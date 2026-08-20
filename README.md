@@ -1,10 +1,10 @@
 # gerfaut-mobile
 
-**[Gerfaut](https://github.com/gerfaut-wallet) for Android and iOS — Bitcoin watch-only wallet.**
+[Gerfaut](https://github.com/gerfaut-wallet) for Android and iOS, a Bitcoin watch-only wallet.
 
 ![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange) ![License: AGPL-3.0-only](https://img.shields.io/badge/license-AGPL--3.0--only-blue)
 
-> **Status: pre-development.** Repository conventions and scaffolding only — no code yet.
+> Status: pre-development. The repository only holds conventions and scaffolding for now, no code yet.
 
 Watch your coins without ever exposing them: Gerfaut holds no private keys. It watches descriptors, shows balances and history, and alerts you when something moves.
 
@@ -16,23 +16,23 @@ Watch your coins without ever exposing them: Gerfaut holds no private keys. It w
 
 ## Watch-only, by design
 
-No key generation, no seed handling, no signing — anywhere in the app. There is no "Send" button. See [CONTRIBUTING.md](CONTRIBUTING.md).
+The app contains no code to generate keys, handle seeds, or sign transactions. There is no "Send" button. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Project
 
 | Repository | Role |
 |---|---|
 | [`gerfaut-core`](https://github.com/gerfaut-wallet/gerfaut-core) | Core Rust library |
-| `gerfaut-mobile` | Mobile app — this repository |
-| [`gerfaut-desktop`](https://github.com/gerfaut-wallet/gerfaut-desktop) | Desktop app (Tauri v2 — Windows, macOS, Linux) |
+| `gerfaut-mobile` | Mobile app, this repository |
+| [`gerfaut-desktop`](https://github.com/gerfaut-wallet/gerfaut-desktop) | Desktop app (Tauri v2, for Windows, macOS, and Linux) |
 | [`gerfaut-web`](https://github.com/gerfaut-wallet/gerfaut-web) | Website, documentation, downloads |
 
 ## License
 
-[AGPL-3.0-only](LICENSE). Commercial licensing: **info@pandul.fr**.
+[AGPL-3.0-only](LICENSE). Commercial licensing: info@pandul.fr.
 
-The Gerfaut name and logo are not covered by the code license — see [TRADEMARK.md](TRADEMARK.md).
+The Gerfaut name and logo are not covered by the code license. See [TRADEMARK.md](TRADEMARK.md).
 
 ## Security
 
-Report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
+Report vulnerabilities privately. See [SECURITY.md](SECURITY.md).
