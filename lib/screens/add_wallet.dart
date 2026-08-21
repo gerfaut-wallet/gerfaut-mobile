@@ -8,6 +8,7 @@ import '../src/models.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
+import 'scan.dart';
 import 'wallet_home.dart';
 
 /// Two steps: paste or import, then confirm what was recognized.
@@ -64,6 +65,15 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
     final text = (await file.readAsString()).trim();
     _rawController.text = text;
     await _parse(text);
+  }
+
+  Future<void> _scan() async {
+    final text = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(builder: (_) => const ScanScreen()),
+    );
+    if (text == null || text.trim().isEmpty) return;
+    _rawController.text = text.trim();
+    await _parse(text.trim());
   }
 
   Future<void> _submit() async {
@@ -193,10 +203,10 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
               onPressed: _importFile,
             ),
             const SizedBox(width: GerfautSpacing.sm),
-            const GhostButton(
-              label: 'Scan coming soon',
+            GhostButton(
+              label: 'Scan',
               icon: LucideIcons.scanLine,
-              onPressed: null,
+              onPressed: _scan,
             ),
           ],
         ),

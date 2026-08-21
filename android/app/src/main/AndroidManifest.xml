@@ -1,6 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- A watch-only wallet still needs the network to watch the chain. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The camera is used for one thing: scanning a descriptor, xpub,
+         or address QR code on the add-wallet screen. Nothing is
+         recorded and no image leaves the device. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <application
         android:label="Gerfaut"
         android:name="${applicationName}"
