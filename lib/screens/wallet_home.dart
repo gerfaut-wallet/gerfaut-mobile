@@ -139,6 +139,7 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                   network: snapshot.meta.network,
                   txs: snapshot.txs,
                   masked: masked,
+                  truncated: snapshot.truncated,
                 ),
                 _UtxoList(walletId: widget.walletId, masked: masked),
               ],
@@ -173,12 +174,16 @@ class _TxList extends StatelessWidget {
     required this.network,
     required this.txs,
     required this.masked,
+    this.truncated = false,
   });
 
   final String walletId;
   final Network network;
   final List<TxSummary> txs;
   final bool masked;
+
+  /// The list is partial (busy watched address); the balance stays exact.
+  final bool truncated;
 
   @override
   Widget build(BuildContext context) {
@@ -196,7 +201,7 @@ class _TxList extends StatelessWidget {
       ...txs.where((tx) => tx.status.confirmed),
     ];
 
-    return ListView.separated(
+    final list = ListView.separated(
       itemCount: sorted.length,
       separatorBuilder: (_, _) =>
           Divider(height: 1, thickness: 1, color: tokens.border),
@@ -271,6 +276,27 @@ class _TxList extends StatelessWidget {
           ),
         );
       },
+    );
+    if (!truncated) {
+      return list;
+    }
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            GerfautSpacing.md,
+            GerfautSpacing.sm,
+            GerfautSpacing.md,
+            0,
+          ),
+          child: Text(
+            'This address has more history than Gerfaut fetched: the list '
+            'below is partial. The balance stays exact.',
+            style: tokens.label.copyWith(color: tokens.textMuted),
+          ),
+        ),
+        Expanded(child: list),
+      ],
     );
   }
 }

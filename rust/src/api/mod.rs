@@ -79,7 +79,7 @@ fn parse_network_opt(name: Option<String>) -> Result<Option<Network>, String> {
 /// Decodes exactly 64 hex characters into 32 key bytes.
 fn decode_key(key_hex: &str) -> Result<[u8; 32], String> {
     let bad = |detail: &str| error_json("bad_key", detail);
-    if key_hex.len() != 64 {
+    if key_hex.len() != 64 || !key_hex.is_ascii() {
         return Err(bad("vault key must be 64 hex characters"));
     }
     let mut key = [0u8; 32];

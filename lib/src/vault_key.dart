@@ -21,8 +21,13 @@ bool _isValidKeyHex(String value) =>
 Future<String> obtainVaultKeyHex({FlutterSecureStorage? storage}) async {
   final store = storage ?? const FlutterSecureStorage();
   final existing = await store.read(key: _vaultKeyName);
-  if (existing != null && _isValidKeyHex(existing)) {
-    return existing;
+  if (existing != null) {
+    if (_isValidKeyHex(existing)) {
+      return existing;
+    }
+    // Never overwrite a stored key, even a malformed one: replacing it
+    // would silently make the existing vault undecryptable forever.
+    throw StateError('stored vault key is malformed; refusing to replace it');
   }
   final rng = Random.secure();
   final hex = List<String>.generate(

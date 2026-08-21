@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- A watch-only wallet still needs the network to watch the chain. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <application
-        android:label="gerfaut"
+        android:label="Gerfaut"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

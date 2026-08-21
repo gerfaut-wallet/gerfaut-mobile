@@ -419,6 +419,7 @@ class WalletSnapshot {
     required this.balance,
     required this.txs,
     required this.tipHeight,
+    this.truncated = false,
   });
 
   factory WalletSnapshot.fromJson(Map<String, dynamic> json) {
@@ -431,6 +432,7 @@ class WalletSnapshot {
           .map((tx) => TxSummary.fromJson(tx as Map<String, dynamic>))
           .toList(),
       tipHeight: json['tip_height'] as int,
+      truncated: json['truncated'] as bool? ?? false,
     );
   }
 
@@ -438,6 +440,10 @@ class WalletSnapshot {
   final BalanceSnapshot balance;
   final List<TxSummary> txs;
   final int tipHeight;
+
+  /// True when the transaction list is partial (busy watched address);
+  /// the balance stays exact.
+  final bool truncated;
 }
 
 /// Outcome of syncing one wallet.
