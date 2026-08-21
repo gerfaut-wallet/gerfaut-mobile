@@ -4,7 +4,7 @@
 
 ![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange) ![License: AGPL-3.0-only](https://img.shields.io/badge/license-AGPL--3.0--only-blue)
 
-> Status: pre-development. The repository only holds conventions and scaffolding for now, no code yet.
+> Status: pre-alpha. The app builds and runs: wallet import with explicit confirmation, balances, transaction history, UTXO view, receive addresses, and settings. Interfaces are still moving.
 
 Watch your coins without ever exposing them: Gerfaut holds no private keys. It watches descriptors, shows balances and history, and alerts you when something moves.
 
