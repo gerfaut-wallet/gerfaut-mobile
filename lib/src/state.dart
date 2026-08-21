@@ -2,9 +2,12 @@
 // notifiers below hold only what the interface itself decides:
 // preferences and sync progress.
 
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'bridge.dart';
+import 'format.dart';
 import 'models.dart';
 
 /// The bridge to the core. Widget tests override this with a fake.
@@ -113,6 +116,122 @@ class MaskedNotifier extends Notifier<bool> {
 /// Masked balances: the eye toggle, persisted as "mobile.masked".
 final maskedProvider = NotifierProvider<MaskedNotifier, bool>(
   MaskedNotifier.new,
+);
+
+class UnitNotifier extends Notifier<AmountUnit> {
+  @override
+  AmountUnit build() => AmountUnit.btc;
+
+  void hydrate(String? stored) {
+    final unit = AmountUnit.fromId(stored);
+    if (unit != null) state = unit;
+  }
+
+  void set(AmountUnit unit) {
+    state = unit;
+    ref
+        .read(bridgeProvider)
+        .setAppPref('display.unit', unit.id)
+        .catchError((_) {});
+  }
+}
+
+/// Display unit for every amount, persisted as "display.unit".
+final unitProvider = NotifierProvider<UnitNotifier, AmountUnit>(
+  UnitNotifier.new,
+);
+
+class FiatEnabledNotifier extends Notifier<bool> {
+  @override
+  bool build() => true;
+
+  void hydrate(String? stored) {
+    if (stored != null) state = stored != '0';
+  }
+
+  void set(bool enabled) {
+    state = enabled;
+    ref
+        .read(bridgeProvider)
+        .setAppPref('display.fiat', enabled ? '1' : '0')
+        .catchError((_) {});
+  }
+}
+
+/// Fiat display, on by default, persisted as "display.fiat".
+final fiatEnabledProvider = NotifierProvider<FiatEnabledNotifier, bool>(
+  FiatEnabledNotifier.new,
+);
+
+class FiatCurrencyNotifier extends Notifier<FiatCurrency> {
+  @override
+  FiatCurrency build() => FiatCurrency.eur;
+
+  void hydrate(String? stored) {
+    final currency = FiatCurrency.fromId(stored);
+    if (currency != null) state = currency;
+  }
+
+  void set(FiatCurrency currency) {
+    state = currency;
+    ref
+        .read(bridgeProvider)
+        .setAppPref('display.fiat_currency', currency.id)
+        .catchError((_) {});
+  }
+}
+
+/// Fiat currency, persisted as "display.fiat_currency".
+final fiatCurrencyProvider =
+    NotifierProvider<FiatCurrencyNotifier, FiatCurrency>(
+      FiatCurrencyNotifier.new,
+    );
+
+class FiatSourceNotifier extends Notifier<PriceSource> {
+  @override
+  PriceSource build() => PriceSource.coingecko;
+
+  void hydrate(String? stored) {
+    final source = PriceSource.fromId(stored);
+    if (source != null) state = source;
+  }
+
+  void set(PriceSource source) {
+    state = source;
+    ref
+        .read(bridgeProvider)
+        .setAppPref('display.fiat_source', source.id)
+        .catchError((_) {});
+  }
+}
+
+/// Price source, persisted as "display.fiat_source".
+final fiatSourceProvider = NotifierProvider<FiatSourceNotifier, PriceSource>(
+  FiatSourceNotifier.new,
+);
+
+/// Current BTC price, refreshed every minute while fiat display is on.
+/// Failures surface as an error state: amounts degrade to no fiat and
+/// the settings screen shows a quiet hint.
+class PriceNotifier extends AsyncNotifier<PriceQuote?> {
+  Timer? _timer;
+
+  @override
+  Future<PriceQuote?> build() async {
+    _timer?.cancel();
+    final enabled = ref.watch(fiatEnabledProvider);
+    final currency = ref.watch(fiatCurrencyProvider);
+    final source = ref.watch(fiatSourceProvider);
+    if (!enabled) return null;
+    ref.onDispose(() => _timer?.cancel());
+    // Scheduled before the fetch so failures retry on the same cadence.
+    _timer = Timer(const Duration(seconds: 60), () => ref.invalidateSelf());
+    return ref.read(bridgeProvider).fetchPrice(source, currency);
+  }
+}
+
+final priceProvider = AsyncNotifierProvider<PriceNotifier, PriceQuote?>(
+  PriceNotifier.new,
 );
 
 /// One-shot guards: prefs hydration and the startup auto-sync.

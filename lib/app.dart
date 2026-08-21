@@ -29,12 +29,17 @@ class _GerfautAppState extends ConsumerState<GerfautApp> {
       final settings = next.valueOrNull;
       if (settings != null && !ref.read(prefsHydratedProvider)) {
         ref.read(prefsHydratedProvider.notifier).state = true;
+        final prefs = settings.appPrefs;
+        ref.read(themeProvider.notifier).hydrate(prefs['mobile.theme']);
+        ref.read(maskedProvider.notifier).hydrate(prefs['mobile.masked']);
+        ref.read(unitProvider.notifier).hydrate(prefs['display.unit']);
+        ref.read(fiatEnabledProvider.notifier).hydrate(prefs['display.fiat']);
         ref
-            .read(themeProvider.notifier)
-            .hydrate(settings.appPrefs['mobile.theme']);
+            .read(fiatCurrencyProvider.notifier)
+            .hydrate(prefs['display.fiat_currency']);
         ref
-            .read(maskedProvider.notifier)
-            .hydrate(settings.appPrefs['mobile.masked']);
+            .read(fiatSourceProvider.notifier)
+            .hydrate(prefs['display.fiat_source']);
       }
     });
 
