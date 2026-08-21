@@ -114,7 +114,7 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                   ),
                 ],
                 const SizedBox(height: GerfautSpacing.md),
-                BalanceAmount(sats: snapshot.balance.total, masked: masked),
+                BalanceAmount(sats: snapshot.balance.total),
                 if (snapshot.balance.hasPending) ...[
                   const SizedBox(height: GerfautSpacing.xs),
                   Text(
@@ -138,10 +138,9 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                   walletId: widget.walletId,
                   network: snapshot.meta.network,
                   txs: snapshot.txs,
-                  masked: masked,
                   truncated: snapshot.truncated,
                 ),
-                _UtxoList(walletId: widget.walletId, masked: masked),
+                _UtxoList(walletId: widget.walletId),
               ],
             ),
           ),
@@ -173,14 +172,12 @@ class _TxList extends StatelessWidget {
     required this.walletId,
     required this.network,
     required this.txs,
-    required this.masked,
     this.truncated = false,
   });
 
   final String walletId;
   final Network network;
   final List<TxSummary> txs;
-  final bool masked;
 
   /// The list is partial (busy watched address); the balance stays exact.
   final bool truncated;
@@ -270,7 +267,7 @@ class _TxList extends StatelessWidget {
                 const SizedBox(width: GerfautSpacing.sm),
                 StatusPill(status: tx.status, confirmations: tx.confirmations),
                 const SizedBox(width: GerfautSpacing.sm),
-                ListAmount(sats: tx.netSats, masked: masked, pending: pending),
+                ListAmount(sats: tx.netSats, pending: pending),
               ],
             ),
           ),
@@ -303,10 +300,9 @@ class _TxList extends StatelessWidget {
 
 /// UTXOs as dense rows: outpoint, address, status, value in sats.
 class _UtxoList extends ConsumerWidget {
-  const _UtxoList({required this.walletId, required this.masked});
+  const _UtxoList({required this.walletId});
 
   final String walletId;
-  final bool masked;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -350,10 +346,7 @@ class _UtxoList extends ConsumerWidget {
                   children: [
                     StatusPill(status: utxo.status),
                     const SizedBox(height: GerfautSpacing.xs),
-                    Text(
-                      masked ? maskedValue : formatSats(utxo.valueSats),
-                      style: tokens.data,
-                    ),
+                    InlineAmount(sats: utxo.valueSats),
                   ],
                 ),
               ],

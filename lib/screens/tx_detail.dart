@@ -9,6 +9,7 @@ import '../src/models.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/address_chip.dart';
+import '../widgets/amounts.dart';
 import '../widgets/status_pill.dart';
 
 /// Full-screen transaction detail: net amount, status, identifiers,
@@ -28,7 +29,6 @@ class TxDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final masked = ref.watch(maskedProvider);
     final detail = ref.watch(
       txDetailProvider((walletId: walletId, txid: txid)),
     );
@@ -37,12 +37,7 @@ class TxDetailScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Transaction')),
       body: SafeArea(
         child: switch (detail) {
-          AsyncData(:final value) => _Detail(
-            detail: value,
-            network: network,
-            masked: masked,
-            tokens: tokens,
-          ),
+          AsyncData(:final value) => _Detail(detail: value, network: network),
           AsyncError() => Center(
             child: Text(
               'This transaction could not be loaded.',
@@ -61,23 +56,19 @@ class TxDetailScreen extends ConsumerWidget {
   }
 }
 
-class _Detail extends StatelessWidget {
-  const _Detail({
-    required this.detail,
-    required this.network,
-    required this.masked,
-    required this.tokens,
-  });
+class _Detail extends ConsumerWidget {
+  const _Detail({required this.detail, required this.network});
 
   final TxDetail detail;
   final Network network;
-  final bool masked;
-  final GerfautTokens tokens;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final masked = ref.watch(maskedProvider);
     final summary = detail.summary;
     final explorer = explorerTxUrl(network, summary.txid);
+    final fiat = fiatValueOf(ref, summary.netSats);
 
     return ListView(
       padding: const EdgeInsets.all(GerfautSpacing.md),
@@ -91,6 +82,11 @@ class _Detail extends StatelessWidget {
                 text: ' BTC',
                 style: tokens.bodySmall.copyWith(color: tokens.textMuted),
               ),
+              if (fiat != null)
+                TextSpan(
+                  text: ' · $fiat',
+                  style: tokens.data.copyWith(color: tokens.textMuted),
+                ),
             ],
           ),
         ),
@@ -119,30 +115,37 @@ class _Detail extends StatelessWidget {
         ),
         const SizedBox(height: GerfautSpacing.md),
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: _Fact(
                 label: 'Fee',
-                value: summary.feeSats != null
-                    ? formatSats(summary.feeSats!)
-                    : 'unknown',
                 tokens: tokens,
+                child: summary.feeSats != null
+                    ? InlineAmount(sats: summary.feeSats!)
+                    : Text(
+                        'n/a',
+                        style: tokens.data.copyWith(color: tokens.textMuted),
+                      ),
               ),
             ),
             Expanded(
               child: _Fact(
                 label: 'Fee rate',
-                value: detail.feeRateSatVb != null
-                    ? '${detail.feeRateSatVb!.toStringAsFixed(1)} sat/vB'
-                    : 'unknown',
                 tokens: tokens,
+                child: Text(
+                  detail.feeRateSatVb != null
+                      ? '${detail.feeRateSatVb!.toStringAsFixed(1)} sat/vB'
+                      : 'n/a',
+                  style: tokens.data,
+                ),
               ),
             ),
             Expanded(
               child: _Fact(
                 label: 'Size',
-                value: '${detail.vsize} vB',
                 tokens: tokens,
+                child: Text('${detail.vsize} vB', style: tokens.data),
               ),
             ),
           ],
@@ -151,14 +154,14 @@ class _Detail extends StatelessWidget {
         _IoSection(
           title: 'Inputs (${detail.inputs.length})',
           ios: detail.inputs,
-          masked: masked,
+          side: _IoSide.input,
           tokens: tokens,
         ),
         const SizedBox(height: GerfautSpacing.md),
         _IoSection(
           title: 'Outputs (${detail.outputs.length})',
           ios: detail.outputs,
-          masked: masked,
+          side: _IoSide.output,
           tokens: tokens,
         ),
         if (explorer != null) ...[
@@ -179,7 +182,7 @@ class _Detail extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'View on explorer',
+                      'View on mempool.space',
                       style: tokens.bodySmall.copyWith(color: tokens.primary),
                     ),
                     const SizedBox(width: GerfautSpacing.xs),
@@ -215,10 +218,10 @@ class _FieldLabel extends StatelessWidget {
 }
 
 class _Fact extends StatelessWidget {
-  const _Fact({required this.label, required this.value, required this.tokens});
+  const _Fact({required this.label, required this.child, required this.tokens});
 
   final String label;
-  final String value;
+  final Widget child;
   final GerfautTokens tokens;
 
   @override
@@ -228,23 +231,25 @@ class _Fact extends StatelessWidget {
       children: [
         _FieldLabel(label, tokens: tokens),
         const SizedBox(height: GerfautSpacing.xs),
-        Text(value, style: tokens.data),
+        child,
       ],
     );
   }
 }
 
+enum _IoSide { input, output }
+
 class _IoSection extends StatelessWidget {
   const _IoSection({
     required this.title,
     required this.ios,
-    required this.masked,
+    required this.side,
     required this.tokens,
   });
 
   final String title;
   final List<TxIo> ios;
-  final bool masked;
+  final _IoSide side;
   final GerfautTokens tokens;
 
   @override
@@ -266,7 +271,7 @@ class _IoSection extends StatelessWidget {
                         Flexible(child: AddressChip(value: io.address!))
                       else
                         Text(
-                          'unknown',
+                          side == _IoSide.input ? 'coinbase' : 'unknown',
                           style: tokens.data.copyWith(color: tokens.textMuted),
                         ),
                       if (io.isMine) ...[
@@ -294,12 +299,13 @@ class _IoSection extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: GerfautSpacing.sm),
-                Text(
-                  io.valueSats != null
-                      ? (masked ? maskedValue : formatSats(io.valueSats!))
-                      : '—',
-                  style: tokens.data,
-                ),
+                if (io.valueSats != null)
+                  InlineAmount(sats: io.valueSats!)
+                else
+                  Text(
+                    'n/a',
+                    style: tokens.data.copyWith(color: tokens.textMuted),
+                  ),
               ],
             ),
           ),

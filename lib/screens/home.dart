@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../src/format.dart';
 import '../src/models.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
+import '../widgets/amounts.dart';
 import '../widgets/buttons.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/sync_indicator.dart';
@@ -41,7 +41,6 @@ class HomeScreen extends ConsumerWidget {
 
     final settings = ref.watch(settingsProvider);
     final wallets = ref.watch(walletsProvider);
-    final masked = ref.watch(maskedProvider);
     ref.watch(syncProvider);
     final sync = ref.read(syncProvider.notifier);
     final network = settings.valueOrNull?.activeNetwork;
@@ -122,7 +121,6 @@ class HomeScreen extends ConsumerWidget {
                       final wallet = value[index];
                       return _WalletCard(
                         wallet: wallet,
-                        masked: masked,
                         syncing: sync.isSyncing(wallet.id),
                         onTap: () {
                           Navigator.of(context).push(
@@ -169,13 +167,11 @@ class HomeScreen extends ConsumerWidget {
 class _WalletCard extends StatelessWidget {
   const _WalletCard({
     required this.wallet,
-    required this.masked,
     required this.syncing,
     required this.onTap,
   });
 
   final WalletMeta wallet;
-  final bool masked;
   final bool syncing;
   final VoidCallback onTap;
 
@@ -201,22 +197,7 @@ class _WalletCard extends StatelessWidget {
               children: [
                 Text(wallet.name, style: tokens.h2),
                 const SizedBox(height: GerfautSpacing.sm),
-                Text.rich(
-                  TextSpan(
-                    text: masked
-                        ? maskedValue
-                        : formatBtc(wallet.cachedBalance.total),
-                    style: tokens.amount,
-                    children: [
-                      TextSpan(
-                        text: ' BTC',
-                        style: tokens.bodySmall.copyWith(
-                          color: tokens.textMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                BalanceAmount(sats: wallet.cachedBalance.total),
                 const SizedBox(height: GerfautSpacing.sm),
                 SyncIndicator(stamp: wallet.lastSync, syncing: syncing),
               ],
