@@ -180,9 +180,15 @@ class FakeBridge implements GerfautBridge {
         const [AddressEntry(index: 0, address: 'tb1qexample', used: false)];
   }
 
+  /// Sync hooks; throw a [BridgeException] to simulate a failure.
+  SyncReport Function(String id)? onSyncWallet;
+  SyncAllReport Function(Network? network)? onSyncAll;
+
   @override
   Future<SyncReport> syncWallet(String id) async {
     syncWalletCalls += 1;
+    final sync = onSyncWallet;
+    if (sync != null) return sync(id);
     return SyncReport(
       walletId: id,
       newTxCount: 0,
@@ -196,6 +202,8 @@ class FakeBridge implements GerfautBridge {
   @override
   Future<SyncAllReport> syncAll([Network? network]) async {
     syncAllCalls += 1;
+    final sync = onSyncAll;
+    if (sync != null) return sync(network);
     return const SyncAllReport(reports: [], failures: []);
   }
 

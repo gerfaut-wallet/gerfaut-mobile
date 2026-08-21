@@ -27,14 +27,11 @@ class WalletHomeScreen extends ConsumerStatefulWidget {
 }
 
 class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
-  String? _syncError;
-
   Future<void> _sync() async {
-    setState(() => _syncError = null);
     try {
       await ref.read(syncProvider.notifier).syncWallet(widget.walletId);
-    } catch (error) {
-      if (mounted) setState(() => _syncError = '$error');
+    } catch (_) {
+      // The failure lands in syncErrorsProvider and the freshness line.
     }
   }
 
@@ -70,7 +67,7 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
       ),
       body: SafeArea(
         child: switch (snapshot) {
-          AsyncData(:final value) => _buildLoaded(value, masked, syncing),
+          AsyncData(:final value) => _buildLoaded(value, syncing),
           AsyncError() => Center(
             child: Text(
               'This wallet could not be loaded.',
@@ -88,7 +85,7 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
     );
   }
 
-  Widget _buildLoaded(WalletSnapshot snapshot, bool masked, bool syncing) {
+  Widget _buildLoaded(WalletSnapshot snapshot, bool syncing) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     return DefaultTabController(
       length: 2,
@@ -105,14 +102,11 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SyncIndicator(stamp: snapshot.meta.lastSync, syncing: syncing),
-                if (_syncError != null) ...[
-                  const SizedBox(height: GerfautSpacing.xs),
-                  Text(
-                    _syncError!,
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  ),
-                ],
+                SyncIndicator(
+                  stamp: snapshot.meta.lastSync,
+                  syncing: syncing,
+                  error: ref.watch(syncErrorsProvider)[widget.walletId],
+                ),
                 const SizedBox(height: GerfautSpacing.md),
                 BalanceAmount(sats: snapshot.balance.total),
                 if (snapshot.balance.hasPending) ...[

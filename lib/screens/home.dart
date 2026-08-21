@@ -111,7 +111,24 @@ class HomeScreen extends ConsumerWidget {
                   ),
                 (_, AsyncData(:final value)) => RefreshIndicator(
                   onRefresh: () async {
-                    if (network != null) await sync.syncAll(network);
+                    if (network == null) return;
+                    final report = await sync.syncAll(network);
+                    if (report == null || !context.mounted) return;
+                    // A benign confirmation: the summary may disappear,
+                    // per-wallet failures stay on the freshness lines.
+                    final synced = report.reports.length;
+                    final failed = report.failures.length;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          failed == 0
+                              ? (synced == 1
+                                    ? '1 wallet synced'
+                                    : '$synced wallets synced')
+                              : '$synced synced, $failed failed',
+                        ),
+                      ),
+                    );
                   },
                   child: ListView.builder(
                     physics: const AlwaysScrollableScrollPhysics(),
@@ -122,6 +139,7 @@ class HomeScreen extends ConsumerWidget {
                       return _WalletCard(
                         wallet: wallet,
                         syncing: sync.isSyncing(wallet.id),
+                        error: ref.watch(syncErrorsProvider)[wallet.id],
                         onTap: () {
                           Navigator.of(context).push(
                             MaterialPageRoute<void>(
@@ -169,11 +187,13 @@ class _WalletCard extends StatelessWidget {
     required this.wallet,
     required this.syncing,
     required this.onTap,
+    this.error,
   });
 
   final WalletMeta wallet;
   final bool syncing;
   final VoidCallback onTap;
+  final String? error;
 
   @override
   Widget build(BuildContext context) {
@@ -199,7 +219,11 @@ class _WalletCard extends StatelessWidget {
                 const SizedBox(height: GerfautSpacing.sm),
                 BalanceAmount(sats: wallet.cachedBalance.total),
                 const SizedBox(height: GerfautSpacing.sm),
-                SyncIndicator(stamp: wallet.lastSync, syncing: syncing),
+                SyncIndicator(
+                  stamp: wallet.lastSync,
+                  syncing: syncing,
+                  error: error,
+                ),
               ],
             ),
           ),

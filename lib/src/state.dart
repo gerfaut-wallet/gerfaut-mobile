@@ -266,12 +266,17 @@ class SyncController extends Notifier<Set<String>> {
   }
 
   /// Syncs one wallet. Rethrows the core error after cleanup so the
-  /// caller can show it.
+  /// caller can show it; the failure also lands in [syncErrorsProvider].
   Future<SyncReport?> syncWallet(String id) async {
     if (state.contains(id)) return null;
     state = {...state, id};
     try {
-      return await ref.read(bridgeProvider).syncWallet(id);
+      final report = await ref.read(bridgeProvider).syncWallet(id);
+      ref.read(syncErrorsProvider.notifier).clear(id);
+      return report;
+    } catch (error) {
+      ref.read(syncErrorsProvider.notifier).set(id, '$error');
+      rethrow;
     } finally {
       state = {...state}..remove(id);
       _invalidateWallet(id);
@@ -284,7 +289,15 @@ class SyncController extends Notifier<Set<String>> {
     if (state.contains(syncAllId)) return null;
     state = {...state, syncAllId};
     try {
-      return await ref.read(bridgeProvider).syncAll(network);
+      final report = await ref.read(bridgeProvider).syncAll(network);
+      final errors = ref.read(syncErrorsProvider.notifier);
+      for (final sync in report.reports) {
+        errors.clear(sync.walletId);
+      }
+      for (final failure in report.failures) {
+        errors.set(failure.walletId, failure.message);
+      }
+      return report;
     } finally {
       state = {...state}..remove(syncAllId);
       _invalidateWallet(null);
@@ -295,3 +308,25 @@ class SyncController extends Notifier<Set<String>> {
 final syncProvider = NotifierProvider<SyncController, Set<String>>(
   SyncController.new,
 );
+
+/// Last sync failure per wallet id, cleared on the next success.
+/// A failed sync is stated with its reason: silence would look like
+/// health.
+class SyncErrorsNotifier extends Notifier<Map<String, String>> {
+  @override
+  Map<String, String> build() => const {};
+
+  void set(String walletId, String message) {
+    state = {...state, walletId: message};
+  }
+
+  void clear(String walletId) {
+    if (!state.containsKey(walletId)) return;
+    state = {...state}..remove(walletId);
+  }
+}
+
+final syncErrorsProvider =
+    NotifierProvider<SyncErrorsNotifier, Map<String, String>>(
+      SyncErrorsNotifier.new,
+    );
