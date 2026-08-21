@@ -11,11 +11,17 @@ WalletMeta makeMeta({
   Network network = Network.mainnet,
   int totalSats = 0,
   SyncStamp? lastSync,
+  WalletKind kind = const DescriptorsKind(
+    external: 'wpkh(tpub.../0/*)#checksum',
+    internal: 'wpkh(tpub.../1/*)#checksum',
+    script: ScriptKind.segwit,
+  ),
 }) {
   return WalletMeta(
     id: id,
     name: name,
     network: network,
+    kind: kind,
     recognizedAs: RecognizedKind.multipathDescriptor,
     createdAt: 1755000000,
     gapLimit: 20,
@@ -233,5 +239,38 @@ class FakeBridge implements GerfautBridge {
   @override
   Future<void> setAppPref(String key, String value) async {
     appPrefs[key] = value;
+  }
+
+  /// Price hook; throw a [BridgeException] to simulate an unreachable
+  /// source. The default rate keeps fiat lines deterministic in tests.
+  PriceQuote Function(PriceSource source, FiatCurrency currency)? onFetchPrice;
+
+  @override
+  Future<PriceQuote> fetchPrice(
+    PriceSource source,
+    FiatCurrency currency,
+  ) async {
+    final fetch = onFetchPrice;
+    if (fetch != null) return fetch(source, currency);
+    return PriceQuote(
+      rate: 50000,
+      currency: currency,
+      source: source,
+      at: 1755000000,
+    );
+  }
+
+  /// Update hook; the default reports the running version as current.
+  UpdateCheck Function(String currentVersion)? onCheckUpdate;
+
+  @override
+  Future<UpdateCheck> checkUpdate(String currentVersion) async {
+    final check = onCheckUpdate;
+    if (check != null) return check(currentVersion);
+    return UpdateCheck(
+      latest: 'v$currentVersion',
+      url: 'https://github.com/gerfaut-wallet/gerfaut-mobile/releases/latest',
+      updateAvailable: false,
+    );
   }
 }

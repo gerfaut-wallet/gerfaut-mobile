@@ -8,6 +8,7 @@
 
 use gerfaut_core::chain::BackendConfig;
 use gerfaut_core::input::ParsedInput;
+use gerfaut_core::price::{FiatCurrency, PriceSource};
 use gerfaut_core::store::VaultKey;
 use gerfaut_core::{CoreError, Network, WalletManager};
 use serde_json::json;
@@ -258,6 +259,41 @@ pub async fn set_app_pref(key: String, value: String) -> String {
     let manager = try_json!(manager());
     match manager.set_app_pref(key, value).await {
         Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+// --- price and updates -------------------------------------------------
+
+/// Parses one serde snake_case enum value from its string spelling.
+fn parse_variant<T: serde::de::DeserializeOwned>(
+    name: &str,
+    kind: &'static str,
+) -> Result<T, String> {
+    serde_json::from_value(serde_json::Value::String(name.to_owned()))
+        .map_err(|_| error_json("bad_json", format!("unknown {kind} `{name}`")))
+}
+
+/// Fetches the current BTC price. `source` is one of `coingecko`,
+/// `kraken`, `mempool_space`; `currency` one of `eur`, `usd`, `gbp`,
+/// `chf`. Returns a serialized `PriceQuote`.
+pub async fn fetch_price(source: String, currency: String) -> String {
+    let source: PriceSource = try_json!(parse_variant(&source, "price source"));
+    let currency: FiatCurrency = try_json!(parse_variant(&currency, "currency"));
+    match gerfaut_core::price::fetch_price(source, currency).await {
+        Ok(quote) => to_json(&quote),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// GitHub repository whose releases this build follows.
+const UPDATE_REPO: &str = "gerfaut-wallet/gerfaut-mobile";
+
+/// Checks the latest published release against the running version.
+/// Returns a serialized `UpdateCheck`.
+pub async fn check_update(current_version: String) -> String {
+    match gerfaut_core::updates::check_update(UPDATE_REPO, &current_version).await {
+        Ok(check) => to_json(&check),
         Err(e) => core_error_json(&e),
     }
 }

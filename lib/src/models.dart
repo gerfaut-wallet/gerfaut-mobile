@@ -217,6 +217,7 @@ class WalletMeta {
     required this.id,
     required this.name,
     required this.network,
+    required this.kind,
     required this.recognizedAs,
     required this.createdAt,
     required this.gapLimit,
@@ -231,6 +232,7 @@ class WalletMeta {
       id: json['id'] as String,
       name: json['name'] as String,
       network: Network.fromId(json['network'] as String),
+      kind: WalletKind.fromJson(json['kind'] as Map<String, dynamic>),
       recognizedAs: RecognizedKind.fromId(json['recognized_as'] as String),
       createdAt: json['created_at'] as int,
       gapLimit: json['gap_limit'] as int,
@@ -247,12 +249,51 @@ class WalletMeta {
   final String id;
   final String name;
   final Network network;
+  final WalletKind kind;
   final RecognizedKind recognizedAs;
   final int createdAt;
   final int gapLimit;
   final SyncStamp? lastSync;
   final BalanceSnapshot cachedBalance;
   final int cachedTxCount;
+
+  bool get isSingleAddress => kind is SingleAddressKind;
+}
+
+/// What a wallet actually watches, as stored in the vault.
+sealed class WalletKind {
+  const WalletKind();
+
+  factory WalletKind.fromJson(Map<String, dynamic> json) {
+    return switch (json['type'] as String) {
+      'single_address' => SingleAddressKind(
+        address: json['address'] as String,
+      ),
+      _ => DescriptorsKind(
+        external: json['external'] as String,
+        internal: json['internal'] as String?,
+        script: ScriptKind.fromId(json['script'] as String),
+      ),
+    };
+  }
+}
+
+class DescriptorsKind extends WalletKind {
+  const DescriptorsKind({
+    required this.external,
+    required this.internal,
+    required this.script,
+  });
+
+  final String external;
+  final String? internal;
+  final ScriptKind script;
+}
+
+class SingleAddressKind extends WalletKind {
+  const SingleAddressKind({required this.address});
+
+  final String address;
 }
 
 /// Confirmation state of a transaction or UTXO.
@@ -584,4 +625,98 @@ class Settings {
   /// Backend for a network, falling back to the public default.
   BackendConfig backendFor(Network network) =>
       backends[network] ?? const PublicEsplora();
+}
+
+/// Where a fiat quote comes from. All endpoints are public and keyless.
+enum PriceSource {
+  coingecko('coingecko', 'CoinGecko'),
+  kraken('kraken', 'Kraken'),
+  mempoolSpace('mempool_space', 'mempool.space');
+
+  const PriceSource(this.id, this.label);
+
+  final String id;
+  final String label;
+
+  static PriceSource? fromId(String? id) {
+    for (final source in PriceSource.values) {
+      if (source.id == id) return source;
+    }
+    return null;
+  }
+}
+
+/// Display currencies offered in the settings.
+enum FiatCurrency {
+  eur('eur', 'EUR'),
+  usd('usd', 'USD'),
+  gbp('gbp', 'GBP'),
+  chf('chf', 'CHF');
+
+  const FiatCurrency(this.id, this.code);
+
+  final String id;
+
+  /// ISO 4217 code, uppercase.
+  final String code;
+
+  static FiatCurrency? fromId(String? id) {
+    for (final currency in FiatCurrency.values) {
+      if (currency.id == id) return currency;
+    }
+    return null;
+  }
+}
+
+/// One BTC priced in a fiat currency, at a point in time.
+class PriceQuote {
+  const PriceQuote({
+    required this.rate,
+    required this.currency,
+    required this.source,
+    required this.at,
+  });
+
+  factory PriceQuote.fromJson(Map<String, dynamic> json) {
+    return PriceQuote(
+      rate: (json['rate'] as num).toDouble(),
+      currency: FiatCurrency.fromId(json['currency'] as String)!,
+      source: PriceSource.fromId(json['source'] as String)!,
+      at: json['at'] as int,
+    );
+  }
+
+  /// Price of 1 BTC in the currency.
+  final double rate;
+  final FiatCurrency currency;
+  final PriceSource source;
+
+  /// Unix timestamp, seconds, when the quote was fetched.
+  final int at;
+}
+
+/// Outcome of a release check.
+class UpdateCheck {
+  const UpdateCheck({
+    required this.latest,
+    required this.url,
+    required this.updateAvailable,
+  });
+
+  factory UpdateCheck.fromJson(Map<String, dynamic> json) {
+    return UpdateCheck(
+      latest: json['latest'] as String,
+      url: json['url'] as String,
+      updateAvailable: json['update_available'] as bool,
+    );
+  }
+
+  /// Latest published tag, for example `v0.2.0`.
+  final String latest;
+
+  /// Web page of the latest release.
+  final String url;
+
+  /// True when the latest tag is newer than the running version.
+  final bool updateAvailable;
 }

@@ -7,7 +7,7 @@ import 'frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `core_error_json`, `core_error_kind`, `decode_key`, `error_json`, `manager`, `ok_json`, `parse_network_opt`, `parse_network`, `to_json`
+// These functions are ignored because they are not marked as `pub`: `core_error_json`, `core_error_kind`, `decode_key`, `error_json`, `manager`, `ok_json`, `parse_network_opt`, `parse_network`, `parse_variant`, `to_json`
 
 /// Opens (or creates) the vault under `data_dir` with a 32-byte key given
 /// as 64 hex characters. Idempotent: once initialized, later calls (hot
@@ -78,3 +78,14 @@ Future<String> setBackend({
 /// Stores one small app preference in the encrypted vault.
 Future<String> setAppPref({required String key, required String value}) =>
     RustLib.instance.api.crateApiSetAppPref(key: key, value: value);
+
+/// Fetches the current BTC price. `source` is one of `coingecko`,
+/// `kraken`, `mempool_space`; `currency` one of `eur`, `usd`, `gbp`,
+/// `chf`. Returns a serialized `PriceQuote`.
+Future<String> fetchPrice({required String source, required String currency}) =>
+    RustLib.instance.api.crateApiFetchPrice(source: source, currency: currency);
+
+/// Checks the latest published release against the running version.
+/// Returns a serialized `UpdateCheck`.
+Future<String> checkUpdate({required String currentVersion}) =>
+    RustLib.instance.api.crateApiCheckUpdate(currentVersion: currentVersion);

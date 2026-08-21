@@ -41,6 +41,8 @@ abstract class GerfautBridge {
   Future<void> setActiveNetwork(Network network);
   Future<void> setBackend(Network network, BackendConfig config);
   Future<void> setAppPref(String key, String value);
+  Future<PriceQuote> fetchPrice(PriceSource source, FiatCurrency currency);
+  Future<UpdateCheck> checkUpdate(String currentVersion);
 }
 
 /// The real bridge, backed by the generated Rust bindings.
@@ -161,5 +163,20 @@ class RustBridge implements GerfautBridge {
   @override
   Future<void> setAppPref(String key, String value) async {
     _ok(await rust.setAppPref(key: key, value: value));
+  }
+
+  @override
+  Future<PriceQuote> fetchPrice(
+    PriceSource source,
+    FiatCurrency currency,
+  ) async {
+    final raw = await rust.fetchPrice(source: source.id, currency: currency.id);
+    return PriceQuote.fromJson(_object(raw));
+  }
+
+  @override
+  Future<UpdateCheck> checkUpdate(String currentVersion) async {
+    final raw = await rust.checkUpdate(currentVersion: currentVersion);
+    return UpdateCheck.fromJson(_object(raw));
   }
 }
