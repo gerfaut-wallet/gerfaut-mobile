@@ -215,7 +215,25 @@ class _WalletCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(wallet.name, style: tokens.h2),
+                Row(
+                  children: [
+                    Icon(
+                      wallet.isSingleAddress
+                          ? LucideIcons.mapPin
+                          : LucideIcons.wallet,
+                      size: 16,
+                      color: tokens.textMuted,
+                    ),
+                    const SizedBox(width: GerfautSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        wallet.name,
+                        style: tokens.h2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: GerfautSpacing.sm),
                 BalanceAmount(sats: wallet.cachedBalance.total),
                 const SizedBox(height: GerfautSpacing.sm),
