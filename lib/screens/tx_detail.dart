@@ -10,6 +10,7 @@ import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/address_chip.dart';
 import '../widgets/amounts.dart';
+import '../widgets/buttons.dart';
 import '../widgets/flow_diagram.dart';
 import '../widgets/status_pill.dart';
 
@@ -178,10 +179,7 @@ class _Detail extends ConsumerWidget {
             alignment: Alignment.centerLeft,
             child: InkWell(
               borderRadius: BorderRadius.circular(GerfautRadius.sm),
-              onTap: () => launchUrl(
-                Uri.parse(explorer),
-                mode: LaunchMode.externalApplication,
-              ),
+              onTap: () => _confirmExplorer(context, explorer),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   vertical: GerfautSpacing.sm,
@@ -208,6 +206,58 @@ class _Detail extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// The explorer link sits behind a privacy warning: a third party can
+/// link the transaction to the viewer's IP address.
+void _confirmExplorer(BuildContext context, String url) {
+  final tokens = Theme.of(context).extension<GerfautTokens>()!;
+  showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return AlertDialog(
+        backgroundColor: tokens.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(GerfautRadius.lg),
+        ),
+        title: Text('Open an external explorer', style: tokens.h2),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'This opens the transaction on mempool.space, a third-party '
+              'website. Its operator can link this transaction to your IP '
+              'address.',
+              style: tokens.bodySmall,
+            ),
+            const SizedBox(height: GerfautSpacing.sm),
+            Text(
+              'Consider a VPN or Tor if that link matters to you.',
+              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: tokens.textMuted),
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          PrimaryButton(
+            label: 'Open explorer',
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              launchUrl(
+                Uri.parse(url),
+                mode: LaunchMode.externalApplication,
+              );
+            },
+          ),
+        ],
+      );
+    },
+  );
 }
 
 class _FieldLabel extends StatelessWidget {
