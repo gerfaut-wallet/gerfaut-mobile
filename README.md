@@ -1,6 +1,6 @@
 # gerfaut-mobile
 
-[Gerfaut](https://github.com/gerfaut-wallet) for Android and iOS, a Bitcoin watch-only wallet.
+[Gerfaut](https://github.com/gerfaut-wallet) for Android, a Bitcoin watch-only wallet.
 
 ![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange) ![License: AGPL-3.0-only](https://img.shields.io/badge/license-AGPL--3.0--only-blue)
 
@@ -10,7 +10,7 @@ Watch your coins without ever exposing them: Gerfaut holds no private keys. It w
 
 ## Scope
 
-- Flutter app for Android and iOS
+- Flutter app, Android first. An iOS version is planned for a later stage, and the codebase stays portable by construction.
 - Wallet logic delegated to [`gerfaut-core`](https://github.com/gerfaut-wallet/gerfaut-core) (Rust) via `flutter_rust_bridge`
 - Native code kept to what must be native: home-screen widgets, push notifications, biometric unlock
 
