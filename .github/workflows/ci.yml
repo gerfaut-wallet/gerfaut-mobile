@@ -1,0 +1,24 @@
+name: CI
+
+# Analysis and widget tests only: the APK build needs the sibling
+# gerfaut-core checkout and the Android NDK, which stay local until the
+# repositories go public.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  flutter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Analyze
+        run: flutter analyze
+      - name: Test
+        run: flutter test
