@@ -1,6 +1,10 @@
 // Display formatting. Mirrors gerfaut-core's rules: 8 decimals in BTC,
 // never silently rounded; identifiers truncated in the middle only.
 
+import 'package:intl/intl.dart';
+
+import 'models.dart';
+
 const int satsPerBtc = 100000000;
 
 /// Narrow no-break space, used for digit grouping.
@@ -79,4 +83,44 @@ String formatTimestamp(int unixSeconds) {
   final hour = local.hour.toString().padLeft(2, '0');
   final minute = local.minute.toString().padLeft(2, '0');
   return '${_months[local.month - 1]} $day, ${local.year}, $hour:$minute';
+}
+
+/// Display unit for amounts.
+enum AmountUnit {
+  btc('btc', 'BTC'),
+  sats('sats', 'sats');
+
+  const AmountUnit(this.id, this.label);
+
+  final String id;
+  final String label;
+
+  static AmountUnit? fromId(String? id) {
+    for (final unit in AmountUnit.values) {
+      if (unit.id == id) return unit;
+    }
+    return null;
+  }
+}
+
+/// Primary amount in the chosen display unit.
+String formatAmount(int sats, AmountUnit unit) {
+  return unit == AmountUnit.btc ? '${formatBtc(sats)} BTC' : formatSats(sats);
+}
+
+/// Signed primary amount in the chosen display unit.
+String formatAmountSigned(int sats, AmountUnit unit) {
+  if (unit == AmountUnit.btc) return '${formatBtcSigned(sats)} BTC';
+  return sats < 0 ? formatSats(sats) : '+${formatSats(sats)}';
+}
+
+/// Fiat value of an amount at a given BTC rate, with the currency's
+/// symbol. Small values keep four decimals so they never round to zero.
+String formatFiat(int sats, double rate, FiatCurrency currency) {
+  final value = sats / satsPerBtc * rate;
+  final formatter = NumberFormat.simpleCurrency(
+    name: currency.code,
+    decimalDigits: value.abs() < 1 ? 4 : 2,
+  );
+  return formatter.format(value);
 }

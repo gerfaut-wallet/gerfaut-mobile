@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/src/format.dart';
+import 'package:gerfaut/src/models.dart';
 
 void main() {
   group('formatBtc', () {
@@ -55,6 +56,38 @@ void main() {
       expect(relativeTime(nowSecs - 120, now: now), '2 min ago');
       expect(relativeTime(nowSecs - 7200, now: now), '2 h ago');
       expect(relativeTime(nowSecs - 172800, now: now), '2 d ago');
+    });
+  });
+
+  group('formatAmount', () {
+    test('follows the display unit', () {
+      expect(formatAmount(123456, AmountUnit.btc), '0.00123456 BTC');
+      expect(formatAmount(123456, AmountUnit.sats), formatSats(123456));
+    });
+
+    test('signs explicitly in both units', () {
+      expect(formatAmountSigned(123456, AmountUnit.btc), '+0.00123456 BTC');
+      expect(formatAmountSigned(-123456, AmountUnit.btc), '-0.00123456 BTC');
+      expect(
+        formatAmountSigned(123456, AmountUnit.sats),
+        '+${formatSats(123456)}',
+      );
+      expect(
+        formatAmountSigned(-123456, AmountUnit.sats),
+        formatSats(-123456),
+      );
+    });
+  });
+
+  group('formatFiat', () {
+    test('applies the rate with the currency symbol', () {
+      expect(formatFiat(100000000, 50000, FiatCurrency.usd), r'$50,000.00');
+      expect(formatFiat(100000000, 50000, FiatCurrency.eur), '€50,000.00');
+    });
+
+    test('small values keep four decimals', () {
+      expect(formatFiat(100, 50000, FiatCurrency.usd), r'$0.0500');
+      expect(formatFiat(-100, 50000, FiatCurrency.usd), r'-$0.0500');
     });
   });
 }
