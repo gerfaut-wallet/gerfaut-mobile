@@ -10,6 +10,7 @@ import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/address_chip.dart';
 import '../widgets/amounts.dart';
+import '../widgets/flow_diagram.dart';
 import '../widgets/status_pill.dart';
 
 /// Full-screen transaction detail: net amount, status, identifiers,
@@ -149,6 +150,13 @@ class _Detail extends ConsumerWidget {
               ),
             ),
           ],
+        ),
+        const SizedBox(height: GerfautSpacing.lg),
+        FlowDiagram(
+          inputs: detail.inputs,
+          outputs: detail.outputs,
+          feeSats: summary.feeSats,
+          feeRate: detail.feeRateSatVb,
         ),
         const SizedBox(height: GerfautSpacing.lg),
         _IoSection(
