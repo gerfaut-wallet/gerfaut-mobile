@@ -7,7 +7,7 @@ const int satsPerBtc = 100000000;
 const String narrowSpace = ' ';
 
 /// Masked replacement for any amount.
-const String masked = '•••••';
+const String maskedValue = '•••••';
 
 /// `123456` -> `"0.00123456"` — always 8 decimals.
 String formatBtc(int sats) {
