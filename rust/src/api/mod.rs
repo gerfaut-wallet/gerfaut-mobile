@@ -30,7 +30,7 @@ fn error_json(kind: &str, message: impl std::fmt::Display) -> String {
 fn core_error_kind(error: &CoreError) -> &'static str {
     match error {
         CoreError::UnrecognizedInput(_) => "unrecognized_input",
-        CoreError::PrivateMaterialRejected => "private_material_rejected",
+        CoreError::PrivateMaterialRejected => "private_material",
         CoreError::InvalidInput { .. } => "invalid_input",
         CoreError::NetworkMismatch { .. } => "network_mismatch",
         CoreError::WalletNotFound(_) => "wallet_not_found",
