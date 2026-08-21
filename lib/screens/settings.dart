@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../src/electrum.dart';
+import '../src/format.dart';
 import '../src/models.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
@@ -11,12 +15,12 @@ const String appVersion = '0.1.0';
 
 const List<({Network network, String hint})> _networkHints = [
   (network: Network.mainnet, hint: 'The Bitcoin network'),
-  (network: Network.signet, hint: 'Test network with reliable blocks'),
+  (network: Network.signet, hint: 'Test network, reliable blocks'),
   (network: Network.testnet4, hint: 'Public test network'),
   (network: Network.regtest, hint: 'Local development chain'),
 ];
 
-/// Settings: workspace network, backend, theme, wallet management.
+/// Settings: workspace, backend, display, appearance, wallets, about.
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
@@ -25,18 +29,31 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  final _urlController = TextEditingController();
+  // Backend form.
+  final _esploraController = TextEditingController();
+  final _hostController = TextEditingController();
+  final _portController = TextEditingController(text: '50002');
+  bool _tls = true;
   String _backendKind = 'public_esplora';
   Network? _seededFor;
   bool _savingBackend = false;
+
+  // Wallet management.
   String? _renamingId;
   final _renameController = TextEditingController();
   String? _confirmRemoveId;
   String? _walletError;
 
+  // Update check.
+  bool _checkingUpdate = false;
+  UpdateCheck? _updateResult;
+  bool _updateFailed = false;
+
   @override
   void dispose() {
-    _urlController.dispose();
+    _esploraController.dispose();
+    _hostController.dispose();
+    _portController.dispose();
     _renameController.dispose();
     super.dispose();
   }
@@ -50,11 +67,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       CustomEsplora() => 'custom_esplora',
       CustomElectrum() => 'custom_electrum',
     };
-    _urlController.text = switch (config) {
+    _esploraController.text = switch (config) {
       CustomEsplora(:final url) => url,
-      CustomElectrum(:final url) => url,
       _ => '',
     };
+    final electrum = switch (config) {
+      CustomElectrum(:final url) => parseElectrumUrl(url),
+      _ => (host: '', port: '50002', tls: true),
+    };
+    _hostController.text = electrum.host;
+    _portController.text = electrum.port.isEmpty ? '50002' : electrum.port;
+    _tls = electrum.tls;
   }
 
   void _toast(String message) {
@@ -70,12 +93,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (mounted) _toast('Setting saved');
   }
 
+  bool get _backendValid {
+    return switch (_backendKind) {
+      'custom_esplora' => _esploraController.text.trim().isNotEmpty,
+      'custom_electrum' =>
+        _hostController.text.trim().isNotEmpty &&
+            RegExp(r'^\d+$').hasMatch(_portController.text.trim()),
+      _ => true,
+    };
+  }
+
   Future<void> _saveBackend(Network network) async {
     setState(() => _savingBackend = true);
-    final url = _urlController.text.trim();
     final config = switch (_backendKind) {
-      'custom_esplora' => CustomEsplora(url: url),
-      'custom_electrum' => CustomElectrum(url: url),
+      'custom_esplora' => CustomEsplora(url: _esploraController.text.trim()),
+      'custom_electrum' => CustomElectrum(
+        url: buildElectrumUrl(_hostController.text, _portController.text, _tls),
+      ),
       _ => const PublicEsplora(),
     };
     try {
@@ -112,6 +146,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  Future<void> _checkForUpdates() async {
+    setState(() {
+      _checkingUpdate = true;
+      _updateFailed = false;
+      _updateResult = null;
+    });
+    try {
+      final result = await ref.read(bridgeProvider).checkUpdate(appVersion);
+      if (mounted) setState(() => _updateResult = result);
+    } catch (_) {
+      if (mounted) setState(() => _updateFailed = true);
+    } finally {
+      if (mounted) setState(() => _checkingUpdate = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
@@ -131,9 +181,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
     _seedBackendForm(settings);
     final network = settings.activeNetwork;
-    final hint = _networkHints
-        .firstWhere((entry) => entry.network == network)
-        .hint;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -141,173 +188,387 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         child: ListView(
           padding: const EdgeInsets.all(GerfautSpacing.md),
           children: [
-            _SectionTitle('Workspace', tokens: tokens),
-            Text(
-              'NETWORK',
-              style: tokens.label.copyWith(color: tokens.textMuted),
-            ),
-            const SizedBox(height: GerfautSpacing.sm),
-            Wrap(
-              spacing: GerfautSpacing.sm,
-              runSpacing: GerfautSpacing.sm,
+            _SectionCard(
+              icon: LucideIcons.globe,
+              title: 'Workspace',
+              tokens: tokens,
               children: [
-                for (final entry in _networkHints)
-                  _Pill(
-                    label: entry.network.label,
-                    selected: entry.network == network,
-                    onTap: () => _setNetwork(entry.network),
+                _FieldLabel('Network', tokens: tokens),
+                const SizedBox(height: GerfautSpacing.sm),
+                for (var row = 0; row < _networkHints.length; row += 2) ...[
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: _NetworkCard(
+                            entry: _networkHints[row],
+                            selected: _networkHints[row].network == network,
+                            onTap: () =>
+                                _setNetwork(_networkHints[row].network),
+                          ),
+                        ),
+                        const SizedBox(width: GerfautSpacing.sm),
+                        Expanded(
+                          child: _NetworkCard(
+                            entry: _networkHints[row + 1],
+                            selected:
+                                _networkHints[row + 1].network == network,
+                            onTap: () =>
+                                _setNetwork(_networkHints[row + 1].network),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
+                  if (row + 2 < _networkHints.length)
+                    const SizedBox(height: GerfautSpacing.sm),
+                ],
+                const SizedBox(height: GerfautSpacing.sm),
+                Text(
+                  'The workspace only shows wallets on the selected network.',
+                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                ),
               ],
             ),
-            const SizedBox(height: GerfautSpacing.sm),
-            Text(
-              '$hint. The workspace only shows wallets on this network.',
-              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-            ),
-            _Separator(tokens: tokens),
-            _SectionTitle('Backend · ${network.label}', tokens: tokens),
-            _BackendOption(
-              value: 'public_esplora',
-              groupValue: _backendKind,
-              label: 'Public API',
-              hint:
-                  'mempool.space, blockstream.info — no setup. The server '
-                  "operator can see this wallet's addresses.",
-              onChanged: (value) => setState(() => _backendKind = value),
-            ),
-            _BackendOption(
-              value: 'custom_esplora',
-              groupValue: _backendKind,
-              label: 'My own Esplora',
-              hint: 'An Esplora-compatible HTTP endpoint you run yourself.',
-              onChanged: (value) => setState(() => _backendKind = value),
-            ),
-            _BackendOption(
-              value: 'custom_electrum',
-              groupValue: _backendKind,
-              label: 'My own Electrum server',
-              hint: 'electrs or Fulcrum, ssl://host:port or tcp://host:port.',
-              onChanged: (value) => setState(() => _backendKind = value),
-            ),
-            if (_backendKind != 'public_esplora') ...[
-              const SizedBox(height: GerfautSpacing.sm),
-              Text(
-                'SERVER URL',
-                style: tokens.label.copyWith(color: tokens.textMuted),
-              ),
-              const SizedBox(height: GerfautSpacing.sm),
-              TextField(
-                controller: _urlController,
-                autocorrect: false,
-                enableSuggestions: false,
-                style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  hintText: _backendKind == 'custom_esplora'
-                      ? 'https://node.example.org:3002/api'
-                      : 'ssl://node.example.org:50002',
-                  hintStyle: tokens.data.copyWith(
-                    fontSize: tokens.body.fontSize,
-                    color: tokens.textMuted,
+            _SectionCard(
+              icon: LucideIcons.server,
+              title: 'Backend · ${network.label}',
+              tokens: tokens,
+              children: [
+                _BackendOption(
+                  value: 'public_esplora',
+                  groupValue: _backendKind,
+                  label: 'Public API',
+                  hint:
+                      'mempool.space and blockstream.info, no setup. The '
+                      "server operator can see this wallet's addresses.",
+                  onChanged: (value) => setState(() => _backendKind = value),
+                ),
+                _BackendOption(
+                  value: 'custom_esplora',
+                  groupValue: _backendKind,
+                  label: 'My own Esplora',
+                  hint: 'An Esplora-compatible HTTP endpoint you run yourself.',
+                  onChanged: (value) => setState(() => _backendKind = value),
+                ),
+                _BackendOption(
+                  value: 'custom_electrum',
+                  groupValue: _backendKind,
+                  label: 'My own Electrum server',
+                  hint: 'electrs or Fulcrum, reachable over TLS or plain TCP.',
+                  onChanged: (value) => setState(() => _backendKind = value),
+                ),
+                if (_backendKind == 'custom_esplora') ...[
+                  const SizedBox(height: GerfautSpacing.sm),
+                  _FieldLabel('Server URL', tokens: tokens),
+                  const SizedBox(height: GerfautSpacing.sm),
+                  _MonoField(
+                    controller: _esploraController,
+                    hint: 'https://node.example.org:3002/api',
+                    onChanged: () => setState(() {}),
+                    tokens: tokens,
                   ),
-                  filled: true,
-                  fillColor: tokens.surfaceSunken,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: GerfautSpacing.md,
-                    vertical: GerfautSpacing.sm,
+                ],
+                if (_backendKind == 'custom_electrum') ...[
+                  const SizedBox(height: GerfautSpacing.sm),
+                  _FieldLabel('Host', tokens: tokens),
+                  const SizedBox(height: GerfautSpacing.sm),
+                  _MonoField(
+                    controller: _hostController,
+                    hint: 'node.example.org or xxxxxxxx.onion',
+                    onChanged: () => setState(() {}),
+                    tokens: tokens,
                   ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(GerfautRadius.sm),
-                    borderSide: BorderSide.none,
+                  const SizedBox(height: GerfautSpacing.sm),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      SizedBox(
+                        width: 120,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _FieldLabel('Port', tokens: tokens),
+                            const SizedBox(height: GerfautSpacing.sm),
+                            _MonoField(
+                              controller: _portController,
+                              hint: '50002',
+                              numeric: true,
+                              onChanged: () => setState(() {}),
+                              tokens: tokens,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: GerfautSpacing.md),
+                      Padding(
+                        padding: const EdgeInsets.only(
+                          bottom: GerfautSpacing.sm,
+                        ),
+                        child: Row(
+                          children: [
+                            Switch(
+                              value: _tls,
+                              activeThumbColor: tokens.onPrimary,
+                              activeTrackColor: tokens.primary,
+                              inactiveThumbColor: tokens.textMuted,
+                              inactiveTrackColor: tokens.surfaceSunken,
+                              onChanged: (value) =>
+                                  setState(() => _tls = value),
+                            ),
+                            const SizedBox(width: GerfautSpacing.xs),
+                            Text('TLS', style: tokens.bodySmall),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(GerfautRadius.sm),
-                    borderSide: BorderSide(color: tokens.primary, width: 2),
+                ],
+                if (_backendKind != 'public_esplora') ...[
+                  const SizedBox(height: GerfautSpacing.sm),
+                  Text(
+                    'Onion addresses are routed through the Tor proxy at '
+                    '127.0.0.1:9050 automatically. Tor must be running on '
+                    'this device.',
+                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                  ),
+                ],
+                const SizedBox(height: GerfautSpacing.md),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: SecondaryButton(
+                    label: 'Save backend',
+                    onPressed: _savingBackend || !_backendValid
+                        ? null
+                        : () => _saveBackend(network),
                   ),
                 ),
-              ),
-            ],
-            const SizedBox(height: GerfautSpacing.md),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: SecondaryButton(
-                label: 'Save backend',
-                onPressed:
-                    _savingBackend ||
-                        (_backendKind != 'public_esplora' &&
-                            _urlController.text.trim().isEmpty)
-                    ? null
-                    : () => _saveBackend(network),
-              ),
-            ),
-            _Separator(tokens: tokens),
-            _SectionTitle('Appearance', tokens: tokens),
-            Text('THEME', style: tokens.label.copyWith(color: tokens.textMuted)),
-            const SizedBox(height: GerfautSpacing.sm),
-            Wrap(
-              spacing: GerfautSpacing.sm,
-              children: [
-                for (final pref in ThemePref.values)
-                  _Pill(
-                    label: pref.label,
-                    selected: ref.watch(themeProvider) == pref,
-                    onTap: () => ref.read(themeProvider.notifier).set(pref),
-                  ),
               ],
             ),
-            _Separator(tokens: tokens),
-            _SectionTitle('Wallets', tokens: tokens),
-            if (wallets.isEmpty)
-              Text(
-                'No wallets on this network yet.',
-                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-              )
-            else
-              for (final wallet in wallets)
-                _WalletRow(
-                  wallet: wallet,
-                  tokens: tokens,
-                  renaming: _renamingId == wallet.id,
-                  confirmingRemove: _confirmRemoveId == wallet.id,
-                  renameController: _renameController,
-                  onRenameStart: () {
-                    setState(() {
-                      _renamingId = wallet.id;
-                      _confirmRemoveId = null;
-                      _renameController.text = wallet.name;
-                    });
-                  },
-                  onRenameSubmit: () => _rename(wallet.id),
-                  onRemoveStart: () {
-                    setState(() {
-                      _confirmRemoveId = wallet.id;
-                      _renamingId = null;
-                    });
-                  },
-                  onRemoveConfirm: () => _remove(wallet.id),
-                  onCancel: () {
-                    setState(() {
-                      _renamingId = null;
-                      _confirmRemoveId = null;
-                    });
-                  },
+            _SectionCard(
+              icon: LucideIcons.coins,
+              title: 'Display',
+              tokens: tokens,
+              children: [
+                _FieldLabel('Amounts', tokens: tokens),
+                const SizedBox(height: GerfautSpacing.sm),
+                Wrap(
+                  spacing: GerfautSpacing.sm,
+                  children: [
+                    for (final unit in AmountUnit.values)
+                      _Pill(
+                        label: unit.label,
+                        selected: ref.watch(unitProvider) == unit,
+                        onTap: () => ref.read(unitProvider.notifier).set(unit),
+                      ),
+                  ],
                 ),
-            if (_walletError != null) ...[
-              const SizedBox(height: GerfautSpacing.sm),
-              Text(
-                _walletError!,
-                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-              ),
-            ],
-            _Separator(tokens: tokens),
-            _SectionTitle('About', tokens: tokens),
-            Text('Gerfaut $appVersion', style: tokens.bodySmall),
-            const SizedBox(height: GerfautSpacing.xs),
-            Text(
-              'Watch-only by design: this application contains no code to '
-              'generate keys, handle seeds, or sign transactions. There is '
-              'no send button.',
-              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                const SizedBox(height: GerfautSpacing.md),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Fiat value',
+                            style: tokens.bodySmall.copyWith(
+                              fontWeight: FontWeight.w500,
+                              fontVariations: const [
+                                FontVariation('wght', 500),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            'Shows the current value next to every amount. '
+                            "The price provider sees this app's requests.",
+                            style: tokens.bodySmall.copyWith(
+                              color: tokens.textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: GerfautSpacing.sm),
+                    Switch(
+                      value: ref.watch(fiatEnabledProvider),
+                      activeThumbColor: tokens.onPrimary,
+                      activeTrackColor: tokens.primary,
+                      inactiveThumbColor: tokens.textMuted,
+                      inactiveTrackColor: tokens.surfaceSunken,
+                      onChanged: (value) =>
+                          ref.read(fiatEnabledProvider.notifier).set(value),
+                    ),
+                  ],
+                ),
+                if (ref.watch(fiatEnabledProvider)) ...[
+                  const SizedBox(height: GerfautSpacing.md),
+                  _FieldLabel('Currency', tokens: tokens),
+                  const SizedBox(height: GerfautSpacing.sm),
+                  Wrap(
+                    spacing: GerfautSpacing.sm,
+                    runSpacing: GerfautSpacing.sm,
+                    children: [
+                      for (final currency in FiatCurrency.values)
+                        _Pill(
+                          label: currency.code,
+                          selected: ref.watch(fiatCurrencyProvider) == currency,
+                          onTap: () => ref
+                              .read(fiatCurrencyProvider.notifier)
+                              .set(currency),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: GerfautSpacing.md),
+                  _FieldLabel('Price source', tokens: tokens),
+                  const SizedBox(height: GerfautSpacing.sm),
+                  Wrap(
+                    spacing: GerfautSpacing.sm,
+                    runSpacing: GerfautSpacing.sm,
+                    children: [
+                      for (final source in PriceSource.values)
+                        _Pill(
+                          label: source.label,
+                          selected: ref.watch(fiatSourceProvider) == source,
+                          onTap: () =>
+                              ref.read(fiatSourceProvider.notifier).set(source),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: GerfautSpacing.sm),
+                  _RatePreview(tokens: tokens),
+                ],
+              ],
+            ),
+            _SectionCard(
+              icon: LucideIcons.sunMoon,
+              title: 'Appearance',
+              tokens: tokens,
+              children: [
+                _FieldLabel('Theme', tokens: tokens),
+                const SizedBox(height: GerfautSpacing.sm),
+                Wrap(
+                  spacing: GerfautSpacing.sm,
+                  children: [
+                    for (final pref in ThemePref.values)
+                      _Pill(
+                        label: pref.label,
+                        selected: ref.watch(themeProvider) == pref,
+                        onTap: () => ref.read(themeProvider.notifier).set(pref),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+            _SectionCard(
+              icon: LucideIcons.wallet,
+              title: 'Wallets',
+              tokens: tokens,
+              children: [
+                if (wallets.isEmpty)
+                  Text(
+                    'No wallets on this network yet.',
+                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                  )
+                else
+                  for (final wallet in wallets)
+                    _WalletRow(
+                      wallet: wallet,
+                      tokens: tokens,
+                      renaming: _renamingId == wallet.id,
+                      confirmingRemove: _confirmRemoveId == wallet.id,
+                      renameController: _renameController,
+                      onRenameStart: () {
+                        setState(() {
+                          _renamingId = wallet.id;
+                          _confirmRemoveId = null;
+                          _renameController.text = wallet.name;
+                        });
+                      },
+                      onRenameSubmit: () => _rename(wallet.id),
+                      onRemoveStart: () {
+                        setState(() {
+                          _confirmRemoveId = wallet.id;
+                          _renamingId = null;
+                        });
+                      },
+                      onRemoveConfirm: () => _remove(wallet.id),
+                      onCancel: () {
+                        setState(() {
+                          _renamingId = null;
+                          _confirmRemoveId = null;
+                        });
+                      },
+                    ),
+                if (_walletError != null) ...[
+                  const SizedBox(height: GerfautSpacing.sm),
+                  Text(
+                    _walletError!,
+                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                  ),
+                ],
+              ],
+            ),
+            _SectionCard(
+              icon: LucideIcons.info,
+              title: 'About',
+              tokens: tokens,
+              children: [
+                Text.rich(
+                  TextSpan(
+                    text: 'Gerfaut $appVersion',
+                    style: tokens.bodySmall,
+                    children: [
+                      TextSpan(
+                        text: '  for Android',
+                        style: tokens.bodySmall.copyWith(
+                          color: tokens.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: GerfautSpacing.md),
+                if (_updateFailed)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: GerfautSpacing.sm),
+                    child: Text(
+                      'Could not reach the release page. Try again later.',
+                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                    ),
+                  ),
+                if (_updateResult != null && !_updateResult!.updateAvailable)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: GerfautSpacing.sm),
+                    child: Text(
+                      'You are up to date.',
+                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                    ),
+                  ),
+                Row(
+                  children: [
+                    if (_updateResult != null &&
+                        _updateResult!.updateAvailable) ...[
+                      PrimaryButton(
+                        label: 'Get ${_updateResult!.latest}',
+                        onPressed: () => launchUrl(
+                          Uri.parse(_updateResult!.url),
+                          mode: LaunchMode.externalApplication,
+                        ),
+                      ),
+                      const SizedBox(width: GerfautSpacing.sm),
+                    ],
+                    SecondaryButton(
+                      label: _checkingUpdate
+                          ? 'Checking…'
+                          : 'Check for updates',
+                      icon: LucideIcons.refreshCw,
+                      onPressed: _checkingUpdate ? null : _checkForUpdates,
+                    ),
+                  ],
+                ),
+              ],
             ),
             const SizedBox(height: GerfautSpacing.lg),
           ],
@@ -317,31 +578,192 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 }
 
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.title, {required this.tokens});
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({
+    required this.icon,
+    required this.title,
+    required this.tokens,
+    required this.children,
+  });
 
+  final IconData icon;
   final String title;
   final GerfautTokens tokens;
+  final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: GerfautSpacing.md),
-      child: Text(title, style: tokens.h2),
+    return Container(
+      margin: const EdgeInsets.only(bottom: GerfautSpacing.gutter),
+      padding: const EdgeInsets.all(GerfautSpacing.md),
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        borderRadius: BorderRadius.circular(GerfautRadius.lg),
+        border: Border.all(color: tokens.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: tokens.textMuted),
+              const SizedBox(width: GerfautSpacing.sm),
+              Text(title, style: tokens.h2),
+            ],
+          ),
+          const SizedBox(height: GerfautSpacing.md),
+          ...children,
+        ],
+      ),
     );
   }
 }
 
-class _Separator extends StatelessWidget {
-  const _Separator({required this.tokens});
+class _FieldLabel extends StatelessWidget {
+  const _FieldLabel(this.text, {required this.tokens});
 
+  final String text;
   final GerfautTokens tokens;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: GerfautSpacing.lg),
-      child: Divider(height: 1, thickness: 1, color: tokens.border),
+    return Text(
+      text.toUpperCase(),
+      style: tokens.label.copyWith(color: tokens.textMuted),
+    );
+  }
+}
+
+class _NetworkCard extends StatelessWidget {
+  const _NetworkCard({
+    required this.entry,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final ({Network network, String hint}) entry;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    return InkWell(
+      borderRadius: BorderRadius.circular(GerfautRadius.md),
+      onTap: selected ? null : onTap,
+      child: Container(
+        padding: const EdgeInsets.all(GerfautSpacing.sm + GerfautSpacing.xs),
+        decoration: BoxDecoration(
+          color: selected ? tokens.surfaceSunken : tokens.surface,
+          borderRadius: BorderRadius.circular(GerfautRadius.md),
+          border: Border.all(color: selected ? tokens.primary : tokens.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    entry.network.label,
+                    style: tokens.bodySmall.copyWith(
+                      color: selected ? tokens.primary : tokens.text,
+                      fontWeight: FontWeight.w500,
+                      fontVariations: const [FontVariation('wght', 500)],
+                    ),
+                  ),
+                ),
+                if (selected)
+                  Icon(LucideIcons.check, size: 15, color: tokens.primary),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              entry.hint,
+              style: tokens.label.copyWith(color: tokens.textMuted),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MonoField extends StatelessWidget {
+  const _MonoField({
+    required this.controller,
+    required this.hint,
+    required this.onChanged,
+    required this.tokens,
+    this.numeric = false,
+  });
+
+  final TextEditingController controller;
+  final String hint;
+  final VoidCallback onChanged;
+  final GerfautTokens tokens;
+  final bool numeric;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      autocorrect: false,
+      enableSuggestions: false,
+      keyboardType: numeric ? TextInputType.number : TextInputType.url,
+      style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
+      onChanged: (_) => onChanged(),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: tokens.data.copyWith(
+          fontSize: tokens.body.fontSize,
+          color: tokens.textMuted,
+        ),
+        filled: true,
+        fillColor: tokens.surfaceSunken,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: GerfautSpacing.md,
+          vertical: GerfautSpacing.sm,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(GerfautRadius.sm),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(GerfautRadius.sm),
+          borderSide: BorderSide(color: tokens.primary, width: 2),
+        ),
+      ),
+    );
+  }
+}
+
+class _RatePreview extends ConsumerWidget {
+  const _RatePreview({required this.tokens});
+
+  final GerfautTokens tokens;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final price = ref.watch(priceProvider);
+    if (price.hasError) {
+      return Text(
+        'The price source did not answer. Amounts show without fiat until '
+        'it does.',
+        style: tokens.bodySmall.copyWith(color: tokens.pending),
+      );
+    }
+    final quote = price.valueOrNull;
+    if (quote == null) {
+      return Text(
+        'Fetching the current price…',
+        style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+      );
+    }
+    return Text(
+      '1 BTC = ${formatFiat(satsPerBtc, quote.rate, quote.currency)} · '
+      'updated ${relativeTime(quote.at)}',
+      style: tokens.data.copyWith(color: tokens.textMuted),
     );
   }
 }
@@ -488,6 +910,7 @@ class _WalletRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final single = wallet.isSingleAddress;
     return Container(
       margin: const EdgeInsets.only(bottom: GerfautSpacing.sm),
       padding: const EdgeInsets.all(GerfautSpacing.md),
@@ -498,63 +921,193 @@ class _WalletRow extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (renaming)
-            TextField(
-              controller: renameController,
-              autofocus: true,
-              style: tokens.body,
-              onSubmitted: (_) => onRenameSubmit(),
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: tokens.surfaceSunken,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: GerfautSpacing.sm,
-                  vertical: GerfautSpacing.xs,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(GerfautRadius.sm),
-                  borderSide: BorderSide.none,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Icon(
+                  single ? LucideIcons.mapPin : LucideIcons.wallet,
+                  size: 16,
+                  color: tokens.textMuted,
                 ),
               ),
-            )
-          else
-            Text(
-              wallet.name,
-              style: tokens.bodySmall.copyWith(
-                fontWeight: FontWeight.w500,
-                fontVariations: const [FontVariation('wght', 500)],
+              const SizedBox(width: GerfautSpacing.sm),
+              Expanded(
+                child: renaming
+                    ? Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: renameController,
+                              autofocus: true,
+                              style: tokens.body,
+                              onSubmitted: (_) => onRenameSubmit(),
+                              decoration: InputDecoration(
+                                filled: true,
+                                fillColor: tokens.surfaceSunken,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: GerfautSpacing.sm,
+                                  vertical: GerfautSpacing.xs,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(
+                                    GerfautRadius.sm,
+                                  ),
+                                  borderSide: BorderSide.none,
+                                ),
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Save name',
+                            onPressed: onRenameSubmit,
+                            icon: Icon(
+                              LucideIcons.check,
+                              size: 18,
+                              color: tokens.primary,
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Cancel renaming',
+                            onPressed: onCancel,
+                            icon: Icon(
+                              LucideIcons.x,
+                              size: 18,
+                              color: tokens.textMuted,
+                            ),
+                          ),
+                        ],
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            wallet.name,
+                            style: tokens.bodySmall.copyWith(
+                              fontWeight: FontWeight.w500,
+                              fontVariations: const [
+                                FontVariation('wght', 500),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            single ? 'Single address' : 'Descriptor wallet',
+                            style: tokens.label.copyWith(
+                              color: tokens.textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
               ),
-            ),
-          const SizedBox(height: GerfautSpacing.sm),
+            ],
+          ),
           if (confirmingRemove) ...[
-            Text(
-              'Stop watching this wallet? Nothing on chain changes.',
-              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-            ),
             const SizedBox(height: GerfautSpacing.sm),
+            Container(
+              padding: const EdgeInsets.all(GerfautSpacing.sm),
+              decoration: BoxDecoration(
+                color: tokens.alertSurface,
+                borderRadius: BorderRadius.circular(GerfautRadius.md),
+                border: Border.all(color: tokens.alert.withValues(alpha: 0.25)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        LucideIcons.triangleAlert,
+                        size: 16,
+                        color: tokens.alert,
+                      ),
+                      const SizedBox(width: GerfautSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          'You are removing "${wallet.name}" from Gerfaut. '
+                          'This only stops watching. Nothing moves on chain.',
+                          style: tokens.bodySmall.copyWith(color: tokens.alert),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: GerfautSpacing.sm),
+                  Row(
+                    children: [
+                      DangerButton(
+                        label: 'Remove wallet',
+                        onPressed: onRemoveConfirm,
+                      ),
+                      const SizedBox(width: GerfautSpacing.sm),
+                      GhostButton(label: 'Cancel', onPressed: onCancel),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ] else if (!renaming) ...[
+            const SizedBox(height: GerfautSpacing.xs),
             Row(
               children: [
-                SecondaryButton(label: 'Remove', onPressed: onRemoveConfirm),
-                const SizedBox(width: GerfautSpacing.sm),
-                GhostButton(label: 'Cancel', onPressed: onCancel),
+                GhostButton(
+                  label: 'Rename',
+                  icon: LucideIcons.pencil,
+                  onPressed: onRenameStart,
+                ),
+                _AlertGhostButton(
+                  label: 'Remove',
+                  icon: LucideIcons.trash2,
+                  onPressed: onRemoveStart,
+                ),
               ],
             ),
-          ] else if (renaming)
-            Row(
-              children: [
-                SecondaryButton(label: 'Save', onPressed: onRenameSubmit),
-                const SizedBox(width: GerfautSpacing.sm),
-                GhostButton(label: 'Cancel', onPressed: onCancel),
-              ],
-            )
-          else
-            Row(
-              children: [
-                GhostButton(label: 'Rename', onPressed: onRenameStart),
-                GhostButton(label: 'Remove', onPressed: onRemoveStart),
-              ],
-            ),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+/// Ghost button in the alert color: the entry point of a destructive
+/// confirmation, mirroring the desktop design amendment.
+class _AlertGhostButton extends StatelessWidget {
+  const _AlertGhostButton({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    return SizedBox(
+      height: 44,
+      child: TextButton(
+        style: TextButton.styleFrom(
+          foregroundColor: tokens.alert,
+          padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(GerfautRadius.md),
+          ),
+          textStyle: tokens.bodySmall.copyWith(
+            fontWeight: FontWeight.w500,
+            fontVariations: const [FontVariation('wght', 500)],
+          ),
+        ),
+        onPressed: onPressed,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14),
+            const SizedBox(width: GerfautSpacing.xs),
+            Text(label),
+          ],
+        ),
       ),
     );
   }

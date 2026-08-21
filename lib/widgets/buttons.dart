@@ -155,3 +155,40 @@ class GhostButton extends StatelessWidget {
     );
   }
 }
+
+/// Destructive confirmations only, never a lone delete button: filled
+/// with the alert color inside an explicit confirmation banner.
+class DangerButton extends StatelessWidget {
+  const DangerButton({super.key, required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return SizedBox(
+      height: 44,
+      child: FilledButton(
+        style: FilledButton.styleFrom(
+          backgroundColor: tokens.alert,
+          // Light: white text on the deep red. Dark: near-black text on
+          // the bright red, mirroring the desktop danger variant.
+          foregroundColor: dark ? tokens.background : tokens.surface,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(GerfautRadius.md),
+          ),
+          textStyle: tokens.bodySmall.copyWith(
+            fontWeight: FontWeight.w500,
+            fontVariations: const [FontVariation('wght', 500)],
+          ),
+        ),
+        onPressed: onPressed,
+        child: Text(label),
+      ),
+    );
+  }
+}
