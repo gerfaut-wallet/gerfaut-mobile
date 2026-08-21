@@ -1,30 +1,53 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'src/state.dart';
 import 'theme/tokens.dart';
 
 /// Root widget: both Toundra themes, light by default, and the startup
 /// bootstrap (Rust bridge + encrypted vault) before the home screen.
-class GerfautApp extends StatefulWidget {
+class GerfautApp extends ConsumerStatefulWidget {
   const GerfautApp({super.key, this.bootstrap});
 
   /// Opens the Rust bridge and the vault at startup. Widget tests pass
-  /// null (or a fake) so pumping the app never touches native code.
+  /// null (with a fake bridge override) so pumping the app never
+  /// touches native code.
   final Future<void> Function()? bootstrap;
 
   @override
-  State<GerfautApp> createState() => _GerfautAppState();
+  ConsumerState<GerfautApp> createState() => _GerfautAppState();
 }
 
-class _GerfautAppState extends State<GerfautApp> {
+class _GerfautAppState extends ConsumerState<GerfautApp> {
   late final Future<void>? _ready = widget.bootstrap?.call();
 
   @override
   Widget build(BuildContext context) {
+    // Hydrate UI prefs from the vault once, as soon as settings load.
+    ref.listen(settingsProvider, (_, next) {
+      final settings = next.valueOrNull;
+      if (settings != null && !ref.read(prefsHydratedProvider)) {
+        ref.read(prefsHydratedProvider.notifier).state = true;
+        ref
+            .read(themeProvider.notifier)
+            .hydrate(settings.appPrefs['mobile.theme']);
+        ref
+            .read(maskedProvider.notifier)
+            .hydrate(settings.appPrefs['mobile.masked']);
+      }
+    });
+
+    final themeMode = switch (ref.watch(themeProvider)) {
+      ThemePref.light => ThemeMode.light,
+      ThemePref.dark => ThemeMode.dark,
+      ThemePref.system => ThemeMode.system,
+    };
+
     return MaterialApp(
       title: 'Gerfaut',
       theme: themeFrom(GerfautTokens.light, Brightness.light),
       darkTheme: themeFrom(GerfautTokens.dark, Brightness.dark),
-      themeMode: ThemeMode.system,
+      themeMode: themeMode,
       home: _ready == null ? const HomeScreen() : _BootstrapGate(ready: _ready),
     );
   }
@@ -75,6 +98,31 @@ ThemeData themeFrom(GerfautTokens tokens, Brightness brightness) {
     canvasColor: tokens.background,
     dividerColor: tokens.border,
     fontFamily: GerfautFonts.ui,
+    appBarTheme: AppBarTheme(
+      backgroundColor: tokens.background,
+      surfaceTintColor: Colors.transparent,
+      foregroundColor: tokens.text,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      centerTitle: false,
+      titleTextStyle: tokens.h2,
+    ),
+    snackBarTheme: SnackBarThemeData(
+      backgroundColor: tokens.text,
+      contentTextStyle: tokens.bodySmall.copyWith(color: tokens.background),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(GerfautRadius.md),
+      ),
+    ),
+    tabBarTheme: TabBarThemeData(
+      labelColor: tokens.text,
+      unselectedLabelColor: tokens.textMuted,
+      indicatorColor: tokens.primary,
+      dividerColor: tokens.border,
+      labelStyle: tokens.bodySmall.copyWith(fontWeight: FontWeight.w500),
+      unselectedLabelStyle: tokens.bodySmall,
+    ),
     extensions: [tokens],
   );
 }
