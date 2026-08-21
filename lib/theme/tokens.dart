@@ -27,6 +27,14 @@ abstract final class GerfautRadius {
   static const double full = 9999;
 }
 
+/// QR codes stay dark-on-light in every theme: scanners expect it, and
+/// inverting hurts contrast for cameras. These are the only theme-fixed
+/// colors of the system.
+abstract final class GerfautQr {
+  static const Color background = Color(0xFFFFFFFF);
+  static const Color foreground = Color(0xFF0D1317);
+}
+
 /// Font families bundled from brand assets.
 abstract final class GerfautFonts {
   /// Bricolage Grotesque: display, h1, h2. Never body text.

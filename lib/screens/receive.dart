@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../src/state.dart';
 import '../theme/tokens.dart';
@@ -61,6 +62,37 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    Center(
+                      child: Semantics(
+                        label: 'Address QR code',
+                        image: true,
+                        child: Container(
+                          width: 220,
+                          padding: const EdgeInsets.all(GerfautSpacing.sm),
+                          decoration: BoxDecoration(
+                            color: GerfautQr.background,
+                            borderRadius: BorderRadius.circular(
+                              GerfautRadius.lg,
+                            ),
+                            border: Border.all(color: tokens.border),
+                          ),
+                          child: QrImageView(
+                            data: entry.address,
+                            backgroundColor: GerfautQr.background,
+                            eyeStyle: const QrEyeStyle(
+                              eyeShape: QrEyeShape.square,
+                              color: GerfautQr.foreground,
+                            ),
+                            dataModuleStyle: const QrDataModuleStyle(
+                              dataModuleShape: QrDataModuleShape.square,
+                              color: GerfautQr.foreground,
+                            ),
+                            padding: EdgeInsets.zero,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: GerfautSpacing.md),
                     Text(
                       'NEXT UNUSED ADDRESS · INDEX ${entry.index}',
                       style: tokens.label.copyWith(color: tokens.textMuted),
