@@ -8,8 +8,9 @@ import '../theme/tokens.dart';
 import 'address_chip.dart';
 import 'amounts.dart';
 
-/// Row height of one input/output lane.
-const double _row = 56;
+/// Row height of one input/output lane. Taller than desktop: the
+/// chip and a wrapped amount line need the room at mobile text sizes.
+const double _row = 76;
 
 /// Width of the strip carrying the curves and the tx node.
 const double _mid = 150;
