@@ -14,6 +14,9 @@ abstract final class GerfautSpacing {
   static const double lg = 24;
   static const double xl = 32;
   static const double xxl = 48;
+
+  /// Mobile gutter between cards (DESIGN.md layout constant).
+  static const double gutter = 12;
 }
 
 /// Corner radii. Nothing above [lg] on a container.

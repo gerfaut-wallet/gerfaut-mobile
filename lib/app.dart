@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'screens/home.dart';
 import 'src/state.dart';
 import 'theme/tokens.dart';
 
@@ -169,102 +170,6 @@ class _StartupErrorScreen extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// The empty state: no wallet watched yet, one action.
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('No wallets yet', style: tokens.body),
-                const SizedBox(height: GerfautSpacing.sm),
-                Text(
-                  'Import a descriptor, xpub, or address to start watching it.',
-                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: GerfautSpacing.lg),
-                _PrimaryButton(
-                  label: 'Add a wallet',
-                  onPressed: () => _showAddWalletPlaceholder(context),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showAddWalletPlaceholder(BuildContext context) {
-    final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: tokens.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(GerfautRadius.lg),
-          ),
-          title: Text('Add a wallet', style: tokens.h2),
-          content: Text(
-            'Importing wallets is not available yet.',
-            style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-          ),
-          actions: [
-            TextButton(
-              style: TextButton.styleFrom(foregroundColor: tokens.primary),
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Close'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-/// The single primary action of a screen: Glacier surface, 44px tall.
-class _PrimaryButton extends StatelessWidget {
-  const _PrimaryButton({required this.label, required this.onPressed});
-
-  final String label;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    return SizedBox(
-      height: 44,
-      child: FilledButton(
-        style: FilledButton.styleFrom(
-          backgroundColor: tokens.primary,
-          foregroundColor: tokens.onPrimary,
-          elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(GerfautRadius.md),
-          ),
-          textStyle: tokens.bodySmall.copyWith(
-            fontWeight: FontWeight.w500,
-            fontVariations: const [FontVariation('wght', 500)],
-          ),
-        ),
-        onPressed: onPressed,
-        child: Text(label),
       ),
     );
   }
