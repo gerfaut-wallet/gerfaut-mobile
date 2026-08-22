@@ -68,29 +68,34 @@ class _Detail extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final masked = ref.watch(maskedProvider);
+    final unit = ref.watch(unitProvider);
     final summary = detail.summary;
     final explorer = explorerTxUrl(network, summary.txid);
     final fiat = fiatValueOf(ref, summary.netSats);
+    // The other unit rides the subline, with the fiat value when on.
+    final secondary = formatAmount(
+      summary.netSats,
+      unit == AmountUnit.btc ? AmountUnit.sats : AmountUnit.btc,
+    );
 
     return ListView(
       padding: const EdgeInsets.all(GerfautSpacing.md),
       children: [
-        Text.rich(
-          TextSpan(
-            text: masked ? maskedValue : formatBtcSigned(summary.netSats),
-            style: tokens.amount,
-            children: [
-              TextSpan(
-                text: ' BTC',
-                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-              ),
-              if (fiat != null)
-                TextSpan(
-                  text: ' · $fiat',
-                  style: tokens.data.copyWith(color: tokens.textMuted),
-                ),
-            ],
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            masked ? maskedValue : formatAmountSigned(summary.netSats, unit),
+            style: tokens.amount.copyWith(fontSize: 26, letterSpacing: -0.26),
+            maxLines: 1,
           ),
+        ),
+        const SizedBox(height: GerfautSpacing.xs),
+        Text(
+          masked
+              ? maskedValue
+              : (fiat != null ? '$secondary · $fiat' : secondary),
+          style: tokens.data.copyWith(color: tokens.textMuted),
         ),
         const SizedBox(height: GerfautSpacing.sm),
         Row(
@@ -109,30 +114,35 @@ class _Detail extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: GerfautSpacing.lg),
-        _FieldLabel('Transaction id', tokens: tokens),
-        const SizedBox(height: GerfautSpacing.xs),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: AddressChip(value: summary.txid, head: 10, tail: 10),
-        ),
-        const SizedBox(height: GerfautSpacing.md),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: _Fact(
+        // The transaction's vitals as one quiet panel: label left,
+        // value right, so long values never overflow.
+        Container(
+          padding: const EdgeInsets.all(GerfautSpacing.md),
+          decoration: BoxDecoration(
+            color: tokens.surface,
+            borderRadius: BorderRadius.circular(GerfautRadius.lg),
+            border: Border.all(color: tokens.border),
+          ),
+          child: Column(
+            children: [
+              _MetaRow(
+                label: 'Transaction id',
+                tokens: tokens,
+                child: AddressChip(value: summary.txid, head: 8, tail: 8),
+              ),
+              const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
+              _MetaRow(
                 label: 'Fee',
                 tokens: tokens,
                 child: summary.feeSats != null
-                    ? InlineAmount(sats: summary.feeSats!)
+                    ? _FeeValue(sats: summary.feeSats!)
                     : Text(
                         'n/a',
                         style: tokens.data.copyWith(color: tokens.textMuted),
                       ),
               ),
-            ),
-            Expanded(
-              child: _Fact(
+              const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
+              _MetaRow(
                 label: 'Fee rate',
                 tokens: tokens,
                 child: Text(
@@ -140,17 +150,23 @@ class _Detail extends ConsumerWidget {
                       ? '${detail.feeRateSatVb!.toStringAsFixed(1)} sat/vB'
                       : 'n/a',
                   style: tokens.data,
+                  maxLines: 1,
+                  softWrap: false,
                 ),
               ),
-            ),
-            Expanded(
-              child: _Fact(
+              const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
+              _MetaRow(
                 label: 'Size',
                 tokens: tokens,
-                child: Text('${detail.vsize} vB', style: tokens.data),
+                child: Text(
+                  '${detail.vsize} vB',
+                  style: tokens.data,
+                  maxLines: 1,
+                  softWrap: false,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         const SizedBox(height: GerfautSpacing.lg),
         FlowDiagram(
@@ -364,8 +380,12 @@ class _FieldLabel extends StatelessWidget {
   }
 }
 
-class _Fact extends StatelessWidget {
-  const _Fact({required this.label, required this.child, required this.tokens});
+class _MetaRow extends StatelessWidget {
+  const _MetaRow({
+    required this.label,
+    required this.child,
+    required this.tokens,
+  });
 
   final String label;
   final Widget child;
@@ -373,13 +393,34 @@ class _Fact extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
         _FieldLabel(label, tokens: tokens),
-        const SizedBox(height: GerfautSpacing.xs),
-        child,
+        const SizedBox(width: GerfautSpacing.sm),
+        Expanded(
+          child: Align(alignment: Alignment.centerRight, child: child),
+        ),
       ],
+    );
+  }
+}
+
+/// Fee in the chosen unit, no fiat: the meta panel stays scannable.
+class _FeeValue extends ConsumerWidget {
+  const _FeeValue({required this.sats});
+
+  final int sats;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final masked = ref.watch(maskedProvider);
+    final unit = ref.watch(unitProvider);
+    return Text(
+      masked ? maskedValue : formatAmount(sats, unit),
+      style: tokens.data,
+      maxLines: 1,
+      softWrap: false,
     );
   }
 }
@@ -410,6 +451,7 @@ class _IoSection extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: GerfautSpacing.sm),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: Row(
@@ -418,7 +460,7 @@ class _IoSection extends StatelessWidget {
                         Flexible(child: AddressChip(value: io.address!))
                       else
                         Text(
-                          side == _IoSide.input ? 'coinbase' : 'unknown',
+                          side == _IoSide.input ? 'coinbase' : 'script output',
                           style: tokens.data.copyWith(color: tokens.textMuted),
                         ),
                       if (io.isMine) ...[
@@ -447,7 +489,7 @@ class _IoSection extends StatelessWidget {
                 ),
                 const SizedBox(width: GerfautSpacing.sm),
                 if (io.valueSats != null)
-                  InlineAmount(sats: io.valueSats!)
+                  StackedAmount(sats: io.valueSats!)
                 else
                   Text(
                     'n/a',
