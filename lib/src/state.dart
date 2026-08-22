@@ -143,10 +143,11 @@ final unitProvider = NotifierProvider<UnitNotifier, AmountUnit>(
 
 class FiatEnabledNotifier extends Notifier<bool> {
   @override
-  bool build() => true;
+  bool build() => false;
 
   void hydrate(String? stored) {
-    if (stored != null) state = stored != '0';
+    // Only an explicit "1" turns the display on: fiat is opt-in.
+    state = stored == '1';
   }
 
   void set(bool enabled) {
@@ -158,7 +159,7 @@ class FiatEnabledNotifier extends Notifier<bool> {
   }
 }
 
-/// Fiat display, on by default, persisted as "display.fiat".
+/// Fiat display, off by default, persisted as "display.fiat".
 final fiatEnabledProvider = NotifierProvider<FiatEnabledNotifier, bool>(
   FiatEnabledNotifier.new,
 );

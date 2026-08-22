@@ -25,7 +25,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    expect(find.text('Workspace'), findsOneWidget);
+    expect(find.text('Network'), findsOneWidget);
 
     await tester.scrollUntilVisible(find.text('Dark'), 100);
     await tester.ensureVisible(find.text('Dark'));

@@ -190,11 +190,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           children: [
             _SectionCard(
               icon: LucideIcons.globe,
-              title: 'Workspace',
+              title: 'Network',
               tokens: tokens,
               children: [
-                _FieldLabel('Network', tokens: tokens),
-                const SizedBox(height: GerfautSpacing.sm),
                 for (var row = 0; row < _networkHints.length; row += 2) ...[
                   IntrinsicHeight(
                     child: Row(
@@ -226,7 +224,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ],
                 const SizedBox(height: GerfautSpacing.sm),
                 Text(
-                  'The workspace only shows wallets on the selected network.',
+                  'Only wallets on the selected network are shown.',
                   style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                 ),
               ],
@@ -328,9 +326,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 if (_backendKind != 'public_esplora') ...[
                   const SizedBox(height: GerfautSpacing.sm),
                   Text(
-                    'Onion addresses are routed through the Tor proxy at '
-                    '127.0.0.1:9050 automatically. Tor must be running on '
-                    'this device.',
+                    'Onion addresses go through the Tor proxy at '
+                    '127.0.0.1:9050. Install and start Orbot first; a '
+                    'built-in Tor client is planned.',
                     style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                   ),
                 ],
@@ -351,7 +349,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: 'Display',
               tokens: tokens,
               children: [
-                _FieldLabel('Amounts', tokens: tokens),
+                _FieldLabel('Unit', tokens: tokens),
+                const SizedBox(height: GerfautSpacing.xs),
+                Text(
+                  'Applies to every amount in the app.',
+                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                ),
                 const SizedBox(height: GerfautSpacing.sm),
                 Wrap(
                   spacing: GerfautSpacing.sm,
@@ -381,8 +384,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             ),
                           ),
                           Text(
-                            'Shows the current value next to every amount. '
-                            "The price provider sees this app's requests.",
+                            'Shows the fiat value next to every amount. '
+                            "Price requests expose this app's IP address to "
+                            'the selected provider; they carry no wallet '
+                            'data.',
                             style: tokens.bodySmall.copyWith(
                               color: tokens.textMuted,
                             ),
@@ -422,6 +427,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                   const SizedBox(height: GerfautSpacing.md),
                   _FieldLabel('Price source', tokens: tokens),
+                  const SizedBox(height: GerfautSpacing.xs),
+                  Text(
+                    'One request per minute while the app is in front.',
+                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                  ),
                   const SizedBox(height: GerfautSpacing.sm),
                   Wrap(
                     spacing: GerfautSpacing.sm,
