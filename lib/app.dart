@@ -40,6 +40,9 @@ class _GerfautAppState extends ConsumerState<GerfautApp> {
         ref
             .read(fiatSourceProvider.notifier)
             .hydrate(prefs['display.fiat_source']);
+        ref
+            .read(explorerAckProvider.notifier)
+            .hydrate(prefs['privacy.explorer_ack']);
       }
     });
 

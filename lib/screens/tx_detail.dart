@@ -179,7 +179,7 @@ class _Detail extends ConsumerWidget {
             alignment: Alignment.centerLeft,
             child: InkWell(
               borderRadius: BorderRadius.circular(GerfautRadius.sm),
-              onTap: () => _confirmExplorer(context, explorer),
+              onTap: () => _openExplorer(context, ref, explorer),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   vertical: GerfautSpacing.sm,
@@ -209,52 +209,141 @@ class _Detail extends ConsumerWidget {
 }
 
 /// The explorer link sits behind a privacy warning: a third party can
-/// link the transaction to the viewer's IP address.
-void _confirmExplorer(BuildContext context, String url) {
+/// link the transaction to the viewer's IP address. Once acknowledged
+/// for good, the dialog steps aside.
+void _openExplorer(BuildContext context, WidgetRef ref, String url) {
+  void launch() {
+    launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+  }
+
+  if (ref.read(explorerAckProvider)) {
+    launch();
+    return;
+  }
+
   final tokens = Theme.of(context).extension<GerfautTokens>()!;
+  var skipNextTime = false;
   showDialog<void>(
     context: context,
     builder: (dialogContext) {
-      return AlertDialog(
-        backgroundColor: tokens.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(GerfautRadius.lg),
-        ),
-        title: Text('Open an external explorer', style: tokens.h2),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'This opens the transaction on mempool.space, a third-party '
-              'website. Its operator can link this transaction to your IP '
-              'address.',
-              style: tokens.bodySmall,
+      return StatefulBuilder(
+        builder: (dialogContext, setState) {
+          return AlertDialog(
+            backgroundColor: tokens.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(GerfautRadius.lg),
             ),
-            const SizedBox(height: GerfautSpacing.sm),
-            Text(
-              'Consider a VPN or Tor if that link matters to you.',
-              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+            title: Text('Open an external explorer', style: tokens.h2),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(GerfautSpacing.sm + 4),
+                    decoration: BoxDecoration(
+                      color: tokens.alertSurface,
+                      borderRadius: BorderRadius.circular(GerfautRadius.md),
+                      border: Border.all(
+                        color: tokens.alert.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Icon(
+                            LucideIcons.triangleAlert,
+                            size: 16,
+                            color: tokens.alert,
+                          ),
+                        ),
+                        const SizedBox(width: GerfautSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            'This opens the transaction on mempool.space, a '
+                            'third-party website. Its operator can link this '
+                            'transaction to your IP address.',
+                            style: tokens.bodySmall.copyWith(
+                              color: tokens.alert,
+                              fontWeight: FontWeight.w500,
+                              fontVariations: const [
+                                FontVariation('wght', 500),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: GerfautSpacing.sm),
+                  Text(
+                    'Consider a VPN or Tor if that link matters to you.',
+                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                  ),
+                  const SizedBox(height: GerfautSpacing.sm),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                    onTap: () => setState(() => skipNextTime = !skipNextTime),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: GerfautSpacing.sm + 2,
+                      ),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: Checkbox(
+                              value: skipNextTime,
+                              activeColor: tokens.primary,
+                              checkColor: tokens.onPrimary,
+                              side: BorderSide(
+                                color: tokens.textMuted,
+                                width: 1.5,
+                              ),
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              onChanged: (value) => setState(
+                                () => skipNextTime = value ?? false,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: GerfautSpacing.sm),
+                          Expanded(
+                            child: Text(
+                              'Do not show this warning again',
+                              style: tokens.bodySmall,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: tokens.textMuted),
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
-          PrimaryButton(
-            label: 'Open explorer',
-            onPressed: () {
-              Navigator.of(dialogContext).pop();
-              launchUrl(
-                Uri.parse(url),
-                mode: LaunchMode.externalApplication,
-              );
-            },
-          ),
-        ],
+            actions: [
+              TextButton(
+                style: TextButton.styleFrom(foregroundColor: tokens.textMuted),
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancel'),
+              ),
+              PrimaryButton(
+                label: 'Open explorer',
+                onPressed: () {
+                  if (skipNextTime) {
+                    ref.read(explorerAckProvider.notifier).set(true);
+                  }
+                  Navigator.of(dialogContext).pop();
+                  launch();
+                },
+              ),
+            ],
+          );
+        },
       );
     },
   );

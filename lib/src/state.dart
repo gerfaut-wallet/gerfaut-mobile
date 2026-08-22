@@ -211,6 +211,30 @@ final fiatSourceProvider = NotifierProvider<FiatSourceNotifier, PriceSource>(
   FiatSourceNotifier.new,
 );
 
+class ExplorerAckNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void hydrate(String? stored) {
+    // Only an explicit "1" skips the warning, same rule as the desktop.
+    state = stored == '1';
+  }
+
+  void set(bool acknowledged) {
+    state = acknowledged;
+    ref
+        .read(bridgeProvider)
+        .setAppPref('privacy.explorer_ack', acknowledged ? '1' : '0')
+        .catchError((_) {});
+  }
+}
+
+/// External explorer warning acknowledged: the dialog is skipped when
+/// set. Persisted as "privacy.explorer_ack", shared with the desktop.
+final explorerAckProvider = NotifierProvider<ExplorerAckNotifier, bool>(
+  ExplorerAckNotifier.new,
+);
+
 /// Current BTC price, refreshed every minute while fiat display is on.
 /// Failures surface as an error state: amounts degrade to no fiat and
 /// the settings screen shows a quiet hint.
