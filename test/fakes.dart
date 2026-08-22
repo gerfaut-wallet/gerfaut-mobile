@@ -4,6 +4,32 @@
 
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/models.dart';
+import 'package:url_launcher_platform_interface/link.dart';
+import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
+
+/// Captures external launches instead of touching the platform.
+/// Install with `UrlLauncherPlatform.instance = FakeUrlLauncher()`.
+class FakeUrlLauncher extends UrlLauncherPlatform {
+  final List<String> launched = [];
+
+  @override
+  LinkDelegate? get linkDelegate => null;
+
+  @override
+  Future<bool> canLaunch(String url) async => true;
+
+  @override
+  Future<bool> supportsMode(PreferredLaunchMode mode) async => true;
+
+  @override
+  Future<bool> supportsCloseForMode(PreferredLaunchMode mode) async => false;
+
+  @override
+  Future<bool> launchUrl(String url, LaunchOptions options) async {
+    launched.add(url);
+    return true;
+  }
+}
 
 WalletMeta makeMeta({
   String id = 'w1',

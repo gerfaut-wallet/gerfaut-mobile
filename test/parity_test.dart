@@ -9,6 +9,7 @@ import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
 import 'fakes.dart';
 
@@ -134,6 +135,112 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(find.text('Open an external explorer'), findsNothing);
+  });
+
+  testWidgets('an acknowledged explorer warning is skipped', (tester) async {
+    final launcher = FakeUrlLauncher();
+    UrlLauncherPlatform.instance = launcher;
+    final txid = 'f' * 64;
+    final detail = makeTxDetail();
+    final meta = makeMeta();
+    final bridge = FakeBridge(
+      wallets: [meta],
+      snapshots: {
+        'w1': makeSnapshot(meta: meta, txs: [detail.summary]),
+      },
+      txDetails: {'w1:$txid': detail},
+      settings: const Settings(
+        activeNetwork: Network.mainnet,
+        backends: {},
+        appPrefs: {'privacy.explorer_ack': '1'},
+      ),
+    );
+    await tester.pumpWidget(app(bridge));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Cold storage'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Received'));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('View on mempool.space'), 200);
+    await tester.ensureVisible(find.text('View on mempool.space'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('View on mempool.space'));
+    await tester.pumpAndSettle();
+
+    // No dialog: the stored acknowledgement opens the page directly.
+    expect(find.text('Open an external explorer'), findsNothing);
+    expect(launcher.launched, ['https://mempool.space/tx/$txid']);
+  });
+
+  testWidgets('the do-not-show-again choice persists', (tester) async {
+    final launcher = FakeUrlLauncher();
+    UrlLauncherPlatform.instance = launcher;
+    final bridge = FakeBridge(txDetails: {'w1:${'f' * 64}': makeTxDetail()});
+    await tester.pumpWidget(
+      app(
+        bridge,
+        home: TxDetailScreen(
+          walletId: 'w1',
+          txid: 'f' * 64,
+          network: Network.mainnet,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('View on mempool.space'), 200);
+    await tester.ensureVisible(find.text('View on mempool.space'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('View on mempool.space'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Do not show this warning again'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open explorer'));
+    await tester.pumpAndSettle();
+
+    expect(bridge.appPrefs['privacy.explorer_ack'], '1');
+    expect(launcher.launched.length, 1);
+
+    // The next visit skips the dialog entirely.
+    await tester.tap(find.text('View on mempool.space'));
+    await tester.pumpAndSettle();
+    expect(find.text('Open an external explorer'), findsNothing);
+    expect(launcher.launched.length, 2);
+  });
+
+  testWidgets('the tx detail net amount follows the unit setting', (
+    tester,
+  ) async {
+    final bridge = FakeBridge(txDetails: {'w1:${'f' * 64}': makeTxDetail()});
+    await tester.pumpWidget(
+      app(
+        bridge,
+        home: TxDetailScreen(
+          walletId: 'w1',
+          txid: 'f' * 64,
+          network: Network.mainnet,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(formatAmountSigned(5000, AmountUnit.btc)), findsOneWidget);
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(TxDetailScreen)),
+      listen: false,
+    );
+    container.read(unitProvider.notifier).set(AmountUnit.sats);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(formatAmountSigned(5000, AmountUnit.sats)),
+      findsOneWidget,
+    );
+    expect(bridge.appPrefs['display.unit'], 'sats');
   });
 
   testWidgets('removing a wallet confirms with the alert banner', (
