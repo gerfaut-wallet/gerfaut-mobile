@@ -340,7 +340,7 @@ class _UtxoList extends ConsumerWidget {
                   children: [
                     StatusPill(status: utxo.status),
                     const SizedBox(height: GerfautSpacing.xs),
-                    InlineAmount(sats: utxo.valueSats),
+                    StackedAmount(sats: utxo.valueSats),
                   ],
                 ),
               ],

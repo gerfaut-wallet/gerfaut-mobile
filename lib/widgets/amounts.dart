@@ -98,6 +98,46 @@ class ListAmount extends ConsumerWidget {
   }
 }
 
+/// Unsigned amount stacked over its fiat value, for dense rows: the
+/// amount never wraps, the fiat line carries the small print.
+class StackedAmount extends ConsumerWidget {
+  const StackedAmount({super.key, required this.sats});
+
+  final int sats;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final masked = ref.watch(maskedProvider);
+    final unit = ref.watch(unitProvider);
+    final fiat = fiatValueOf(ref, sats);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          masked ? maskedValue : formatAmount(sats, unit),
+          style: tokens.data,
+          maxLines: 1,
+          softWrap: false,
+          textAlign: TextAlign.right,
+        ),
+        if (fiat != null)
+          Text(
+            fiat,
+            style: tokens.data.copyWith(
+              fontSize: tokens.label.fontSize,
+              color: tokens.textMuted,
+            ),
+            maxLines: 1,
+            softWrap: false,
+            textAlign: TextAlign.right,
+          ),
+      ],
+    );
+  }
+}
+
 /// Inline amount for detail views: primary unit plus fiat.
 class InlineAmount extends ConsumerWidget {
   const InlineAmount({super.key, required this.sats});
