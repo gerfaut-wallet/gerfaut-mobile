@@ -113,11 +113,57 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
                       ),
                     ),
                     const SizedBox(height: GerfautSpacing.md),
-                    Text(
-                      'Verify this address on your signing device before '
-                      'sharing it. Gerfaut only watches: it never holds the '
-                      'keys behind it.',
-                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                    // The one warning that must not read as small print:
+                    // a highlighted panel, not a muted footnote.
+                    Container(
+                      padding: const EdgeInsets.all(GerfautSpacing.sm + 4),
+                      decoration: BoxDecoration(
+                        color: tokens.alertSurface,
+                        borderRadius: BorderRadius.circular(GerfautRadius.md),
+                        border: Border.all(
+                          color: tokens.alert.withValues(alpha: 0.25),
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Icon(
+                              LucideIcons.triangleAlert,
+                              size: 16,
+                              color: tokens.alert,
+                            ),
+                          ),
+                          const SizedBox(width: GerfautSpacing.sm),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Verify this address on your signing '
+                                  'device before sharing it.',
+                                  style: tokens.bodySmall.copyWith(
+                                    color: tokens.alert,
+                                    fontWeight: FontWeight.w500,
+                                    fontVariations: const [
+                                      FontVariation('wght', 500),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Gerfaut only watches: it never holds the '
+                                  'keys behind it.',
+                                  style: tokens.bodySmall.copyWith(
+                                    color: tokens.textMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     const Spacer(),
                     PrimaryButton(
