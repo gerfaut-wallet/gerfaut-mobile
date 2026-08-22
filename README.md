@@ -27,6 +27,16 @@ The app contains no code to generate keys, handle seeds, or sign transactions. T
 | [`gerfaut-desktop`](https://github.com/gerfaut-wallet/gerfaut-desktop) | Desktop app (Tauri v2, for Windows, macOS, and Linux) |
 | [`gerfaut-web`](https://github.com/gerfaut-wallet/gerfaut-web) | Website, documentation, downloads |
 
+## Releases
+
+A signed APK is built by CI from every `v*` tag and published on the [releases page](https://github.com/gerfaut-wallet/gerfaut-mobile/releases). Each release ships a `SHA256SUMS` manifest signed with the author's [minisign](https://jedisct1.github.io/minisign/) key:
+
+```
+RWTz3c4gUmglCX5Uvjthigz1ts3TS3ZSdhRNpFgOJRW/Wr4XjGlqTR3O
+```
+
+Verify a download in two steps: `minisign -Vm SHA256SUMS -P <key>` proves the manifest comes from the author, then `sha256sum --check SHA256SUMS --ignore-missing` proves your file matches it.
+
 ## License
 
 [AGPL-3.0-only](LICENSE). Commercial licensing: info@pandul.fr.
