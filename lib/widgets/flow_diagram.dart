@@ -1,7 +1,9 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/format.dart';
 import '../src/models.dart';
@@ -9,59 +11,97 @@ import '../src/state.dart';
 import '../theme/tokens.dart';
 import 'address_chip.dart';
 
-/// Row height of one input/output lane. Taller than desktop: the chip
-/// and the amount line need the room at mobile text sizes.
-const double _row = 76;
+/// Vertical pitch of one input/output lane.
+const double _row = 52;
 
 /// Height of one lane card inside its row.
-const double _laneH = 60;
+const double _cardH = 40;
 
-/// Width of the strip carrying the ribbons and the tx node.
-const double _mid = 150;
+/// Width of the strip carrying the links and the TX block.
+const double _mid = 120;
 
 /// Lanes shown per side before aggregation into a "+N more" lane.
 const int _maxLanes = 7;
 
-/// Width of the transaction node capsule.
-const double _nodeW = 22;
+/// Width of the TX block.
+const double _nodeW = 44;
 
 /// Extra height under the lanes for the fee branch.
-const double _feeDrop = 52;
-
-/// Ribbon thickness bounds; area follows sqrt so small amounts stay
-/// visible.
-const double _minT = 3;
-const double _maxT = 24;
-
-/// Vertical gap between ribbon anchors on the node.
-const double _nodeGap = 3;
+const double _feeDrop = 44;
 
 /// Minimum width of one lane column; below that the diagram scrolls.
-const double _minSide = 132;
+const double _minSide = 290;
+
+/// What a lane means, which sets its icon and line color.
+enum _LaneRole {
+  mineIn,
+  externalIn,
+  coinbase,
+  receive,
+  change,
+  externalOut,
+  opReturn,
+  more,
+}
 
 class _Lane {
   const _Lane({
+    required this.role,
     required this.label,
     required this.valueSats,
-    required this.mine,
     this.more = 0,
+    this.preview,
   });
 
+  final _LaneRole role;
   final String? label;
   final int? valueSats;
-  final bool mine;
 
   /// Aggregated remainder lane ("+N more").
   final int more;
+
+  /// OP_RETURN preview: decoded text, or hex.
+  final String? preview;
+
+  bool get mine =>
+      role == _LaneRole.mineIn ||
+      role == _LaneRole.receive ||
+      role == _LaneRole.change;
 }
 
-List<_Lane> _toLanes(List<TxIo> ios) {
-  if (ios.length <= _maxLanes) {
-    return [
-      for (final io in ios)
-        _Lane(label: io.address, valueSats: io.valueSats, mine: io.isMine),
-    ];
+enum _Side { input, output }
+
+List<_Lane> _toLanes(List<TxIo> ios, _Side side, bool coinbase) {
+  _Lane lane(TxIo io) {
+    if (side == _Side.input) {
+      return _Lane(
+        role: coinbase
+            ? _LaneRole.coinbase
+            : io.isMine
+            ? _LaneRole.mineIn
+            : _LaneRole.externalIn,
+        label: io.address,
+        valueSats: io.valueSats,
+      );
+    }
+    if (io.opReturn != null) {
+      return _Lane(
+        role: _LaneRole.opReturn,
+        label: null,
+        valueSats: null,
+        preview: io.opReturn!.text ?? io.opReturn!.hex,
+      );
+    }
+    return _Lane(
+      role: io.isMine
+          ? (io.change ? _LaneRole.change : _LaneRole.receive)
+          : _LaneRole.externalOut,
+      label: io.address,
+      valueSats: io.valueSats,
+    );
   }
+
+  if (ios.length <= _maxLanes) return [for (final io in ios) lane(io)];
   final shown = ios.sublist(0, _maxLanes - 1);
   final rest = ios.sublist(_maxLanes - 1);
   int? restValue = 0;
@@ -73,27 +113,21 @@ List<_Lane> _toLanes(List<TxIo> ios) {
     }
   }
   return [
-    for (final io in shown)
-      _Lane(label: io.address, valueSats: io.valueSats, mine: io.isMine),
+    for (final io in shown) lane(io),
     _Lane(
+      role: _LaneRole.more,
       label: null,
       valueSats: restValue,
-      mine: rest.any((io) => io.isMine),
       more: rest.length,
     ),
   ];
 }
 
-double _thickness(int? valueSats, int max) {
-  if (valueSats == null || max <= 0) return _minT;
-  return _minT + (_maxT - _minT) * math.sqrt(valueSats / max);
-}
-
-/// Transaction flow in the spirit of Sparrow and mempool.space: filled
-/// ribbons whose thickness follows the amounts converge into the
-/// transaction node and fan out again; the fee drips below. Pure
-/// geometry, nothing measured. Scrolls horizontally inside its card
-/// when the screen is narrower than the lane grid.
+/// Transaction flow: every input line converges on a central TX block
+/// and every output line leaves it, mirrored and evenly spaced. Wallet
+/// lanes carry the accent color and a role icon; the fee drips from the
+/// block down to its pill. Pure geometry, nothing measured. Scrolls
+/// horizontally inside its card on narrow screens.
 class FlowDiagram extends StatelessWidget {
   const FlowDiagram({
     super.key,
@@ -101,52 +135,31 @@ class FlowDiagram extends StatelessWidget {
     required this.outputs,
     required this.feeSats,
     required this.feeRate,
+    this.isCoinbase = false,
+    this.coinbasePool,
   });
 
   final List<TxIo> inputs;
   final List<TxIo> outputs;
   final int? feeSats;
   final double? feeRate;
+  final bool isCoinbase;
+  final String? coinbasePool;
 
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final inLanes = _toLanes(inputs);
-    final outLanes = _toLanes(outputs);
+    final inLanes = _toLanes(inputs, _Side.input, isCoinbase);
+    final outLanes = _toLanes(outputs, _Side.output, false);
     final laneCount = math.max(math.max(inLanes.length, outLanes.length), 1);
     final height = laneCount * _row;
-    var maxValue = 0;
-    for (final lane in [...inLanes, ...outLanes]) {
-      if (lane.valueSats != null && lane.valueSats! > maxValue) {
-        maxValue = lane.valueSats!;
-      }
-    }
-    final tIn = [
-      for (final lane in inLanes) _thickness(lane.valueSats, maxValue),
-    ];
-    final tOut = [
-      for (final lane in outLanes) _thickness(lane.valueSats, maxValue),
-    ];
-    double stackOf(List<double> ts) =>
-        ts.fold(0.0, (sum, t) => sum + t) +
-        math.max(0, ts.length - 1) * _nodeGap;
-    final stackIn = stackOf(tIn);
-    final stackOut = stackOf(tOut);
-    final nodeH = math.max(48.0, math.max(stackIn, stackOut) + 18);
+    final maxSide = math.max(inLanes.length, outLanes.length);
+    // The block grows with the lane count but stays inside the strip.
+    final nodeH = math.min(
+      math.max(_nodeW, 12.0 * maxSide + 16),
+      math.max(_nodeW, height - 8),
+    );
     final nodeTop = (height - nodeH) / 2;
-    // Ribbon anchors stack on the node by cumulative thickness, so
-    // ribbons meet the capsule without overlapping: the Sankey look.
-    List<double> anchors(List<double> ts, double stack) {
-      var cursor = nodeTop + (nodeH - stack) / 2;
-      return [
-        for (final t in ts)
-          () {
-            final y = cursor + t / 2;
-            cursor += t + _nodeGap;
-            return y;
-          }(),
-      ];
-    }
 
     double laneY(int index, int count) =>
         (height - count * _row) / 2 + index * _row + _row / 2;
@@ -178,17 +191,14 @@ class FlowDiagram extends StatelessWidget {
                         side: _Side.input,
                         laneY: (index) => laneY(index, inLanes.length),
                         height: height,
+                        coinbasePool: coinbasePool,
                       ),
                     ),
                     CustomPaint(
                       size: Size(_mid, canvasHeight),
                       painter: _FlowPainter(
-                        inLanes: inLanes,
-                        outLanes: outLanes,
-                        tIn: tIn,
-                        tOut: tOut,
-                        anchorIn: anchors(tIn, stackIn),
-                        anchorOut: anchors(tOut, stackOut),
+                        inRoles: [for (final lane in inLanes) lane.role],
+                        outRoles: [for (final lane in outLanes) lane.role],
                         inYs: [
                           for (var i = 0; i < inLanes.length; i++)
                             laneY(i, inLanes.length),
@@ -199,13 +209,19 @@ class FlowDiagram extends StatelessWidget {
                         ],
                         nodeTop: nodeTop,
                         nodeH: nodeH,
-                        height: height,
                         showFee: showFee,
-                        mineColor: tokens.primary,
+                        primaryColor: tokens.primary,
                         mutedColor: tokens.textMuted,
+                        pendingColor: tokens.pending,
                         borderColor: tokens.border,
-                        nodeFill: tokens.surfaceSunken,
-                        feeColor: tokens.pending,
+                        nodeFill: tokens.surface,
+                        labelStyle: tokens.data.copyWith(
+                          fontSize: 12,
+                          letterSpacing: 0.96,
+                          color: tokens.textMuted,
+                          fontWeight: FontWeight.w500,
+                          fontVariations: const [FontVariation('wght', 500)],
+                        ),
                       ),
                     ),
                     Expanded(
@@ -214,12 +230,24 @@ class FlowDiagram extends StatelessWidget {
                         side: _Side.output,
                         laneY: (index) => laneY(index, outLanes.length),
                         height: height,
+                        coinbasePool: null,
                       ),
                     ),
                   ],
                 ),
                 if (showFee)
-                  Center(child: _FeePill(feeSats: feeSats!, feeRate: feeRate)),
+                  Row(
+                    children: [
+                      const Expanded(child: SizedBox()),
+                      SizedBox(
+                        width: _mid,
+                        child: Center(
+                          child: _FeePill(feeSats: feeSats!, feeRate: feeRate),
+                        ),
+                      ),
+                      const Expanded(child: SizedBox()),
+                    ],
+                  ),
               ],
             ),
           );
@@ -234,8 +262,8 @@ class FlowDiagram extends StatelessWidget {
   }
 }
 
-/// Fee as a pending-tinted pill under the fee branch: amount in the
-/// chosen unit, rate as small print. Never an alert, only small print.
+/// Fee as a pending-tinted pill the dashed branch touches: amount in
+/// the chosen unit, rate as small print. Never an alert.
 class _FeePill extends ConsumerWidget {
   const _FeePill({required this.feeSats, required this.feeRate});
 
@@ -264,10 +292,7 @@ class _FeePill extends ConsumerWidget {
           children: [
             TextSpan(
               text: ' · ${masked ? maskedValue : formatAmount(feeSats, unit)}',
-              style: tokens.data.copyWith(
-                fontSize: 12,
-                color: tokens.pending,
-              ),
+              style: tokens.data.copyWith(fontSize: 12, color: tokens.pending),
             ),
             if (feeRate != null)
               TextSpan(
@@ -286,20 +311,20 @@ class _FeePill extends ConsumerWidget {
   }
 }
 
-enum _Side { input, output }
-
 class _LaneColumn extends StatelessWidget {
   const _LaneColumn({
     required this.lanes,
     required this.side,
     required this.laneY,
     required this.height,
+    required this.coinbasePool,
   });
 
   final List<_Lane> lanes;
   final _Side side;
   final double Function(int index) laneY;
   final double height;
+  final String? coinbasePool;
 
   @override
   Widget build(BuildContext context) {
@@ -312,9 +337,9 @@ class _LaneColumn extends StatelessWidget {
             Positioned(
               left: 0,
               right: 0,
-              top: laneY(index) - _laneH / 2,
-              height: _laneH,
-              child: _LaneCard(lane: lane, side: side),
+              top: laneY(index) - _cardH / 2,
+              height: _cardH,
+              child: _LaneCard(lane: lane, side: side, pool: coinbasePool),
             ),
         ],
       ),
@@ -322,52 +347,96 @@ class _LaneColumn extends StatelessWidget {
   }
 }
 
-/// One input or output as a small card the ribbon plugs into: mine
-/// lanes carry the primary tint, aggregate lanes a dashed outline.
+/// One input or output as a one-line card the link plugs into: role
+/// icon, address chip, amount, never wrapping. Mine lanes carry the
+/// primary tint, aggregate lanes a dashed outline.
 class _LaneCard extends StatelessWidget {
-  const _LaneCard({required this.lane, required this.side});
+  const _LaneCard({required this.lane, required this.side, required this.pool});
 
   final _Lane lane;
   final _Side side;
+  final String? pool;
 
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final (icon, iconColor) = switch (lane.role) {
+      _LaneRole.mineIn => (LucideIcons.wallet, tokens.primary),
+      _LaneRole.receive => (LucideIcons.arrowDownLeft, tokens.primary),
+      _LaneRole.change => (LucideIcons.undo2, tokens.primary),
+      _LaneRole.coinbase => (LucideIcons.pickaxe, tokens.textMuted),
+      _LaneRole.opReturn => (LucideIcons.scrollText, tokens.pending),
+      _ => (null, tokens.textMuted),
+    };
     final content = Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: GerfautSpacing.sm + 2,
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: side == _Side.input
-            ? CrossAxisAlignment.end
-            : CrossAxisAlignment.start,
+      padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.sm + 2),
+      child: Row(
         children: [
-          if (lane.more > 0)
+          if (icon != null) ...[
+            Icon(icon, size: 14, color: iconColor),
+            const SizedBox(width: GerfautSpacing.sm - 2),
+          ],
+          if (lane.role == _LaneRole.more)
             Text(
               '+${lane.more} more '
               '${side == _Side.input ? 'inputs' : 'outputs'}',
-              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+              style: tokens.bodySmall.copyWith(
+                fontSize: 12,
+                color: tokens.textMuted,
+              ),
               maxLines: 1,
               softWrap: false,
             )
+          else if (lane.role == _LaneRole.opReturn) ...[
+            Text(
+              'OP_RETURN',
+              style: tokens.data.copyWith(fontSize: 12, color: tokens.pending),
+              maxLines: 1,
+              softWrap: false,
+            ),
+            if (lane.preview != null) ...[
+              const SizedBox(width: GerfautSpacing.sm - 2),
+              Flexible(
+                child: Text(
+                  lane.preview!,
+                  style: tokens.data.copyWith(
+                    fontSize: 11,
+                    color: tokens.textMuted,
+                  ),
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ] else if (lane.role == _LaneRole.coinbase)
+            Flexible(
+              child: Text(
+                'coinbase${pool != null ? ' · $pool' : ''}',
+                style: tokens.data.copyWith(color: tokens.textMuted),
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+              ),
+            )
           else if (lane.label != null)
-            AddressChip(value: lane.label!)
+            Flexible(child: AddressChip(value: lane.label!))
           else
             Text(
-              side == _Side.input ? 'coinbase' : 'script output',
+              side == _Side.input ? 'unknown input' : 'script output',
               style: tokens.data.copyWith(color: tokens.textMuted),
               maxLines: 1,
               softWrap: false,
             ),
-          if (lane.valueSats != null) ...[
-            const SizedBox(height: 2),
+          if (lane.valueSats != null && lane.role != _LaneRole.opReturn) ...[
+            const Spacer(),
+            const SizedBox(width: GerfautSpacing.xs),
             _LaneAmount(sats: lane.valueSats!),
           ],
         ],
       ),
     );
-    if (lane.more > 0) {
+    if (lane.role == _LaneRole.more) {
       return CustomPaint(
         painter: _DashedRRectPainter(
           color: tokens.border,
@@ -380,11 +449,15 @@ class _LaneCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: lane.mine
             ? tokens.primary.withValues(alpha: 0.05)
+            : lane.role == _LaneRole.opReturn
+            ? tokens.pendingSurface
             : tokens.background,
         borderRadius: BorderRadius.circular(GerfautRadius.md),
         border: Border.all(
           color: lane.mine
               ? tokens.primary.withValues(alpha: 0.4)
+              : lane.role == _LaneRole.opReturn
+              ? tokens.pending.withValues(alpha: 0.3)
               : tokens.border,
         ),
       ),
@@ -450,102 +523,97 @@ class _DashedRRectPainter extends CustomPainter {
 
 class _FlowPainter extends CustomPainter {
   const _FlowPainter({
-    required this.inLanes,
-    required this.outLanes,
-    required this.tIn,
-    required this.tOut,
-    required this.anchorIn,
-    required this.anchorOut,
+    required this.inRoles,
+    required this.outRoles,
     required this.inYs,
     required this.outYs,
     required this.nodeTop,
     required this.nodeH,
-    required this.height,
     required this.showFee,
-    required this.mineColor,
+    required this.primaryColor,
     required this.mutedColor,
+    required this.pendingColor,
     required this.borderColor,
     required this.nodeFill,
-    required this.feeColor,
+    required this.labelStyle,
   });
 
-  final List<_Lane> inLanes;
-  final List<_Lane> outLanes;
-  final List<double> tIn;
-  final List<double> tOut;
-  final List<double> anchorIn;
-  final List<double> anchorOut;
+  final List<_LaneRole> inRoles;
+  final List<_LaneRole> outRoles;
   final List<double> inYs;
   final List<double> outYs;
   final double nodeTop;
   final double nodeH;
-  final double height;
   final bool showFee;
-  final Color mineColor;
+  final Color primaryColor;
   final Color mutedColor;
+  final Color pendingColor;
   final Color borderColor;
   final Color nodeFill;
-  final Color feeColor;
+  final TextStyle labelStyle;
 
-  /// A constant-thickness ribbon between two anchors: two mirrored
-  /// cubic curves closed into one filled shape.
-  Path _ribbon(double x0, double y0, double x1, double y1, double t) {
-    final c1 = x0 + (x1 - x0) * 0.38;
-    final c2 = x0 + (x1 - x0) * 0.62;
-    final h = t / 2;
+  Color _strokeOf(_LaneRole role) => switch (role) {
+    _LaneRole.mineIn ||
+    _LaneRole.receive ||
+    _LaneRole.change => primaryColor.withValues(alpha: 0.9),
+    _LaneRole.opReturn => pendingColor.withValues(alpha: 0.6),
+    _ => mutedColor.withValues(alpha: 0.45),
+  };
+
+  /// Symmetric cubic between two points: control points at 45% and 55%.
+  Path _link(double x0, double y0, double x1, double y1) {
+    final c1 = x0 + (x1 - x0) * 0.45;
+    final c2 = x0 + (x1 - x0) * 0.55;
     return Path()
-      ..moveTo(x0, y0 - h)
-      ..cubicTo(c1, y0 - h, c2, y1 - h, x1, y1 - h)
-      ..lineTo(x1, y1 + h)
-      ..cubicTo(c2, y1 + h, c1, y0 + h, x0, y0 + h)
-      ..close();
+      ..moveTo(x0, y0)
+      ..cubicTo(c1, y0, c2, y1, x1, y1);
   }
 
-  Paint _fill(bool mine) => Paint()
-    ..style = PaintingStyle.fill
-    ..color = mine
-        ? mineColor.withValues(alpha: 0.5)
-        : mutedColor.withValues(alpha: 0.18);
+  /// Anchors spread evenly inside the block edge, mirrored per side.
+  double _anchorY(int index, int count) =>
+      nodeTop + (nodeH * (index + 1)) / (count + 1);
 
   @override
   void paint(Canvas canvas, Size size) {
-    const nodeX = _mid / 2;
+    const cx = _mid / 2;
+    final line = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
 
-    for (final (index, lane) in inLanes.indexed) {
+    for (final (index, role) in inRoles.indexed) {
       canvas.drawPath(
-        _ribbon(
+        _link(
           0,
           inYs[index],
-          nodeX - _nodeW / 2 + 2,
-          anchorIn[index],
-          tIn[index],
+          cx - _nodeW / 2,
+          _anchorY(index, inRoles.length),
         ),
-        _fill(lane.mine),
+        line..color = _strokeOf(role),
       );
     }
-    for (final (index, lane) in outLanes.indexed) {
+    for (final (index, role) in outRoles.indexed) {
       canvas.drawPath(
-        _ribbon(
-          nodeX + _nodeW / 2 - 2,
-          anchorOut[index],
+        _link(
+          cx + _nodeW / 2,
+          _anchorY(index, outRoles.length),
           _mid,
           outYs[index],
-          tOut[index],
         ),
-        _fill(lane.mine),
+        line..color = _strokeOf(role),
       );
     }
 
     if (showFee) {
-      // Dotted branch: short dashes with round caps read as dots.
+      // Dashed pending branch from the block down to the fee pill.
       final path = Path()
-        ..moveTo(nodeX, nodeTop + nodeH - 1)
-        ..lineTo(nodeX, height + _feeDrop - 14);
+        ..moveTo(cx, nodeTop + nodeH)
+        ..lineTo(cx, size.height);
       final paint = Paint()
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeWidth = 2
-        ..color = feeColor.withValues(alpha: 0.7);
+        ..color = pendingColor.withValues(alpha: 0.7);
       for (final metric in path.computeMetrics()) {
         var distance = 0.0;
         while (distance < metric.length) {
@@ -555,10 +623,10 @@ class _FlowPainter extends CustomPainter {
       }
     }
 
-    // The transaction node capsule.
+    // The TX block: everything meets here.
     final node = RRect.fromRectAndRadius(
-      Rect.fromLTWH(nodeX - _nodeW / 2, nodeTop, _nodeW, nodeH),
-      const Radius.circular(_nodeW / 2),
+      Rect.fromLTWH(cx - _nodeW / 2, nodeTop, _nodeW, nodeH),
+      const Radius.circular(10),
     );
     canvas.drawRRect(node, Paint()..color = nodeFill);
     canvas.drawRRect(
@@ -568,19 +636,29 @@ class _FlowPainter extends CustomPainter {
         ..strokeWidth = 1
         ..color = borderColor,
     );
+    final label = TextPainter(
+      text: TextSpan(text: 'TX', style: labelStyle),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    label.paint(
+      canvas,
+      Offset(cx - label.width / 2, nodeTop + (nodeH - label.height) / 2),
+    );
   }
 
   @override
   bool shouldRepaint(covariant _FlowPainter old) {
-    return old.inLanes != inLanes ||
-        old.outLanes != outLanes ||
-        old.anchorIn != anchorIn ||
-        old.anchorOut != anchorOut ||
+    return !listEquals(old.inRoles, inRoles) ||
+        !listEquals(old.outRoles, outRoles) ||
+        !listEquals(old.inYs, inYs) ||
+        !listEquals(old.outYs, outYs) ||
+        old.nodeTop != nodeTop ||
+        old.nodeH != nodeH ||
         old.showFee != showFee ||
-        old.mineColor != mineColor ||
+        old.primaryColor != primaryColor ||
         old.mutedColor != mutedColor ||
+        old.pendingColor != pendingColor ||
         old.borderColor != borderColor ||
-        old.nodeFill != nodeFill ||
-        old.feeColor != feeColor;
+        old.nodeFill != nodeFill;
   }
 }
