@@ -25,7 +25,7 @@ Widget app(FakeBridge bridge, {Widget? home}) {
   );
 }
 
-TxDetail makeTxDetail() {
+TxDetail makeTxDetail({TxExtras? extras, List<TxIo>? outputs}) {
   return TxDetail(
     summary: TxSummary(
       txid: 'f' * 64,
@@ -37,12 +37,58 @@ TxDetail makeTxDetail() {
     inputs: const [
       TxIo(address: 'bc1qinputaddress', valueSats: 10000, isMine: false),
     ],
-    outputs: const [
-      TxIo(address: 'bc1qoutputaddress', valueSats: 5000, isMine: true),
-      TxIo(address: 'bc1qchangeaddress', valueSats: 4859, isMine: false),
-    ],
+    outputs:
+        outputs ??
+        const [
+          TxIo(address: 'bc1qoutputaddress', valueSats: 5000, isMine: true),
+          TxIo(address: 'bc1qchangeaddress', valueSats: 4859, isMine: false),
+        ],
     vsize: 141,
     feeRateSatVb: 1.0,
+    extras: extras,
+  );
+}
+
+TxExtras makeExtras({
+  bool rbfSignaled = false,
+  bool segwit = false,
+  bool taproot = false,
+  bool isCoinbase = false,
+  String? coinbasePool,
+  int locktime = 0,
+  String rawHex = '',
+}) {
+  return TxExtras(
+    sizeBytes: 226,
+    vsize: 141,
+    weightWu: 564,
+    version: 2,
+    locktime: locktime,
+    rbfSignaled: rbfSignaled,
+    segwit: segwit,
+    taproot: taproot,
+    isCoinbase: isCoinbase,
+    coinbasePool: coinbasePool,
+    sigops: 8,
+    rawHex: rawHex,
+  );
+}
+
+/// A tall test surface so the whole detail screen builds at once.
+void useTallSurface(WidgetTester tester) {
+  tester.view.physicalSize = const Size(800, 2400);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+}
+
+Widget txDetailApp(FakeBridge bridge) {
+  return app(
+    bridge,
+    home: TxDetailScreen(
+      walletId: 'w1',
+      txid: 'f' * 64,
+      network: Network.mainnet,
+    ),
   );
 }
 
@@ -241,6 +287,101 @@ void main() {
       findsOneWidget,
     );
     expect(bridge.appPrefs['display.unit'], 'sats');
+  });
+
+  testWidgets('feature badges render from extras', (tester) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge(
+      txDetails: {
+        'w1:${'f' * 64}': makeTxDetail(
+          extras: makeExtras(rbfSignaled: true, segwit: true),
+        ),
+      },
+    );
+    await tester.pumpWidget(txDetailApp(bridge));
+    await tester.pumpAndSettle();
+
+    expect(find.text('RBF'), findsOneWidget);
+    expect(find.text('SegWit'), findsOneWidget);
+    expect(find.text('Version 2'), findsOneWidget);
+    expect(find.text('Taproot'), findsNothing);
+
+    // The meta panel carries the full fact set.
+    expect(find.text('226 B'), findsOneWidget);
+    expect(find.text('564 WU'), findsOneWidget);
+  });
+
+  testWidgets('an OP_RETURN output shows its decoded text', (tester) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge(
+      txDetails: {
+        'w1:${'f' * 64}': makeTxDetail(
+          extras: makeExtras(segwit: true),
+          outputs: const [
+            TxIo(address: 'bc1qoutputaddress', valueSats: 5000, isMine: true),
+            TxIo(
+              address: null,
+              valueSats: 0,
+              isMine: false,
+              opReturn: OpReturnData(
+                hex: '68656c6c6f2067657266617574',
+                text: 'hello gerfaut',
+              ),
+            ),
+          ],
+        ),
+      },
+    );
+    await tester.pumpWidget(txDetailApp(bridge));
+    await tester.pumpAndSettle();
+
+    // The tag shows in the diagram lane, the badge row, and the list.
+    expect(find.text('OP_RETURN'), findsWidgets);
+    expect(find.text('hello gerfaut'), findsWidgets);
+  });
+
+  testWidgets('the raw transaction is revealed on tap', (tester) async {
+    useTallSurface(tester);
+    const hex = '0200000001abcdef';
+    final bridge = FakeBridge(
+      txDetails: {
+        'w1:${'f' * 64}': makeTxDetail(extras: makeExtras(rawHex: hex)),
+      },
+    );
+    await tester.pumpWidget(txDetailApp(bridge));
+    await tester.pumpAndSettle();
+
+    expect(find.text('RAW TRANSACTION'), findsOneWidget);
+    expect(find.text(hex), findsNothing);
+
+    await tester.tap(find.text('RAW TRANSACTION'));
+    await tester.pumpAndSettle();
+    expect(find.text(hex), findsOneWidget);
+  });
+
+  testWidgets('a change output carries the change pill', (tester) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge(
+      txDetails: {
+        'w1:${'f' * 64}': makeTxDetail(
+          extras: makeExtras(),
+          outputs: const [
+            TxIo(address: 'bc1qoutputaddress', valueSats: 5000, isMine: true),
+            TxIo(
+              address: 'bc1qchangeaddress',
+              valueSats: 4859,
+              isMine: true,
+              change: true,
+            ),
+          ],
+        ),
+      },
+    );
+    await tester.pumpWidget(txDetailApp(bridge));
+    await tester.pumpAndSettle();
+
+    expect(find.text('CHANGE'), findsOneWidget);
+    expect(find.text('MINE'), findsOneWidget);
   });
 
   testWidgets('removing a wallet confirms with the alert banner', (
