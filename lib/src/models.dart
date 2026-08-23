@@ -345,12 +345,32 @@ class TxSummary {
   final int confirmations;
 }
 
+/// A decoded OP_RETURN payload.
+class OpReturnData {
+  const OpReturnData({required this.hex, required this.text});
+
+  factory OpReturnData.fromJson(Map<String, dynamic> json) {
+    return OpReturnData(
+      hex: json['hex'] as String,
+      text: json['text'] as String?,
+    );
+  }
+
+  /// Payload bytes in hex.
+  final String hex;
+
+  /// The payload as text, when it is printable UTF-8.
+  final String? text;
+}
+
 /// One input or output of a transaction.
 class TxIo {
   const TxIo({
     required this.address,
     required this.valueSats,
     required this.isMine,
+    this.change = false,
+    this.opReturn,
   });
 
   factory TxIo.fromJson(Map<String, dynamic> json) {
@@ -358,12 +378,71 @@ class TxIo {
       address: json['address'] as String?,
       valueSats: json['value_sats'] as int?,
       isMine: json['is_mine'] as bool,
+      change: json['change'] as bool? ?? false,
+      opReturn: json['op_return'] == null
+          ? null
+          : OpReturnData.fromJson(json['op_return'] as Map<String, dynamic>),
     );
   }
 
   final String? address;
   final int? valueSats;
   final bool isMine;
+
+  /// Output on the wallet's change keychain (descriptor wallets only).
+  final bool change;
+
+  /// Decoded OP_RETURN payload, for data-carrying outputs.
+  final OpReturnData? opReturn;
+}
+
+/// Deep transaction facts; absent only for watched-address entries
+/// synced by older versions.
+class TxExtras {
+  const TxExtras({
+    required this.sizeBytes,
+    required this.vsize,
+    required this.weightWu,
+    required this.version,
+    required this.locktime,
+    required this.rbfSignaled,
+    required this.segwit,
+    required this.taproot,
+    required this.isCoinbase,
+    required this.coinbasePool,
+    required this.sigops,
+    required this.rawHex,
+  });
+
+  factory TxExtras.fromJson(Map<String, dynamic> json) {
+    return TxExtras(
+      sizeBytes: json['size_bytes'] as int? ?? 0,
+      vsize: json['vsize'] as int? ?? 0,
+      weightWu: json['weight_wu'] as int? ?? 0,
+      version: json['version'] as int? ?? 0,
+      locktime: json['locktime'] as int? ?? 0,
+      rbfSignaled: json['rbf_signaled'] as bool? ?? false,
+      segwit: json['segwit'] as bool? ?? false,
+      taproot: json['taproot'] as bool? ?? false,
+      isCoinbase: json['is_coinbase'] as bool? ?? false,
+      coinbasePool: json['coinbase_pool'] as String?,
+      sigops: json['sigops'] as int? ?? 0,
+      rawHex: json['raw_hex'] as String? ?? '',
+    );
+  }
+
+  final int sizeBytes;
+  final int vsize;
+  final int weightWu;
+  final int version;
+  final int locktime;
+  final bool rbfSignaled;
+  final bool segwit;
+  final bool taproot;
+  final bool isCoinbase;
+  final String? coinbasePool;
+  final int sigops;
+  final String rawHex;
 }
 
 /// Full transaction detail.
@@ -374,6 +453,7 @@ class TxDetail {
     required this.outputs,
     required this.vsize,
     required this.feeRateSatVb,
+    this.extras,
   });
 
   factory TxDetail.fromJson(Map<String, dynamic> json) {
@@ -387,6 +467,9 @@ class TxDetail {
           .toList(),
       vsize: json['vsize'] as int,
       feeRateSatVb: (json['fee_rate_sat_vb'] as num?)?.toDouble(),
+      extras: json['extras'] == null
+          ? null
+          : TxExtras.fromJson(json['extras'] as Map<String, dynamic>),
     );
   }
 
@@ -395,6 +478,7 @@ class TxDetail {
   final List<TxIo> outputs;
   final int vsize;
   final double? feeRateSatVb;
+  final TxExtras? extras;
 }
 
 /// One unspent output.
