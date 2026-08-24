@@ -43,13 +43,18 @@ final txDetailProvider = FutureProvider
       return ref.watch(bridgeProvider).txDetail(key.walletId, key.txid);
     });
 
-/// The next unused receive address of one wallet.
-final receiveProvider = FutureProvider.family<List<AddressEntry>, String>((
-  ref,
-  id,
-) {
-  return ref.watch(bridgeProvider).receiveAddresses(id, 0);
-});
+/// The next unused receive address of one wallet, plus `lookahead`
+/// addresses peeked past it. The entry at index `lookahead` is the one
+/// on display; peeking retires nothing.
+final receiveProvider = FutureProvider
+    .family<List<AddressEntry>, ({String walletId, int lookahead})>((
+      ref,
+      key,
+    ) {
+      return ref
+          .watch(bridgeProvider)
+          .receiveAddresses(key.walletId, key.lookahead);
+    });
 
 // --- preferences -------------------------------------------------------
 

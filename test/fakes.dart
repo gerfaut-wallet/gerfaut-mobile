@@ -36,6 +36,7 @@ WalletMeta makeMeta({
   String name = 'Cold storage',
   Network network = Network.mainnet,
   int totalSats = 0,
+  int gapLimit = 20,
   SyncStamp? lastSync,
   WalletKind kind = const DescriptorsKind(
     external: 'wpkh(tpub.../0/*)#checksum',
@@ -50,7 +51,7 @@ WalletMeta makeMeta({
     kind: kind,
     recognizedAs: RecognizedKind.multipathDescriptor,
     createdAt: 1755000000,
-    gapLimit: 20,
+    gapLimit: gapLimit,
     lastSync: lastSync,
     cachedBalance: makeBalance(totalSats),
     cachedTxCount: 0,
@@ -207,10 +208,28 @@ class FakeBridge implements GerfautBridge {
   @override
   Future<List<UtxoInfo>> utxos(String id) async => utxoMap[id] ?? [];
 
+  /// Lookahead of every receiveAddresses call, for assertions.
+  final List<int> receiveLookaheads = [];
+
   @override
   Future<List<AddressEntry>> receiveAddresses(String id, int lookahead) async {
-    return addresses[id] ??
+    receiveLookaheads.add(lookahead);
+    final base =
+        addresses[id] ??
         const [AddressEntry(index: 0, address: 'tb1qexample', used: false)];
+    final first = base.first;
+    // Mirrors the core: the next unused entry plus `lookahead` peeked
+    // ones, continuing past the configured list when it runs short.
+    return [
+      for (var i = 0; i <= lookahead; i++)
+        i < base.length
+            ? base[i]
+            : AddressEntry(
+                index: first.index + i,
+                address: '${first.address}$i',
+                used: false,
+              ),
+    ];
   }
 
   /// Sync hooks; throw a [BridgeException] to simulate a failure.
