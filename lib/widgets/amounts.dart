@@ -16,9 +16,9 @@ String? fiatValueOf(WidgetRef ref, int sats) {
   return formatFiat(sats, quote.rate, quote.currency);
 }
 
-/// Large balance figure: mono, tabular, masked-aware, never animated.
-/// The primary line follows the unit setting; the second line carries
-/// the other unit and the fiat value.
+/// Large balance figure: UI face, tabular, masked-aware, never
+/// animated. The primary line follows the unit setting; the second line
+/// carries the other unit and the fiat value.
 class BalanceAmount extends ConsumerWidget {
   const BalanceAmount({super.key, required this.sats});
 
@@ -54,7 +54,7 @@ class BalanceAmount extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: GerfautSpacing.xs),
-        Text(secondLine, style: tokens.data.copyWith(color: tokens.textMuted)),
+        Text(secondLine, style: tokens.figureOf(color: tokens.textMuted)),
       ],
     );
   }
@@ -81,16 +81,13 @@ class ListAmount extends ConsumerWidget {
       children: [
         Text(
           masked ? maskedValue : formatAmountSigned(sats, unit),
-          style: tokens.data.copyWith(color: color),
+          style: tokens.figureOf(weight: FontWeight.w500, color: color),
           textAlign: TextAlign.right,
         ),
         if (fiat != null)
           Text(
             fiat,
-            style: tokens.data.copyWith(
-              fontSize: tokens.label.fontSize,
-              color: tokens.textMuted,
-            ),
+            style: tokens.figureOf(size: 11, color: tokens.textMuted),
             textAlign: TextAlign.right,
           ),
       ],
@@ -117,7 +114,7 @@ class StackedAmount extends ConsumerWidget {
       children: [
         Text(
           masked ? maskedValue : formatAmount(sats, unit),
-          style: tokens.data,
+          style: tokens.figureOf(weight: FontWeight.w500),
           maxLines: 1,
           softWrap: false,
           textAlign: TextAlign.right,
@@ -125,10 +122,7 @@ class StackedAmount extends ConsumerWidget {
         if (fiat != null)
           Text(
             fiat,
-            style: tokens.data.copyWith(
-              fontSize: tokens.label.fontSize,
-              color: tokens.textMuted,
-            ),
+            style: tokens.figureOf(size: 11, color: tokens.textMuted),
             maxLines: 1,
             softWrap: false,
             textAlign: TextAlign.right,
@@ -150,18 +144,18 @@ class InlineAmount extends ConsumerWidget {
     final masked = ref.watch(maskedProvider);
     final unit = ref.watch(unitProvider);
     if (masked) {
-      return Text(maskedValue, style: tokens.data);
+      return Text(maskedValue, style: tokens.figure);
     }
     final fiat = fiatValueOf(ref, sats);
     return Text.rich(
       TextSpan(
         text: formatAmount(sats, unit),
-        style: tokens.data,
+        style: tokens.figure,
         children: [
           if (fiat != null)
             TextSpan(
               text: ' · $fiat',
-              style: tokens.data.copyWith(color: tokens.textMuted),
+              style: tokens.figureOf(color: tokens.textMuted),
             ),
         ],
       ),

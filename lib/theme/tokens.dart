@@ -40,10 +40,11 @@ abstract final class GerfautFonts {
   /// Bricolage Grotesque: display, h1, h2. Never body text.
   static const String display = 'Bricolage Grotesque';
 
-  /// Instrument Sans: everything interface.
+  /// Instrument Sans: everything interface, figures included.
   static const String ui = 'Instrument Sans';
 
-  /// JetBrains Mono: every Bitcoin datum, without exception.
+  /// JetBrains Mono: identifiers and code only — txids, addresses,
+  /// descriptors, raw hex, OP_RETURN payloads, backend host and port.
   static const String data = 'JetBrains Mono';
 }
 
@@ -72,6 +73,7 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
     required this.bodySmall,
     required this.label,
     required this.amount,
+    required this.figure,
     required this.data,
   });
 
@@ -139,11 +141,22 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
   /// 12px Instrument 500, +0.04em.
   final TextStyle label;
 
-  /// 32px JetBrains Mono 500, tabular figures.
+  /// 32px Instrument Sans 600, tabular figures: the headline figure.
   final TextStyle amount;
 
-  /// 13px JetBrains Mono 400, tabular figures.
+  /// 13px Instrument Sans 400, tabular figures: every other figure.
+  final TextStyle figure;
+
+  /// 13px JetBrains Mono 400, tabular figures: identifiers and code.
   final TextStyle data;
+
+  /// A figure in the UI face at an arbitrary size and weight, in this
+  /// theme's text color unless [color] says otherwise.
+  TextStyle figureOf({
+    double size = 13,
+    FontWeight weight = FontWeight.w400,
+    Color? color,
+  }) => figureStyle(size: size, weight: weight, color: color ?? text);
 
   // --- instances -------------------------------------------------------
 
@@ -170,6 +183,7 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
     bodySmall: _bodySmall(const Color(0xFF0D1317)),
     label: _label(const Color(0xFF55636F)),
     amount: _amount(const Color(0xFF0D1317)),
+    figure: figureStyle(color: const Color(0xFF0D1317)),
     data: _data(const Color(0xFF0D1317)),
   );
 
@@ -196,6 +210,7 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
     bodySmall: _bodySmall(const Color(0xFFE6ECF2)),
     label: _label(const Color(0xFF8A98A6)),
     amount: _amount(const Color(0xFFE6ECF2)),
+    figure: figureStyle(color: const Color(0xFFE6ECF2)),
     data: _data(const Color(0xFFE6ECF2)),
   );
 
@@ -261,18 +276,31 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
     );
   }
 
-  static TextStyle _amount(Color color) {
+  /// Figures live in the UI face: amounts, fiat values, dates, block
+  /// heights, sizes, counts, fee rates. Mono is kept for identifiers
+  /// and code, where telling `0` from `O` is a security requirement.
+  /// Tabular figures keep columns aligned and a value that updates from
+  /// shifting the layout; the slight negative tracking stops long
+  /// numbers from sprawling. The only place that feature list is set.
+  static TextStyle figureStyle({
+    double size = 13,
+    FontWeight weight = FontWeight.w400,
+    required Color color,
+  }) {
     return TextStyle(
-      fontFamily: GerfautFonts.data,
-      fontSize: 32,
-      height: 1.1,
-      letterSpacing: -0.32,
+      fontFamily: GerfautFonts.ui,
+      fontSize: size,
+      height: size >= 24 ? 1.1 : 1.4,
+      letterSpacing: -size * 0.01,
       color: color,
-      fontWeight: FontWeight.w500,
-      fontVariations: const [FontVariation('wght', 500)],
+      fontWeight: weight,
+      fontVariations: [FontVariation('wght', weight.value.toDouble())],
       fontFeatures: const [FontFeature.tabularFigures()],
     );
   }
+
+  static TextStyle _amount(Color color) =>
+      figureStyle(size: 32, weight: FontWeight.w600, color: color);
 
   static TextStyle _data(Color color) {
     return TextStyle(
@@ -311,6 +339,7 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
     TextStyle? bodySmall,
     TextStyle? label,
     TextStyle? amount,
+    TextStyle? figure,
     TextStyle? data,
   }) {
     return GerfautTokens(
@@ -335,6 +364,7 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
       bodySmall: bodySmall ?? this.bodySmall,
       label: label ?? this.label,
       amount: amount ?? this.amount,
+      figure: figure ?? this.figure,
       data: data ?? this.data,
     );
   }
@@ -364,6 +394,7 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
       bodySmall: TextStyle.lerp(bodySmall, other.bodySmall, t)!,
       label: TextStyle.lerp(label, other.label, t)!,
       amount: TextStyle.lerp(amount, other.amount, t)!,
+      figure: TextStyle.lerp(figure, other.figure, t)!,
       data: TextStyle.lerp(data, other.data, t)!,
     );
   }

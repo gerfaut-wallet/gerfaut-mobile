@@ -26,17 +26,29 @@ void main() {
       expect(tokens.body.fontFamily, GerfautFonts.ui);
       expect(tokens.bodySmall.fontFamily, GerfautFonts.ui);
       expect(tokens.label.fontFamily, GerfautFonts.ui);
-      expect(tokens.amount.fontFamily, GerfautFonts.data);
+      // Figures sit in the UI face; mono is left to identifiers.
+      expect(tokens.amount.fontFamily, GerfautFonts.ui);
+      expect(tokens.figure.fontFamily, GerfautFonts.ui);
+      expect(tokens.figureOf(size: 11).fontFamily, GerfautFonts.ui);
       expect(tokens.data.fontFamily, GerfautFonts.data);
 
-      // Every Bitcoin datum aligns: tabular figures on the mono styles.
+      // Every figure and datum aligns: tabular figures throughout.
+      for (final style in [
+        tokens.amount,
+        tokens.figure,
+        tokens.figureOf(size: 11, weight: FontWeight.w500),
+        tokens.data,
+      ]) {
+        expect(style.fontFeatures, contains(const FontFeature.tabularFigures()));
+      }
+
+      // Large figures carry the slight negative tracking.
+      expect(tokens.amount.letterSpacing, lessThan(0));
+      expect(tokens.figure.letterSpacing, lessThan(0));
+      expect(tokens.amount.fontWeight, FontWeight.w600);
       expect(
-        tokens.amount.fontFeatures,
-        contains(const FontFeature.tabularFigures()),
-      );
-      expect(
-        tokens.data.fontFeatures,
-        contains(const FontFeature.tabularFigures()),
+        tokens.figureOf(weight: FontWeight.w500).fontVariations,
+        contains(const FontVariation('wght', 500)),
       );
     }
   });

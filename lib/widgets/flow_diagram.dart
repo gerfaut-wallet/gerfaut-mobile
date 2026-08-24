@@ -292,15 +292,16 @@ class _FeePill extends ConsumerWidget {
           children: [
             TextSpan(
               text: ' · ${masked ? maskedValue : formatAmount(feeSats, unit)}',
-              style: tokens.data.copyWith(fontSize: 12, color: tokens.pending),
+              style: tokens.figureOf(
+                size: 12,
+                weight: FontWeight.w500,
+                color: tokens.pending,
+              ),
             ),
             if (feeRate != null)
               TextSpan(
                 text: ' · ${feeRate!.toStringAsFixed(1)} sat/vB',
-                style: tokens.data.copyWith(
-                  fontSize: 11,
-                  color: tokens.textMuted,
-                ),
+                style: tokens.figureOf(size: 11, color: tokens.textMuted),
               ),
           ],
         ),
@@ -380,17 +381,14 @@ class _LaneCard extends StatelessWidget {
             Text(
               '+${lane.more} more '
               '${side == _Side.input ? 'inputs' : 'outputs'}',
-              style: tokens.bodySmall.copyWith(
-                fontSize: 12,
-                color: tokens.textMuted,
-              ),
+              style: tokens.figureOf(size: 12, color: tokens.textMuted),
               maxLines: 1,
               softWrap: false,
             )
           else if (lane.role == _LaneRole.opReturn) ...[
             Text(
               'OP_RETURN',
-              style: tokens.data.copyWith(fontSize: 12, color: tokens.pending),
+              style: tokens.label.copyWith(color: tokens.pending),
               maxLines: 1,
               softWrap: false,
             ),
@@ -412,8 +410,8 @@ class _LaneCard extends StatelessWidget {
           ] else if (lane.role == _LaneRole.coinbase)
             Flexible(
               child: Text(
-                'coinbase${pool != null ? ' · $pool' : ''}',
-                style: tokens.data.copyWith(color: tokens.textMuted),
+                'Coinbase${pool != null ? ' · $pool' : ''}',
+                style: tokens.figureOf(color: tokens.textMuted),
                 maxLines: 1,
                 softWrap: false,
                 overflow: TextOverflow.ellipsis,
@@ -423,8 +421,8 @@ class _LaneCard extends StatelessWidget {
             Flexible(child: AddressChip(value: lane.label!))
           else
             Text(
-              side == _Side.input ? 'unknown input' : 'script output',
-              style: tokens.data.copyWith(color: tokens.textMuted),
+              side == _Side.input ? 'Unknown input' : 'Script output',
+              style: tokens.figureOf(color: tokens.textMuted),
               maxLines: 1,
               softWrap: false,
             ),
@@ -479,7 +477,7 @@ class _LaneAmount extends ConsumerWidget {
     final unit = ref.watch(unitProvider);
     return Text(
       masked ? maskedValue : formatAmount(sats, unit),
-      style: tokens.data,
+      style: tokens.figure,
       maxLines: 1,
       softWrap: false,
     );

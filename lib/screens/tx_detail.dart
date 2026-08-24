@@ -88,7 +88,7 @@ class _Detail extends ConsumerWidget {
           alignment: Alignment.centerLeft,
           child: Text(
             masked ? maskedValue : formatAmountSigned(summary.netSats, unit),
-            style: tokens.amount.copyWith(fontSize: 26, letterSpacing: -0.26),
+            style: tokens.figureOf(size: 26, weight: FontWeight.w600),
             maxLines: 1,
           ),
         ),
@@ -97,7 +97,7 @@ class _Detail extends ConsumerWidget {
           masked
               ? maskedValue
               : (fiat != null ? '$secondary · $fiat' : secondary),
-          style: tokens.data.copyWith(color: tokens.textMuted),
+          style: tokens.figureOf(color: tokens.textMuted),
         ),
         const SizedBox(height: GerfautSpacing.sm),
         Row(
@@ -110,7 +110,7 @@ class _Detail extends ConsumerWidget {
               const SizedBox(width: GerfautSpacing.sm),
               Text(
                 'block ${groupThousands('${summary.status.height}')}',
-                style: tokens.data.copyWith(color: tokens.textMuted),
+                style: tokens.figureOf(size: 12, color: tokens.textMuted),
               ),
             ],
           ],
@@ -140,7 +140,7 @@ class _Detail extends ConsumerWidget {
                     ? _FeeValue(sats: summary.feeSats!)
                     : Text(
                         'n/a',
-                        style: tokens.data.copyWith(color: tokens.textMuted),
+                        style: tokens.figureOf(color: tokens.textMuted),
                       ),
               ),
               const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
@@ -151,7 +151,7 @@ class _Detail extends ConsumerWidget {
                   detail.feeRateSatVb != null
                       ? '${detail.feeRateSatVb!.toStringAsFixed(1)} sat/vB'
                       : 'n/a',
-                  style: tokens.data,
+                  style: tokens.figureOf(weight: FontWeight.w500),
                   maxLines: 1,
                   softWrap: false,
                 ),
@@ -451,7 +451,7 @@ class _MetaRow extends StatelessWidget {
   }
 }
 
-/// A plain meta value: mono, one line, right-aligned by its row.
+/// A plain meta value: UI face, tabular, one line, right-aligned.
 class _MetaValueRow extends StatelessWidget {
   const _MetaValueRow({
     required this.label,
@@ -468,7 +468,12 @@ class _MetaValueRow extends StatelessWidget {
     return _MetaRow(
       label: label,
       tokens: tokens,
-      child: Text(value, style: tokens.data, maxLines: 1, softWrap: false),
+      child: Text(
+        value,
+        style: tokens.figureOf(weight: FontWeight.w500),
+        maxLines: 1,
+        softWrap: false,
+      ),
     );
   }
 }
@@ -708,7 +713,7 @@ class _FeeValue extends ConsumerWidget {
     final unit = ref.watch(unitProvider);
     return Text(
       masked ? maskedValue : formatAmount(sats, unit),
-      style: tokens.data,
+      style: tokens.figureOf(weight: FontWeight.w500),
       maxLines: 1,
       softWrap: false,
     );

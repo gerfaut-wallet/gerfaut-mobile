@@ -252,7 +252,15 @@ class _TxList extends StatelessWidget {
                         tx.status.confirmed && tx.status.timestamp != null
                             ? formatTimestamp(tx.status.timestamp!)
                             : truncateMiddle(tx.txid, head: 8, tail: 8),
-                        style: tokens.data.copyWith(color: tokens.textMuted),
+                        style: tx.status.confirmed && tx.status.timestamp != null
+                            ? tokens.figureOf(
+                                size: 12,
+                                color: tokens.textMuted,
+                              )
+                            : tokens.data.copyWith(
+                                fontSize: 12,
+                                color: tokens.textMuted,
+                              ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],

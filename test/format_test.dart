@@ -11,8 +11,8 @@ void main() {
       expect(formatBtc(100000000), '1.00000000');
     });
 
-    test('groups whole bitcoins with narrow no-break spaces', () {
-      expect(formatBtc(2100000000000000), '21 000 000.00000000');
+    test('groups whole bitcoins with no-break spaces', () {
+      expect(formatBtc(2100000000000000), '21\u00A0000\u00A0000.00000000');
     });
 
     test('signs explicitly', () {
@@ -22,8 +22,8 @@ void main() {
   });
 
   group('formatSats', () {
-    test('groups thousands with a narrow space', () {
-      expect(formatSats(1234567), '1 234 567 sats');
+    test('groups thousands with a no-break space', () {
+      expect(formatSats(1234567), '1\u00A0234\u00A0567 sats');
       expect(formatSats(-500), '-500 sats');
     });
   });
@@ -31,6 +31,12 @@ void main() {
   group('groupThousands', () {
     test('leaves short numbers alone', () {
       expect(groupThousands('999'), '999');
+    });
+
+    test('separates with a no-break space, never a narrow one', () {
+      expect(groupSeparator, ' ');
+      expect(groupThousands('1000000'), contains(' '));
+      expect(groupThousands('1000000'), isNot(contains(' ')));
     });
   });
 

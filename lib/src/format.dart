@@ -7,8 +7,9 @@ import 'models.dart';
 
 const int satsPerBtc = 100000000;
 
-/// Narrow no-break space, used for digit grouping.
-const String narrowSpace = ' ';
+/// No-break space for digit grouping: in the UI face the narrow
+/// no-break space collapses and "1 000 000" reads as one blob.
+const String groupSeparator = '\u00A0';
 
 /// Masked replacement for any amount.
 const String maskedValue = '•••••';
@@ -26,11 +27,11 @@ String formatBtc(int sats) {
 String formatBtcSigned(int sats) =>
     sats < 0 ? formatBtc(sats) : '+${formatBtc(sats)}';
 
-/// `"1234567"` -> `"1 234 567"` (narrow no-break spaces).
+/// `"1234567"` -> `"1 234 567"` (no-break spaces).
 String groupThousands(String digits) {
   return digits.replaceAllMapped(
     RegExp(r'\B(?=(\d{3})+(?!\d))'),
-    (_) => narrowSpace,
+    (_) => groupSeparator,
   );
 }
 
