@@ -207,15 +207,19 @@ class _TabLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(label),
-        if (count > 0) ...[
-          const SizedBox(width: GerfautSpacing.xs + 2),
-          CountBadge(count: count),
+    // A long label plus its count scales down rather than clipping.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label),
+          if (count > 0) ...[
+            const SizedBox(width: GerfautSpacing.xs + 2),
+            CountBadge(count: count),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
@@ -245,13 +249,11 @@ class _TxList extends ConsumerWidget {
       if (added == null) return;
       messenger.showSnackBar(
         SnackBar(
-          content: Text(
-            switch (added) {
-              0 => 'History is complete',
-              1 => '1 older transaction',
-              _ => '$added older transactions',
-            },
-          ),
+          content: Text(switch (added) {
+            0 => 'History is complete',
+            1 => '1 older transaction',
+            _ => '$added older transactions',
+          }),
         ),
       );
     } on BridgeException catch (error) {
@@ -292,9 +294,7 @@ class _TxList extends ConsumerWidget {
                 SecondaryButton(
                   label: loading ? 'Fetching…' : 'Load older transactions',
                   icon: LucideIcons.chevronDown,
-                  onPressed: loading
-                      ? null
-                      : () => _loadOlder(context, ref),
+                  onPressed: loading ? null : () => _loadOlder(context, ref),
                 ),
                 const SizedBox(height: GerfautSpacing.sm),
                 Text(
@@ -358,27 +358,42 @@ class _TxList extends ConsumerWidget {
                         incoming ? 'Received' : 'Sent',
                         style: tokens.bodySmall,
                       ),
-                      Text(
-                        tx.status.confirmed && tx.status.timestamp != null
-                            ? formatTimestamp(tx.status.timestamp!)
-                            : truncateMiddle(tx.txid, head: 8, tail: 8),
-                        style: tx.status.confirmed && tx.status.timestamp != null
-                            ? tokens.figureOf(
-                                size: 12,
-                                color: tokens.textMuted,
-                              )
-                            : tokens.data.copyWith(
-                                fontSize: 12,
-                                color: tokens.textMuted,
-                              ),
-                        overflow: TextOverflow.ellipsis,
+                      // Timestamp and status share the second line: on a
+                      // phone the date is what may be shortened, never
+                      // the amount.
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              tx.status.confirmed && tx.status.timestamp != null
+                                  ? formatTimestamp(tx.status.timestamp!)
+                                  : truncateMiddle(tx.txid, head: 8, tail: 8),
+                              style:
+                                  tx.status.confirmed &&
+                                      tx.status.timestamp != null
+                                  ? tokens.figureOf(
+                                      size: 12,
+                                      color: tokens.textMuted,
+                                    )
+                                  : tokens.data.copyWith(
+                                      fontSize: 12,
+                                      color: tokens.textMuted,
+                                    ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: GerfautSpacing.xs + 2),
+                          StatusPill(
+                            status: tx.status,
+                            confirmations: tx.confirmations,
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(width: GerfautSpacing.sm),
-                StatusPill(status: tx.status, confirmations: tx.confirmations),
-                const SizedBox(width: GerfautSpacing.xs + 2),
                 ListAmount(sats: tx.netSats, pending: pending),
                 const SizedBox(width: 2),
                 Icon(
