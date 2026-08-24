@@ -9,6 +9,7 @@ import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
 import 'fakes.dart';
@@ -301,10 +302,12 @@ void main() {
     await tester.pumpWidget(txDetailApp(bridge));
     await tester.pumpAndSettle();
 
-    expect(find.text('RBF'), findsOneWidget);
+    expect(find.text('Replaceable'), findsOneWidget);
     expect(find.text('SegWit'), findsOneWidget);
-    expect(find.text('Version 2'), findsOneWidget);
     expect(find.text('Taproot'), findsNothing);
+    // The version lives in the meta panel, never as a badge.
+    expect(find.text('Version 2'), findsNothing);
+    expect(find.text('VERSION'), findsOneWidget);
 
     // The meta panel carries the full fact set.
     expect(find.text('226 B'), findsOneWidget);
@@ -359,7 +362,7 @@ void main() {
     expect(find.text(hex), findsOneWidget);
   });
 
-  testWidgets('a change output carries the change pill', (tester) async {
+  testWidgets('wallet rows carry a role icon, not a text pill', (tester) async {
     useTallSurface(tester);
     final bridge = FakeBridge(
       txDetails: {
@@ -380,8 +383,11 @@ void main() {
     await tester.pumpWidget(txDetailApp(bridge));
     await tester.pumpAndSettle();
 
-    expect(find.text('CHANGE'), findsOneWidget);
-    expect(find.text('MINE'), findsOneWidget);
+    expect(find.text('CHANGE'), findsNothing);
+    expect(find.text('MINE'), findsNothing);
+    // Diagram lane and output row share the same role vocabulary.
+    expect(find.byIcon(LucideIcons.undo2), findsNWidgets(2));
+    expect(find.byIcon(LucideIcons.arrowDownLeft), findsNWidgets(2));
   });
 
   testWidgets('removing a wallet confirms with the alert banner', (
