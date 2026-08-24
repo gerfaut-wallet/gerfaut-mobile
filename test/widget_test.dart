@@ -58,6 +58,36 @@ void main() {
     expect(find.byIcon(LucideIcons.mapPin), findsNothing);
   });
 
+  testWidgets('the wallet list masks its balances from its own eye', (
+    tester,
+  ) async {
+    final bridge = FakeBridge(wallets: [makeMeta(totalSats: 123456)]);
+    await tester.pumpWidget(app(bridge));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('0.00123456', findRichText: true),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byTooltip('Hide balances'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('0.00123456', findRichText: true), findsNothing);
+    expect(find.textContaining('•••••', findRichText: true), findsWidgets);
+    expect(find.byIcon(LucideIcons.eyeOff), findsOneWidget);
+    expect(bridge.appPrefs['mobile.masked'], '1');
+
+    await tester.tap(find.byTooltip('Show balances'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('0.00123456', findRichText: true),
+      findsOneWidget,
+    );
+    expect(bridge.appPrefs['mobile.masked'], '0');
+  });
+
   testWidgets('a failed bootstrap shows the startup error screen', (
     tester,
   ) async {

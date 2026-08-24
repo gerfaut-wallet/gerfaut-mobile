@@ -41,6 +41,7 @@ class HomeScreen extends ConsumerWidget {
 
     final settings = ref.watch(settingsProvider);
     final wallets = ref.watch(walletsProvider);
+    final masked = ref.watch(maskedProvider);
     ref.watch(syncProvider);
     final sync = ref.read(syncProvider.notifier);
     final network = settings.valueOrNull?.activeNetwork;
@@ -70,6 +71,15 @@ class HomeScreen extends ConsumerWidget {
           ],
         ),
         actions: [
+          // The list shows balances, so it masks them from here too.
+          IconButton(
+            tooltip: masked ? 'Show balances' : 'Hide balances',
+            onPressed: () => ref.read(maskedProvider.notifier).toggle(),
+            icon: Icon(
+              masked ? LucideIcons.eyeOff : LucideIcons.eye,
+              size: 20,
+            ),
+          ),
           IconButton(
             tooltip: 'Settings',
             onPressed: () {
