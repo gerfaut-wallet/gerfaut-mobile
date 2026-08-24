@@ -60,7 +60,7 @@ class _Lane {
   /// Aggregated remainder lane ("+N more").
   final int more;
 
-  /// OP_RETURN preview: decoded text, or hex.
+  /// OP_RETURN preview: recognized label, decoded text, or hex.
   final String? preview;
 
   bool get mine =>
@@ -89,7 +89,7 @@ List<_Lane> _toLanes(List<TxIo> ios, _Side side, bool coinbase) {
         role: _LaneRole.opReturn,
         label: null,
         valueSats: null,
-        preview: io.opReturn!.text ?? io.opReturn!.hex,
+        preview: opReturnPreview(io.opReturn!),
       );
     }
     return _Lane(

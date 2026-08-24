@@ -46,6 +46,17 @@ String truncateMiddle(String value, {int head = 6, int tail = 4}) {
   return '${value.substring(0, head)}...${value.substring(value.length - tail)}';
 }
 
+/// Preview text for an OP_RETURN payload: the recognized protocol name
+/// when there is one, then the decoded text, then a short hex excerpt.
+/// Kept short on purpose so a row never pushes its amount out of view.
+String opReturnPreview(OpReturnData data) {
+  final label = data.label;
+  if (label != null) return label;
+  final text = data.text;
+  if (text != null) return truncateMiddle(text, head: 22, tail: 6);
+  return truncateMiddle(data.hex, head: 12, tail: 6);
+}
+
 /// Relative freshness for sync stamps: "just now", "2 min ago", ...
 String relativeTime(int unixSeconds, {DateTime? now}) {
   final nowMs = (now ?? DateTime.now()).millisecondsSinceEpoch;

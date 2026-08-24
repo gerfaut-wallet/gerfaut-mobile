@@ -347,12 +347,13 @@ class TxSummary {
 
 /// A decoded OP_RETURN payload.
 class OpReturnData {
-  const OpReturnData({required this.hex, required this.text});
+  const OpReturnData({required this.hex, required this.text, this.label});
 
   factory OpReturnData.fromJson(Map<String, dynamic> json) {
     return OpReturnData(
       hex: json['hex'] as String,
       text: json['text'] as String?,
+      label: json['label'] as String?,
     );
   }
 
@@ -361,6 +362,9 @@ class OpReturnData {
 
   /// The payload as text, when it is printable UTF-8.
   final String? text;
+
+  /// Name of a recognized protocol payload, when the prefix says so.
+  final String? label;
 }
 
 /// One input or output of a transaction.
@@ -412,6 +416,8 @@ class TxExtras {
     required this.coinbasePool,
     required this.sigops,
     required this.rawHex,
+    this.coinbaseHeight,
+    this.coinbaseTag,
   });
 
   factory TxExtras.fromJson(Map<String, dynamic> json) {
@@ -426,6 +432,8 @@ class TxExtras {
       taproot: json['taproot'] as bool? ?? false,
       isCoinbase: json['is_coinbase'] as bool? ?? false,
       coinbasePool: json['coinbase_pool'] as String?,
+      coinbaseHeight: json['coinbase_height'] as int?,
+      coinbaseTag: json['coinbase_tag'] as String?,
       sigops: json['sigops'] as int? ?? 0,
       rawHex: json['raw_hex'] as String? ?? '',
     );
@@ -441,6 +449,13 @@ class TxExtras {
   final bool taproot;
   final bool isCoinbase;
   final String? coinbasePool;
+
+  /// Block height committed in the coinbase input (BIP-34).
+  final int? coinbaseHeight;
+
+  /// Printable text left in the coinbase signature script.
+  final String? coinbaseTag;
+
   final int sigops;
   final String rawHex;
 }
