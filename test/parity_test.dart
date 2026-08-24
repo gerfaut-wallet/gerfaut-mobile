@@ -26,7 +26,11 @@ Widget app(FakeBridge bridge, {Widget? home}) {
   );
 }
 
-TxDetail makeTxDetail({TxExtras? extras, List<TxIo>? outputs}) {
+TxDetail makeTxDetail({
+  TxExtras? extras,
+  List<TxIo>? inputs,
+  List<TxIo>? outputs,
+}) {
   return TxDetail(
     summary: TxSummary(
       txid: 'f' * 64,
@@ -35,9 +39,11 @@ TxDetail makeTxDetail({TxExtras? extras, List<TxIo>? outputs}) {
       status: const TxStatus.confirmed(height: 100, timestamp: 1755000000),
       confirmations: 10,
     ),
-    inputs: const [
-      TxIo(address: 'bc1qinputaddress', valueSats: 10000, isMine: false),
-    ],
+    inputs:
+        inputs ??
+        const [
+          TxIo(address: 'bc1qinputaddress', valueSats: 10000, isMine: false),
+        ],
     outputs:
         outputs ??
         const [
@@ -56,6 +62,8 @@ TxExtras makeExtras({
   bool taproot = false,
   bool isCoinbase = false,
   String? coinbasePool,
+  int? coinbaseHeight,
+  String? coinbaseTag,
   int locktime = 0,
   String rawHex = '',
 }) {
@@ -70,6 +78,8 @@ TxExtras makeExtras({
     taproot: taproot,
     isCoinbase: isCoinbase,
     coinbasePool: coinbasePool,
+    coinbaseHeight: coinbaseHeight,
+    coinbaseTag: coinbaseTag,
     sigops: 8,
     rawHex: rawHex,
   );
@@ -426,5 +436,148 @@ void main() {
     // Flush the confirmation snackbar timer.
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('figures sit in the ui face, identifiers stay mono', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge(txDetails: {'w1:${'f' * 64}': makeTxDetail()});
+    await tester.pumpWidget(txDetailApp(bridge));
+    await tester.pumpAndSettle();
+
+    final amount = tester.widget<Text>(
+      find.text(formatAmountSigned(5000, AmountUnit.btc)),
+    );
+    expect(amount.style!.fontFamily, GerfautFonts.ui);
+    expect(
+      amount.style!.fontFeatures,
+      contains(const FontFeature.tabularFigures()),
+    );
+    expect(amount.style!.letterSpacing, lessThan(0));
+
+    // A vsize is a figure too, and it groups with no-break spaces.
+    final vsize = tester.widget<Text>(find.text('141 vB'));
+    expect(vsize.style!.fontFamily, GerfautFonts.ui);
+    expect(
+      vsize.style!.fontFeatures,
+      contains(const FontFeature.tabularFigures()),
+    );
+
+    // The transaction id is an identifier: mono, and only mono.
+    final txid = tester.widget<Text>(find.text('${'f' * 8}...${'f' * 8}'));
+    expect(txid.style!.fontFamily, GerfautFonts.data);
+  });
+
+  testWidgets('a truncated history loads older rounds on demand', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    final meta = makeMeta();
+    final detail = makeTxDetail();
+    final bridge = FakeBridge(
+      wallets: [meta],
+      snapshots: {
+        'w1': makeSnapshot(meta: meta, txs: [detail.summary], truncated: true),
+      },
+    );
+    bridge.onLoadMoreHistory = (_) => 3;
+    await tester.pumpWidget(
+      app(bridge, home: const WalletHomeScreen(walletId: 'w1')),
+    );
+    await tester.pumpAndSettle();
+
+    // The partial list is an action, not a notice.
+    expect(find.text('Load older transactions'), findsOneWidget);
+    expect(find.textContaining('it loads in rounds'), findsOneWidget);
+    expect(find.textContaining('the list below is partial'), findsNothing);
+
+    await tester.tap(find.text('Load older transactions'));
+    await tester.pumpAndSettle();
+
+    expect(bridge.loadMoreHistoryCalls, 1);
+    expect(find.text('3 older transactions'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+
+    // An empty round says so instead of staying silent.
+    bridge.onLoadMoreHistory = (_) => 0;
+    await tester.tap(find.text('Load older transactions'));
+    await tester.pumpAndSettle();
+
+    expect(bridge.loadMoreHistoryCalls, 2);
+    expect(find.text('History is complete'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a coinbase input states its block and its reward', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge(
+      txDetails: {
+        'w1:${'f' * 64}': makeTxDetail(
+          extras: makeExtras(
+            isCoinbase: true,
+            coinbasePool: 'Foundry USA',
+            coinbaseHeight: 840000,
+            coinbaseTag: '/Foundry USA Pool/',
+          ),
+          inputs: const [TxIo(address: null, valueSats: null, isMine: false)],
+          outputs: const [
+            TxIo(address: 'bc1qminer', valueSats: 312500000, isMine: false),
+          ],
+        ),
+      },
+    );
+    await tester.pumpWidget(txDetailApp(bridge));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Coinbase · block ${groupThousands('840000')} · Foundry USA'),
+      findsOneWidget,
+    );
+    // A coinbase input spends nothing, so its row carries the reward:
+    // once in the diagram lane, once per input and output row.
+    expect(find.text('n/a'), findsNothing);
+    expect(
+      find.text(formatAmount(312500000, AmountUnit.btc)),
+      findsNWidgets(3),
+    );
+  });
+
+  testWidgets('a recognized OP_RETURN payload shows its name', (tester) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge(
+      txDetails: {
+        'w1:${'f' * 64}': makeTxDetail(
+          extras: makeExtras(),
+          outputs: [
+            const TxIo(
+              address: 'bc1qoutputaddress',
+              valueSats: 5000,
+              isMine: true,
+            ),
+            TxIo(
+              address: null,
+              valueSats: 0,
+              isMine: false,
+              opReturn: OpReturnData(
+                hex: 'aa21a9ed${'9' * 64}',
+                text: null,
+                label: 'Witness commitment',
+              ),
+            ),
+          ],
+        ),
+      },
+    );
+    await tester.pumpWidget(txDetailApp(bridge));
+    await tester.pumpAndSettle();
+
+    // The label wins over the payload: the diagram lane and the row.
+    expect(find.text('Witness commitment'), findsNWidgets(2));
+    expect(find.textContaining('aa21a9ed'), findsNothing);
   });
 }

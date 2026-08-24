@@ -39,7 +39,10 @@ void main() {
         tokens.figureOf(size: 11, weight: FontWeight.w500),
         tokens.data,
       ]) {
-        expect(style.fontFeatures, contains(const FontFeature.tabularFigures()));
+        expect(
+          style.fontFeatures,
+          contains(const FontFeature.tabularFigures()),
+        );
       }
 
       // Large figures carry the slight negative tracking.
