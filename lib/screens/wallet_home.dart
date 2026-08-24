@@ -9,6 +9,7 @@ import '../theme/tokens.dart';
 import '../widgets/address_chip.dart';
 import '../widgets/amounts.dart';
 import '../widgets/buttons.dart';
+import '../widgets/count_badge.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/status_pill.dart';
 import '../widgets/sync_indicator.dart';
@@ -108,21 +109,57 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                   error: ref.watch(syncErrorsProvider)[widget.walletId],
                 ),
                 const SizedBox(height: GerfautSpacing.md),
-                BalanceAmount(sats: snapshot.balance.total),
-                if (snapshot.balance.hasPending) ...[
-                  const SizedBox(height: GerfautSpacing.xs),
-                  Text(
-                    'includes pending funds not yet confirmed',
-                    style: tokens.label.copyWith(color: tokens.textMuted),
+                // The balance as a dashboard figure: its own bordered
+                // surface, with the role spelled out above it.
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(GerfautSpacing.md),
+                  decoration: BoxDecoration(
+                    color: tokens.surface,
+                    borderRadius: BorderRadius.circular(GerfautRadius.lg),
+                    border: Border.all(color: tokens.border),
                   ),
-                ],
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'TOTAL BALANCE',
+                        style: tokens.label.copyWith(color: tokens.textMuted),
+                      ),
+                      const SizedBox(height: GerfautSpacing.sm),
+                      BalanceAmount(sats: snapshot.balance.total),
+                      if (snapshot.balance.hasPending) ...[
+                        const SizedBox(height: GerfautSpacing.sm),
+                        Text(
+                          'Includes pending funds not yet confirmed.',
+                          style: tokens.label.copyWith(color: tokens.textMuted),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
-          const TabBar(
+          TabBar(
             tabs: [
-              Tab(text: 'Transactions'),
-              Tab(text: 'UTXOs'),
+              Tab(
+                child: _TabLabel(
+                  label: 'Transactions',
+                  count: snapshot.txs.length,
+                ),
+              ),
+              Tab(
+                child: _TabLabel(
+                  label: 'UTXOs',
+                  count:
+                      ref
+                          .watch(utxosProvider(widget.walletId))
+                          .valueOrNull
+                          ?.length ??
+                      0,
+                ),
+              ),
             ],
           ),
           Expanded(
@@ -159,8 +196,31 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
   }
 }
 
+/// A tab label with the count of what it holds: the sunken pill keeps
+/// the number legible without competing with the label.
+class _TabLabel extends StatelessWidget {
+  const _TabLabel({required this.label, required this.count});
+
+  final String label;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label),
+        if (count > 0) ...[
+          const SizedBox(width: GerfautSpacing.xs + 2),
+          CountBadge(count: count),
+        ],
+      ],
+    );
+  }
+}
+
 /// Transactions are list rows, never cards: they scan vertically.
-/// 44px minimum, hairline separators, amounts right-aligned in mono.
+/// 48px rows, hairline separators, figures right-aligned.
 class _TxList extends StatelessWidget {
   const _TxList({
     required this.walletId,
@@ -213,21 +273,21 @@ class _TxList extends StatelessWidget {
             );
           },
           child: Container(
-            constraints: const BoxConstraints(minHeight: 44),
+            constraints: const BoxConstraints(minHeight: 48),
             padding: const EdgeInsets.symmetric(
               horizontal: GerfautSpacing.md,
-              vertical: GerfautSpacing.sm,
+              vertical: GerfautSpacing.xs + 2,
             ),
             child: Row(
               children: [
                 Container(
-                  width: 28,
-                  height: 28,
+                  width: 32,
+                  height: 32,
                   decoration: BoxDecoration(
                     color: incoming && !pending
                         ? tokens.confirmedSurface
                         : tokens.surfaceSunken,
-                    shape: BoxShape.circle,
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
                     incoming
@@ -268,8 +328,14 @@ class _TxList extends StatelessWidget {
                 ),
                 const SizedBox(width: GerfautSpacing.sm),
                 StatusPill(status: tx.status, confirmations: tx.confirmations),
-                const SizedBox(width: GerfautSpacing.sm),
+                const SizedBox(width: GerfautSpacing.xs + 2),
                 ListAmount(sats: tx.netSats, pending: pending),
+                const SizedBox(width: 2),
+                Icon(
+                  LucideIcons.chevronRight,
+                  size: 16,
+                  color: tokens.textMuted,
+                ),
               ],
             ),
           ),

@@ -40,17 +40,24 @@ class BalanceAmount extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text.rich(
-          TextSpan(
-            text: masked ? maskedValue : primary,
-            style: tokens.amount,
-            children: [
-              if (unit == AmountUnit.btc)
-                TextSpan(
-                  text: ' BTC',
-                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                ),
-            ],
+        // A long balance scales down rather than overflowing: a figure
+        // is never allowed to clip.
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text.rich(
+            TextSpan(
+              text: masked ? maskedValue : primary,
+              style: tokens.amount,
+              children: [
+                if (unit == AmountUnit.btc)
+                  TextSpan(
+                    text: ' BTC',
+                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                  ),
+              ],
+            ),
+            maxLines: 1,
           ),
         ),
         const SizedBox(height: GerfautSpacing.xs),
