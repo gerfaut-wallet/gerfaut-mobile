@@ -937,7 +937,7 @@ class _WalletRow extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: Icon(
-                  single ? LucideIcons.mapPin : LucideIcons.wallet,
+                  LucideIcons.wallet,
                   size: 16,
                   color: tokens.textMuted,
                 ),

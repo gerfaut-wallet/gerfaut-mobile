@@ -218,9 +218,7 @@ class _WalletCard extends StatelessWidget {
                 Row(
                   children: [
                     Icon(
-                      wallet.isSingleAddress
-                          ? LucideIcons.mapPin
-                          : LucideIcons.wallet,
+                      LucideIcons.wallet,
                       size: 16,
                       color: tokens.textMuted,
                     ),
