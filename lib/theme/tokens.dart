@@ -291,7 +291,9 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
       fontFamily: GerfautFonts.ui,
       fontSize: size,
       height: size >= 24 ? 1.1 : 1.4,
-      letterSpacing: -size * 0.01,
+      // DESIGN.md: -0.01em under 24px, -0.02em above, the way a
+      // large figure needs more tightening than a table cell.
+      letterSpacing: size >= 24 ? -size * 0.02 : -size * 0.01,
       color: color,
       fontWeight: weight,
       fontVariations: [FontVariation('wght', weight.value.toDouble())],
