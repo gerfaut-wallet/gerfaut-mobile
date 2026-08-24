@@ -72,12 +72,14 @@ WalletSnapshot makeSnapshot({
   int totalSats = 0,
   List<TxSummary> txs = const [],
   int tipHeight = 0,
+  bool truncated = false,
 }) {
   return WalletSnapshot(
     meta: meta ?? makeMeta(totalSats: totalSats),
     balance: makeBalance(totalSats),
     txs: txs,
     tipHeight: tipHeight,
+    truncated: truncated,
   );
 }
 
@@ -145,7 +147,12 @@ class FakeBridge implements GerfautBridge {
   int addWalletCalls = 0;
   int syncWalletCalls = 0;
   int syncAllCalls = 0;
+  int loadMoreHistoryCalls = 0;
   Network? lastActiveNetworkSet;
+
+  /// History round hook; the default reports nothing left to fetch.
+  /// Throw a [BridgeException] to simulate a failed round.
+  int Function(String id)? onLoadMoreHistory;
 
   @override
   Future<ParsedInput> parseInput(String input) async {
@@ -223,6 +230,13 @@ class FakeBridge implements GerfautBridge {
       tookMs: 1,
       backend: 'mempool.space',
     );
+  }
+
+  @override
+  Future<int> loadMoreHistory(String id) async {
+    loadMoreHistoryCalls += 1;
+    final load = onLoadMoreHistory;
+    return load != null ? load(id) : 0;
   }
 
   @override

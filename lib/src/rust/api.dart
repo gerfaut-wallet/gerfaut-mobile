@@ -58,6 +58,11 @@ Future<String> receiveAddresses({required String id, required int lookahead}) =>
 Future<String> syncWallet({required String id}) =>
     RustLib.instance.api.crateApiSyncWallet(id: id);
 
+/// Fetches an older round of history for a watched address. Returns how
+/// many transactions were added; zero means the history is exhausted.
+Future<String> loadMoreHistory({required String id}) =>
+    RustLib.instance.api.crateApiLoadMoreHistory(id: id);
+
 Future<String> syncAll({String? network}) =>
     RustLib.instance.api.crateApiSyncAll(network: network);
 

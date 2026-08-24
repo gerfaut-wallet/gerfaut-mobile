@@ -218,6 +218,16 @@ pub async fn sync_wallet(id: String) -> String {
     }
 }
 
+/// Fetches an older round of history for a watched address. Returns how
+/// many transactions were added; zero means the history is exhausted.
+pub async fn load_more_history(id: String) -> String {
+    let manager = try_json!(manager());
+    match manager.load_more_history(&id).await {
+        Ok(added) => to_json(&added),
+        Err(e) => core_error_json(&e),
+    }
+}
+
 pub async fn sync_all(network: Option<String>) -> String {
     let manager = try_json!(manager());
     let network = try_json!(parse_network_opt(network));

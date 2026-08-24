@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../src/bridge.dart';
 import '../src/format.dart';
 import '../src/models.dart';
 import '../src/state.dart';
@@ -221,7 +222,7 @@ class _TabLabel extends StatelessWidget {
 
 /// Transactions are list rows, never cards: they scan vertically.
 /// 48px rows, hairline separators, figures right-aligned.
-class _TxList extends StatelessWidget {
+class _TxList extends ConsumerWidget {
   const _TxList({
     required this.walletId,
     required this.network,
@@ -236,10 +237,32 @@ class _TxList extends StatelessWidget {
   /// The list is partial (busy watched address); the balance stays exact.
   final bool truncated;
 
+  /// Fetches one more round and states what it brought back.
+  Future<void> _loadOlder(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final added = await ref.read(historyProvider.notifier).loadMore(walletId);
+      if (added == null) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            switch (added) {
+              0 => 'History is complete',
+              1 => '1 older transaction',
+              _ => '$added older transactions',
+            },
+          ),
+        ),
+      );
+    } on BridgeException catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text('$error')));
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    if (txs.isEmpty) {
+    if (txs.isEmpty && !truncated) {
       return const EmptyState(
         title: 'No transactions yet',
         hint: 'Once this wallet sees activity on the chain, it shows up here.',
@@ -252,11 +275,38 @@ class _TxList extends StatelessWidget {
       ...txs.where((tx) => tx.status.confirmed),
     ];
 
-    final list = ListView.separated(
-      itemCount: sorted.length,
+    ref.watch(historyProvider);
+    final loading = ref.read(historyProvider.notifier).isLoading(walletId);
+
+    return ListView.separated(
+      itemCount: sorted.length + (truncated ? 1 : 0),
       separatorBuilder: (_, _) =>
           Divider(height: 1, thickness: 1, color: tokens.border),
       itemBuilder: (context, index) {
+        if (index == sorted.length) {
+          // The rest of the history is one action away, not a warning.
+          return Padding(
+            padding: const EdgeInsets.all(GerfautSpacing.md),
+            child: Column(
+              children: [
+                SecondaryButton(
+                  label: loading ? 'Fetching…' : 'Load older transactions',
+                  icon: LucideIcons.chevronDown,
+                  onPressed: loading
+                      ? null
+                      : () => _loadOlder(context, ref),
+                ),
+                const SizedBox(height: GerfautSpacing.sm),
+                Text(
+                  'This address has a long history: it loads in rounds. '
+                  'The balance above already covers all of it.',
+                  style: tokens.label.copyWith(color: tokens.textMuted),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          );
+        }
         final tx = sorted[index];
         final incoming = tx.netSats >= 0;
         final pending = !tx.status.confirmed;
@@ -341,27 +391,6 @@ class _TxList extends StatelessWidget {
           ),
         );
       },
-    );
-    if (!truncated) {
-      return list;
-    }
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            GerfautSpacing.md,
-            GerfautSpacing.sm,
-            GerfautSpacing.md,
-            0,
-          ),
-          child: Text(
-            'This address has more history than Gerfaut fetched: the list '
-            'below is partial. The balance stays exact.',
-            style: tokens.label.copyWith(color: tokens.textMuted),
-          ),
-        ),
-        Expanded(child: list),
-      ],
     );
   }
 }

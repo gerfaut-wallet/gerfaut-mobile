@@ -34,6 +34,11 @@ abstract class GerfautBridge {
   Future<List<UtxoInfo>> utxos(String id);
   Future<List<AddressEntry>> receiveAddresses(String id, int lookahead);
   Future<SyncReport> syncWallet(String id);
+
+  /// Fetches an older round of history for a watched address and
+  /// returns how many transactions were added. Zero means the history
+  /// is complete.
+  Future<int> loadMoreHistory(String id);
   Future<SyncAllReport> syncAll([Network? network]);
   Future<void> renameWallet(String id, String name);
   Future<void> removeWallet(String id);
@@ -121,6 +126,11 @@ class RustBridge implements GerfautBridge {
   @override
   Future<SyncReport> syncWallet(String id) async {
     return SyncReport.fromJson(_object(await rust.syncWallet(id: id)));
+  }
+
+  @override
+  Future<int> loadMoreHistory(String id) async {
+    return _decode(await rust.loadMoreHistory(id: id)) as int;
   }
 
   @override

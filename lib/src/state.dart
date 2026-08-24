@@ -334,6 +334,33 @@ final syncProvider = NotifierProvider<SyncController, Set<String>>(
   SyncController.new,
 );
 
+/// Loads older history for a watched address, one round at a time. The
+/// balance already covers the whole chain, so only the list grows.
+class HistoryController extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  bool isLoading(String walletId) => state.contains(walletId);
+
+  /// Returns how many transactions were added, or null when a round is
+  /// already in flight. Rethrows the core error after refreshing the
+  /// snapshot, so the caller can state what went wrong.
+  Future<int?> loadMore(String walletId) async {
+    if (state.contains(walletId)) return null;
+    state = {...state, walletId};
+    try {
+      return await ref.read(bridgeProvider).loadMoreHistory(walletId);
+    } finally {
+      state = {...state}..remove(walletId);
+      ref.invalidate(snapshotProvider(walletId));
+    }
+  }
+}
+
+final historyProvider = NotifierProvider<HistoryController, Set<String>>(
+  HistoryController.new,
+);
+
 /// Last sync failure per wallet id, cleared on the next success.
 /// A failed sync is stated with its reason: silence would look like
 /// health.
