@@ -46,6 +46,7 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
         .isSyncing(widget.walletId);
     ref.watch(syncProvider);
     final snapshot = ref.watch(snapshotProvider(widget.walletId));
+    final loaded = snapshot.valueOrNull;
 
     return Scaffold(
       appBar: AppBar(
@@ -67,22 +68,25 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
           const SizedBox(width: GerfautSpacing.sm),
         ],
       ),
+      // A wallet already loaded stays on screen while it refreshes: a
+      // loading line in place of a balance would hide what is known.
       body: SafeArea(
-        child: switch (snapshot) {
-          AsyncData(:final value) => _buildLoaded(value, syncing),
-          AsyncError() => Center(
-            child: Text(
-              'This wallet could not be loaded.',
-              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-            ),
-          ),
-          _ => Center(
-            child: Text(
-              'Loading wallet…',
-              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-            ),
-          ),
-        },
+        child: loaded != null
+            ? _buildLoaded(loaded, syncing)
+            : switch (snapshot) {
+                AsyncError() => Center(
+                  child: Text(
+                    'This wallet could not be loaded.',
+                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                  ),
+                ),
+                _ => Center(
+                  child: Text(
+                    'Loading wallet…',
+                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                  ),
+                ),
+              },
       ),
     );
   }
