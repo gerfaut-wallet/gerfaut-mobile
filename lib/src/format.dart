@@ -97,6 +97,17 @@ String formatTimestamp(int unixSeconds) {
   return '${_months[local.month - 1]} $day, ${local.year}, $hour:$minute';
 }
 
+/// File-name slug of a wallet name: lowercase, runs of anything but
+/// letters and digits collapsed to one dash. `"Cold storage"` ->
+/// `"cold-storage"`; an empty result falls back to `"wallet"`.
+String slugify(String name) {
+  final slug = name
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+      .replaceAll(RegExp(r'^-+|-+$'), '');
+  return slug.isEmpty ? 'wallet' : slug;
+}
+
 /// Display unit for amounts.
 enum AmountUnit {
   btc('btc', 'BTC'),
