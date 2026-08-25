@@ -22,8 +22,12 @@ void main() {
     await tester.pumpWidget(app(bridge));
     await tester.pumpAndSettle();
 
-    // The secondary line carries only the other unit, no fiat value.
-    expect(find.text(formatSats(123456)), findsOneWidget);
+    // One unit only, and no fiat line while the display is off.
+    expect(
+      find.textContaining('0.00123456', findRichText: true),
+      findsOneWidget,
+    );
+    expect(find.text(formatSats(123456)), findsNothing);
     expect(find.textContaining('€'), findsNothing);
   });
 

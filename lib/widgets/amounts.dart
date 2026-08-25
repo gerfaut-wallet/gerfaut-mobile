@@ -18,7 +18,7 @@ String? fiatValueOf(WidgetRef ref, int sats) {
 
 /// Large balance figure: UI face, tabular, masked-aware, never
 /// animated. The primary line follows the unit setting; the second line
-/// carries the other unit and the fiat value.
+/// carries only the fiat value, when that display is on.
 class BalanceAmount extends ConsumerWidget {
   const BalanceAmount({super.key, required this.sats});
 
@@ -31,12 +31,6 @@ class BalanceAmount extends ConsumerWidget {
     final unit = ref.watch(unitProvider);
     final fiat = fiatValueOf(ref, sats);
     final primary = unit == AmountUnit.btc ? formatBtc(sats) : formatSats(sats);
-    final secondary = unit == AmountUnit.btc
-        ? formatSats(sats)
-        : '${formatBtc(sats)} BTC';
-    final secondLine = masked
-        ? maskedValue
-        : (fiat != null ? '$secondary · $fiat' : secondary);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -60,8 +54,10 @@ class BalanceAmount extends ConsumerWidget {
             maxLines: 1,
           ),
         ),
-        const SizedBox(height: GerfautSpacing.xs),
-        Text(secondLine, style: tokens.figureOf(color: tokens.textMuted)),
+        if (fiat != null) ...[
+          const SizedBox(height: GerfautSpacing.xs),
+          Text(fiat, style: tokens.figureOf(color: tokens.textMuted)),
+        ],
       ],
     );
   }

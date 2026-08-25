@@ -73,12 +73,8 @@ class _Detail extends ConsumerWidget {
     final summary = detail.summary;
     final extras = detail.extras;
     final explorer = explorerTxUrl(network, summary.txid);
+    // The subline carries only the fiat value, when that display is on.
     final fiat = fiatValueOf(ref, summary.netSats);
-    // The other unit rides the subline, with the fiat value when on.
-    final secondary = formatAmount(
-      summary.netSats,
-      unit == AmountUnit.btc ? AmountUnit.sats : AmountUnit.btc,
-    );
     // A coinbase input spends nothing: what it creates is the sum of the
     // outputs, which is the figure worth showing on that row.
     final outputTotal = detail.outputs.fold<int>(
@@ -98,13 +94,10 @@ class _Detail extends ConsumerWidget {
             maxLines: 1,
           ),
         ),
-        const SizedBox(height: GerfautSpacing.xs),
-        Text(
-          masked
-              ? maskedValue
-              : (fiat != null ? '$secondary · $fiat' : secondary),
-          style: tokens.figureOf(color: tokens.textMuted),
-        ),
+        if (fiat != null) ...[
+          const SizedBox(height: GerfautSpacing.xs),
+          Text(fiat, style: tokens.figureOf(color: tokens.textMuted)),
+        ],
         const SizedBox(height: GerfautSpacing.sm),
         Row(
           children: [

@@ -324,6 +324,18 @@ void main() {
     expect(find.text('564 WU'), findsOneWidget);
   });
 
+  testWidgets('the tx detail header never echoes the other unit', (
+    tester,
+  ) async {
+    final bridge = FakeBridge(txDetails: {'w1:${'f' * 64}': makeTxDetail()});
+    await tester.pumpWidget(txDetailApp(bridge));
+    await tester.pumpAndSettle();
+
+    // BTC is the unit: the net amount shows once, sats nowhere near it.
+    expect(find.text(formatAmountSigned(5000, AmountUnit.btc)), findsOneWidget);
+    expect(find.textContaining('sats'), findsNothing);
+  });
+
   testWidgets('an OP_RETURN output shows its decoded text', (tester) async {
     useTallSurface(tester);
     final bridge = FakeBridge(

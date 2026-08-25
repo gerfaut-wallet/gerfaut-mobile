@@ -34,8 +34,8 @@ void main() {
       find.textContaining('0.00123456', findRichText: true),
       findsOneWidget,
     );
-    // Secondary line: the other unit. Fiat is off by default.
-    expect(find.textContaining(formatSats(123456)), findsOneWidget);
+    // One unit only: the balance never echoes the other unit.
+    expect(find.textContaining(formatSats(123456)), findsNothing);
     expect(find.text('Never synced'), findsOneWidget);
     expect(find.text('Receive'), findsOneWidget);
 
