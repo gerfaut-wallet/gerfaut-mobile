@@ -66,6 +66,8 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
     required this.confirmedSurface,
     required this.pending,
     required this.pendingSurface,
+    required this.premium,
+    required this.premiumSurface,
     required this.display,
     required this.h1,
     required this.h2,
@@ -120,6 +122,12 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
 
   /// Tinted surface behind [pending] content.
   final Color pendingSurface;
+
+  /// Bruyère: strictly reserved for premium (server) features.
+  final Color premium;
+
+  /// Tinted surface behind [premium] content.
+  final Color premiumSurface;
 
   // --- type scale ------------------------------------------------------
 
@@ -176,6 +184,8 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
     confirmedSurface: const Color(0xFFDCF5E6),
     pending: const Color(0xFF745400),
     pendingSurface: const Color(0xFFFDF0CF),
+    premium: const Color(0xFF6D28D9),
+    premiumSurface: const Color(0xFFF3EEFC),
     display: _display(const Color(0xFF0D1317)),
     h1: _h1(const Color(0xFF0D1317)),
     h2: _h2(const Color(0xFF0D1317)),
@@ -203,6 +213,8 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
     confirmedSurface: const Color(0xFF161E27),
     pending: const Color(0xFFC1983A),
     pendingSurface: const Color(0xFF161E27),
+    premium: const Color(0xFFC4B5FD),
+    premiumSurface: const Color(0xFF1F2933),
     display: _display(const Color(0xFFE6ECF2)),
     h1: _h1(const Color(0xFFE6ECF2)),
     h2: _h2(const Color(0xFFE6ECF2)),
@@ -334,6 +346,8 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
     Color? confirmedSurface,
     Color? pending,
     Color? pendingSurface,
+    Color? premium,
+    Color? premiumSurface,
     TextStyle? display,
     TextStyle? h1,
     TextStyle? h2,
@@ -359,6 +373,8 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
       confirmedSurface: confirmedSurface ?? this.confirmedSurface,
       pending: pending ?? this.pending,
       pendingSurface: pendingSurface ?? this.pendingSurface,
+      premium: premium ?? this.premium,
+      premiumSurface: premiumSurface ?? this.premiumSurface,
       display: display ?? this.display,
       h1: h1 ?? this.h1,
       h2: h2 ?? this.h2,
@@ -389,6 +405,8 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
       confirmedSurface: Color.lerp(confirmedSurface, other.confirmedSurface, t)!,
       pending: Color.lerp(pending, other.pending, t)!,
       pendingSurface: Color.lerp(pendingSurface, other.pendingSurface, t)!,
+      premium: Color.lerp(premium, other.premium, t)!,
+      premiumSurface: Color.lerp(premiumSurface, other.premiumSurface, t)!,
       display: TextStyle.lerp(display, other.display, t)!,
       h1: TextStyle.lerp(h1, other.h1, t)!,
       h2: TextStyle.lerp(h2, other.h2, t)!,
