@@ -71,6 +71,11 @@ Future<String> getSettings() => RustLib.instance.api.crateApiGetSettings();
 Future<String> setActiveNetwork({required String network}) =>
     RustLib.instance.api.crateApiSetActiveNetwork(network: network);
 
+/// Sets the global gap limit applied to every descriptor wallet on the
+/// next sync. Bounded to 1..=500 by the core.
+Future<String> setGapLimit({required int gapLimit}) =>
+    RustLib.instance.api.crateApiSetGapLimit(gapLimit: gapLimit);
+
 /// Sets the backend for a network from a serialized `BackendConfig`.
 Future<String> setBackend({
   required String network,

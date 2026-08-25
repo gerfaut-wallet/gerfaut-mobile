@@ -699,6 +699,7 @@ class Settings {
     required this.activeNetwork,
     required this.backends,
     required this.appPrefs,
+    this.gapLimit = 20,
   });
 
   factory Settings.fromJson(Map<String, dynamic> json) {
@@ -714,12 +715,16 @@ class Settings {
       appPrefs: (json['app_prefs'] as Map<String, dynamic>? ?? {}).map(
         (key, value) => MapEntry(key, value as String),
       ),
+      gapLimit: json['gap_limit'] as int? ?? 20,
     );
   }
 
   final Network activeNetwork;
   final Map<Network, BackendConfig> backends;
   final Map<String, String> appPrefs;
+
+  /// Global gap limit applied to every descriptor wallet on sync.
+  final int gapLimit;
 
   /// Backend for a network, falling back to the public default.
   BackendConfig backendFor(Network network) =>

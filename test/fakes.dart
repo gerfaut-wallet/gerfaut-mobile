@@ -290,6 +290,28 @@ class FakeBridge implements GerfautBridge {
       activeNetwork: network,
       backends: settings.backends,
       appPrefs: settings.appPrefs,
+      gapLimit: settings.gapLimit,
+    );
+  }
+
+  /// Last accepted gap limit, for assertions; null when never set.
+  int? lastGapLimitSet;
+
+  @override
+  Future<void> setGapLimit(int gapLimit) async {
+    // Mirrors the core bound: 1..=500 or CoreError::InvalidInput.
+    if (gapLimit < 1 || gapLimit > 500) {
+      throw const BridgeException(
+        'invalid_input',
+        'gap limit must be between 1 and 500',
+      );
+    }
+    lastGapLimitSet = gapLimit;
+    settings = Settings(
+      activeNetwork: settings.activeNetwork,
+      backends: settings.backends,
+      appPrefs: settings.appPrefs,
+      gapLimit: gapLimit,
     );
   }
 
@@ -300,6 +322,7 @@ class FakeBridge implements GerfautBridge {
       activeNetwork: settings.activeNetwork,
       backends: {...settings.backends, network: config},
       appPrefs: settings.appPrefs,
+      gapLimit: settings.gapLimit,
     );
   }
 

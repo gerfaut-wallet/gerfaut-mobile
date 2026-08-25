@@ -27,7 +27,11 @@ class BridgeException implements Exception {
 /// Every operation the app can ask of the core.
 abstract class GerfautBridge {
   Future<ParsedInput> parseInput(String input);
-  Future<WalletMeta> addWallet(String name, ParsedInput parsed, Network network);
+  Future<WalletMeta> addWallet(
+    String name,
+    ParsedInput parsed,
+    Network network,
+  );
   Future<List<WalletMeta>> listWallets([Network? network]);
   Future<WalletSnapshot> walletSnapshot(String id);
   Future<TxDetail> txDetail(String id, String txid);
@@ -44,6 +48,9 @@ abstract class GerfautBridge {
   Future<void> removeWallet(String id);
   Future<Settings> getSettings();
   Future<void> setActiveNetwork(Network network);
+
+  /// Sets the global gap limit (1..=500), applied on the next sync.
+  Future<void> setGapLimit(int gapLimit);
   Future<void> setBackend(Network network, BackendConfig config);
   Future<void> setAppPref(String key, String value);
   Future<PriceQuote> fetchPrice(PriceSource source, FiatCurrency currency);
@@ -158,6 +165,11 @@ class RustBridge implements GerfautBridge {
   @override
   Future<void> setActiveNetwork(Network network) async {
     _ok(await rust.setActiveNetwork(network: network.id));
+  }
+
+  @override
+  Future<void> setGapLimit(int gapLimit) async {
+    _ok(await rust.setGapLimit(gapLimit: gapLimit));
   }
 
   @override

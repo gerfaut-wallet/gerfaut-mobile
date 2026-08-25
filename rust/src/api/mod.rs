@@ -250,6 +250,16 @@ pub async fn set_active_network(network: String) -> String {
     }
 }
 
+/// Sets the global gap limit applied to every descriptor wallet on the
+/// next sync. Bounded to 1..=500 by the core.
+pub async fn set_gap_limit(gap_limit: u32) -> String {
+    let manager = try_json!(manager());
+    match manager.set_gap_limit(gap_limit).await {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
 /// Sets the backend for a network from a serialized `BackendConfig`.
 pub async fn set_backend(network: String, config_json: String) -> String {
     let manager = try_json!(manager());

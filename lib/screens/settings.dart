@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -44,10 +45,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String? _confirmRemoveId;
   String? _walletError;
 
+  // Gap limit. Seeded from the vault, committed on blur or submit.
+  final _gapLimitController = TextEditingController();
+  final _gapLimitFocus = FocusNode();
+  int? _seededGapLimit;
+
   // Update check.
   bool _checkingUpdate = false;
   UpdateCheck? _updateResult;
   bool _updateFailed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Commit on blur; an invalid value snaps back without noise.
+    _gapLimitFocus.addListener(() {
+      if (!_gapLimitFocus.hasFocus) _commitGapLimit();
+    });
+  }
 
   @override
   void dispose() {
@@ -55,6 +70,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _hostController.dispose();
     _portController.dispose();
     _renameController.dispose();
+    _gapLimitController.dispose();
+    _gapLimitFocus.dispose();
     super.dispose();
   }
 
@@ -80,10 +97,44 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _tls = electrum.tls;
   }
 
+  void _seedGapLimit(Settings settings) {
+    if (_seededGapLimit == settings.gapLimit || _gapLimitFocus.hasFocus) {
+      return;
+    }
+    _seededGapLimit = settings.gapLimit;
+    _gapLimitController.text = '${settings.gapLimit}';
+  }
+
+  /// Commits the gap limit field. An unparseable or out-of-range value
+  /// silently returns to the current one; a saved value refreshes the
+  /// settings and every wallet view.
+  Future<void> _commitGapLimit() async {
+    final current = _seededGapLimit ?? 20;
+    final parsed = int.tryParse(_gapLimitController.text.trim());
+    if (parsed == null || parsed < 1 || parsed > 500) {
+      _gapLimitController.text = '$current';
+      return;
+    }
+    if (parsed == current) {
+      _gapLimitController.text = '$current';
+      return;
+    }
+    try {
+      await ref.read(bridgeProvider).setGapLimit(parsed);
+      _seededGapLimit = parsed;
+      _gapLimitController.text = '$parsed';
+      ref.invalidate(settingsProvider);
+      ref.invalidate(walletsProvider);
+      ref.invalidate(snapshotProvider);
+      if (mounted) _toast('Setting saved');
+    } catch (_) {
+      _gapLimitController.text = '$current';
+    }
+  }
+
   void _toast(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _setNetwork(Network network) async {
@@ -180,6 +231,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       );
     }
     _seedBackendForm(settings);
+    _seedGapLimit(settings);
     final network = settings.activeNetwork;
 
     return Scaffold(
@@ -476,6 +528,51 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: 'Wallets',
               tokens: tokens,
               children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Gap limit',
+                            style: tokens.bodySmall.copyWith(
+                              fontWeight: FontWeight.w500,
+                              fontVariations: const [
+                                FontVariation('wght', 500),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            'How many unused addresses in a row syncs scan '
+                            'past the last used one, for every wallet. 20 is '
+                            'the convention most wallets share. Applies on '
+                            'the next sync; the Receive screen warns beyond '
+                            'it.',
+                            style: tokens.bodySmall.copyWith(
+                              color: tokens.textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: GerfautSpacing.sm),
+                    SizedBox(
+                      width: 72,
+                      child: _MonoField(
+                        controller: _gapLimitController,
+                        hint: '1-500',
+                        numeric: true,
+                        focusNode: _gapLimitFocus,
+                        onChanged: () {},
+                        onSubmitted: _commitGapLimit,
+                        tokens: tokens,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: GerfautSpacing.md),
                 if (wallets.isEmpty)
                   Text(
                     'No wallets on this network yet.',
@@ -706,6 +803,8 @@ class _MonoField extends StatelessWidget {
     required this.onChanged,
     required this.tokens,
     this.numeric = false,
+    this.focusNode,
+    this.onSubmitted,
   });
 
   final TextEditingController controller;
@@ -713,16 +812,23 @@ class _MonoField extends StatelessWidget {
   final VoidCallback onChanged;
   final GerfautTokens tokens;
   final bool numeric;
+  final FocusNode? focusNode;
+  final VoidCallback? onSubmitted;
 
   @override
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
+      focusNode: focusNode,
       autocorrect: false,
       enableSuggestions: false,
       keyboardType: numeric ? TextInputType.number : TextInputType.url,
+      inputFormatters: numeric
+          ? [FilteringTextInputFormatter.digitsOnly]
+          : null,
       style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
       onChanged: (_) => onChanged(),
+      onSubmitted: onSubmitted == null ? null : (_) => onSubmitted!(),
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: tokens.data.copyWith(
