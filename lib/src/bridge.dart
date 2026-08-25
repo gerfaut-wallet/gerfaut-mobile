@@ -37,6 +37,14 @@ abstract class GerfautBridge {
   Future<TxDetail> txDetail(String id, String txid);
   Future<List<UtxoInfo>> utxos(String id);
   Future<List<AddressEntry>> receiveAddresses(String id, int lookahead);
+
+  /// Revealed addresses by keychain, with usage and the balance on
+  /// each. Capped by the core to 200 rows per keychain.
+  Future<AddressList> addressList(String id);
+
+  /// Builds the CSV export of this wallet's transactions, filtered.
+  /// Everything stays on this device.
+  Future<ExportResult> exportTransactions(String id, ExportOptions options);
   Future<SyncReport> syncWallet(String id);
 
   /// Fetches an older round of history for a watched address and
@@ -128,6 +136,23 @@ class RustBridge implements GerfautBridge {
   Future<List<AddressEntry>> receiveAddresses(String id, int lookahead) async {
     final raw = await rust.receiveAddresses(id: id, lookahead: lookahead);
     return _list(raw).map(AddressEntry.fromJson).toList();
+  }
+
+  @override
+  Future<AddressList> addressList(String id) async {
+    return AddressList.fromJson(_object(await rust.addressList(id: id)));
+  }
+
+  @override
+  Future<ExportResult> exportTransactions(
+    String id,
+    ExportOptions options,
+  ) async {
+    final raw = await rust.exportTransactions(
+      id: id,
+      optionsJson: jsonEncode(options.toJson()),
+    );
+    return ExportResult.fromJson(_object(raw)['ok'] as Map<String, dynamic>);
   }
 
   @override

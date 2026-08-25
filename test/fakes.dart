@@ -119,12 +119,14 @@ class FakeBridge implements GerfautBridge {
     Map<String, List<UtxoInfo>>? utxos,
     Map<String, TxDetail>? txDetails,
     Map<String, List<AddressEntry>>? addresses,
+    Map<String, AddressList>? addressLists,
     this.onParse,
   }) : wallets = wallets ?? [],
        snapshots = snapshots ?? {},
        utxoMap = utxos ?? {},
        txDetails = txDetails ?? {},
-       addresses = addresses ?? {};
+       addresses = addresses ?? {},
+       addressLists = addressLists ?? {};
 
   List<WalletMeta> wallets;
   Settings settings;
@@ -134,6 +136,7 @@ class FakeBridge implements GerfautBridge {
   /// Keyed by `'$walletId:$txid'`.
   Map<String, TxDetail> txDetails;
   Map<String, List<AddressEntry>> addresses;
+  Map<String, AddressList> addressLists;
 
   /// Classification hook; throw a [BridgeException] to simulate a
   /// rejection (private material, unrecognized input, ...).
@@ -230,6 +233,49 @@ class FakeBridge implements GerfautBridge {
                 used: false,
               ),
     ];
+  }
+
+  @override
+  Future<AddressList> addressList(String id) async {
+    final list = addressLists[id];
+    if (list != null) return list;
+    return const AddressList(external: [], internal: []);
+  }
+
+  /// Every export call's options, for assertions.
+  final List<ExportOptions> exportCalls = [];
+
+  @override
+  Future<ExportResult> exportTransactions(
+    String id,
+    ExportOptions options,
+  ) async {
+    exportCalls.add(options);
+    // Mirrors gerfaut-core's export::passes so counters and results
+    // agree in tests.
+    final txs = (snapshots[id]?.txs ?? []).where((tx) {
+      if (options.direction == ExportDirection.incoming && tx.netSats < 0) {
+        return false;
+      }
+      if (options.direction == ExportDirection.outgoing && tx.netSats >= 0) {
+        return false;
+      }
+      final unbounded = options.from == null && options.to == null;
+      if (!tx.status.confirmed) return options.includePending && unbounded;
+      final at = tx.status.timestamp;
+      if (at == null) return unbounded;
+      return (options.from == null || at >= options.from!) &&
+          (options.to == null || at <= options.to!);
+    }).toList();
+    final csv = StringBuffer(
+      'txid,date_utc,block_height,confirmations,direction,amount_sats,'
+      'amount_btc,fee_sats\n',
+    );
+    for (final tx in txs) {
+      csv.writeln('${tx.txid},,,,${tx.netSats >= 0 ? 'in' : 'out'},'
+          '${tx.netSats},,');
+    }
+    return ExportResult(csv: csv.toString(), rows: txs.length);
   }
 
   /// Sync hooks; throw a [BridgeException] to simulate a failure.

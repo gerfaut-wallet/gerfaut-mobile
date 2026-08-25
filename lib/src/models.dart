@@ -558,6 +558,118 @@ class AddressEntry {
   final String? derivation;
 }
 
+/// One row of the address audit list.
+class AddressRow {
+  const AddressRow({
+    required this.index,
+    required this.address,
+    required this.used,
+    required this.balanceSats,
+  });
+
+  factory AddressRow.fromJson(Map<String, dynamic> json) {
+    return AddressRow(
+      index: json['index'] as int,
+      address: json['address'] as String,
+      used: json['used'] as bool,
+      balanceSats: json['balance_sats'] as int,
+    );
+  }
+
+  final int index;
+  final String address;
+
+  /// Whether the chain has seen this address used.
+  final bool used;
+
+  /// Sum of the unspent outputs currently on this address.
+  final int balanceSats;
+}
+
+/// Revealed addresses of a wallet, by keychain, capped by the core.
+class AddressList {
+  const AddressList({
+    required this.external,
+    required this.internal,
+    this.truncated = false,
+  });
+
+  factory AddressList.fromJson(Map<String, dynamic> json) {
+    return AddressList(
+      external: (json['external'] as List)
+          .map((row) => AddressRow.fromJson(row as Map<String, dynamic>))
+          .toList(),
+      internal: (json['internal'] as List)
+          .map((row) => AddressRow.fromJson(row as Map<String, dynamic>))
+          .toList(),
+      truncated: json['truncated'] as bool? ?? false,
+    );
+  }
+
+  final List<AddressRow> external;
+
+  /// Change addresses; empty when none were revealed (or for wallets
+  /// without a change descriptor).
+  final List<AddressRow> internal;
+
+  /// True when a keychain had more rows than the core's cap.
+  final bool truncated;
+}
+
+/// Keep only one direction of transactions in an export.
+enum ExportDirection {
+  incoming('incoming', 'Received'),
+  outgoing('outgoing', 'Sent');
+
+  const ExportDirection(this.id, this.label);
+
+  final String id;
+  final String label;
+}
+
+/// Filters for a transaction export. Empty options export everything.
+class ExportOptions {
+  const ExportOptions({
+    this.from,
+    this.to,
+    this.direction,
+    this.includePending = true,
+  });
+
+  /// Unix seconds, inclusive lower bound on the confirmation time.
+  final int? from;
+
+  /// Unix seconds, inclusive upper bound on the confirmation time.
+  final int? to;
+  final ExportDirection? direction;
+
+  /// Pending transactions have no date: they only pass when no date
+  /// bound is set.
+  final bool includePending;
+
+  Map<String, dynamic> toJson() => {
+    'from': from,
+    'to': to,
+    'direction': direction?.id,
+    'include_pending': includePending,
+  };
+}
+
+/// A built export, ready to write.
+class ExportResult {
+  const ExportResult({required this.csv, required this.rows});
+
+  factory ExportResult.fromJson(Map<String, dynamic> json) {
+    return ExportResult(
+      csv: json['csv'] as String,
+      rows: json['rows'] as int,
+    );
+  }
+
+  final String csv;
+  final int rows;
+}
+
 /// Everything a wallet view needs.
 class WalletSnapshot {
   const WalletSnapshot({

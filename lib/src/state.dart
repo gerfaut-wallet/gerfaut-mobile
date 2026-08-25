@@ -43,6 +43,14 @@ final txDetailProvider = FutureProvider
       return ref.watch(bridgeProvider).txDetail(key.walletId, key.txid);
     });
 
+/// Revealed addresses of one wallet, by keychain, capped by the core.
+final addressListProvider = FutureProvider.family<AddressList, String>((
+  ref,
+  id,
+) {
+  return ref.watch(bridgeProvider).addressList(id);
+});
+
 /// The next unused receive address of one wallet, plus `lookahead`
 /// addresses peeked past it. The entry at index `lookahead` is the one
 /// on display; peeking retires nothing.
@@ -288,9 +296,11 @@ class SyncController extends Notifier<Set<String>> {
     if (id != null) {
       ref.invalidate(snapshotProvider(id));
       ref.invalidate(utxosProvider(id));
+      ref.invalidate(addressListProvider(id));
     } else {
       ref.invalidate(snapshotProvider);
       ref.invalidate(utxosProvider);
+      ref.invalidate(addressListProvider);
     }
     ref.invalidate(txDetailProvider);
   }
