@@ -14,6 +14,8 @@ import '../widgets/count_badge.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/status_pill.dart';
 import '../widgets/sync_indicator.dart';
+import 'addresses.dart';
+import 'export.dart';
 import 'receive.dart';
 import 'tx_detail.dart';
 
@@ -64,6 +66,52 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
             tooltip: 'Sync',
             onPressed: syncing ? null : _sync,
             icon: const Icon(LucideIcons.refreshCw, size: 20),
+          ),
+          PopupMenuButton<Widget Function(String)>(
+            tooltip: 'More',
+            icon: const Icon(LucideIcons.ellipsisVertical, size: 20),
+            color: tokens.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(GerfautRadius.md),
+              side: BorderSide(color: tokens.border),
+            ),
+            onSelected: (build) {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => build(widget.walletId),
+                ),
+              );
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: (id) => AddressesScreen(walletId: id),
+                child: Row(
+                  children: [
+                    Icon(
+                      LucideIcons.listOrdered,
+                      size: 16,
+                      color: tokens.textMuted,
+                    ),
+                    const SizedBox(width: GerfautSpacing.sm),
+                    Text('Addresses', style: tokens.bodySmall),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: (id) => ExportScreen(walletId: id),
+                child: Row(
+                  children: [
+                    Icon(
+                      LucideIcons.fileDown,
+                      size: 16,
+                      color: tokens.textMuted,
+                    ),
+                    const SizedBox(width: GerfautSpacing.sm),
+                    Text('Export CSV', style: tokens.bodySmall),
+                  ],
+                ),
+              ),
+            ],
           ),
           const SizedBox(width: GerfautSpacing.sm),
         ],
