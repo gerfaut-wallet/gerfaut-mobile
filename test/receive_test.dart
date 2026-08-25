@@ -81,6 +81,48 @@ void main() {
     expect(find.text('Next address'), findsNothing);
     expect(find.text('First unused'), findsNothing);
     expect(find.byIcon(LucideIcons.skipForward), findsNothing);
+    // A single watched address has no derivation path to show.
+    expect(find.text('DERIVATION PATH'), findsNothing);
+  });
+
+  testWidgets('the derivation path shows when the core provides one', (
+    tester,
+  ) async {
+    final meta = makeMeta();
+    final bridge = FakeBridge(
+      wallets: [meta],
+      snapshots: {'w1': makeSnapshot(meta: meta)},
+      addresses: {
+        'w1': const [
+          AddressEntry(
+            index: 0,
+            address: 'tb1qfirst',
+            used: false,
+            derivation: "m/84'/1'/0'/0/0",
+          ),
+        ],
+      },
+    );
+    await tester.pumpWidget(receiveApp(bridge));
+    await tester.pumpAndSettle();
+
+    expect(find.text('DERIVATION PATH'), findsOneWidget);
+    expect(find.text("m/84'/1'/0'/0/0"), findsOneWidget);
+  });
+
+  testWidgets('no derivation line when the core sends none', (tester) async {
+    final meta = makeMeta();
+    final bridge = FakeBridge(
+      wallets: [meta],
+      snapshots: {'w1': makeSnapshot(meta: meta)},
+      addresses: {
+        'w1': const [AddressEntry(index: 0, address: 'tb1qfirst', used: false)],
+      },
+    );
+    await tester.pumpWidget(receiveApp(bridge));
+    await tester.pumpAndSettle();
+
+    expect(find.text('DERIVATION PATH'), findsNothing);
   });
 
   testWidgets('peeking past the gap limit raises the warning', (tester) async {

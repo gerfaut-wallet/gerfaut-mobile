@@ -143,6 +143,17 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
                                 ),
                               ),
                             ),
+                            if (entry.derivation != null) ...[
+                              const SizedBox(height: GerfautSpacing.md),
+                              Text(
+                                'DERIVATION PATH',
+                                style: tokens.label.copyWith(
+                                  color: tokens.textMuted,
+                                ),
+                              ),
+                              const SizedBox(height: GerfautSpacing.xs),
+                              Text(entry.derivation!, style: tokens.data),
+                            ],
                             if (!single && _offset >= gapLimit) ...[
                               const SizedBox(height: GerfautSpacing.md),
                               // Peeking this far outruns what scanning

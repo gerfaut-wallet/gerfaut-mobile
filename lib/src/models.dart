@@ -537,6 +537,7 @@ class AddressEntry {
     required this.index,
     required this.address,
     required this.used,
+    this.derivation,
   });
 
   factory AddressEntry.fromJson(Map<String, dynamic> json) {
@@ -544,12 +545,17 @@ class AddressEntry {
       index: json['index'] as int,
       address: json['address'] as String,
       used: json['used'] as bool,
+      derivation: json['derivation'] as String?,
     );
   }
 
   final int index;
   final String address;
   final bool used;
+
+  /// Absolute or relative derivation path (`m/84'/1'/0'/0/5` or `0/5`);
+  /// null for a single watched address.
+  final String? derivation;
 }
 
 /// Everything a wallet view needs.
