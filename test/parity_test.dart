@@ -324,6 +324,35 @@ void main() {
     expect(find.text('564 WU'), findsOneWidget);
   });
 
+  testWidgets('neutral badges share the tinted badges\' border', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge(
+      txDetails: {
+        'w1:${'f' * 64}': makeTxDetail(extras: makeExtras(locktime: 840000)),
+      },
+    );
+    await tester.pumpWidget(txDetailApp(bridge));
+    await tester.pumpAndSettle();
+
+    BoxDecoration badgeDecoration(String label) {
+      final container = tester.widget<Container>(
+        find
+            .ancestor(of: find.text(label), matching: find.byType(Container))
+            .first,
+      );
+      return container.decoration! as BoxDecoration;
+    }
+
+    // Final and Locktime are neutral, yet bordered like the others.
+    expect(badgeDecoration('Final').border, isNotNull);
+    expect(
+      badgeDecoration('Locktime ${groupThousands('840000')}').border,
+      isNotNull,
+    );
+  });
+
   testWidgets('the tx detail header never echoes the other unit', (
     tester,
   ) async {

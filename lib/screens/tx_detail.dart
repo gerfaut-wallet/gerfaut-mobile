@@ -503,7 +503,7 @@ class _Badge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (Color fill, Color ink, Color? outline) = switch (tone) {
+    final (Color fill, Color ink, Color outline) = switch (tone) {
       _BadgeTone.pending => (
         tokens.pendingSurface,
         tokens.pending,
@@ -519,7 +519,12 @@ class _Badge extends StatelessWidget {
         tokens.primary,
         tokens.primary.withValues(alpha: 0.25),
       ),
-      _BadgeTone.neutral => (tokens.surfaceSunken, tokens.textMuted, null),
+      // Neutral shares the tinted badges' bordered anatomy.
+      _BadgeTone.neutral => (
+        tokens.surfaceSunken,
+        tokens.textMuted,
+        tokens.border,
+      ),
     };
     return Tooltip(
       message: hint,
@@ -532,7 +537,7 @@ class _Badge extends StatelessWidget {
         decoration: BoxDecoration(
           color: fill,
           borderRadius: BorderRadius.circular(GerfautRadius.full),
-          border: outline != null ? Border.all(color: outline) : null,
+          border: Border.all(color: outline),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
