@@ -55,6 +55,22 @@ Future<String> utxos({required String id}) =>
 Future<String> receiveAddresses({required String id, required int lookahead}) =>
     RustLib.instance.api.crateApiReceiveAddresses(id: id, lookahead: lookahead);
 
+/// Revealed addresses of a wallet, by keychain, with usage and balance.
+/// Capped by the core: an audit view, not an infinite scroll.
+Future<String> addressList({required String id}) =>
+    RustLib.instance.api.crateApiAddressList(id: id);
+
+/// Builds a CSV export of one wallet's transactions from serialized
+/// `ExportOptions`. Returns `{"ok": ExportResult}`; nothing leaves the
+/// device.
+Future<String> exportTransactions({
+  required String id,
+  required String optionsJson,
+}) => RustLib.instance.api.crateApiExportTransactions(
+  id: id,
+  optionsJson: optionsJson,
+);
+
 Future<String> syncWallet({required String id}) =>
     RustLib.instance.api.crateApiSyncWallet(id: id);
 

@@ -7,6 +7,7 @@
 //! the FFI boundary.
 
 use gerfaut_core::chain::BackendConfig;
+use gerfaut_core::export::ExportOptions;
 use gerfaut_core::input::ParsedInput;
 use gerfaut_core::price::{FiatCurrency, PriceSource};
 use gerfaut_core::store::VaultKey;
@@ -204,6 +205,31 @@ pub async fn receive_addresses(id: String, lookahead: u32) -> String {
     let manager = try_json!(manager());
     match manager.receive_addresses(&id, lookahead).await {
         Ok(entries) => to_json(&entries),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Revealed addresses of a wallet, by keychain, with usage and balance.
+/// Capped by the core: an audit view, not an infinite scroll.
+pub async fn address_list(id: String) -> String {
+    let manager = try_json!(manager());
+    match manager.address_list(&id).await {
+        Ok(list) => to_json(&list),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Builds a CSV export of one wallet's transactions from serialized
+/// `ExportOptions`. Returns `{"ok": ExportResult}`; nothing leaves the
+/// device.
+pub async fn export_transactions(id: String, options_json: String) -> String {
+    let manager = try_json!(manager());
+    let options: ExportOptions = try_json!(
+        serde_json::from_str(&options_json)
+            .map_err(|e| error_json("bad_json", format!("invalid ExportOptions JSON: {e}")))
+    );
+    match manager.export_transactions(&id, &options).await {
+        Ok(result) => json!({ "ok": result }).to_string(),
         Err(e) => core_error_json(&e),
     }
 }
