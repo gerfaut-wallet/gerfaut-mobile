@@ -14,11 +14,16 @@ class AddressChip extends StatefulWidget {
     required this.value,
     this.head = 6,
     this.tail = 4,
+    this.emphasis = false,
   });
 
   final String value;
   final int head;
   final int tail;
+
+  /// Wallet-owned address: primary wash and full-strength medium text,
+  /// so "mine" reads against the muted external gray (desktop mirror).
+  final bool emphasis;
 
   @override
   State<AddressChip> createState() => _AddressChipState();
@@ -50,7 +55,9 @@ class _AddressChipState extends State<AddressChip> {
             vertical: GerfautSpacing.xs,
           ),
           decoration: BoxDecoration(
-            color: tokens.surfaceSunken,
+            color: widget.emphasis
+                ? tokens.primary.withValues(alpha: 0.10)
+                : tokens.surfaceSunken,
             borderRadius: BorderRadius.circular(GerfautRadius.sm),
           ),
           child: Row(
@@ -63,7 +70,13 @@ class _AddressChipState extends State<AddressChip> {
                     head: widget.head,
                     tail: widget.tail,
                   ),
-                  style: tokens.data.copyWith(color: tokens.textMuted),
+                  style: widget.emphasis
+                      ? tokens.data.copyWith(
+                          color: tokens.text,
+                          fontWeight: FontWeight.w500,
+                          fontVariations: const [FontVariation('wght', 500)],
+                        )
+                      : tokens.data.copyWith(color: tokens.textMuted),
                   overflow: TextOverflow.fade,
                   softWrap: false,
                 ),

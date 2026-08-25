@@ -969,7 +969,9 @@ class _IoIdentity extends StatelessWidget {
             ),
           )
         else if (io.address != null)
-          Flexible(child: AddressChip(value: io.address!))
+          Flexible(
+            child: AddressChip(value: io.address!, emphasis: io.isMine),
+          )
         else
           Flexible(
             child: Text(

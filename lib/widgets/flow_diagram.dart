@@ -418,7 +418,9 @@ class _LaneCard extends StatelessWidget {
               ),
             )
           else if (lane.label != null)
-            Flexible(child: AddressChip(value: lane.label!))
+            Flexible(
+              child: AddressChip(value: lane.label!, emphasis: lane.mine),
+            )
           else
             Text(
               side == _Side.input ? 'Unknown input' : 'Script output',
