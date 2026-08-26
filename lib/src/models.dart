@@ -44,10 +44,7 @@ enum ScriptKind {
 enum RecognizedKind {
   descriptor('descriptor', 'Output descriptor'),
   descriptorPair('descriptor_pair', 'Descriptor pair (receive + change)'),
-  multipathDescriptor(
-    'multipath_descriptor',
-    'Multipath descriptor (BIP-389)',
-  ),
+  multipathDescriptor('multipath_descriptor', 'Multipath descriptor (BIP-389)'),
   extendedKey('extended_key', 'Extended public key'),
   address('address', 'Single address'),
   walletExport('wallet_export', 'Wallet export file');
@@ -65,7 +62,7 @@ enum RecognizedKind {
 enum InputWarning {
   assumedSegwit(
     'assumed_segwit',
-    'The key does not say its script type: Native SegWit was assumed.',
+    'This key carries no script type: check the one selected below.',
   ),
   slip132Converted(
     'slip132_converted',
@@ -132,6 +129,8 @@ class ParsedInput {
     required this.payload,
     required this.warnings,
     required this.rawJson,
+    this.scriptOptions = const [],
+    this.previewAddress,
   });
 
   factory ParsedInput.fromJson(Map<String, dynamic> json, String rawJson) {
@@ -145,6 +144,10 @@ class ParsedInput {
           .map((w) => InputWarning.fromId(w as String))
           .toList(),
       rawJson: rawJson,
+      scriptOptions: ((json['script_options'] as List?) ?? const [])
+          .map((s) => ScriptKind.fromId(s as String))
+          .toList(),
+      previewAddress: json['preview_address'] as String?,
     );
   }
 
@@ -159,6 +162,14 @@ class ParsedInput {
   /// The exact JSON the core produced, passed back verbatim to
   /// `add_wallet` so the roundtrip can never drift.
   final String rawJson;
+
+  /// Script types the user may switch to. Empty when the input fixes
+  /// its own script type; non-empty only for a lone extended key.
+  final List<ScriptKind> scriptOptions;
+
+  /// First receive address on the first candidate network, so the user
+  /// can compare it with their wallet. Null when nothing derives.
+  final String? previewAddress;
 }
 
 /// Balance split as BDK reports it, in sats.
@@ -224,6 +235,7 @@ class WalletMeta {
     required this.lastSync,
     required this.cachedBalance,
     required this.cachedTxCount,
+    this.scanGap = 20,
   });
 
   factory WalletMeta.fromJson(Map<String, dynamic> json) {
@@ -236,6 +248,9 @@ class WalletMeta {
       recognizedAs: RecognizedKind.fromId(json['recognized_as'] as String),
       createdAt: json['created_at'] as int,
       gapLimit: json['gap_limit'] as int,
+      // Same fallback as the core: wallets stored before scan tracking
+      // were scanned with the default gap.
+      scanGap: json['scan_gap'] as int? ?? 20,
       lastSync: json['last_sync'] == null
           ? null
           : SyncStamp.fromJson(json['last_sync'] as Map<String, dynamic>),
@@ -253,6 +268,10 @@ class WalletMeta {
   final RecognizedKind recognizedAs;
   final int createdAt;
   final int gapLimit;
+
+  /// Gap limit the last full scan actually used; a setting raised above
+  /// it makes the next sync a full scan again.
+  final int scanGap;
   final SyncStamp? lastSync;
   final BalanceSnapshot cachedBalance;
   final int cachedTxCount;
@@ -266,9 +285,7 @@ sealed class WalletKind {
 
   factory WalletKind.fromJson(Map<String, dynamic> json) {
     return switch (json['type'] as String) {
-      'single_address' => SingleAddressKind(
-        address: json['address'] as String,
-      ),
+      'single_address' => SingleAddressKind(address: json['address'] as String),
       _ => DescriptorsKind(
         external: json['external'] as String,
         internal: json['internal'] as String?,
@@ -660,10 +677,7 @@ class ExportResult {
   const ExportResult({required this.csv, required this.rows});
 
   factory ExportResult.fromJson(Map<String, dynamic> json) {
-    return ExportResult(
-      csv: json['csv'] as String,
-      rows: json['rows'] as int,
-    );
+    return ExportResult(csv: json['csv'] as String, rows: json['rows'] as int);
   }
 
   final String csv;

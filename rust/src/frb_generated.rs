@@ -444,12 +444,14 @@ fn wire__crate__api__parse_input_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_input = <String>::sse_decode(&mut deserializer);
+            let api_script = <Option<String>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, ()>(
                     (move || async move {
-                        let output_ok =
-                            Result::<_, ()>::Ok(crate::api::parse_input(api_input).await)?;
+                        let output_ok = Result::<_, ()>::Ok(
+                            crate::api::parse_input(api_input, api_script).await,
+                        )?;
                         Ok(output_ok)
                     })()
                     .await,

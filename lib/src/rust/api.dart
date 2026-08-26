@@ -17,8 +17,10 @@ Future<String> initManager({required String dataDir, required String keyHex}) =>
 
 /// Classifies pasted or scanned wallet material. Returns the serialized
 /// `ParsedInput` to pass back to [`add_wallet`] after user confirmation.
-Future<String> parseInput({required String input}) =>
-    RustLib.instance.api.crateApiParseInput(input: input);
+/// `script` is the user's script type choice for a lone extended key
+/// (`legacy`, `nested_segwit`, `segwit`, `taproot`), ignored otherwise.
+Future<String> parseInput({required String input, String? script}) =>
+    RustLib.instance.api.crateApiParseInput(input: input, script: script);
 
 /// Adds a wallet from a `ParsedInput` JSON on an explicit network.
 /// Returns the new wallet's metadata.

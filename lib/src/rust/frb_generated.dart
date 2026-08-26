@@ -114,7 +114,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<String> crateApiLoadMoreHistory({required String id});
 
-  Future<String> crateApiParseInput({required String input});
+  Future<String> crateApiParseInput({required String input, String? script});
 
   Future<String> crateApiReceiveAddresses({
     required String id,
@@ -468,12 +468,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "load_more_history", argNames: ["id"]);
 
   @override
-  Future<String> crateApiParseInput({required String input}) {
+  Future<String> crateApiParseInput({required String input, String? script}) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(input, serializer);
+          sse_encode_opt_String(script, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -486,14 +487,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: null,
         ),
         constMeta: kCrateApiParseInputConstMeta,
-        argValues: [input],
+        argValues: [input, script],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiParseInputConstMeta =>
-      const TaskConstMeta(debugName: "parse_input", argNames: ["input"]);
+  TaskConstMeta get kCrateApiParseInputConstMeta => const TaskConstMeta(
+    debugName: "parse_input",
+    argNames: ["input", "script"],
+  );
 
   @override
   Future<String> crateApiReceiveAddresses({

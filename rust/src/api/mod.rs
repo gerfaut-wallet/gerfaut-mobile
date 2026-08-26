@@ -8,7 +8,7 @@
 
 use gerfaut_core::chain::BackendConfig;
 use gerfaut_core::export::ExportOptions;
-use gerfaut_core::input::ParsedInput;
+use gerfaut_core::input::{ParsedInput, ScriptKind};
 use gerfaut_core::price::{FiatCurrency, PriceSource};
 use gerfaut_core::store::VaultKey;
 use gerfaut_core::{CoreError, Network, WalletManager};
@@ -127,8 +127,17 @@ pub async fn init_manager(data_dir: String, key_hex: String) -> String {
 
 /// Classifies pasted or scanned wallet material. Returns the serialized
 /// `ParsedInput` to pass back to [`add_wallet`] after user confirmation.
-pub async fn parse_input(input: String) -> String {
-    match gerfaut_core::input::parse_input(&input) {
+/// `script` is the user's script type choice for a lone extended key
+/// (`legacy`, `nested_segwit`, `segwit`, `taproot`), ignored otherwise.
+pub async fn parse_input(input: String, script: Option<String>) -> String {
+    let script: Option<ScriptKind> = match script {
+        None => None,
+        Some(id) => match serde_json::from_value(json!(id)) {
+            Ok(kind) => Some(kind),
+            Err(_) => return error_json("invalid_input", format!("unknown script type `{id}`")),
+        },
+    };
+    match gerfaut_core::input::parse_input_with(&input, script) {
         Ok(parsed) => to_json(&parsed),
         Err(e) => core_error_json(&e),
     }

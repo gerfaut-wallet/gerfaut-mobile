@@ -26,7 +26,9 @@ class BridgeException implements Exception {
 
 /// Every operation the app can ask of the core.
 abstract class GerfautBridge {
-  Future<ParsedInput> parseInput(String input);
+  /// Classifies wallet material. `script` is the user's script type
+  /// choice for a lone extended key; the core ignores it otherwise.
+  Future<ParsedInput> parseInput(String input, {ScriptKind? script});
   Future<WalletMeta> addWallet(
     String name,
     ParsedInput parsed,
@@ -92,8 +94,8 @@ class RustBridge implements GerfautBridge {
   static void _ok(String raw) => _decode(raw);
 
   @override
-  Future<ParsedInput> parseInput(String input) async {
-    final raw = await rust.parseInput(input: input);
+  Future<ParsedInput> parseInput(String input, {ScriptKind? script}) async {
+    final raw = await rust.parseInput(input: input, script: script?.id);
     return ParsedInput.fromJson(_object(raw), raw);
   }
 

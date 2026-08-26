@@ -29,6 +29,10 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
   Network? _network;
   bool _adding = false;
 
+  /// Bumped on every classifier answer so the script field rebuilds on
+  /// what the core holds, never on a choice the core rejected.
+  int _parseSeq = 0;
+
   @override
   void dispose() {
     _rawController.dispose();
@@ -36,23 +40,40 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
     super.dispose();
   }
 
-  Future<void> _parse(String input) async {
+  Future<void> _parse(String input, {ScriptKind? script}) async {
     setState(() => _error = null);
     try {
-      final parsed = await ref.read(bridgeProvider).parseInput(input);
-      final active =
-          ref.read(settingsProvider).valueOrNull?.activeNetwork;
+      final parsed = await ref
+          .read(bridgeProvider)
+          .parseInput(input, script: script);
+      // A re-parse keeps the network the user already picked.
+      final preferred =
+          _network ?? ref.read(settingsProvider).valueOrNull?.activeNetwork;
       setState(() {
         _parsed = parsed;
-        _network = active != null && parsed.networks.contains(active)
-            ? active
+        _parseSeq += 1;
+        _network = preferred != null && parsed.networks.contains(preferred)
+            ? preferred
             : parsed.networks.first;
       });
     } on BridgeException catch (error) {
-      setState(() => _error = error.message);
+      setState(() {
+        _error = error.message;
+        _parseSeq += 1;
+      });
     } catch (error) {
-      setState(() => _error = '$error');
+      setState(() {
+        _error = '$error';
+        _parseSeq += 1;
+      });
     }
+  }
+
+  /// The script type is rebuilt by the core, never patched locally: the
+  /// descriptors and the preview address must come from one place.
+  void _chooseScript(ScriptKind chosen) {
+    // ignore: unawaited_futures
+    _parse(_rawController.text.trim(), script: chosen);
   }
 
   Future<void> _importFile() async {
@@ -260,6 +281,15 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
                   style: tokens.data.copyWith(color: tokens.textMuted),
                 ),
               ],
+              if (parsed.previewAddress != null) ...[
+                const SizedBox(height: GerfautSpacing.sm),
+                Text(
+                  'First address',
+                  style: tokens.label.copyWith(color: tokens.textMuted),
+                ),
+                const SizedBox(height: 2),
+                SelectableText(parsed.previewAddress!, style: tokens.data),
+              ],
               if (parsed.warnings.isNotEmpty) ...[
                 const SizedBox(height: GerfautSpacing.sm),
                 for (final warning in parsed.warnings)
@@ -289,6 +319,65 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
             ],
           ),
         ),
+        if (parsed.scriptOptions.isNotEmpty &&
+            payload is DescriptorsPayload) ...[
+          const SizedBox(height: GerfautSpacing.md),
+          Text(
+            'SCRIPT TYPE',
+            style: tokens.label.copyWith(color: tokens.textMuted),
+          ),
+          const SizedBox(height: GerfautSpacing.sm),
+          DropdownButtonFormField<ScriptKind>(
+            key: ValueKey('script-$_parseSeq'),
+            initialValue: payload.script,
+            isExpanded: true,
+            style: tokens.body,
+            dropdownColor: tokens.surface,
+            borderRadius: BorderRadius.circular(GerfautRadius.md),
+            icon: Icon(
+              LucideIcons.chevronDown,
+              size: 16,
+              color: tokens.textMuted,
+            ),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: tokens.surfaceSunken,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: GerfautSpacing.md,
+                vertical: GerfautSpacing.sm,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                borderSide: BorderSide(color: tokens.primary, width: 2),
+              ),
+            ),
+            items: [
+              for (final option in parsed.scriptOptions)
+                DropdownMenuItem(
+                  value: option,
+                  child: Text(
+                    option.label,
+                    style: tokens.body,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: (chosen) {
+              if (chosen != null && chosen != payload.script) {
+                _chooseScript(chosen);
+              }
+            },
+          ),
+          const SizedBox(height: GerfautSpacing.xs + 2),
+          Text(
+            'Compare the first address above with your wallet.',
+            style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+          ),
+        ],
         const SizedBox(height: GerfautSpacing.md),
         Text('NAME', style: tokens.label.copyWith(color: tokens.textMuted)),
         const SizedBox(height: GerfautSpacing.sm),
@@ -347,8 +436,7 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
               child: PrimaryButton(
                 label: _adding ? 'Adding…' : 'Add wallet',
                 expand: true,
-                onPressed:
-                    _nameController.text.trim().isEmpty || _adding
+                onPressed: _nameController.text.trim().isEmpty || _adding
                     ? null
                     : _submit,
               ),

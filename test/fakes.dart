@@ -97,6 +97,8 @@ ParsedInput makeParsedInput({
     script: ScriptKind.segwit,
   ),
   List<InputWarning> warnings = const [],
+  List<ScriptKind> scriptOptions = const [],
+  String? previewAddress,
 }) {
   return ParsedInput(
     kind: kind,
@@ -104,6 +106,8 @@ ParsedInput makeParsedInput({
     payload: payload,
     warnings: warnings,
     rawJson: '{}',
+    scriptOptions: scriptOptions,
+    previewAddress: previewAddress,
   );
 }
 
@@ -121,6 +125,7 @@ class FakeBridge implements GerfautBridge {
     Map<String, List<AddressEntry>>? addresses,
     Map<String, AddressList>? addressLists,
     this.onParse,
+    this.onParseWith,
   }) : wallets = wallets ?? [],
        snapshots = snapshots ?? {},
        utxoMap = utxos ?? {},
@@ -142,6 +147,13 @@ class FakeBridge implements GerfautBridge {
   /// rejection (private material, unrecognized input, ...).
   ParsedInput Function(String input)? onParse;
 
+  /// Classification hook that also sees the script type choice; takes
+  /// precedence over [onParse] when set.
+  ParsedInput Function(String input, ScriptKind? script)? onParseWith;
+
+  /// The script argument of every parseInput call, for assertions.
+  final List<ScriptKind?> parseScripts = [];
+
   /// Every `set_app_pref` write, for assertions.
   final Map<String, String> appPrefs = {};
 
@@ -159,7 +171,10 @@ class FakeBridge implements GerfautBridge {
   int Function(String id)? onLoadMoreHistory;
 
   @override
-  Future<ParsedInput> parseInput(String input) async {
+  Future<ParsedInput> parseInput(String input, {ScriptKind? script}) async {
+    parseScripts.add(script);
+    final parseWith = onParseWith;
+    if (parseWith != null) return parseWith(input, script);
     final parse = onParse;
     if (parse == null) {
       throw const BridgeException('unrecognized_input', 'no parser configured');
@@ -272,8 +287,10 @@ class FakeBridge implements GerfautBridge {
       'amount_btc,fee_sats\n',
     );
     for (final tx in txs) {
-      csv.writeln('${tx.txid},,,,${tx.netSats >= 0 ? 'in' : 'out'},'
-          '${tx.netSats},,');
+      csv.writeln(
+        '${tx.txid},,,,${tx.netSats >= 0 ? 'in' : 'out'},'
+        '${tx.netSats},,',
+      );
     }
     return ExportResult(csv: csv.toString(), rows: txs.length);
   }
