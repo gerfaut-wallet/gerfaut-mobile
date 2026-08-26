@@ -956,3 +956,58 @@ class UpdateCheck {
   /// True when the latest tag is newer than the running version.
   final bool updateAvailable;
 }
+
+/// Envelope recognized around a scanned QR frame.
+enum QrFormat {
+  /// The frame is the material itself.
+  plain('plain'),
+
+  /// Uniform Resource (`ur:`), single or multi-part.
+  ur('ur'),
+
+  /// BBQr (`B$`), single or multi-part.
+  bbqr('bbqr');
+
+  const QrFormat(this.id);
+
+  final String id;
+
+  static QrFormat fromId(String id) =>
+      QrFormat.values.firstWhere((f) => f.id == id);
+}
+
+/// Where a scan stands after the frames seen so far.
+class QrProgress {
+  const QrProgress({
+    required this.format,
+    required this.received,
+    required this.total,
+    required this.complete,
+    this.text,
+  });
+
+  factory QrProgress.fromJson(Map<String, dynamic> json) {
+    return QrProgress(
+      format: QrFormat.fromId(json['format'] as String),
+      received: json['received'] as int,
+      total: json['total'] as int,
+      complete: json['complete'] as bool,
+      text: json['text'] as String?,
+    );
+  }
+
+  final QrFormat format;
+
+  /// Distinct parts received (for a UR: fragments resolved).
+  final int received;
+
+  /// Parts announced by the envelope; 1 for a plain frame.
+  final int total;
+  final bool complete;
+
+  /// The assembled text, once [complete].
+  final String? text;
+
+  /// True while an animated code is still being collected.
+  bool get inProgress => total > 1 && !complete;
+}

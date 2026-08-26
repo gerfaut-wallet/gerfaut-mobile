@@ -22,6 +22,13 @@ Future<String> initManager({required String dataDir, required String keyHex}) =>
 Future<String> parseInput({required String input, String? script}) =>
     RustLib.instance.api.crateApiParseInput(input: input, script: script);
 
+/// Assembles the QR frames scanned so far (plain text, UR, BBQr) from a
+/// JSON array of strings. Returns the serialized `QrProgress`: feed the
+/// growing list until `complete` is true, then pass `text` to
+/// [`parse_input`].
+Future<String> assembleQr({required String framesJson}) =>
+    RustLib.instance.api.crateApiAssembleQr(framesJson: framesJson);
+
 /// Adds a wallet from a `ParsedInput` JSON on an explicit network.
 /// Returns the new wallet's metadata.
 Future<String> addWallet({

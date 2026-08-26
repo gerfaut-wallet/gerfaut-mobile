@@ -29,6 +29,11 @@ abstract class GerfautBridge {
   /// Classifies wallet material. `script` is the user's script type
   /// choice for a lone extended key; the core ignores it otherwise.
   Future<ParsedInput> parseInput(String input, {ScriptKind? script});
+
+  /// Assembles the distinct QR frames scanned so far (plain text, UR,
+  /// BBQr). Feed the growing list until [QrProgress.complete], then
+  /// hand [QrProgress.text] to [parseInput].
+  Future<QrProgress> assembleQr(List<String> frames);
   Future<WalletMeta> addWallet(
     String name,
     ParsedInput parsed,
@@ -97,6 +102,12 @@ class RustBridge implements GerfautBridge {
   Future<ParsedInput> parseInput(String input, {ScriptKind? script}) async {
     final raw = await rust.parseInput(input: input, script: script?.id);
     return ParsedInput.fromJson(_object(raw), raw);
+  }
+
+  @override
+  Future<QrProgress> assembleQr(List<String> frames) async {
+    final raw = await rust.assembleQr(framesJson: jsonEncode(frames));
+    return QrProgress.fromJson(_object(raw));
   }
 
   @override

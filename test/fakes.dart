@@ -2,6 +2,8 @@
 // code. Screens observe the same contract as the real bridge, including
 // BridgeException errors.
 
+import 'dart:async';
+
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:url_launcher_platform_interface/link.dart';
@@ -180,6 +182,28 @@ class FakeBridge implements GerfautBridge {
       throw const BridgeException('unrecognized_input', 'no parser configured');
     }
     return parse(input);
+  }
+
+  /// QR assembly hook; the default takes the last frame as the whole
+  /// code. Throw a [BridgeException] to simulate an unsupported
+  /// envelope or material that is not a wallet to watch.
+  FutureOr<QrProgress> Function(List<String> frames)? onAssembleQr;
+
+  /// The frame list of every assembleQr call, for assertions.
+  final List<List<String>> assembleCalls = [];
+
+  @override
+  Future<QrProgress> assembleQr(List<String> frames) async {
+    assembleCalls.add(List.of(frames));
+    final assemble = onAssembleQr;
+    if (assemble != null) return assemble(frames);
+    return QrProgress(
+      format: QrFormat.plain,
+      received: 1,
+      total: 1,
+      complete: true,
+      text: frames.last,
+    );
   }
 
   @override

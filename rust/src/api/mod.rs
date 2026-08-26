@@ -143,6 +143,21 @@ pub async fn parse_input(input: String, script: Option<String>) -> String {
     }
 }
 
+/// Assembles the QR frames scanned so far (plain text, UR, BBQr) from a
+/// JSON array of strings. Returns the serialized `QrProgress`: feed the
+/// growing list until `complete` is true, then pass `text` to
+/// [`parse_input`].
+pub async fn assemble_qr(frames_json: String) -> String {
+    let frames: Vec<String> = try_json!(
+        serde_json::from_str(&frames_json)
+            .map_err(|e| error_json("bad_json", format!("invalid frames JSON: {e}")))
+    );
+    match gerfaut_core::input::qr::assemble(&frames) {
+        Ok(progress) => to_json(&progress),
+        Err(e) => core_error_json(&e),
+    }
+}
+
 // --- wallet lifecycle --------------------------------------------------
 
 /// Adds a wallet from a `ParsedInput` JSON on an explicit network.
