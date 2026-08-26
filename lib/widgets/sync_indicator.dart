@@ -19,7 +19,8 @@ class SyncIndicator extends StatelessWidget {
   final SyncStamp? stamp;
   final bool syncing;
 
-  /// Last sync failure; long-press shows the full reason.
+  /// Last sync failure. The reason shows under the line, truncated;
+  /// long-press shows it in full.
   final String? error;
 
   @override
@@ -38,20 +39,35 @@ class SyncIndicator extends StatelessWidget {
       return Tooltip(
         message: error!,
         triggerMode: TooltipTriggerMode.longPress,
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.triangleAlert, size: 13, color: tokens.pending),
-            const SizedBox(width: GerfautSpacing.xs),
-            Flexible(
-              child: Text(
-                stamp == null
-                    ? 'Sync failed · no data yet'
-                    : 'Sync failed · showing data from '
-                          '${relativeTime(stamp!.at)}',
-                style: tokens.label.copyWith(color: tokens.pending),
-                overflow: TextOverflow.ellipsis,
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  LucideIcons.triangleAlert,
+                  size: 13,
+                  color: tokens.pending,
+                ),
+                const SizedBox(width: GerfautSpacing.xs),
+                Flexible(
+                  child: Text(
+                    stamp == null
+                        ? 'Sync failed'
+                        : 'Sync failed · last sync ${relativeTime(stamp!.at)}',
+                    style: tokens.label.copyWith(color: tokens.pending),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              error!,
+              style: tokens.label.copyWith(color: tokens.textMuted),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),

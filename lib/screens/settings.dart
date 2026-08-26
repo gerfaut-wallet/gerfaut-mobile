@@ -262,8 +262,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         Expanded(
                           child: _NetworkCard(
                             entry: _networkHints[row + 1],
-                            selected:
-                                _networkHints[row + 1].network == network,
+                            selected: _networkHints[row + 1].network == network,
                             onTap: () =>
                                 _setNetwork(_networkHints[row + 1].network),
                           ),
@@ -291,8 +290,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   groupValue: _backendKind,
                   label: 'Public API',
                   hint:
-                      'mempool.space and blockstream.info, no setup. The '
-                      "server operator can see this wallet's addresses.",
+                      'mempool.space, blockstream.info and mempool.emzy.de, '
+                      'no setup. The operator that answers can see this '
+                      "wallet's addresses.",
                   onChanged: (value) => setState(() => _backendKind = value),
                 ),
                 _BackendOption(

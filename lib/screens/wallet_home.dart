@@ -43,9 +43,7 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final masked = ref.watch(maskedProvider);
-    final syncing = ref
-        .watch(syncProvider.notifier)
-        .isSyncing(widget.walletId);
+    final syncing = ref.watch(syncProvider.notifier).isSyncing(widget.walletId);
     ref.watch(syncProvider);
     final snapshot = ref.watch(snapshotProvider(widget.walletId));
     final loaded = snapshot.valueOrNull;
@@ -57,10 +55,7 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
           IconButton(
             tooltip: masked ? 'Show balances' : 'Hide balances',
             onPressed: () => ref.read(maskedProvider.notifier).toggle(),
-            icon: Icon(
-              masked ? LucideIcons.eyeOff : LucideIcons.eye,
-              size: 20,
-            ),
+            icon: Icon(masked ? LucideIcons.eyeOff : LucideIcons.eye, size: 20),
           ),
           IconButton(
             tooltip: 'Sync',
@@ -77,9 +72,7 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
             ),
             onSelected: (build) {
               Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => build(widget.walletId),
-                ),
+                MaterialPageRoute<void>(builder: (_) => build(widget.walletId)),
               );
             },
             itemBuilder: (context) => [
@@ -139,8 +132,23 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
     );
   }
 
+  /// The figure alone can lie: a wallet that never reached a backend
+  /// shows zero. The note says where the number comes from.
+  static String? _balanceNote(WalletSnapshot snapshot, String? error) {
+    final synced = snapshot.meta.lastSync != null;
+    if (error != null && !synced) return 'Sync failed: nothing fetched yet.';
+    if (error != null) return 'Sync failed: showing the last known balance.';
+    if (!synced) return 'Not synced yet.';
+    if (snapshot.balance.hasPending) {
+      return 'Includes pending funds not yet confirmed.';
+    }
+    return null;
+  }
+
   Widget _buildLoaded(WalletSnapshot snapshot, bool syncing) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final syncError = ref.watch(syncErrorsProvider)[widget.walletId];
+    final note = _balanceNote(snapshot, syncError);
     return DefaultTabController(
       length: 2,
       child: Column(
@@ -159,7 +167,7 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                 SyncIndicator(
                   stamp: snapshot.meta.lastSync,
                   syncing: syncing,
-                  error: ref.watch(syncErrorsProvider)[widget.walletId],
+                  error: syncError,
                 ),
                 const SizedBox(height: GerfautSpacing.md),
                 // The balance as a dashboard figure: its own bordered
@@ -181,10 +189,10 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                       ),
                       const SizedBox(height: GerfautSpacing.sm),
                       BalanceAmount(sats: snapshot.balance.total),
-                      if (snapshot.balance.hasPending) ...[
+                      if (note != null) ...[
                         const SizedBox(height: GerfautSpacing.sm),
                         Text(
-                          'Includes pending funds not yet confirmed.',
+                          note,
                           style: tokens.label.copyWith(color: tokens.textMuted),
                         ),
                       ],

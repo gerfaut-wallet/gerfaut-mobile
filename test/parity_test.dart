@@ -154,7 +154,8 @@ void main() {
     await tester.tap(find.byTooltip('Sync'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Sync failed'), findsOneWidget);
+    expect(find.text('Sync failed'), findsOneWidget);
+    expect(find.text('Sync failed: nothing fetched yet.'), findsOneWidget);
   });
 
   testWidgets('the explorer link warns before opening', (tester) async {
