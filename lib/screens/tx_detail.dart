@@ -12,11 +12,16 @@ import '../theme/tokens.dart';
 import '../widgets/address_chip.dart';
 import '../widgets/amounts.dart';
 import '../widgets/buttons.dart';
-import '../widgets/flow_diagram.dart';
 import '../widgets/status_pill.dart';
 
-/// Full-screen transaction detail: net amount, status, identifiers,
-/// fees, and both sides of the transaction with "mine" markers.
+/// Width from which the flow summary sits side by side instead of
+/// stacked: a phone in landscape or a tablet.
+const double _wideFlow = 560;
+
+/// Transaction detail: the amount and its status first, the flow in
+/// one glance, then two calm fact cards, the inputs and outputs, and
+/// the raw transaction behind a disclosure. Same facts as before, read
+/// in the order a person asks for them.
 class TxDetailScreen extends ConsumerWidget {
   const TxDetailScreen({
     super.key,
@@ -68,13 +73,10 @@ class _Detail extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final masked = ref.watch(maskedProvider);
-    final unit = ref.watch(unitProvider);
     final summary = detail.summary;
     final extras = detail.extras;
     final explorer = explorerTxUrl(network, summary.txid);
-    // The subline carries only the fiat value, when that display is on.
-    final fiat = fiatValueOf(ref, summary.netSats);
+    final coinbase = extras?.isCoinbase ?? false;
     // A coinbase input spends nothing: what it creates is the sum of the
     // outputs, which is the figure worth showing on that row.
     final outputTotal = detail.outputs.fold<int>(
@@ -85,167 +87,172 @@ class _Detail extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(GerfautSpacing.md),
       children: [
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Text(
-            masked ? maskedValue : formatAmountSigned(summary.netSats, unit),
-            style: tokens.figureOf(size: 26, weight: FontWeight.w600),
-            maxLines: 1,
-          ),
-        ),
-        if (fiat != null) ...[
-          const SizedBox(height: GerfautSpacing.xs),
-          Text(fiat, style: tokens.figureOf(color: tokens.textMuted)),
-        ],
-        const SizedBox(height: GerfautSpacing.sm),
-        Row(
-          children: [
-            StatusPill(
-              status: summary.status,
-              confirmations: summary.confirmations,
-            ),
-            if (summary.status.confirmed) ...[
-              const SizedBox(width: GerfautSpacing.sm),
-              Text(
-                'block ${groupThousands('${summary.status.height}')}',
-                style: tokens.figureOf(size: 12, color: tokens.textMuted),
-              ),
-            ],
-          ],
-        ),
+        _Hero(detail: detail, tokens: tokens),
         const SizedBox(height: GerfautSpacing.lg),
-        // The transaction's vitals as one quiet panel: label left,
-        // value right, so long values never overflow.
-        Container(
-          padding: const EdgeInsets.all(GerfautSpacing.md),
-          decoration: BoxDecoration(
-            color: tokens.surface,
-            borderRadius: BorderRadius.circular(GerfautRadius.lg),
-            border: Border.all(color: tokens.border),
-          ),
-          child: Column(
-            children: [
-              _MetaRow(
-                label: 'Transaction id',
-                tokens: tokens,
-                child: AddressChip(value: summary.txid, head: 8, tail: 8),
-              ),
-              const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
-              _MetaRow(
-                label: 'Fee',
-                tokens: tokens,
-                child: summary.feeSats != null
-                    ? _FeeValue(sats: summary.feeSats!)
-                    : Text(
-                        'n/a',
-                        style: tokens.figureOf(color: tokens.textMuted),
-                      ),
-              ),
-              const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
-              _MetaRow(
-                label: 'Fee rate',
-                tokens: tokens,
-                child: Text(
-                  detail.feeRateSatVb != null
-                      ? '${detail.feeRateSatVb!.toStringAsFixed(1)} sat/vB'
-                      : 'n/a',
-                  style: tokens.figureOf(weight: FontWeight.w500),
-                  maxLines: 1,
-                  softWrap: false,
-                ),
-              ),
-              if (extras != null) ...[
-                const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
-                _MetaValueRow(
-                  label: 'Size',
-                  value: '${groupThousands('${extras.sizeBytes}')} B',
-                  tokens: tokens,
-                ),
-                const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
-                _MetaValueRow(
-                  label: 'Virtual size',
-                  value: '${groupThousands('${extras.vsize}')} vB',
-                  tokens: tokens,
-                ),
-                const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
-                _MetaValueRow(
-                  label: 'Weight',
-                  value: '${groupThousands('${extras.weightWu}')} WU',
-                  tokens: tokens,
-                ),
-                const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
-                _MetaValueRow(
-                  label: 'Version',
-                  value: '${extras.version}',
-                  tokens: tokens,
-                ),
-                const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
-                _MetaValueRow(
-                  label: 'Sigops',
-                  value: groupThousands('${extras.sigops}'),
-                  tokens: tokens,
-                ),
-              ] else ...[
-                const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
-                _MetaValueRow(
-                  label: 'Virtual size',
-                  value: '${groupThousands('${detail.vsize}')} vB',
-                  tokens: tokens,
-                ),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(height: GerfautSpacing.lg),
-        FlowDiagram(
+        _FlowSummary(
           inputs: detail.inputs,
           outputs: detail.outputs,
           feeSats: summary.feeSats,
           feeRate: detail.feeRateSatVb,
-          isCoinbase: extras?.isCoinbase ?? false,
+          isCoinbase: coinbase,
           coinbasePool: extras?.coinbasePool,
+          tokens: tokens,
         ),
-        if (extras != null) ...[
-          const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
-          _FeatureBadges(
-            extras: extras,
-            outputs: detail.outputs,
-            tokens: tokens,
-          ),
-        ],
         const SizedBox(height: GerfautSpacing.lg),
-        _IoSection(
-          title: 'Inputs (${detail.inputs.length})',
+        _FactsCard(
+          title: 'Details',
+          tokens: tokens,
+          rows: [
+            _Fact(
+              label: 'Transaction ID',
+              tokens: tokens,
+              child: AddressChip(value: summary.txid, head: 8, tail: 8),
+            ),
+            _Fact(
+              label: 'Date',
+              tokens: tokens,
+              child:
+                  summary.status.confirmed && summary.status.timestamp != null
+                  ? _Value(formatTimestamp(summary.status.timestamp!), tokens)
+                  : _Value('not yet mined', tokens, muted: true),
+            ),
+            _Fact(
+              label: 'Block',
+              tokens: tokens,
+              child: summary.status.confirmed
+                  ? _Value(groupThousands('${summary.status.height}'), tokens)
+                  : _Value('—', tokens, muted: true),
+            ),
+            _Fact(
+              label: 'Confirmations',
+              tokens: tokens,
+              child: _Value(groupThousands('${summary.confirmations}'), tokens),
+            ),
+            _Fact(
+              label: 'Fee',
+              tokens: tokens,
+              child: summary.feeSats != null
+                  ? _FeeValue(sats: summary.feeSats!)
+                  : _Value('n/a', tokens, muted: true),
+            ),
+            _Fact(
+              label: 'Fee rate',
+              tokens: tokens,
+              child: _Value(
+                detail.feeRateSatVb != null
+                    ? '${detail.feeRateSatVb!.toStringAsFixed(1)} sat/vB'
+                    : 'n/a',
+                tokens,
+                muted: detail.feeRateSatVb == null,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: GerfautSpacing.gutter),
+        _FactsCard(
+          title: 'Technical',
+          tokens: tokens,
+          rows: extras != null
+              ? [
+                  _Fact(
+                    label: 'Size',
+                    tokens: tokens,
+                    child: _Value(
+                      '${groupThousands('${extras.sizeBytes}')} B',
+                      tokens,
+                    ),
+                  ),
+                  _Fact(
+                    label: 'Virtual size',
+                    tokens: tokens,
+                    child: _Value(
+                      '${groupThousands('${extras.vsize}')} vB',
+                      tokens,
+                    ),
+                  ),
+                  _Fact(
+                    label: 'Weight',
+                    tokens: tokens,
+                    child: _Value(
+                      '${groupThousands('${extras.weightWu}')} WU',
+                      tokens,
+                    ),
+                  ),
+                  _Fact(
+                    label: 'Version',
+                    tokens: tokens,
+                    child: _Value('${extras.version}', tokens),
+                  ),
+                  _Fact(
+                    label: 'Locktime',
+                    tokens: tokens,
+                    child: extras.locktime > 0
+                        ? _Value(groupThousands('${extras.locktime}'), tokens)
+                        : _Value('none', tokens, muted: true),
+                  ),
+                  _Fact(
+                    label: 'Sigops',
+                    tokens: tokens,
+                    child: _Value(groupThousands('${extras.sigops}'), tokens),
+                  ),
+                  _Fact(
+                    label: 'Flags',
+                    tokens: tokens,
+                    child: _Flags(
+                      extras: extras,
+                      outputs: detail.outputs,
+                      tokens: tokens,
+                    ),
+                  ),
+                ]
+              : [
+                  _Fact(
+                    label: 'Virtual size',
+                    tokens: tokens,
+                    child: _Value(
+                      '${groupThousands('${detail.vsize}')} vB',
+                      tokens,
+                    ),
+                  ),
+                ],
+        ),
+        const SizedBox(height: GerfautSpacing.lg),
+        _IoList(
+          title: 'Inputs',
           ios: detail.inputs,
           side: _IoSide.input,
           extras: extras,
           coinbaseValue: outputTotal,
           tokens: tokens,
         ),
-        const SizedBox(height: GerfautSpacing.md),
-        _IoSection(
-          title: 'Outputs (${detail.outputs.length})',
+        const SizedBox(height: GerfautSpacing.lg),
+        _IoList(
+          title: 'Outputs',
           ios: detail.outputs,
           side: _IoSide.output,
           extras: extras,
           coinbaseValue: null,
           tokens: tokens,
         ),
-        if (extras != null && extras.rawHex.isNotEmpty) ...[
-          const SizedBox(height: GerfautSpacing.lg),
+        const SizedBox(height: GerfautSpacing.lg),
+        Divider(
+          height: 1,
+          thickness: 1,
+          color: tokens.border.withValues(alpha: 0.6),
+        ),
+        const SizedBox(height: GerfautSpacing.sm),
+        if (extras != null && extras.rawHex.isNotEmpty)
           _RawTransaction(hex: extras.rawHex, tokens: tokens),
-        ],
-        if (explorer != null) ...[
-          const SizedBox(height: GerfautSpacing.lg),
+        if (explorer != null)
           Align(
             alignment: Alignment.centerLeft,
             child: InkWell(
               borderRadius: BorderRadius.circular(GerfautRadius.sm),
               onTap: () => _openExplorer(context, ref, explorer),
               child: Padding(
+                // 44px tap target around a one-line link.
                 padding: const EdgeInsets.symmetric(
-                  vertical: GerfautSpacing.sm,
+                  vertical: GerfautSpacing.sm + GerfautSpacing.xs,
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -265,8 +272,359 @@ class _Detail extends ConsumerWidget {
               ),
             ),
           ),
-        ],
       ],
+    );
+  }
+}
+
+/// What happened, in one glance: direction, amount, status.
+class _Hero extends ConsumerWidget {
+  const _Hero({required this.detail, required this.tokens});
+
+  final TxDetail detail;
+  final GerfautTokens tokens;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final masked = ref.watch(maskedProvider);
+    final unit = ref.watch(unitProvider);
+    final summary = detail.summary;
+    final sats = summary.netSats;
+    // The subline carries only the fiat value, when that display is on.
+    final fiat = fiatValueOf(ref, sats);
+    final coinbase = detail.extras?.isCoinbase ?? false;
+    final direction = coinbase
+        ? 'Block reward'
+        : sats >= 0
+        ? 'Received'
+        : 'Sent';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _FieldLabel(direction, tokens: tokens),
+        const SizedBox(height: GerfautSpacing.xs),
+        // A long amount scales down rather than overflowing: a figure
+        // is never allowed to clip.
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            masked ? maskedValue : formatAmountSigned(sats, unit),
+            style: tokens.amount,
+            maxLines: 1,
+          ),
+        ),
+        if (fiat != null) ...[
+          const SizedBox(height: GerfautSpacing.xs),
+          Text(fiat, style: tokens.figureOf(color: tokens.textMuted)),
+        ],
+        const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
+        Row(
+          children: [
+            StatusPill(
+              status: summary.status,
+              confirmations: summary.confirmations,
+            ),
+            if (summary.status.confirmed) ...[
+              const SizedBox(width: GerfautSpacing.sm),
+              Text(
+                'block ${groupThousands('${summary.status.height}')}',
+                style: tokens.figureOf(size: 12, color: tokens.textMuted),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Sum of the values, or null as soon as one of them is unknown: a
+/// partial total would read as a fact.
+int? _sum(List<TxIo> ios) {
+  var total = 0;
+  for (final io in ios) {
+    final value = io.valueSats;
+    if (value == null) return null;
+    total += value;
+  }
+  return total;
+}
+
+/// The transaction in one glance: what went in, what came out, and the
+/// fee between the two. Counts and totals only — the input and output
+/// lists below carry the detail. Stacked on a phone, side by side once
+/// the width allows it.
+class _FlowSummary extends ConsumerWidget {
+  const _FlowSummary({
+    required this.inputs,
+    required this.outputs,
+    required this.feeSats,
+    required this.feeRate,
+    required this.isCoinbase,
+    required this.coinbasePool,
+    required this.tokens,
+  });
+
+  final List<TxIo> inputs;
+  final List<TxIo> outputs;
+  final int? feeSats;
+  final double? feeRate;
+  final bool isCoinbase;
+  final String? coinbasePool;
+  final GerfautTokens tokens;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final masked = ref.watch(maskedProvider);
+    final unit = ref.watch(unitProvider);
+    final outTotal = _sum(outputs);
+    // A coinbase input spends nothing: what it creates is the reward.
+    final inTotal = isCoinbase ? outTotal : _sum(inputs);
+    String amount(int? sats) => sats == null
+        ? 'n/a'
+        : masked
+        ? maskedValue
+        : formatAmount(sats, unit);
+
+    final inSide = _FlowSide(
+      title: isCoinbase
+          ? 'Coinbase'
+          : '${inputs.length} input${inputs.length == 1 ? '' : 's'}',
+      subtitle: isCoinbase
+          ? (coinbasePool != null
+                ? 'Newly minted · $coinbasePool'
+                : 'Newly minted coins')
+          : 'spent',
+      amount: amount(inTotal),
+      unknown: inTotal == null,
+      icon: isCoinbase ? LucideIcons.pickaxe : null,
+      tokens: tokens,
+    );
+    final outSide = _FlowSide(
+      title: '${outputs.length} output${outputs.length == 1 ? '' : 's'}',
+      subtitle: 'created',
+      amount: amount(outTotal),
+      unknown: outTotal == null,
+      tokens: tokens,
+    );
+    final showFee = feeSats != null && feeSats! > 0;
+    final feePill = showFee
+        ? _FeePill(feeSats: feeSats!, feeRate: feeRate, tokens: tokens)
+        : null;
+
+    return Container(
+      padding: const EdgeInsets.all(GerfautSpacing.md),
+      decoration: BoxDecoration(
+        color: tokens.surfaceSunken.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(GerfautRadius.lg),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth >= _wideFlow) {
+            // Both cards share the taller one's height, the way two
+            // halves of one statement should.
+            return IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: inSide),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: GerfautSpacing.sm + GerfautSpacing.xs,
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          LucideIcons.arrowRight,
+                          size: 20,
+                          color: tokens.textMuted,
+                        ),
+                        if (feePill != null) ...[
+                          const SizedBox(height: GerfautSpacing.xs),
+                          feePill,
+                        ],
+                      ],
+                    ),
+                  ),
+                  Expanded(child: outSide),
+                ],
+              ),
+            );
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              inSide,
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: GerfautSpacing.sm,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      LucideIcons.arrowDown,
+                      size: 20,
+                      color: tokens.textMuted,
+                    ),
+                    if (feePill != null) ...[
+                      const SizedBox(width: GerfautSpacing.sm),
+                      Flexible(child: feePill),
+                    ],
+                  ],
+                ),
+              ),
+              outSide,
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// One side of the flow: a count, what it means, and the total.
+class _FlowSide extends StatelessWidget {
+  const _FlowSide({
+    required this.title,
+    required this.subtitle,
+    required this.amount,
+    required this.unknown,
+    required this.tokens,
+    this.icon,
+  });
+
+  final String title;
+  final String subtitle;
+  final String amount;
+
+  /// The total could not be computed: shown muted, never as a figure.
+  final bool unknown;
+  final GerfautTokens tokens;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: GerfautSpacing.md,
+        vertical: GerfautSpacing.sm + GerfautSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        borderRadius: BorderRadius.circular(GerfautRadius.md),
+        border: Border.all(color: tokens.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 14, color: tokens.textMuted),
+                const SizedBox(width: GerfautSpacing.xs + 2),
+              ],
+              Text(
+                title,
+                style: tokens.bodySmall.copyWith(
+                  fontWeight: FontWeight.w500,
+                  fontVariations: const [FontVariation('wght', 500)],
+                ),
+                maxLines: 1,
+                softWrap: false,
+              ),
+              const SizedBox(width: GerfautSpacing.xs + 2),
+              Flexible(
+                child: Text(
+                  subtitle,
+                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: GerfautSpacing.xs),
+          Text(
+            amount,
+            style: unknown
+                ? tokens.figureOf(size: 15, color: tokens.textMuted)
+                : tokens.figureOf(size: 15, weight: FontWeight.w600),
+            maxLines: 1,
+            softWrap: false,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Fee as a pending-tinted pill between the two sides: amount in the
+/// chosen unit, rate as small print. Never an alert.
+class _FeePill extends ConsumerWidget {
+  const _FeePill({
+    required this.feeSats,
+    required this.feeRate,
+    required this.tokens,
+  });
+
+  final int feeSats;
+  final double? feeRate;
+  final GerfautTokens tokens;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final masked = ref.watch(maskedProvider);
+    final unit = ref.watch(unitProvider);
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: GerfautSpacing.sm + 2,
+        vertical: 2,
+      ),
+      decoration: BoxDecoration(
+        color: tokens.pendingSurface,
+        borderRadius: BorderRadius.circular(GerfautRadius.full),
+        border: Border.all(color: tokens.pending.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          Text('FEE', style: tokens.label.copyWith(color: tokens.pending)),
+          const SizedBox(width: GerfautSpacing.xs + 2),
+          // The figures give way before the pill ever overflows.
+          Flexible(
+            child: Text(
+              masked ? maskedValue : formatAmount(feeSats, unit),
+              style: tokens.figureOf(
+                size: 11,
+                weight: FontWeight.w500,
+                color: tokens.pending,
+              ),
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.fade,
+            ),
+          ),
+          if (feeRate != null) ...[
+            const SizedBox(width: GerfautSpacing.xs + 2),
+            Flexible(
+              child: Text(
+                '${feeRate!.toStringAsFixed(1)} sat/vB',
+                style: tokens.figureOf(size: 11, color: tokens.textMuted),
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.fade,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -369,9 +727,8 @@ void _openExplorer(BuildContext context, WidgetRef ref, String url) {
                               ),
                               materialTapTargetSize:
                                   MaterialTapTargetSize.shrinkWrap,
-                              onChanged: (value) => setState(
-                                () => skipNextTime = value ?? false,
-                              ),
+                              onChanged: (value) =>
+                                  setState(() => skipNextTime = value ?? false),
                             ),
                           ),
                           const SizedBox(width: GerfautSpacing.sm),
@@ -412,6 +769,7 @@ void _openExplorer(BuildContext context, WidgetRef ref, String url) {
   );
 }
 
+/// Section title: uppercase label, muted.
 class _FieldLabel extends StatelessWidget {
   const _FieldLabel(this.text, {required this.tokens});
 
@@ -427,12 +785,54 @@ class _FieldLabel extends StatelessWidget {
   }
 }
 
-class _MetaRow extends StatelessWidget {
-  const _MetaRow({
-    required this.label,
-    required this.child,
+/// A calm card of facts: a title, then label / value lines separated
+/// by hairlines, with room to breathe.
+class _FactsCard extends StatelessWidget {
+  const _FactsCard({
+    required this.title,
+    required this.rows,
     required this.tokens,
   });
+
+  final String title;
+  final List<Widget> rows;
+  final GerfautTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: GerfautSpacing.md,
+        vertical: GerfautSpacing.sm + GerfautSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        borderRadius: BorderRadius.circular(GerfautRadius.lg),
+        border: Border.all(color: tokens.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _FieldLabel(title, tokens: tokens),
+          const SizedBox(height: GerfautSpacing.xs),
+          for (final (index, row) in rows.indexed) ...[
+            if (index > 0)
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: tokens.border.withValues(alpha: 0.5),
+              ),
+            row,
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// One label / value line; values keep their own typography.
+class _Fact extends StatelessWidget {
+  const _Fact({required this.label, required this.child, required this.tokens});
 
   final String label;
   final Widget child;
@@ -440,50 +840,70 @@ class _MetaRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        _FieldLabel(label, tokens: tokens),
-        const SizedBox(width: GerfautSpacing.sm),
-        Expanded(
-          child: Align(alignment: Alignment.centerRight, child: child),
-        ),
-      ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: GerfautSpacing.sm),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: tokens.bodySmall.copyWith(
+              fontSize: 13,
+              color: tokens.textMuted,
+            ),
+          ),
+          const SizedBox(width: GerfautSpacing.md),
+          Expanded(
+            child: Align(alignment: Alignment.centerRight, child: child),
+          ),
+        ],
+      ),
     );
   }
 }
 
-/// A plain meta value: UI face, tabular, one line, right-aligned.
-class _MetaValueRow extends StatelessWidget {
-  const _MetaValueRow({
-    required this.label,
-    required this.value,
-    required this.tokens,
-  });
+/// A plain fact value: UI face, tabular, one line, right-aligned.
+class _Value extends StatelessWidget {
+  const _Value(this.text, this.tokens, {this.muted = false});
 
-  final String label;
-  final String value;
+  final String text;
   final GerfautTokens tokens;
+  final bool muted;
 
   @override
   Widget build(BuildContext context) {
-    return _MetaRow(
-      label: label,
-      tokens: tokens,
-      child: Text(
-        value,
-        style: tokens.figureOf(weight: FontWeight.w500),
-        maxLines: 1,
-        softWrap: false,
+    return Text(
+      text,
+      style: tokens.figureOf(
+        weight: FontWeight.w500,
+        color: muted ? tokens.textMuted : null,
       ),
+      maxLines: 1,
+      softWrap: false,
+      textAlign: TextAlign.right,
     );
+  }
+}
+
+/// Fee in the chosen unit, no fiat: the facts stay scannable.
+class _FeeValue extends ConsumerWidget {
+  const _FeeValue({required this.sats});
+
+  final int sats;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final masked = ref.watch(maskedProvider);
+    final unit = ref.watch(unitProvider);
+    return _Value(masked ? maskedValue : formatAmount(sats, unit), tokens);
   }
 }
 
 enum _BadgeTone { neutral, pending, confirmed, accent }
 
 /// One feature chip: icon, label, and a tone that carries the meaning.
-/// The explanation rides a long-press tooltip, which also serves as the
-/// accessibility label.
+/// Every tone shares the same bordered anatomy. The explanation rides
+/// a long-press tooltip, which also serves as the accessibility label.
 class _Badge extends StatelessWidget {
   const _Badge({
     required this.tone,
@@ -519,7 +939,6 @@ class _Badge extends StatelessWidget {
         tokens.primary,
         tokens.primary.withValues(alpha: 0.25),
       ),
-      // Neutral shares the tinted badges' bordered anatomy.
       _BadgeTone.neutral => (
         tokens.surfaceSunken,
         tokens.textMuted,
@@ -531,7 +950,7 @@ class _Badge extends StatelessWidget {
       triggerMode: TooltipTriggerMode.longPress,
       child: Container(
         padding: const EdgeInsets.symmetric(
-          horizontal: GerfautSpacing.sm + 2,
+          horizontal: GerfautSpacing.sm,
           vertical: 2,
         ),
         decoration: BoxDecoration(
@@ -563,10 +982,10 @@ class _Badge extends StatelessWidget {
   }
 }
 
-/// The transaction's options at a glance, under the flow diagram. The
-/// version lives in the meta panel, so it is not repeated here.
-class _FeatureBadges extends StatelessWidget {
-  const _FeatureBadges({
+/// The transaction's options as a tidy row of chips inside the facts.
+/// The locktime value lives on its own line, so its chip stays bare.
+class _Flags extends StatelessWidget {
+  const _Flags({
     required this.extras,
     required this.outputs,
     required this.tokens,
@@ -580,7 +999,7 @@ class _FeatureBadges extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasOpReturn = outputs.any((io) => io.opReturn != null);
     return Wrap(
-      alignment: WrapAlignment.center,
+      alignment: WrapAlignment.end,
       spacing: GerfautSpacing.sm - 2,
       runSpacing: GerfautSpacing.sm - 2,
       children: [
@@ -630,7 +1049,7 @@ class _FeatureBadges extends StatelessWidget {
           _Badge(
             tone: _BadgeTone.neutral,
             icon: LucideIcons.clock,
-            label: 'Locktime ${groupThousands('${extras.locktime}')}',
+            label: 'Locktime',
             hint: 'Earliest block this transaction could be mined in',
             tokens: tokens,
           ),
@@ -681,7 +1100,10 @@ class _RawTransactionState extends State<_RawTransaction> {
           borderRadius: BorderRadius.circular(GerfautRadius.sm),
           onTap: () => setState(() => _open = !_open),
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: GerfautSpacing.sm),
+            // 44px tap target around a one-line disclosure.
+            padding: const EdgeInsets.symmetric(
+              vertical: GerfautSpacing.sm + GerfautSpacing.xs,
+            ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -738,41 +1160,19 @@ class _RawTransactionState extends State<_RawTransaction> {
               ),
             ],
           ),
+          const SizedBox(height: GerfautSpacing.sm),
         ],
       ],
     );
   }
 }
 
-/// Fee in the chosen unit, no fiat: the meta panel stays scannable.
-class _FeeValue extends ConsumerWidget {
-  const _FeeValue({required this.sats});
-
-  final int sats;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final masked = ref.watch(maskedProvider);
-    final unit = ref.watch(unitProvider);
-    return Text(
-      masked ? maskedValue : formatAmount(sats, unit),
-      style: tokens.figureOf(weight: FontWeight.w500),
-      maxLines: 1,
-      softWrap: false,
-    );
-  }
-}
-
 enum _IoSide { input, output }
 
-/// One side of the transaction as a bordered list under a sunken header
-/// band. Wallet rows are highlighted rather than labelled: a primary
-/// left bar, a faint primary wash, and the role icon of the matching
-/// flow diagram lane. The value column keeps a fixed share of the row,
-/// so a long identity can never push an amount out of view.
-class _IoSection extends StatelessWidget {
-  const _IoSection({
+/// Inputs or outputs as airy rows: a role chip, the address, the
+/// amount. Wallet rows carry a Glacier edge and an emphasized chip.
+class _IoList extends StatelessWidget {
+  const _IoList({
     required this.title,
     required this.ios,
     required this.side,
@@ -793,43 +1193,31 @@ class _IoSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final coinbase = side == _IoSide.input && (extras?.isCoinbase ?? false);
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        borderRadius: BorderRadius.circular(GerfautRadius.lg),
-        border: Border.all(color: tokens.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            color: tokens.surfaceSunken,
-            padding: const EdgeInsets.symmetric(
-              horizontal: GerfautSpacing.md,
-              vertical: GerfautSpacing.sm,
-            ),
-            child: _FieldLabel(title, tokens: tokens),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.xs),
+          child: _FieldLabel('$title (${ios.length})', tokens: tokens),
+        ),
+        const SizedBox(height: GerfautSpacing.sm),
+        for (final (index, io) in ios.indexed) ...[
+          if (index > 0) const SizedBox(height: GerfautSpacing.sm - 2),
+          _IoRow(
+            io: io,
+            side: side,
+            coinbase: coinbase,
+            extras: extras,
+            coinbaseValue: coinbaseValue,
+            tokens: tokens,
           ),
-          for (final (index, io) in ios.indexed) ...[
-            if (index > 0)
-              Divider(height: 1, thickness: 1, color: tokens.border),
-            _IoRow(
-              io: io,
-              side: side,
-              coinbase: coinbase,
-              extras: extras,
-              coinbaseValue: coinbaseValue,
-              tokens: tokens,
-            ),
-          ],
         ],
-      ),
+      ],
     );
   }
 }
 
-/// One input or output: identity on the left, value on the right.
+/// One input or output: role chip, identity, amount.
 class _IoRow extends StatelessWidget {
   const _IoRow({
     required this.io,
@@ -851,54 +1239,45 @@ class _IoRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final mine = io.isMine;
     final value = io.valueSats ?? (coinbase ? coinbaseValue : null);
-    return DecoratedBox(
+    return Container(
+      padding: const EdgeInsets.all(GerfautSpacing.sm + 2),
       decoration: BoxDecoration(
-        color: mine ? tokens.primary.withValues(alpha: 0.06) : null,
-        border: mine
-            ? Border(left: BorderSide(color: tokens.primary, width: 2))
-            : null,
+        color: mine ? tokens.primary.withValues(alpha: 0.04) : tokens.surface,
+        borderRadius: BorderRadius.circular(GerfautRadius.md),
+        border: Border.all(
+          color: mine ? tokens.primary.withValues(alpha: 0.4) : tokens.border,
+        ),
       ),
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: mine ? GerfautSpacing.md - 2 : GerfautSpacing.md,
-          right: GerfautSpacing.md,
-          top: GerfautSpacing.sm,
-          bottom: GerfautSpacing.sm,
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              flex: 58,
-              child: _IoIdentity(
-                io: io,
-                side: side,
-                coinbase: coinbase,
-                extras: extras,
-                tokens: tokens,
-              ),
+      child: Row(
+        children: [
+          _RoleChip(io: io, side: side, coinbase: coinbase, tokens: tokens),
+          const SizedBox(width: GerfautSpacing.sm + 2),
+          Expanded(
+            child: _IoIdentity(
+              io: io,
+              side: side,
+              coinbase: coinbase,
+              extras: extras,
+              tokens: tokens,
             ),
-            const SizedBox(width: GerfautSpacing.sm),
-            Expanded(
-              flex: 42,
-              child: value != null
-                  ? StackedAmount(sats: value)
-                  : Text(
-                      'n/a',
-                      style: tokens.figureOf(color: tokens.textMuted),
-                      textAlign: TextAlign.right,
-                      maxLines: 1,
-                    ),
+          ),
+          const SizedBox(width: GerfautSpacing.sm),
+          if (value != null)
+            StackedAmount(sats: value)
+          else
+            Text(
+              'n/a',
+              style: tokens.figureOf(color: tokens.textMuted),
+              maxLines: 1,
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
 }
 
-/// What the row is about: role icon plus address, coinbase attribution,
-/// or OP_RETURN payload preview.
+/// What the row is about: the address with its wallet role, the
+/// coinbase attribution, or the OP_RETURN payload preview.
 class _IoIdentity extends StatelessWidget {
   const _IoIdentity({
     required this.io,
@@ -914,83 +1293,113 @@ class _IoIdentity extends StatelessWidget {
   final TxExtras? extras;
   final GerfautTokens tokens;
 
-  /// "Coinbase · block 148 589 · Foundry USA": a coinbase input spends
-  /// nothing, so the row states where the coins come from instead.
+  /// "block 148 589 · Foundry USA": a coinbase input spends nothing,
+  /// so the row states where the coins come from instead.
   String get _coinbaseLine {
     final height = extras?.coinbaseHeight;
     final pool = extras?.coinbasePool;
-    return 'Coinbase'
-        '${height != null ? ' · block ${groupThousands('$height')}' : ''}'
-        '${pool != null ? ' · $pool' : ''}';
+    final origin = height != null
+        ? 'block ${groupThousands('$height')}'
+        : 'newly minted';
+    return '$origin${pool != null ? ' · $pool' : ''}';
+  }
+
+  Widget _subline(String text, {TextStyle? style}) {
+    return Text(
+      text,
+      style:
+          style ??
+          tokens.bodySmall.copyWith(fontSize: 11, color: tokens.textMuted),
+      maxLines: 1,
+      softWrap: false,
+      overflow: TextOverflow.ellipsis,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final opReturn = io.opReturn;
-    return Row(
+    final main = tokens.bodySmall.copyWith(
+      fontSize: 13,
+      fontWeight: FontWeight.w500,
+      fontVariations: const [FontVariation('wght', 500)],
+    );
+    final List<Widget> lines;
+    if (opReturn != null) {
+      lines = [
+        Text(
+          'OP_RETURN',
+          style: main.copyWith(color: tokens.pending),
+          maxLines: 1,
+          softWrap: false,
+        ),
+        Tooltip(
+          message: opReturn.text ?? opReturn.hex,
+          triggerMode: TooltipTriggerMode.longPress,
+          child: _subline(
+            opReturnPreview(opReturn),
+            style: tokens.data.copyWith(fontSize: 11, color: tokens.textMuted),
+          ),
+        ),
+      ];
+    } else if (coinbase) {
+      lines = [
+        Text('Coinbase', style: main, maxLines: 1, softWrap: false),
+        Tooltip(
+          message: extras?.coinbaseTag ?? _coinbaseLine,
+          triggerMode: TooltipTriggerMode.longPress,
+          child: _subline(_coinbaseLine),
+        ),
+      ];
+    } else if (io.address != null) {
+      lines = [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: AddressChip(
+            value: io.address!,
+            head: 10,
+            tail: 8,
+            emphasis: io.isMine,
+          ),
+        ),
+        if (io.isMine)
+          _subline(switch (side) {
+            _IoSide.input => 'Spent from this wallet',
+            _IoSide.output when io.change => 'Change back to this wallet',
+            _IoSide.output => 'Received by this wallet',
+          }),
+      ];
+    } else {
+      lines = [
+        Text(
+          side == _IoSide.input ? 'Unknown input' : 'Script output',
+          style: tokens.bodySmall.copyWith(
+            fontSize: 13,
+            color: tokens.textMuted,
+          ),
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ];
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        _RoleIcon(io: io, side: side, coinbase: coinbase, tokens: tokens),
-        if (opReturn != null) ...[
-          Text(
-            'OP_RETURN',
-            style: tokens.label.copyWith(color: tokens.pending),
-            maxLines: 1,
-            softWrap: false,
-          ),
-          const SizedBox(width: GerfautSpacing.sm - 2),
-          Flexible(
-            child: Tooltip(
-              message: opReturn.text ?? opReturn.hex,
-              triggerMode: TooltipTriggerMode.longPress,
-              child: Text(
-                opReturnPreview(opReturn),
-                style: tokens.data.copyWith(
-                  fontSize: 11,
-                  color: tokens.textMuted,
-                ),
-                maxLines: 1,
-                softWrap: false,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ),
-        ] else if (coinbase)
-          Flexible(
-            child: Tooltip(
-              message: extras?.coinbaseTag ?? _coinbaseLine,
-              triggerMode: TooltipTriggerMode.longPress,
-              child: Text(
-                _coinbaseLine,
-                style: tokens.figureOf(color: tokens.textMuted),
-                maxLines: 1,
-                softWrap: false,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          )
-        else if (io.address != null)
-          Flexible(
-            child: AddressChip(value: io.address!, emphasis: io.isMine),
-          )
-        else
-          Flexible(
-            child: Text(
-              side == _IoSide.input ? 'Unknown input' : 'Script output',
-              style: tokens.figureOf(color: tokens.textMuted),
-              maxLines: 1,
-              softWrap: false,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
+        for (final (index, line) in lines.indexed) ...[
+          if (index > 0) const SizedBox(height: 2),
+          line,
+        ],
       ],
     );
   }
 }
 
-/// The same role vocabulary as the flow diagram lanes: what this row
-/// does for the watched wallet, in one icon.
-class _RoleIcon extends StatelessWidget {
-  const _RoleIcon({
+/// Role chip: a 32px square that says what this row does for the
+/// watched wallet, in one icon. The hint rides a long-press tooltip.
+class _RoleChip extends StatelessWidget {
+  const _RoleChip({
     required this.io,
     required this.side,
     required this.coinbase,
@@ -1004,41 +1413,55 @@ class _RoleIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (IconData? icon, Color color, String hint) = switch (io) {
+    final (IconData icon, Color ink, Color fill, String hint) = switch (io) {
       _ when coinbase => (
         LucideIcons.pickaxe,
         tokens.textMuted,
+        tokens.surfaceSunken,
         'Newly minted coins',
       ),
       _ when io.opReturn != null => (
         LucideIcons.scrollText,
         tokens.pending,
+        tokens.pendingSurface,
         'Data output',
       ),
-      _ when !io.isMine => (null, tokens.textMuted, ''),
+      _ when !io.isMine => (
+        LucideIcons.arrowUpRight,
+        tokens.textMuted,
+        tokens.surfaceSunken,
+        side == _IoSide.input ? 'External input' : 'External output',
+      ),
       _ when side == _IoSide.input => (
         LucideIcons.wallet,
         tokens.primary,
+        tokens.primary.withValues(alpha: 0.10),
         'Spent from this wallet',
       ),
       _ when io.change => (
         LucideIcons.undo2,
         tokens.primary,
+        tokens.primary.withValues(alpha: 0.10),
         'Change back to this wallet',
       ),
       _ => (
         LucideIcons.arrowDownLeft,
         tokens.primary,
+        tokens.primary.withValues(alpha: 0.10),
         'Received by this wallet',
       ),
     };
-    if (icon == null) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(right: GerfautSpacing.sm - 2),
-      child: Tooltip(
-        message: hint,
-        triggerMode: TooltipTriggerMode.longPress,
-        child: Icon(icon, size: 14, color: color),
+    return Tooltip(
+      message: hint,
+      triggerMode: TooltipTriggerMode.longPress,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: fill,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, size: 15, color: ink),
       ),
     );
   }
