@@ -545,11 +545,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             ),
                           ),
                           Text(
-                            'How many unused addresses in a row syncs scan '
-                            'past the last used one, for every wallet. 20 is '
-                            'the convention most wallets share. Applies on '
-                            'the next sync; the Receive screen warns beyond '
-                            'it.',
+                            'How many unused addresses Gerfaut scans past '
+                            'the last used one. 20 is the norm.',
                             style: tokens.bodySmall.copyWith(
                               color: tokens.textMuted,
                             ),
