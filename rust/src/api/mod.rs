@@ -353,8 +353,9 @@ fn parse_variant<T: serde::de::DeserializeOwned>(
 }
 
 /// Fetches the current BTC price. `source` is one of `coingecko`,
-/// `kraken`, `mempool_space`; `currency` one of `eur`, `usd`, `gbp`,
-/// `chf`. Returns a serialized `PriceQuote`.
+/// `kraken`, `mempool_space`; `currency` is one of the `FiatCurrency`
+/// identifiers. The source must quote the currency: only CoinGecko
+/// serves the ones past the first seven. Returns a `PriceQuote`.
 pub async fn fetch_price(source: String, currency: String) -> String {
     let source: PriceSource = try_json!(parse_variant(&source, "price source"));
     let currency: FiatCurrency = try_json!(parse_variant(&currency, "currency"));

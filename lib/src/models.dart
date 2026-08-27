@@ -931,6 +931,12 @@ enum PriceSource {
   final String id;
   final String label;
 
+  /// Whether this source quotes a currency without an API key. Kraken
+  /// lists seven fiat pairs against XBT and the mempool projects
+  /// publish the same seven; CoinGecko publishes them all.
+  bool supportsCurrency(FiatCurrency currency) =>
+      this == PriceSource.coingecko || currency.reach == CurrencyReach.every;
+
   static PriceSource? fromId(String? id) {
     for (final source in PriceSource.values) {
       if (source.id == id) return source;
@@ -939,19 +945,68 @@ enum PriceSource {
   }
 }
 
-/// Display currencies offered in the settings.
-enum FiatCurrency {
-  eur('eur', 'EUR'),
-  usd('usd', 'USD'),
-  gbp('gbp', 'GBP'),
-  chf('chf', 'CHF');
+/// How many price sources quote a currency.
+enum CurrencyReach {
+  /// Every source quotes it: the seven Kraken and the mempool projects
+  /// publish.
+  every,
 
-  const FiatCurrency(this.id, this.code);
+  /// CoinGecko alone quotes it.
+  coingeckoOnly,
+}
+
+/// Display currencies offered in the settings, in display order.
+///
+/// The first seven are quoted by every source. The rest are the
+/// currencies of the most populous countries and of the places where
+/// Bitcoin is most used; CoinGecko is the only keyless source that
+/// publishes them.
+enum FiatCurrency {
+  eur('eur', 'EUR', 'Euro', CurrencyReach.every),
+  usd('usd', 'USD', 'US dollar', CurrencyReach.every),
+  gbp('gbp', 'GBP', 'Pound sterling', CurrencyReach.every),
+  chf('chf', 'CHF', 'Swiss franc', CurrencyReach.every),
+  jpy('jpy', 'JPY', 'Japanese yen', CurrencyReach.every),
+  cad('cad', 'CAD', 'Canadian dollar', CurrencyReach.every),
+  aud('aud', 'AUD', 'Australian dollar', CurrencyReach.every),
+  inr('inr', 'INR', 'Indian rupee', CurrencyReach.coingeckoOnly),
+  cny('cny', 'CNY', 'Chinese yuan', CurrencyReach.coingeckoOnly),
+  brl('brl', 'BRL', 'Brazilian real', CurrencyReach.coingeckoOnly),
+  ngn('ngn', 'NGN', 'Nigerian naira', CurrencyReach.coingeckoOnly),
+  idr('idr', 'IDR', 'Indonesian rupiah', CurrencyReach.coingeckoOnly),
+  pkr('pkr', 'PKR', 'Pakistani rupee', CurrencyReach.coingeckoOnly),
+  bdt('bdt', 'BDT', 'Bangladeshi taka', CurrencyReach.coingeckoOnly),
+  rub('rub', 'RUB', 'Russian ruble', CurrencyReach.coingeckoOnly),
+  mxn('mxn', 'MXN', 'Mexican peso', CurrencyReach.coingeckoOnly),
+  php('php', 'PHP', 'Philippine peso', CurrencyReach.coingeckoOnly),
+  vnd('vnd', 'VND', 'Vietnamese dong', CurrencyReach.coingeckoOnly),
+  // `try` is a Dart keyword, so only the constant is spelled out; the
+  // identifier the core stores stays `try`.
+  tryLira('try', 'TRY', 'Turkish lira', CurrencyReach.coingeckoOnly),
+  ars('ars', 'ARS', 'Argentine peso', CurrencyReach.coingeckoOnly),
+  krw('krw', 'KRW', 'South Korean won', CurrencyReach.coingeckoOnly),
+  zar('zar', 'ZAR', 'South African rand', CurrencyReach.coingeckoOnly),
+  thb('thb', 'THB', 'Thai baht', CurrencyReach.coingeckoOnly),
+  uah('uah', 'UAH', 'Ukrainian hryvnia', CurrencyReach.coingeckoOnly),
+  pln('pln', 'PLN', 'Polish zloty', CurrencyReach.coingeckoOnly),
+  sek('sek', 'SEK', 'Swedish krona', CurrencyReach.coingeckoOnly),
+  sgd('sgd', 'SGD', 'Singapore dollar', CurrencyReach.coingeckoOnly),
+  hkd('hkd', 'HKD', 'Hong Kong dollar', CurrencyReach.coingeckoOnly),
+  aed('aed', 'AED', 'UAE dirham', CurrencyReach.coingeckoOnly),
+  nzd('nzd', 'NZD', 'New Zealand dollar', CurrencyReach.coingeckoOnly);
+
+  const FiatCurrency(this.id, this.code, this.label, this.reach);
 
   final String id;
 
   /// ISO 4217 code, uppercase.
   final String code;
+
+  /// English name, so a list of thirty codes stays readable.
+  final String label;
+
+  /// Which sources quote this currency.
+  final CurrencyReach reach;
 
   static FiatCurrency? fromId(String? id) {
     for (final currency in FiatCurrency.values) {
