@@ -71,6 +71,20 @@ void main() {
       expect(parsed.previewAddress, isNull);
     });
 
+    test('recognizes a BSMS record', () {
+      final json = {
+        'kind': 'bsms',
+        'networks': ['mainnet'],
+        'payload': _descriptors,
+        'warnings': <String>[],
+      };
+      final parsed = ParsedInput.fromJson(json, jsonEncode(json));
+
+      expect(parsed.kind, RecognizedKind.bsms);
+      expect(RecognizedKind.fromId('bsms'), RecognizedKind.bsms);
+      expect(RecognizedKind.bsms.label, 'BSMS record');
+    });
+
     test('reads an explicit null preview address', () {
       final json = {
         'kind': 'address',

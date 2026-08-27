@@ -65,6 +65,61 @@ void main() {
     expect(bridge.appPrefs['mobile.theme'], 'system');
   });
 
+  testWidgets('the theme options carry a glyph each', (tester) async {
+    useTallSurface(tester);
+    await tester.pumpWidget(settingsApp(FakeBridge()));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(LucideIcons.sun), findsOneWidget);
+    expect(find.byIcon(LucideIcons.moon), findsOneWidget);
+    expect(find.byIcon(LucideIcons.monitor), findsOneWidget);
+    expect(find.text('Light'), findsOneWidget);
+    expect(find.text('Dark'), findsOneWidget);
+    expect(find.text('System'), findsOneWidget);
+
+    // Tapping the glyph selects the option like tapping its label.
+    await tester.tap(find.byIcon(LucideIcons.moon));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<Icon>(find.byIcon(LucideIcons.moon)).color,
+      GerfautTokens.light.onPrimary,
+    );
+  });
+
+  testWidgets('the display and wallet hints read as one sentence each', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    await tester.pumpWidget(settingsApp(FakeBridge()));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Shows the fiat value next to every amount.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('IP address'), findsNothing);
+    expect(
+      find.text(
+        'How many unused addresses Gerfaut scans past the last used one.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('20 is the norm'), findsNothing);
+
+    // The price source hint only shows once fiat is on.
+    expect(
+      find.text('Serves the fiat value and the overview price.'),
+      findsNothing,
+    );
+    await tester.tap(find.byType(Switch).first);
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Serves the fiat value and the overview price.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('One request per minute'), findsNothing);
+  });
+
   testWidgets('wallet rows share one icon, the subtitle tells the kind', (
     tester,
   ) async {

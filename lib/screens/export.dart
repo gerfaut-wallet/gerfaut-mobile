@@ -35,7 +35,11 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
   /// Inclusive unix-second bounds of the picked days, local time.
   int? get _fromSecs => _from == null
       ? null
-      : DateTime(_from!.year, _from!.month, _from!.day).millisecondsSinceEpoch ~/
+      : DateTime(
+              _from!.year,
+              _from!.month,
+              _from!.day,
+            ).millisecondsSinceEpoch ~/
             1000;
 
   int? get _toSecs => _to == null
@@ -135,8 +139,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                 padding: const EdgeInsets.all(GerfautSpacing.md),
                 children: [
                   Text(
-                    "This wallet's transaction history as a CSV file. "
-                    'Everything stays on this device.',
+                    "This wallet's transaction history as a CSV file.",
                     style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                   ),
                   const SizedBox(height: GerfautSpacing.md),
@@ -254,7 +257,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                             ),
                             Text(
                               "Adds the price at each transaction's date to "
-                              'the file. Coming with the Gerfaut server.',
+                              'the file.',
                               style: tokens.bodySmall.copyWith(
                                 color: tokens.textMuted,
                               ),

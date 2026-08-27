@@ -133,7 +133,7 @@ void main() {
     await tester.tap(find.text('Export CSV'));
     await tester.pumpAndSettle();
     expect(
-      find.textContaining('Everything stays on this device.'),
+      find.text("This wallet's transaction history as a CSV file."),
       findsOneWidget,
     );
   });

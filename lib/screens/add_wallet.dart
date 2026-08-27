@@ -79,7 +79,7 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
   Future<void> _importFile() async {
     const typeGroup = XTypeGroup(
       label: 'Wallet material',
-      extensions: ['txt', 'json', 'desc'],
+      extensions: ['txt', 'json', 'desc', 'bsms'],
     );
     final file = await openFile(acceptedTypeGroups: const [typeGroup]);
     if (file == null) return;

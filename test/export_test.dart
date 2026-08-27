@@ -131,14 +131,14 @@ void main() {
     expect(find.text('Fiat value at transaction time'), findsOneWidget);
     expect(find.text('PREMIUM'), findsOneWidget);
     expect(
-      find.textContaining('Coming with the Gerfaut server.'),
+      find.text("Adds the price at each transaction's date to the file."),
       findsOneWidget,
     );
+    expect(find.textContaining('Coming with'), findsNothing);
+    expect(find.textContaining('Everything stays'), findsNothing);
 
     // The premium switch is off and inert; the pending one still works.
-    final switches = tester
-        .widgetList<Switch>(find.byType(Switch))
-        .toList();
+    final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
     expect(switches, hasLength(2));
     expect(switches.last.onChanged, isNull);
     expect(switches.last.value, isFalse);

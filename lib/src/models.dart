@@ -47,7 +47,8 @@ enum RecognizedKind {
   multipathDescriptor('multipath_descriptor', 'Multipath descriptor (BIP-389)'),
   extendedKey('extended_key', 'Extended public key'),
   address('address', 'Single address'),
-  walletExport('wallet_export', 'Wallet export file');
+  walletExport('wallet_export', 'Wallet export file'),
+  bsms('bsms', 'BSMS record');
 
   const RecognizedKind(this.id, this.label);
 

@@ -436,10 +436,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             ),
                           ),
                           Text(
-                            'Shows the fiat value next to every amount. '
-                            "Price requests expose this app's IP address to "
-                            'the selected provider; they carry no wallet '
-                            'data.',
+                            'Shows the fiat value next to every amount.',
                             style: tokens.bodySmall.copyWith(
                               color: tokens.textMuted,
                             ),
@@ -481,7 +478,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   _FieldLabel('Price source', tokens: tokens),
                   const SizedBox(height: GerfautSpacing.xs),
                   Text(
-                    'One request per minute while the app is in front.',
+                    'Serves the fiat value and the overview price.',
                     style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                   ),
                   const SizedBox(height: GerfautSpacing.sm),
@@ -516,6 +513,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     for (final pref in ThemePref.values)
                       _Pill(
                         label: pref.label,
+                        icon: _themeIcons[pref],
                         selected: ref.watch(themeProvider) == pref,
                         onTap: () => ref.read(themeProvider.notifier).set(pref),
                       ),
@@ -546,7 +544,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           ),
                           Text(
                             'How many unused addresses Gerfaut scans past '
-                            'the last used one. 20 is the norm.',
+                            'the last used one.',
                             style: tokens.bodySmall.copyWith(
                               color: tokens.textMuted,
                             ),
@@ -881,20 +879,33 @@ class _RatePreview extends ConsumerWidget {
   }
 }
 
+/// Glyph shown before each theme option; the label stays the semantic
+/// text.
+const Map<ThemePref, IconData> _themeIcons = {
+  ThemePref.light: LucideIcons.sun,
+  ThemePref.dark: LucideIcons.moon,
+  ThemePref.system: LucideIcons.monitor,
+};
+
 class _Pill extends StatelessWidget {
   const _Pill({
     required this.label,
     required this.selected,
     required this.onTap,
+    this.icon,
   });
 
   final String label;
   final bool selected;
   final VoidCallback onTap;
 
+  /// Optional decorative glyph before the label.
+  final IconData? icon;
+
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final color = selected ? tokens.onPrimary : tokens.text;
     return InkWell(
       borderRadius: BorderRadius.circular(GerfautRadius.md),
       onTap: onTap,
@@ -906,13 +917,22 @@ class _Pill extends StatelessWidget {
           color: selected ? tokens.primary : tokens.surfaceSunken,
           borderRadius: BorderRadius.circular(GerfautRadius.md),
         ),
-        child: Text(
-          label,
-          style: tokens.bodySmall.copyWith(
-            color: selected ? tokens.onPrimary : tokens.text,
-            fontWeight: FontWeight.w500,
-            fontVariations: const [FontVariation('wght', 500)],
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              ExcludeSemantics(child: Icon(icon, size: 15, color: color)),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              label,
+              style: tokens.bodySmall.copyWith(
+                color: color,
+                fontWeight: FontWeight.w500,
+                fontVariations: const [FontVariation('wght', 500)],
+              ),
+            ),
+          ],
         ),
       ),
     );
