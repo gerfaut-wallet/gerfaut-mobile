@@ -6,6 +6,7 @@ import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/address_chip.dart';
 import '../widgets/amounts.dart';
+import '../widgets/status_pill.dart';
 
 /// Audit view of a wallet's revealed addresses: external first, then
 /// change, each row with its usage and the balance sitting on it.
@@ -192,24 +193,7 @@ class _AddressRowTile extends StatelessWidget {
           ),
           Expanded(child: AddressChip(value: row.address, head: 8, tail: 6)),
           const SizedBox(width: GerfautSpacing.sm),
-          if (row.used)
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: GerfautSpacing.sm,
-                vertical: 2,
-              ),
-              decoration: BoxDecoration(
-                color: tokens.surfaceSunken,
-                borderRadius: BorderRadius.circular(GerfautRadius.full),
-                border: Border.all(color: tokens.border),
-              ),
-              child: Text('Used', style: tokens.label),
-            )
-          else
-            Text(
-              'Fresh',
-              style: tokens.label.copyWith(color: tokens.textMuted),
-            ),
+          AddressStatePill(used: row.used),
           const SizedBox(width: GerfautSpacing.sm),
           if (row.balanceSats > 0)
             StackedAmount(sats: row.balanceSats)

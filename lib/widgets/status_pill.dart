@@ -52,3 +52,44 @@ class StatusPill extends StatelessWidget {
     );
   }
 }
+
+/// Address state on the audit list: Used or Fresh, two pills of the
+/// same shape read side by side in one column, neither carrying its
+/// meaning by colour alone.
+///
+/// "Used" is the documented exception to the alert reserve: on an audit
+/// page an address the chain has already seen is the one fact that
+/// calls for a decision — do not hand it out again. In the dark theme
+/// the tinted alert surface is the card surface itself, so the fill
+/// becomes the alert colour at 10% and the text stays alert.
+class AddressStatePill extends StatelessWidget {
+  const AddressStatePill({super.key, required this.used});
+
+  final bool used;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final color = used ? tokens.alert : tokens.primary;
+    final fill = used && !dark
+        ? tokens.alertSurface
+        : color.withValues(alpha: 0.1);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: GerfautSpacing.sm,
+        vertical: 2,
+      ),
+      decoration: BoxDecoration(
+        color: fill,
+        borderRadius: BorderRadius.circular(GerfautRadius.full),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Text(
+        used ? 'Used' : 'Fresh',
+        style: tokens.label.copyWith(fontSize: 11, color: color),
+      ),
+    );
+  }
+}
