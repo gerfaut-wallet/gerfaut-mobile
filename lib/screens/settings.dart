@@ -519,6 +519,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                     ),
                   ],
+                  if (ref.watch(fiatSourceProvider) ==
+                      PriceSource.coingecko) ...[
+                    const SizedBox(height: GerfautSpacing.xs),
+                    // Required by the CoinGecko API terms wherever their
+                    // data is shown.
+                    Text(
+                      'Powered by CoinGecko',
+                      style: tokens.label.copyWith(
+                        fontSize: 11,
+                        color: tokens.textMuted,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: GerfautSpacing.sm),
                   _RatePreview(tokens: tokens),
                 ],

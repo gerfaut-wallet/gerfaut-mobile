@@ -337,6 +337,27 @@ void main() {
       expect(find.textContaining('the only source that quotes'), findsNothing);
     });
 
+    testWidgets('CoinGecko is credited while it serves the price', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      await tester.pumpWidget(settingsApp(FakeBridge()));
+      await tester.pumpAndSettle();
+      expect(find.text('Powered by CoinGecko'), findsNothing);
+
+      await enableFiat(tester);
+      expect(find.text('Powered by CoinGecko'), findsOneWidget);
+      // The API terms ask for a legible line, not a hidden one.
+      expect(
+        tester.widget<Text>(find.text('Powered by CoinGecko')).style!.fontSize!,
+        greaterThanOrEqualTo(10),
+      );
+
+      await tester.tap(find.text('Kraken'));
+      await tester.pumpAndSettle();
+      expect(find.text('Powered by CoinGecko'), findsNothing);
+    });
+
     testWidgets('a disabled source announces itself as such', (tester) async {
       useTallSurface(tester);
       final handle = tester.ensureSemantics();
