@@ -121,8 +121,9 @@ Future<String> setAppPref({required String key, required String value}) =>
     RustLib.instance.api.crateApiSetAppPref(key: key, value: value);
 
 /// Fetches the current BTC price. `source` is one of `coingecko`,
-/// `kraken`, `mempool_space`; `currency` one of `eur`, `usd`, `gbp`,
-/// `chf`. Returns a serialized `PriceQuote`.
+/// `kraken`, `mempool_space`; `currency` is one of the `FiatCurrency`
+/// identifiers. The source must quote the currency: only CoinGecko
+/// serves the ones past the first seven. Returns a `PriceQuote`.
 Future<String> fetchPrice({required String source, required String currency}) =>
     RustLib.instance.api.crateApiFetchPrice(source: source, currency: currency);
 
