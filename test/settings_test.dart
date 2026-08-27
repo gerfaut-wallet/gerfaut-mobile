@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/settings.dart';
+import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
@@ -210,5 +211,171 @@ void main() {
 
     expect(bridge.lastGapLimitSet, isNull);
     expect(find.widgetWithText(TextField, '20'), findsOneWidget);
+  });
+
+  group('public server choice', () {
+    testWidgets('the public backend defaults to the automatic rotation', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge();
+      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Automatic'), findsOneWidget);
+      expect(find.text('Rotates over every public Esplora.'), findsOneWidget);
+      // The hint says who answers and what else they serve.
+      expect(find.textContaining('fee estimates'), findsOneWidget);
+
+      await tester.tap(find.text('Save backend'));
+      await tester.pumpAndSettle();
+
+      final saved = bridge.savedBackends[Network.mainnet]! as PublicEsplora;
+      expect(saved.server, isNull);
+      expect(saved.toJson(), {'type': 'public_esplora'});
+    });
+
+    testWidgets('every server of the network is offered, protocol included', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      await tester.pumpWidget(settingsApp(FakeBridge()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(DropdownButton<String?>));
+      await tester.pumpAndSettle();
+
+      // The seven mainnet servers, each labelled with its host.
+      for (final server in defaultPublicServers[Network.mainnet]!) {
+        expect(find.text(server.label), findsOneWidget);
+      }
+      // Three Esplora instances, four Electrum servers, each marked.
+      expect(find.text('Esplora'), findsNWidgets(3));
+      expect(find.text('Electrum'), findsNWidgets(4));
+    });
+
+    testWidgets('choosing a server stores its identifier', (tester) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge();
+      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(DropdownButton<String?>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('blockstream.info').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Save backend'));
+      await tester.pumpAndSettle();
+
+      final saved = bridge.savedBackends[Network.mainnet]! as PublicEsplora;
+      expect(saved.server, 'blockstream.info');
+      expect(saved.toJson(), {
+        'type': 'public_esplora',
+        'server': 'blockstream.info',
+      });
+    });
+
+    testWidgets('an Electrum server says what it cannot serve', (tester) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge();
+      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('An Electrum server cannot serve a single-address wallet.'),
+        findsNothing,
+      );
+
+      final dropdown = tester.widget<DropdownButton<String?>>(
+        find.byType(DropdownButton<String?>),
+      );
+      dropdown.onChanged!('electrum:frigate.2140.dev');
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('An Electrum server cannot serve a single-address wallet.'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Save backend'));
+      await tester.pumpAndSettle();
+      expect(
+        (bridge.savedBackends[Network.mainnet]! as PublicEsplora).server,
+        'electrum:frigate.2140.dev',
+      );
+    });
+
+    testWidgets('the choice is re-seeded when the network changes', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge(
+        settings: const Settings(
+          activeNetwork: Network.mainnet,
+          backends: {
+            Network.mainnet: PublicEsplora(server: 'blockstream.info'),
+            Network.signet: PublicEsplora(server: 'mempool.emzy.de'),
+          },
+          appPrefs: {},
+        ),
+      );
+      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<DropdownButton<String?>>(
+          find.byType(DropdownButton<String?>),
+        ).value,
+        'blockstream.info',
+      );
+
+      await tester.tap(find.text('Signet'));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<DropdownButton<String?>>(
+          find.byType(DropdownButton<String?>),
+        ).value,
+        'mempool.emzy.de',
+      );
+      // Signet has no frigate.2140.dev: the list follows the network.
+      expect(find.text('frigate.2140.dev:50002'), findsNothing);
+    });
+
+    testWidgets('a network without a public server says so', (tester) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge(
+        settings: const Settings(
+          activeNetwork: Network.regtest,
+          backends: {},
+          appPrefs: {},
+        ),
+      );
+      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DropdownButton<String?>), findsNothing);
+      expect(find.textContaining('No public server exists on Regtest'), findsOneWidget);
+    });
+
+    testWidgets('an unreachable catalogue degrades to a quiet line', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge();
+      bridge.onPublicServers = (_) {
+        throw const BridgeException('not_initialized', 'call init first');
+      };
+      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DropdownButton<String?>), findsNothing);
+      expect(find.textContaining('The server list is unavailable'), findsOneWidget);
+      // The backend still saves: automatic is the fallback anyway.
+      await tester.tap(find.text('Save backend'));
+      await tester.pumpAndSettle();
+      expect(bridge.savedBackends[Network.mainnet], isA<PublicEsplora>());
+    });
   });
 }

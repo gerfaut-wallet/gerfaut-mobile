@@ -36,6 +36,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _portController = TextEditingController(text: '50002');
   bool _tls = true;
   String _backendKind = 'public_esplora';
+
+  /// Chosen public server id; null is the automatic rotation.
+  String? _publicServer;
   Network? _seededFor;
   bool _savingBackend = false;
 
@@ -83,6 +86,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       PublicEsplora() => 'public_esplora',
       CustomEsplora() => 'custom_esplora',
       CustomElectrum() => 'custom_electrum',
+    };
+    _publicServer = switch (config) {
+      PublicEsplora(:final server) => server,
+      _ => null,
     };
     _esploraController.text = switch (config) {
       CustomEsplora(:final url) => url,
@@ -161,7 +168,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       'custom_electrum' => CustomElectrum(
         url: buildElectrumUrl(_hostController.text, _portController.text, _tls),
       ),
-      _ => const PublicEsplora(),
+      _ => PublicEsplora(server: _publicServer),
     };
     try {
       await ref.read(bridgeProvider).setBackend(network, config);
@@ -290,9 +297,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   groupValue: _backendKind,
                   label: 'Public API',
                   hint:
-                      'mempool.space, blockstream.info and mempool.emzy.de, '
-                      'no setup. The operator that answers can see this '
-                      "wallet's addresses.",
+                      'Public servers, no setup: the one that answers sees '
+                      "this wallet's addresses and serves the fee estimates.",
                   onChanged: (value) => setState(() => _backendKind = value),
                 ),
                 _BackendOption(
@@ -309,6 +315,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   hint: 'electrs or Fulcrum, reachable over TLS or plain TCP.',
                   onChanged: (value) => setState(() => _backendKind = value),
                 ),
+                if (_backendKind == 'public_esplora') ...[
+                  const SizedBox(height: GerfautSpacing.sm),
+                  _FieldLabel('Server', tokens: tokens),
+                  const SizedBox(height: GerfautSpacing.sm),
+                  _PublicServerField(
+                    network: network,
+                    selected: _publicServer,
+                    onChanged: (id) => setState(() => _publicServer = id),
+                  ),
+                ],
                 if (_backendKind == 'custom_esplora') ...[
                   const SizedBox(height: GerfautSpacing.sm),
                   _FieldLabel('Server URL', tokens: tokens),
@@ -845,6 +861,153 @@ class _MonoField extends StatelessWidget {
           borderSide: BorderSide(color: tokens.primary, width: 2),
         ),
       ),
+    );
+  }
+}
+
+/// Which public server answers: Automatic first, then every server the
+/// core lists for this network. A quiet line stands in for the control
+/// when the catalogue is empty (regtest) or out of reach.
+class _PublicServerField extends ConsumerWidget {
+  const _PublicServerField({
+    required this.network,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final Network network;
+
+  /// Identifier of the chosen server; null is the automatic rotation.
+  final String? selected;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    return ref
+        .watch(publicServersProvider(network))
+        .when(
+          loading: () => Text(
+            'Loading the server list…',
+            style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+          ),
+          error: (error, stack) => Text(
+            'The server list is unavailable. Gerfaut keeps rotating over '
+            'every public instance.',
+            style: tokens.bodySmall.copyWith(color: tokens.pending),
+          ),
+          data: (servers) => _list(context, tokens, servers),
+        );
+  }
+
+  Widget _list(
+    BuildContext context,
+    GerfautTokens tokens,
+    List<PublicServer> servers,
+  ) {
+    if (servers.isEmpty) {
+      return Text(
+        'No public server exists on ${network.label}. Run your own node '
+        'and point Gerfaut at it.',
+        style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+      );
+    }
+    // A server retired by a later version falls back to Automatic, which
+    // is what the core does with an identifier it no longer knows.
+    PublicServer? chosen;
+    for (final server in servers) {
+      if (server.id == selected) chosen = server;
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Semantics(
+          container: true,
+          label: 'Public server',
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: GerfautSpacing.sm + GerfautSpacing.xs,
+            ),
+            decoration: BoxDecoration(
+              color: tokens.surfaceSunken,
+              borderRadius: BorderRadius.circular(GerfautRadius.sm),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String?>(
+                isExpanded: true,
+                // Items carry two lines, so they size themselves.
+                itemHeight: null,
+                padding: const EdgeInsets.symmetric(
+                  vertical: GerfautSpacing.sm,
+                ),
+                borderRadius: BorderRadius.circular(GerfautRadius.md),
+                dropdownColor: tokens.surface,
+                icon: Icon(
+                  LucideIcons.chevronDown,
+                  size: 18,
+                  color: tokens.textMuted,
+                ),
+                value: chosen?.id,
+                onChanged: onChanged,
+                items: [
+                  DropdownMenuItem<String?>(
+                    value: null,
+                    child: _ServerEntry(tokens: tokens),
+                  ),
+                  for (final server in servers)
+                    DropdownMenuItem<String?>(
+                      value: server.id,
+                      child: _ServerEntry(tokens: tokens, server: server),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (chosen?.protocol == ServerProtocol.electrum) ...[
+          const SizedBox(height: GerfautSpacing.sm),
+          Text(
+            'An Electrum server cannot serve a single-address wallet.',
+            style: tokens.bodySmall.copyWith(color: tokens.pending),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// One line of the public server list: the host, then what it speaks.
+class _ServerEntry extends StatelessWidget {
+  const _ServerEntry({required this.tokens, this.server});
+
+  final GerfautTokens tokens;
+
+  /// Null for the automatic rotation, the first entry of the list.
+  final PublicServer? server;
+
+  @override
+  Widget build(BuildContext context) {
+    final entry = server;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (entry == null)
+          Text('Automatic', style: tokens.body)
+        else
+          // A host is an identifier: mono, and never cut at the end.
+          Text(
+            entry.label,
+            maxLines: 1,
+            style: tokens.data.copyWith(fontSize: 14),
+          ),
+        Text(
+          entry == null
+              ? 'Rotates over every public Esplora.'
+              : entry.protocol.label,
+          style: tokens.label.copyWith(color: tokens.textMuted),
+        ),
+      ],
     );
   }
 }
