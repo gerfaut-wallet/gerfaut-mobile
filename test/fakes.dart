@@ -113,6 +113,77 @@ ParsedInput makeParsedInput({
   );
 }
 
+PublicServer _esplora(String host, String url) => PublicServer(
+  id: host,
+  label: host,
+  protocol: ServerProtocol.esplora,
+  url: url,
+);
+
+PublicServer _electrum(String host, String label, String url) => PublicServer(
+  id: 'electrum:$host',
+  label: label,
+  protocol: ServerProtocol.electrum,
+  url: url,
+);
+
+/// The catalogue gerfaut-core publishes, network by network: the public
+/// Esplora instances first, then the Electrum servers. Mirrored here so
+/// the settings list under test is the one the app really offers.
+final Map<Network, List<PublicServer>> defaultPublicServers = {
+  Network.mainnet: [
+    _esplora('mempool.space', 'https://mempool.space/api'),
+    _esplora('blockstream.info', 'https://blockstream.info/api'),
+    _esplora('mempool.emzy.de', 'https://mempool.emzy.de/api'),
+    _electrum(
+      'blockstream.info',
+      'blockstream.info:700',
+      'ssl://blockstream.info:700',
+    ),
+    _electrum(
+      'electrum.blockstream.info',
+      'electrum.blockstream.info:50002',
+      'ssl://electrum.blockstream.info:50002',
+    ),
+    _electrum(
+      'electrum.diynodes.com',
+      'electrum.diynodes.com:50022',
+      'ssl://electrum.diynodes.com:50022',
+    ),
+    _electrum(
+      'frigate.2140.dev',
+      'frigate.2140.dev:50002',
+      'ssl://frigate.2140.dev:50002',
+    ),
+  ],
+  Network.signet: [
+    _esplora('mempool.space', 'https://mempool.space/signet/api'),
+    _esplora('blockstream.info', 'https://blockstream.info/signet/api'),
+    _esplora('mempool.emzy.de', 'https://mempool.emzy.de/signet/api'),
+    _electrum(
+      'mempool.space',
+      'mempool.space:60602',
+      'ssl://mempool.space:60602',
+    ),
+  ],
+  Network.testnet4: [
+    _esplora('mempool.space', 'https://mempool.space/testnet4/api'),
+    _esplora('mempool.emzy.de', 'https://mempool.emzy.de/testnet4/api'),
+    _electrum(
+      'mempool.space',
+      'mempool.space:40002',
+      'ssl://mempool.space:40002',
+    ),
+    _electrum(
+      'blackie.c3-soft.com',
+      'blackie.c3-soft.com:57010',
+      'ssl://blackie.c3-soft.com:57010',
+    ),
+  ],
+  // A local chain has no public server, by definition.
+  Network.regtest: [],
+};
+
 class FakeBridge implements GerfautBridge {
   FakeBridge({
     List<WalletMeta>? wallets,
@@ -411,6 +482,21 @@ class FakeBridge implements GerfautBridge {
       appPrefs: settings.appPrefs,
       gapLimit: settings.gapLimit,
     );
+  }
+
+  /// Catalogue hook; throw a [BridgeException] to simulate a bridge
+  /// that cannot answer. The default serves [defaultPublicServers].
+  List<PublicServer> Function(Network network)? onPublicServers;
+
+  /// Every network the catalogue was asked for, for assertions.
+  final List<Network> publicServerCalls = [];
+
+  @override
+  Future<List<PublicServer>> publicServers(Network network) async {
+    publicServerCalls.add(network);
+    final servers = onPublicServers;
+    if (servers != null) return servers(network);
+    return defaultPublicServers[network] ?? const [];
   }
 
   @override

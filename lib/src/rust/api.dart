@@ -110,6 +110,12 @@ Future<String> setBackend({
   configJson: configJson,
 );
 
+/// The public servers offered for a network, in settings order.
+/// Returns a serialized `Vec<PublicServer>`, empty on regtest, which
+/// has no public server by definition.
+Future<String> publicServers({required String network}) =>
+    RustLib.instance.api.crateApiPublicServers(network: network);
+
 /// Stores one small app preference in the encrypted vault.
 Future<String> setAppPref({required String key, required String value}) =>
     RustLib.instance.api.crateApiSetAppPref(key: key, value: value);

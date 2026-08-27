@@ -785,6 +785,51 @@ class SyncFailure {
   final String message;
 }
 
+/// Protocol a public server speaks.
+enum ServerProtocol {
+  esplora('esplora', 'Esplora'),
+  electrum('electrum', 'Electrum');
+
+  const ServerProtocol(this.id, this.label);
+
+  final String id;
+
+  /// Marker shown next to the host in the settings.
+  final String label;
+
+  static ServerProtocol fromId(String id) =>
+      ServerProtocol.values.firstWhere((p) => p.id == id);
+}
+
+/// One public server offered in the settings.
+class PublicServer {
+  const PublicServer({
+    required this.id,
+    required this.label,
+    required this.protocol,
+    required this.url,
+  });
+
+  factory PublicServer.fromJson(Map<String, dynamic> json) {
+    return PublicServer(
+      id: json['id'] as String,
+      label: json['label'] as String,
+      protocol: ServerProtocol.fromId(json['protocol'] as String),
+      url: json['url'] as String,
+    );
+  }
+
+  /// Stable key stored in the settings; it outlives a URL change.
+  final String id;
+
+  /// What the settings show: the host, nothing else.
+  final String label;
+  final ServerProtocol protocol;
+
+  /// Endpoint Gerfaut talks to.
+  final String url;
+}
+
 /// Chain data source for one network.
 sealed class BackendConfig {
   const BackendConfig();

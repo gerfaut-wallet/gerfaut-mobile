@@ -324,6 +324,14 @@ pub async fn set_backend(network: String, config_json: String) -> String {
     }
 }
 
+/// The public servers offered for a network, in settings order.
+/// Returns a serialized `Vec<PublicServer>`, empty on regtest, which
+/// has no public server by definition.
+pub async fn public_servers(network: String) -> String {
+    let network = try_json!(parse_network(&network));
+    to_json(&gerfaut_core::chain::public::public_servers(network))
+}
+
 /// Stores one small app preference in the encrypted vault.
 pub async fn set_app_pref(key: String, value: String) -> String {
     let manager = try_json!(manager());

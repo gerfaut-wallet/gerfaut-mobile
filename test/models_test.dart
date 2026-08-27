@@ -136,6 +136,29 @@ void main() {
       );
     });
 
+    test('reads a public server entry', () {
+      final server = PublicServer.fromJson(const {
+        'id': 'electrum:frigate.2140.dev',
+        'label': 'frigate.2140.dev:50002',
+        'protocol': 'electrum',
+        'url': 'ssl://frigate.2140.dev:50002',
+      });
+      expect(server.id, 'electrum:frigate.2140.dev');
+      expect(server.label, 'frigate.2140.dev:50002');
+      expect(server.protocol, ServerProtocol.electrum);
+      expect(server.protocol.label, 'Electrum');
+      expect(server.url, 'ssl://frigate.2140.dev:50002');
+      expect(
+        PublicServer.fromJson(const {
+          'id': 'mempool.space',
+          'label': 'mempool.space',
+          'protocol': 'esplora',
+          'url': 'https://mempool.space/api',
+        }).protocol,
+        ServerProtocol.esplora,
+      );
+    });
+
     test('settings fall back to the automatic public backend', () {
       const settings = Settings(
         activeNetwork: Network.mainnet,

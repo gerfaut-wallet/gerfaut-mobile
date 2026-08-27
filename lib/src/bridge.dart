@@ -67,6 +67,10 @@ abstract class GerfautBridge {
   /// Sets the global gap limit (1..=500), applied on the next sync.
   Future<void> setGapLimit(int gapLimit);
   Future<void> setBackend(Network network, BackendConfig config);
+
+  /// Public servers offered for a network, in settings order. Empty on
+  /// regtest, which has no public server.
+  Future<List<PublicServer>> publicServers(Network network);
   Future<void> setAppPref(String key, String value);
   Future<PriceQuote> fetchPrice(PriceSource source, FiatCurrency currency);
   Future<UpdateCheck> checkUpdate(String currentVersion);
@@ -218,6 +222,12 @@ class RustBridge implements GerfautBridge {
         configJson: jsonEncode(config.toJson()),
       ),
     );
+  }
+
+  @override
+  Future<List<PublicServer>> publicServers(Network network) async {
+    final raw = await rust.publicServers(network: network.id);
+    return _list(raw).map(PublicServer.fromJson).toList();
   }
 
   @override

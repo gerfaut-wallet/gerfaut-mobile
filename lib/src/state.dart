@@ -18,6 +18,13 @@ final settingsProvider = FutureProvider<Settings>((ref) {
   return ref.watch(bridgeProvider).getSettings();
 });
 
+/// Public servers offered for a network, in the order the settings list
+/// them. A fixed catalogue: it only changes with the app.
+final publicServersProvider =
+    FutureProvider.family<List<PublicServer>, Network>((ref, network) {
+      return ref.watch(bridgeProvider).publicServers(network);
+    });
+
 /// Wallets of the active workspace network.
 final walletsProvider = FutureProvider<List<WalletMeta>>((ref) async {
   final settings = await ref.watch(settingsProvider.future);
