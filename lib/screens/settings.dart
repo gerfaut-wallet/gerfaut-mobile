@@ -144,6 +144,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
+  /// Sets the display currency and keeps the price source able to quote
+  /// it: only CoinGecko serves the currencies past the common seven.
+  void _setCurrency(FiatCurrency currency) {
+    ref.read(fiatCurrencyProvider.notifier).set(currency);
+    if (!ref.read(fiatSourceProvider).supportsCurrency(currency)) {
+      ref.read(fiatSourceProvider.notifier).set(PriceSource.coingecko);
+    }
+  }
+
   Future<void> _setNetwork(Network network) async {
     await ref.read(bridgeProvider).setActiveNetwork(network);
     ref.invalidate(settingsProvider);
@@ -240,6 +249,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _seedBackendForm(settings);
     _seedGapLimit(settings);
     final network = settings.activeNetwork;
+    final currency = ref.watch(fiatCurrencyProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -476,20 +486,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   const SizedBox(height: GerfautSpacing.md),
                   _FieldLabel('Currency', tokens: tokens),
                   const SizedBox(height: GerfautSpacing.sm),
-                  Wrap(
-                    spacing: GerfautSpacing.sm,
-                    runSpacing: GerfautSpacing.sm,
-                    children: [
-                      for (final currency in FiatCurrency.values)
-                        _Pill(
-                          label: currency.code,
-                          selected: ref.watch(fiatCurrencyProvider) == currency,
-                          onTap: () => ref
-                              .read(fiatCurrencyProvider.notifier)
-                              .set(currency),
-                        ),
-                    ],
-                  ),
+                  _CurrencyField(selected: currency, onChanged: _setCurrency),
                   const SizedBox(height: GerfautSpacing.md),
                   _FieldLabel('Price source', tokens: tokens),
                   const SizedBox(height: GerfautSpacing.xs),
@@ -506,11 +503,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         _Pill(
                           label: source.label,
                           selected: ref.watch(fiatSourceProvider) == source,
+                          // A source that does not quote the currency is
+                          // shown as unavailable, never silently broken.
+                          enabled: source.supportsCurrency(currency),
                           onTap: () =>
                               ref.read(fiatSourceProvider.notifier).set(source),
                         ),
                     ],
                   ),
+                  if (currency.reach == CurrencyReach.coingeckoOnly) ...[
+                    const SizedBox(height: GerfautSpacing.sm),
+                    Text(
+                      'CoinGecko is the only source that quotes '
+                      '${currency.code}.',
+                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                    ),
+                  ],
                   const SizedBox(height: GerfautSpacing.sm),
                   _RatePreview(tokens: tokens),
                 ],
@@ -1012,6 +1020,134 @@ class _ServerEntry extends StatelessWidget {
   }
 }
 
+/// The display currency, thirty of them: the seven every source quotes
+/// first, then the ones CoinGecko alone serves, each group announced.
+class _CurrencyField extends StatelessWidget {
+  const _CurrencyField({required this.selected, required this.onChanged});
+
+  final FiatCurrency selected;
+  final ValueChanged<FiatCurrency> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    return Semantics(
+      container: true,
+      label: 'Display currency',
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: GerfautSpacing.sm + GerfautSpacing.xs,
+        ),
+        decoration: BoxDecoration(
+          color: tokens.surfaceSunken,
+          borderRadius: BorderRadius.circular(GerfautRadius.sm),
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<FiatCurrency>(
+            isExpanded: true,
+            // Group headers are shorter than the entries around them.
+            itemHeight: null,
+            padding: const EdgeInsets.symmetric(vertical: GerfautSpacing.sm),
+            borderRadius: BorderRadius.circular(GerfautRadius.md),
+            dropdownColor: tokens.surface,
+            // Thirty entries: the list scrolls rather than filling a
+            // phone from edge to edge.
+            menuMaxHeight: 360,
+            icon: Icon(
+              LucideIcons.chevronDown,
+              size: 18,
+              color: tokens.textMuted,
+            ),
+            value: selected,
+            onChanged: (value) {
+              if (value != null) onChanged(value);
+            },
+            items: [
+              for (final reach in CurrencyReach.values) ...[
+                DropdownMenuItem<FiatCurrency>(
+                  enabled: false,
+                  child: _CurrencyGroup(tokens: tokens, reach: reach),
+                ),
+                for (final currency in FiatCurrency.values.where(
+                  (c) => c.reach == reach,
+                ))
+                  DropdownMenuItem<FiatCurrency>(
+                    value: currency,
+                    child: _CurrencyEntry(tokens: tokens, currency: currency),
+                  ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Header announcing which sources quote the currencies below it.
+class _CurrencyGroup extends StatelessWidget {
+  const _CurrencyGroup({required this.tokens, required this.reach});
+
+  final GerfautTokens tokens;
+  final CurrencyReach reach;
+
+  @override
+  Widget build(BuildContext context) {
+    final first = reach == CurrencyReach.every;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (!first) ...[
+          const SizedBox(height: GerfautSpacing.xs),
+          Container(height: 1, color: tokens.border),
+          const SizedBox(height: GerfautSpacing.sm),
+        ],
+        Text(
+          first ? 'EVERY SOURCE' : 'COINGECKO ONLY',
+          style: tokens.label.copyWith(color: tokens.textMuted),
+        ),
+      ],
+    );
+  }
+}
+
+/// One currency: its ISO code, then its name so thirty codes stay
+/// readable.
+class _CurrencyEntry extends StatelessWidget {
+  const _CurrencyEntry({required this.tokens, required this.currency});
+
+  final GerfautTokens tokens;
+  final FiatCurrency currency;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 44,
+          child: Text(
+            currency.code,
+            style: tokens.body.copyWith(
+              fontWeight: FontWeight.w500,
+              fontVariations: const [FontVariation('wght', 500)],
+            ),
+          ),
+        ),
+        Flexible(
+          child: Text(
+            currency.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _RatePreview extends ConsumerWidget {
   const _RatePreview({required this.tokens});
 
@@ -1056,6 +1192,7 @@ class _Pill extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.icon,
+    this.enabled = true,
   });
 
   final String label;
@@ -1065,37 +1202,52 @@ class _Pill extends StatelessWidget {
   /// Optional decorative glyph before the label.
   final IconData? icon;
 
+  /// An option that cannot apply here: quiet, and out of reach.
+  final bool enabled;
+
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final color = selected ? tokens.onPrimary : tokens.text;
-    return InkWell(
-      borderRadius: BorderRadius.circular(GerfautRadius.md),
-      onTap: onTap,
-      child: Container(
-        height: 44,
-        padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? tokens.primary : tokens.surfaceSunken,
-          borderRadius: BorderRadius.circular(GerfautRadius.md),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              ExcludeSemantics(child: Icon(icon, size: 15, color: color)),
-              const SizedBox(width: 6),
-            ],
-            Text(
-              label,
-              style: tokens.bodySmall.copyWith(
-                color: color,
-                fontWeight: FontWeight.w500,
-                fontVariations: const [FontVariation('wght', 500)],
+    final color = switch ((selected, enabled)) {
+      (true, _) => tokens.onPrimary,
+      (false, false) => tokens.textMuted,
+      (false, true) => tokens.text,
+    };
+    return Semantics(
+      container: true,
+      button: true,
+      enabled: enabled,
+      selected: selected,
+      label: label,
+      excludeSemantics: true,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(GerfautRadius.md),
+        onTap: enabled ? onTap : null,
+        child: Container(
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? tokens.primary : tokens.surfaceSunken,
+            borderRadius: BorderRadius.circular(GerfautRadius.md),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                ExcludeSemantics(child: Icon(icon, size: 15, color: color)),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                label,
+                style: tokens.bodySmall.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.w500,
+                  fontVariations: const [FontVariation('wght', 500)],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

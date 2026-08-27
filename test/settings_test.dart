@@ -1,3 +1,5 @@
+import 'dart:ui' show Tristate;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -211,6 +213,148 @@ void main() {
 
     expect(bridge.lastGapLimitSet, isNull);
     expect(find.widgetWithText(TextField, '20'), findsOneWidget);
+  });
+
+  group('display currency', () {
+    /// Turns the fiat display on: the currency and source controls only
+    /// exist once it is.
+    Future<void> enableFiat(WidgetTester tester) async {
+      await tester.tap(find.byType(Switch).first);
+      await tester.pumpAndSettle();
+    }
+
+    DropdownButton<FiatCurrency> currencyField(WidgetTester tester) {
+      return tester.widget<DropdownButton<FiatCurrency>>(
+        find.byType(DropdownButton<FiatCurrency>),
+      );
+    }
+
+    InkWell sourcePill(WidgetTester tester, String label) {
+      return tester.widget<InkWell>(
+        find.ancestor(of: find.text(label), matching: find.byType(InkWell)),
+      );
+    }
+
+    testWidgets('every currency is offered, grouped by what quotes it', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      await tester.pumpWidget(settingsApp(FakeBridge()));
+      await tester.pumpAndSettle();
+      await enableFiat(tester);
+
+      final items = currencyField(tester).items!;
+      // Thirty currencies, in the core's order, plus one header each
+      // for the group they belong to.
+      expect(
+        items.where((item) => item.value != null).map((item) => item.value),
+        FiatCurrency.values,
+      );
+      final headers = items.where((item) => !item.enabled).toList();
+      expect(headers, hasLength(2));
+      expect(items.first, headers.first);
+      // The seven every source quotes come first, then the header of
+      // the ones CoinGecko alone serves.
+      expect(items[8], headers.last);
+    });
+
+    testWidgets('the currency list reads group by group', (tester) async {
+      useTallSurface(tester);
+      await tester.pumpWidget(settingsApp(FakeBridge()));
+      await tester.pumpAndSettle();
+      await enableFiat(tester);
+
+      await tester.tap(find.byType(DropdownButton<FiatCurrency>));
+      await tester.pumpAndSettle();
+
+      expect(find.text('EVERY SOURCE'), findsOneWidget);
+      expect(find.text('Euro'), findsWidgets);
+      expect(find.text('US dollar'), findsOneWidget);
+
+      // The second group sits below the fold of a phone-sized menu.
+      await tester.scrollUntilVisible(
+        find.text('COINGECKO ONLY'),
+        120,
+        scrollable: find.byType(Scrollable).last,
+      );
+      expect(find.text('COINGECKO ONLY'), findsOneWidget);
+      expect(find.text('Indian rupee'), findsOneWidget);
+    });
+
+    testWidgets('picking a currency saves it', (tester) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge();
+      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpAndSettle();
+      await enableFiat(tester);
+
+      await tester.tap(find.byType(DropdownButton<FiatCurrency>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('US dollar'));
+      await tester.pumpAndSettle();
+
+      expect(currencyField(tester).value, FiatCurrency.usd);
+      expect(bridge.appPrefs['display.fiat_currency'], 'usd');
+    });
+
+    testWidgets('a CoinGecko-only currency moves the source over', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge();
+      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpAndSettle();
+      await enableFiat(tester);
+
+      await tester.tap(find.text('Kraken'));
+      await tester.pumpAndSettle();
+      expect(bridge.appPrefs['display.fiat_source'], 'kraken');
+      expect(sourcePill(tester, 'mempool.space').onTap, isNotNull);
+
+      currencyField(tester).onChanged!(FiatCurrency.ngn);
+      await tester.pumpAndSettle();
+
+      expect(bridge.appPrefs['display.fiat_currency'], 'ngn');
+      expect(bridge.appPrefs['display.fiat_source'], 'coingecko');
+      expect(
+        find.text('CoinGecko is the only source that quotes NGN.'),
+        findsOneWidget,
+      );
+      // The two sources that cannot quote it are out of reach, not
+      // silently wrong.
+      expect(sourcePill(tester, 'Kraken').onTap, isNull);
+      expect(sourcePill(tester, 'mempool.space').onTap, isNull);
+      expect(sourcePill(tester, 'CoinGecko').onTap, isNotNull);
+      expect(
+        tester.widget<Text>(find.text('Kraken')).style!.color,
+        GerfautTokens.light.textMuted,
+      );
+
+      // Back to a currency everyone quotes: the sources return.
+      currencyField(tester).onChanged!(FiatCurrency.chf);
+      await tester.pumpAndSettle();
+      expect(sourcePill(tester, 'Kraken').onTap, isNotNull);
+      expect(find.textContaining('the only source that quotes'), findsNothing);
+    });
+
+    testWidgets('a disabled source announces itself as such', (tester) async {
+      useTallSurface(tester);
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(settingsApp(FakeBridge()));
+      await tester.pumpAndSettle();
+      await enableFiat(tester);
+
+      currencyField(tester).onChanged!(FiatCurrency.krw);
+      await tester.pumpAndSettle();
+
+      final kraken = tester.getSemantics(find.text('Kraken'));
+      expect(kraken.label, 'Kraken');
+      expect(kraken.flagsCollection.isEnabled, Tristate.isFalse);
+      final coingecko = tester.getSemantics(find.text('CoinGecko'));
+      expect(coingecko.flagsCollection.isEnabled, Tristate.isTrue);
+      expect(coingecko.flagsCollection.isSelected, Tristate.isTrue);
+      handle.dispose();
+    });
   });
 
   group('public server choice', () {

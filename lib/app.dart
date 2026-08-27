@@ -34,6 +34,8 @@ class _GerfautAppState extends ConsumerState<GerfautApp> {
         ref.read(maskedProvider.notifier).hydrate(prefs['mobile.masked']);
         ref.read(unitProvider.notifier).hydrate(prefs['display.unit']);
         ref.read(fiatEnabledProvider.notifier).hydrate(prefs['display.fiat']);
+        // Currency before source: the source only takes if it quotes
+        // the currency that was stored with it.
         ref
             .read(fiatCurrencyProvider.notifier)
             .hydrate(prefs['display.fiat_currency']);

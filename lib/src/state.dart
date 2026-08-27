@@ -214,7 +214,13 @@ class FiatSourceNotifier extends Notifier<PriceSource> {
 
   void hydrate(String? stored) {
     final source = PriceSource.fromId(stored);
-    if (source != null) state = source;
+    // A stored pair no source can honour — a currency only CoinGecko
+    // quotes, kept next to Kraken — falls back to CoinGecko rather than
+    // to a quote that never arrives. The currency hydrates first.
+    if (source != null &&
+        source.supportsCurrency(ref.read(fiatCurrencyProvider))) {
+      state = source;
+    }
   }
 
   void set(PriceSource source) {

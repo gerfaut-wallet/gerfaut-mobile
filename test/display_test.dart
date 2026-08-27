@@ -47,6 +47,34 @@ void main() {
     expect(find.textContaining('€'), findsWidgets);
   });
 
+  testWidgets(
+    'a stored currency and source that disagree land on one that answers',
+    (tester) async {
+      final bridge = FakeBridge(
+        wallets: [makeMeta(totalSats: 123456)],
+        settings: const Settings(
+          activeNetwork: Network.mainnet,
+          backends: {},
+          appPrefs: {
+            'display.fiat': '1',
+            'display.fiat_currency': 'ngn',
+            'display.fiat_source': 'kraken',
+          },
+        ),
+      );
+      await tester.pumpWidget(app(bridge));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(GerfautApp)),
+      );
+      expect(container.read(fiatCurrencyProvider), FiatCurrency.ngn);
+      // Kraken does not quote the naira: CoinGecko answers rather than
+      // no one at all.
+      expect(container.read(fiatSourceProvider), PriceSource.coingecko);
+    },
+  );
+
   testWidgets('any other stored value keeps fiat off', (tester) async {
     final meta = makeMeta(totalSats: 123456);
     final bridge = FakeBridge(
