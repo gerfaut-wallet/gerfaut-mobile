@@ -791,7 +791,7 @@ sealed class BackendConfig {
 
   factory BackendConfig.fromJson(Map<String, dynamic> json) {
     return switch (json['type'] as String) {
-      'public_esplora' => const PublicEsplora(),
+      'public_esplora' => PublicEsplora(server: json['server'] as String?),
       'custom_esplora' => CustomEsplora(url: json['url'] as String),
       'custom_electrum' => CustomElectrum(url: json['url'] as String),
       final other => throw FormatException('unknown backend type: $other'),
@@ -801,11 +801,22 @@ sealed class BackendConfig {
   Map<String, dynamic> toJson();
 }
 
+/// One of the public servers the core lists. Without a chosen operator
+/// the public Esplora instances are rotated through; with one, that
+/// server answers alone.
 class PublicEsplora extends BackendConfig {
-  const PublicEsplora();
+  const PublicEsplora({this.server});
+
+  /// Identifier of the chosen server, null for the automatic rotation.
+  final String? server;
 
   @override
-  Map<String, dynamic> toJson() => {'type': 'public_esplora'};
+  Map<String, dynamic> toJson() => {
+    'type': 'public_esplora',
+    // Omitted when unset, so an automatic configuration serializes
+    // exactly as every stored vault already carries it.
+    if (server != null) 'server': server,
+  };
 }
 
 class CustomEsplora extends BackendConfig {

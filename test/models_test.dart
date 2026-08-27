@@ -113,4 +113,37 @@ void main() {
       expect(meta.scanGap, 20);
     });
   });
+
+  group('BackendConfig', () {
+    test('an automatic public backend keeps its stored shape', () {
+      final stored = BackendConfig.fromJson({'type': 'public_esplora'});
+      expect(stored, isA<PublicEsplora>());
+      expect((stored as PublicEsplora).server, isNull);
+      // The key must not appear at all: the core reads the exact shape
+      // every vault written before the choice existed already carries.
+      expect(jsonEncode(stored.toJson()), '{"type":"public_esplora"}');
+    });
+
+    test('a chosen operator rides along in the same tag', () {
+      final config = BackendConfig.fromJson({
+        'type': 'public_esplora',
+        'server': 'blockstream.info',
+      });
+      expect((config as PublicEsplora).server, 'blockstream.info');
+      expect(
+        jsonEncode(config.toJson()),
+        '{"type":"public_esplora","server":"blockstream.info"}',
+      );
+    });
+
+    test('settings fall back to the automatic public backend', () {
+      const settings = Settings(
+        activeNetwork: Network.mainnet,
+        backends: {},
+        appPrefs: {},
+      );
+      final config = settings.backendFor(Network.mainnet);
+      expect((config as PublicEsplora).server, isNull);
+    });
+  });
 }
