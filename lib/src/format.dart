@@ -137,13 +137,33 @@ String formatAmountSigned(int sats, AmountUnit unit) {
   return sats < 0 ? formatSats(sats) : '+${formatSats(sats)}';
 }
 
+/// One formatter pair per currency: building a [NumberFormat] parses a
+/// pattern, and every amount on screen asks for one.
+final Map<FiatCurrency, ({NumberFormat natural, NumberFormat precise})>
+_fiatFormatters = {};
+
+/// Formatter for a currency, in its own convention or in the finer one
+/// small values need.
+NumberFormat _fiatFormatter(FiatCurrency currency, {required bool precise}) {
+  final pair = _fiatFormatters.putIfAbsent(currency, () {
+    // No decimalDigits: the currency's own convention applies, two for
+    // the euro, none for the yen.
+    final natural = NumberFormat.simpleCurrency(name: currency.code);
+    return (
+      natural: natural,
+      precise: (natural.decimalDigits ?? 2) >= 4
+          ? natural
+          : NumberFormat.simpleCurrency(name: currency.code, decimalDigits: 4),
+    );
+  });
+  return precise ? pair.precise : pair.natural;
+}
+
 /// Fiat value of an amount at a given BTC rate, with the currency's
-/// symbol. Small values keep four decimals so they never round to zero.
+/// symbol and its own number of decimals — never two forced on a
+/// currency that has none. Small values keep four decimals so they
+/// never round to zero.
 String formatFiat(int sats, double rate, FiatCurrency currency) {
   final value = sats / satsPerBtc * rate;
-  final formatter = NumberFormat.simpleCurrency(
-    name: currency.code,
-    decimalDigits: value.abs() < 1 ? 4 : 2,
-  );
-  return formatter.format(value);
+  return _fiatFormatter(currency, precise: value.abs() < 1).format(value);
 }

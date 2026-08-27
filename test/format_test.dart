@@ -95,5 +95,27 @@ void main() {
       expect(formatFiat(100, 50000, FiatCurrency.usd), r'$0.0500');
       expect(formatFiat(-100, 50000, FiatCurrency.usd), r'-$0.0500');
     });
+
+    test('a currency without a minor unit gets no decimals', () {
+      // The yen, the won, the dong and the rupiah have no cents: two
+      // forced decimals would be a number that does not exist.
+      for (final currency in [
+        FiatCurrency.jpy,
+        FiatCurrency.krw,
+        FiatCurrency.vnd,
+        FiatCurrency.idr,
+      ]) {
+        final formatted = formatFiat(100000000, 7654321, currency);
+        expect(formatted, contains('7,654,321'));
+        expect(formatted, isNot(contains('.')));
+      }
+      expect(formatFiat(100000000, 1234.6, FiatCurrency.jpy), '¥1,235');
+    });
+
+    test('a small value in a whole currency still shows', () {
+      // Under one unit the four decimals win over the convention: a
+      // rounded zero would read as no value at all.
+      expect(formatFiat(1, 15000000, FiatCurrency.jpy), '¥0.1500');
+    });
   });
 }
