@@ -8,6 +8,7 @@ import '../src/models.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
+import '../widgets/select_field.dart';
 import 'scan.dart';
 import 'wallet_home.dart';
 
@@ -29,10 +30,6 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
   Network? _network;
   bool _adding = false;
 
-  /// Bumped on every classifier answer so the script field rebuilds on
-  /// what the core holds, never on a choice the core rejected.
-  int _parseSeq = 0;
-
   @override
   void dispose() {
     _rawController.dispose();
@@ -51,21 +48,14 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
           _network ?? ref.read(settingsProvider).valueOrNull?.activeNetwork;
       setState(() {
         _parsed = parsed;
-        _parseSeq += 1;
         _network = preferred != null && parsed.networks.contains(preferred)
             ? preferred
             : parsed.networks.first;
       });
     } on BridgeException catch (error) {
-      setState(() {
-        _error = error.message;
-        _parseSeq += 1;
-      });
+      setState(() => _error = error.message);
     } catch (error) {
-      setState(() {
-        _error = '$error';
-        _parseSeq += 1;
-      });
+      setState(() => _error = '$error');
     }
   }
 
@@ -327,49 +317,17 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
             style: tokens.label.copyWith(color: tokens.textMuted),
           ),
           const SizedBox(height: GerfautSpacing.sm),
-          DropdownButtonFormField<ScriptKind>(
-            key: ValueKey('script-$_parseSeq'),
-            initialValue: payload.script,
-            isExpanded: true,
-            style: tokens.body,
-            dropdownColor: tokens.surface,
-            borderRadius: BorderRadius.circular(GerfautRadius.md),
-            icon: Icon(
-              LucideIcons.chevronDown,
-              size: 16,
-              color: tokens.textMuted,
-            ),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: tokens.surfaceSunken,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: GerfautSpacing.md,
-                vertical: GerfautSpacing.sm,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(GerfautRadius.sm),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(GerfautRadius.sm),
-                borderSide: BorderSide(color: tokens.primary, width: 2),
-              ),
-            ),
+          // The value is what the core holds, never a local choice it
+          // rejected.
+          GerfautSelect<ScriptKind>.items(
+            label: 'Script type',
+            value: payload.script,
             items: [
               for (final option in parsed.scriptOptions)
-                DropdownMenuItem(
-                  value: option,
-                  child: Text(
-                    option.label,
-                    style: tokens.body,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
+                GerfautSelectItem(value: option, title: option.label),
             ],
             onChanged: (chosen) {
-              if (chosen != null && chosen != payload.script) {
-                _chooseScript(chosen);
-              }
+              if (chosen != payload.script) _chooseScript(chosen);
             },
           ),
           const SizedBox(height: GerfautSpacing.xs + 2),

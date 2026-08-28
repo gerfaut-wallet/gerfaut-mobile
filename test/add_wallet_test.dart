@@ -7,6 +7,7 @@ import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/select_field.dart';
 
 import 'fakes.dart';
 
@@ -116,7 +117,7 @@ void main() {
     await tester.tap(find.text('Testnet 4'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(DropdownButtonFormField<ScriptKind>));
+    await tester.tap(find.byType(GerfautSelect<ScriptKind>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Taproot (P2TR)').last);
     await tester.pumpAndSettle();
