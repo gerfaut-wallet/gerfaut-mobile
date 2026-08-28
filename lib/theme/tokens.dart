@@ -19,11 +19,13 @@ abstract final class GerfautSpacing {
   static const double gutter = 12;
 }
 
-/// Corner radii. Nothing above [lg] on a container.
+/// Corner radii. Nothing above [lg] on a container; [canvas] is shell
+/// geometry, kept for the top edge of a bottom sheet.
 abstract final class GerfautRadius {
   static const double sm = 4;
   static const double md = 8;
   static const double lg = 12;
+  static const double canvas = 16;
   static const double full = 9999;
 }
 
@@ -68,6 +70,7 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
     required this.pendingSurface,
     required this.premium,
     required this.premiumSurface,
+    required this.shadowOverlay,
     required this.display,
     required this.h1,
     required this.h2,
@@ -129,6 +132,10 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
   /// Tinted surface behind [premium] content.
   final Color premiumSurface;
 
+  /// The one shadow: surfaces that really float, a menu or a modal. A
+  /// card never has one.
+  final BoxShadow shadowOverlay;
+
   // --- type scale ------------------------------------------------------
 
   /// 32px Bricolage 600.
@@ -186,6 +193,11 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
     pendingSurface: const Color(0xFFFDF0CF),
     premium: const Color(0xFF6D28D9),
     premiumSurface: const Color(0xFFF3EEFC),
+    shadowOverlay: const BoxShadow(
+      color: Color(0x240D1317),
+      offset: Offset(0, 8),
+      blurRadius: 24,
+    ),
     display: _display(const Color(0xFF0D1317)),
     h1: _h1(const Color(0xFF0D1317)),
     h2: _h2(const Color(0xFF0D1317)),
@@ -215,6 +227,11 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
     pendingSurface: const Color(0xFF161E27),
     premium: const Color(0xFFC4B5FD),
     premiumSurface: const Color(0xFF1F2933),
+    shadowOverlay: const BoxShadow(
+      color: Color(0x80000000),
+      offset: Offset(0, 8),
+      blurRadius: 24,
+    ),
     display: _display(const Color(0xFFE6ECF2)),
     h1: _h1(const Color(0xFFE6ECF2)),
     h2: _h2(const Color(0xFFE6ECF2)),
@@ -348,6 +365,7 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
     Color? pendingSurface,
     Color? premium,
     Color? premiumSurface,
+    BoxShadow? shadowOverlay,
     TextStyle? display,
     TextStyle? h1,
     TextStyle? h2,
@@ -375,6 +393,7 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
       pendingSurface: pendingSurface ?? this.pendingSurface,
       premium: premium ?? this.premium,
       premiumSurface: premiumSurface ?? this.premiumSurface,
+      shadowOverlay: shadowOverlay ?? this.shadowOverlay,
       display: display ?? this.display,
       h1: h1 ?? this.h1,
       h2: h2 ?? this.h2,
@@ -402,11 +421,16 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
       alert: Color.lerp(alert, other.alert, t)!,
       alertSurface: Color.lerp(alertSurface, other.alertSurface, t)!,
       confirmed: Color.lerp(confirmed, other.confirmed, t)!,
-      confirmedSurface: Color.lerp(confirmedSurface, other.confirmedSurface, t)!,
+      confirmedSurface: Color.lerp(
+        confirmedSurface,
+        other.confirmedSurface,
+        t,
+      )!,
       pending: Color.lerp(pending, other.pending, t)!,
       pendingSurface: Color.lerp(pendingSurface, other.pendingSurface, t)!,
       premium: Color.lerp(premium, other.premium, t)!,
       premiumSurface: Color.lerp(premiumSurface, other.premiumSurface, t)!,
+      shadowOverlay: BoxShadow.lerp(shadowOverlay, other.shadowOverlay, t)!,
       display: TextStyle.lerp(display, other.display, t)!,
       h1: TextStyle.lerp(h1, other.h1, t)!,
       h2: TextStyle.lerp(h2, other.h2, t)!,
