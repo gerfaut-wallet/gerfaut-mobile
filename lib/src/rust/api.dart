@@ -120,6 +120,37 @@ Future<String> publicServers({required String network}) =>
 Future<String> setAppPref({required String key, required String value}) =>
     RustLib.instance.api.crateApiSetAppPref(key: key, value: value);
 
+/// Decodes a transaction somebody else signed (PSBT as base64, hex or a
+/// binary file passed as hex; raw transaction as hex; a `ur:crypto-psbt`
+/// or BBQr envelope) and previews what it does on `network`. Returns a
+/// serialized `TxPreview`; nothing is signed, nothing is sent.
+Future<String> previewTransaction({
+  required String input,
+  required String network,
+}) => RustLib.instance.api.crateApiPreviewTransaction(
+  input: input,
+  network: network,
+);
+
+/// Hands a fully signed transaction (hex) to the backend of `network`.
+/// Returns a serialized `BroadcastReport`; a refusal comes back verbatim
+/// as the error message.
+Future<String> broadcastTransaction({
+  required String network,
+  required String hex,
+}) => RustLib.instance.api.crateApiBroadcastTransaction(
+  network: network,
+  hex: hex,
+);
+
+/// Where a broadcast transaction (hex) stands as the backend of
+/// `network` sees it. Returns a serialized `BroadcastStatus`.
+Future<String> transactionStatus({
+  required String network,
+  required String hex,
+}) =>
+    RustLib.instance.api.crateApiTransactionStatus(network: network, hex: hex);
+
 /// Fetches the current BTC price. `source` is one of `coingecko`,
 /// `kraken`, `mempool_space`; `currency` is one of the `FiatCurrency`
 /// identifiers. The source must quote the currency: only CoinGecko

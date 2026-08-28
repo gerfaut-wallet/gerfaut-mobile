@@ -341,6 +341,44 @@ pub async fn set_app_pref(key: String, value: String) -> String {
     }
 }
 
+// --- broadcast ---------------------------------------------------------
+
+/// Decodes a transaction somebody else signed (PSBT as base64, hex or a
+/// binary file passed as hex; raw transaction as hex; a `ur:crypto-psbt`
+/// or BBQr envelope) and previews what it does on `network`. Returns a
+/// serialized `TxPreview`; nothing is signed, nothing is sent.
+pub async fn preview_transaction(input: String, network: String) -> String {
+    let manager = try_json!(manager());
+    let network = try_json!(parse_network(&network));
+    match manager.preview_transaction(&input, network).await {
+        Ok(preview) => to_json(&preview),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Hands a fully signed transaction (hex) to the backend of `network`.
+/// Returns a serialized `BroadcastReport`; a refusal comes back verbatim
+/// as the error message.
+pub async fn broadcast_transaction(network: String, hex: String) -> String {
+    let manager = try_json!(manager());
+    let network = try_json!(parse_network(&network));
+    match manager.broadcast_transaction(network, &hex).await {
+        Ok(report) => to_json(&report),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Where a broadcast transaction (hex) stands as the backend of
+/// `network` sees it. Returns a serialized `BroadcastStatus`.
+pub async fn transaction_status(network: String, hex: String) -> String {
+    let manager = try_json!(manager());
+    let network = try_json!(parse_network(&network));
+    match manager.transaction_status(network, &hex).await {
+        Ok(status) => to_json(&status),
+        Err(e) => core_error_json(&e),
+    }
+}
+
 // --- price and updates -------------------------------------------------
 
 /// Parses one serde snake_case enum value from its string spelling.
