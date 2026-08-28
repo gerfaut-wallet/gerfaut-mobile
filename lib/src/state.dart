@@ -3,6 +3,7 @@
 // preferences and sync progress.
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -45,8 +46,11 @@ final utxosProvider = FutureProvider.family<List<UtxoInfo>, String>((ref, id) {
 });
 
 /// Detail of one transaction, keyed by wallet and txid.
-final txDetailProvider = FutureProvider
-    .family<TxDetail, ({String walletId, String txid})>((ref, key) {
+final txDetailProvider =
+    FutureProvider.family<TxDetail, ({String walletId, String txid})>((
+      ref,
+      key,
+    ) {
       return ref.watch(bridgeProvider).txDetail(key.walletId, key.txid);
     });
 
@@ -61,11 +65,11 @@ final addressListProvider = FutureProvider.family<AddressList, String>((
 /// The next unused receive address of one wallet, plus `lookahead`
 /// addresses peeked past it. The entry at index `lookahead` is the one
 /// on display; peeking retires nothing.
-final receiveProvider = FutureProvider
-    .family<List<AddressEntry>, ({String walletId, int lookahead})>((
-      ref,
-      key,
-    ) {
+final receiveProvider =
+    FutureProvider.family<
+      List<AddressEntry>,
+      ({String walletId, int lookahead})
+    >((ref, key) {
       return ref
           .watch(bridgeProvider)
           .receiveAddresses(key.walletId, key.lookahead);
@@ -284,6 +288,52 @@ class PriceNotifier extends AsyncNotifier<PriceQuote?> {
 final priceProvider = AsyncNotifierProvider<PriceNotifier, PriceQuote?>(
   PriceNotifier.new,
 );
+
+/// Most broadcasts kept for a later status check.
+const int recentBroadcastsCap = 10;
+
+/// The transactions this app sent, newest first, so the broadcast
+/// screen can check on them again after a restart. Persisted as JSON
+/// under "broadcast.recent", capped at [recentBroadcastsCap].
+class RecentBroadcastsNotifier extends Notifier<List<RecentBroadcast>> {
+  @override
+  List<RecentBroadcast> build() => const [];
+
+  void hydrate(String? stored) {
+    if (stored == null || stored.isEmpty) return;
+    try {
+      final decoded = jsonDecode(stored);
+      if (decoded is! List) return;
+      state = [
+        for (final entry in decoded)
+          if (entry is Map<String, dynamic>) RecentBroadcast.fromJson(entry),
+      ];
+    } on FormatException {
+      // A preference this build cannot read is left alone: the next
+      // broadcast rewrites it.
+    }
+  }
+
+  /// Records a broadcast, replacing an earlier entry with the same txid.
+  void add(RecentBroadcast broadcast) {
+    state = [
+      broadcast,
+      ...state.where((b) => b.txid != broadcast.txid),
+    ].take(recentBroadcastsCap).toList();
+    ref
+        .read(bridgeProvider)
+        .setAppPref(
+          'broadcast.recent',
+          jsonEncode([for (final b in state) b.toJson()]),
+        )
+        .catchError((_) {});
+  }
+}
+
+final recentBroadcastsProvider =
+    NotifierProvider<RecentBroadcastsNotifier, List<RecentBroadcast>>(
+      RecentBroadcastsNotifier.new,
+    );
 
 /// One-shot guards: prefs hydration and the startup auto-sync.
 final prefsHydratedProvider = StateProvider<bool>((ref) => false);

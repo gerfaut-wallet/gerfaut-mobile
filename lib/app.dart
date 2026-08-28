@@ -45,6 +45,9 @@ class _GerfautAppState extends ConsumerState<GerfautApp> {
         ref
             .read(explorerAckProvider.notifier)
             .hydrate(prefs['privacy.explorer_ack']);
+        ref
+            .read(recentBroadcastsProvider.notifier)
+            .hydrate(prefs['broadcast.recent']);
       }
     });
 
