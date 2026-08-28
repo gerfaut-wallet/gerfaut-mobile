@@ -646,10 +646,10 @@ void main() {
 
       // Checked over the endpoint the backend is about to use.
       expect(bridge.inspectedCertificates, ['ssl://node.local:50002']);
-      expect(find.text('Trust this certificate?'), findsOneWidget);
+      expect(find.text('This server signs its own certificate'), findsOneWidget);
       expect(
         find.textContaining(
-          'No public authority vouches for the certificate node.local:50002',
+          'No public authority vouches for the certificate of node.local:50002',
         ),
         findsOneWidget,
       );
@@ -664,12 +664,12 @@ void main() {
       // What the certificate says about itself, and why nothing vouches.
       expect(
         find.text(
-          'Reason: self-signed, or signed by an authority this machine '
-          'does not know',
+          'Why it is asked: self-signed, or signed by an authority this '
+          'machine does not know',
         ),
         findsOneWidget,
       );
-      expect(find.text('Issued to: CN=node.local'), findsOneWidget);
+      expect(find.text('Subject: CN=node.local'), findsOneWidget);
       expect(
         find.text('Valid until: ${formatTimestamp(1893456000)}'),
         findsOneWidget,
@@ -696,7 +696,7 @@ void main() {
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Trust this certificate?'), findsNothing);
+      expect(find.text('This server signs its own certificate'), findsNothing);
       expect(bridge.trustedCertificates, isEmpty);
       expect(bridge.savedBackends, isEmpty);
       expect(bridge.settings.electrumCerts, isEmpty);
@@ -711,7 +711,7 @@ void main() {
       await tester.pumpAndSettle();
       await save(tester);
 
-      await tester.tap(find.text('Accept and remember'));
+      await tester.tap(find.text('Accept and save'));
       await tester.pumpAndSettle();
 
       expect(bridge.trustedCertificates, [
@@ -737,7 +737,7 @@ void main() {
       await tester.pumpAndSettle();
       await save(tester);
 
-      expect(find.text('Trust this certificate?'), findsNothing);
+      expect(find.text('This server signs its own certificate'), findsNothing);
       expect(bridge.trustedCertificates, isEmpty);
       expect(bridge.savedBackends[Network.mainnet], isA<CustomElectrum>());
     });
@@ -798,7 +798,7 @@ void main() {
       await tester.pumpAndSettle();
       await save(tester);
 
-      expect(find.text('This certificate changed'), findsOneWidget);
+      expect(find.text("This server's certificate changed"), findsOneWidget);
       expect(
         find.textContaining(
           'node.local:50002 was accepted with one certificate and now '

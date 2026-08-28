@@ -1627,7 +1627,7 @@ class _UnknownCertificateDialog extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(GerfautRadius.lg),
       ),
-      title: Text('Trust this certificate?', style: tokens.h2),
+      title: Text('This server signs its own certificate', style: tokens.h2),
       content: SizedBox(
         width: double.maxFinite,
         child: SingleChildScrollView(
@@ -1636,10 +1636,10 @@ class _UnknownCertificateDialog extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'No public authority vouches for the certificate $host '
-                'presents. Most Electrum servers sign their own, so this '
-                'alone is not alarming: the fingerprint is what identifies '
-                'the server.',
+                'No public authority vouches for the certificate of $host. '
+                'Compare the fingerprint below with the one your server '
+                'shows, then accept it once: Gerfaut remembers it and '
+                'refuses anything else afterwards.',
                 style: tokens.bodySmall,
               ),
               const SizedBox(height: GerfautSpacing.md),
@@ -1647,14 +1647,17 @@ class _UnknownCertificateDialog extends StatelessWidget {
                 label: 'SHA-256 fingerprint',
                 fingerprint: status.fingerprint,
               ),
-              _CertificateFact(label: 'Reason', value: status.reason),
               if (subject != null)
-                _CertificateFact(label: 'Issued to', value: subject),
+                _CertificateFact(label: 'Subject', value: subject),
               if (expires != null)
                 _CertificateFact(
                   label: 'Valid until',
                   value: formatTimestamp(expires),
                 ),
+              _CertificateFact(
+                label: 'Why it is asked',
+                value: status.reason,
+              ),
               const SizedBox(height: GerfautSpacing.md),
               Text(
                 'On the machine that runs the server, this prints the same '
@@ -1691,7 +1694,7 @@ class _UnknownCertificateDialog extends StatelessWidget {
           child: const Text('Cancel'),
         ),
         PrimaryButton(
-          label: 'Accept and remember',
+          label: 'Accept and save',
           onPressed: () => Navigator.of(context).pop(true),
         ),
       ],
@@ -1726,7 +1729,7 @@ class _ChangedCertificateDialogState extends State<_ChangedCertificateDialog> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(GerfautRadius.lg),
       ),
-      title: Text('This certificate changed', style: tokens.h2),
+      title: Text("This server's certificate changed", style: tokens.h2),
       content: SizedBox(
         width: double.maxFinite,
         child: SingleChildScrollView(
