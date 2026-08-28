@@ -34,6 +34,8 @@ migrate_working_dir/
 .pub/
 /build/
 /android/build/
+# Kotlin compiler session files, written on every Gradle run.
+/android/.kotlin/
 
 # Symbolication related
 app.*.symbols
