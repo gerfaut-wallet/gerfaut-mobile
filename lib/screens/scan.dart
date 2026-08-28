@@ -15,7 +15,23 @@ typedef CameraBuilder = Widget Function(ValueChanged<String> onFrame);
 /// UR or BBQr envelope animated over several frames) and pops with the
 /// assembled text; the caller feeds it to the input classifier.
 class ScanScreen extends ConsumerStatefulWidget {
-  const ScanScreen({super.key, @visibleForTesting this.cameraBuilder});
+  const ScanScreen({
+    super.key,
+    this.caption = walletCaption,
+    @visibleForTesting this.cameraBuilder,
+  });
+
+  /// What the scanner expects, shown under the camera.
+  static const String walletCaption =
+      'Point the camera at a descriptor, extended public key, or address '
+      'QR code: plain text, UR, or BBQr, animated or not.';
+
+  /// The caption for a signed transaction or PSBT.
+  static const String transactionCaption =
+      'Point the camera at a signed transaction or PSBT QR code: '
+      'crypto-psbt UR or BBQr, animated or not.';
+
+  final String caption;
 
   /// Replaces the camera view; tests use it to push frames by hand.
   final CameraBuilder? cameraBuilder;
@@ -132,10 +148,7 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
             Padding(
               padding: const EdgeInsets.all(GerfautSpacing.md),
               child: Text(
-                _error ??
-                    'Point the camera at a descriptor, extended public key, '
-                        'or address QR code: plain text, UR, or BBQr, '
-                        'animated or not.',
+                _error ?? widget.caption,
                 style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                 textAlign: TextAlign.center,
               ),
