@@ -121,11 +121,17 @@ PublicServer _esplora(String host, String url) => PublicServer(
   url: url,
 );
 
-PublicServer _electrum(String host, String label, String url) => PublicServer(
+PublicServer _electrum(
+  String host,
+  String label,
+  String url, {
+  bool selfSigned = false,
+}) => PublicServer(
   id: 'electrum:$host',
   label: label,
   protocol: ServerProtocol.electrum,
   url: url,
+  selfSigned: selfSigned,
 );
 
 /// The catalogue gerfaut-core publishes, network by network: the public
@@ -155,6 +161,31 @@ final Map<Network, List<PublicServer>> defaultPublicServers = {
       'frigate.2140.dev',
       'frigate.2140.dev:50002',
       'ssl://frigate.2140.dev:50002',
+    ),
+    // The rest of Sparrow's list; these four sign their own certificate.
+    _electrum(
+      'bitcoin.lu.ke',
+      'bitcoin.lu.ke:50002',
+      'ssl://bitcoin.lu.ke:50002',
+      selfSigned: true,
+    ),
+    _electrum(
+      'electrum.emzy.de',
+      'electrum.emzy.de:50002',
+      'ssl://electrum.emzy.de:50002',
+      selfSigned: true,
+    ),
+    _electrum(
+      'electrum.bitaroo.net',
+      'electrum.bitaroo.net:50002',
+      'ssl://electrum.bitaroo.net:50002',
+      selfSigned: true,
+    ),
+    _electrum(
+      'fulcrum.sethforprivacy.com',
+      'fulcrum.sethforprivacy.com:50002',
+      'ssl://fulcrum.sethforprivacy.com:50002',
+      selfSigned: true,
     ),
   ],
   Network.signet: [

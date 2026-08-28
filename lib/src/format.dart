@@ -46,6 +46,19 @@ String truncateMiddle(String value, {int head = 6, int tail = 4}) {
   return '${value.substring(0, head)}...${value.substring(value.length - tail)}';
 }
 
+/// A certificate fingerprint in rows two eyes can compare: eight byte
+/// pairs a line, the colons the core stores kept, so what is on screen
+/// is what `openssl x509 -noout -fingerprint -sha256` prints.
+String groupFingerprint(String fingerprint) {
+  final pairs = fingerprint.split(':');
+  final lines = <String>[];
+  for (var i = 0; i < pairs.length; i += 8) {
+    final end = i + 8 < pairs.length ? i + 8 : pairs.length;
+    lines.add(pairs.sublist(i, end).join(':'));
+  }
+  return lines.join('\n');
+}
+
 /// Preview text for an OP_RETURN payload: the recognized protocol name
 /// when there is one, then the decoded text, then a short hex excerpt.
 /// Kept short on purpose so a row never pushes its amount out of view.

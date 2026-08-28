@@ -6,9 +6,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/settings.dart';
 import 'package:gerfaut/src/bridge.dart';
+import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/buttons.dart';
 import 'package:gerfaut/widgets/select_field.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -29,6 +31,22 @@ void useTallSurface(WidgetTester tester) {
   tester.view.physicalSize = const Size(800, 3600);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
+}
+
+/// Two made-up SHA-256 fingerprints, in the shape the core stores them:
+/// thirty-two uppercase hex pairs joined by colons.
+const String _fingerprint =
+    '4B:CD:74:1F:2A:39:58:67:76:85:94:A3:B2:C1:D0:EF:'
+    '0E:1D:2C:3B:4A:59:68:77:86:95:A4:B3:C2:D1:E0:FF';
+const String _otherFingerprint =
+    'AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:'
+    '99:88:77:66:55:44:33:22:11:00:FF:EE:DD:CC:BB:AA';
+
+/// The public server picker, for the options it offers.
+GerfautSelect<String?> serverField(WidgetTester tester) {
+  return tester.widget<GerfautSelect<String?>>(
+    find.byType(GerfautSelect<String?>),
+  );
 }
 
 void main() {
@@ -407,16 +425,21 @@ void main() {
       await tester.pumpWidget(settingsApp(FakeBridge()));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(GerfautSelect<String?>));
-      await tester.pumpAndSettle();
-
-      // The seven mainnet servers, each labelled with its host.
-      for (final server in defaultPublicServers[Network.mainnet]!) {
-        expect(find.text(server.label), findsOneWidget);
-      }
-      // Three Esplora instances, four Electrum servers, each marked.
-      expect(find.text('Esplora'), findsNWidgets(3));
-      expect(find.text('Electrum'), findsNWidgets(4));
+      final items = serverField(tester).items;
+      // The automatic rotation, then every mainnet server the core
+      // lists, in its order, each labelled with its host.
+      expect(items.first.title, 'Automatic');
+      expect(items.first.value, isNull);
+      expect(
+        items.skip(1).map((item) => item.title).toList(),
+        defaultPublicServers[Network.mainnet]!.map((s) => s.label).toList(),
+      );
+      // Three Esplora instances, eight Electrum servers, each marked.
+      expect(items.where((i) => i.subtitle == 'Esplora'), hasLength(3));
+      expect(
+        items.where((i) => i.subtitle?.startsWith('Electrum') ?? false),
+        hasLength(8),
+      );
     });
 
     testWidgets('choosing a server stores its identifier', (tester) async {
@@ -527,6 +550,38 @@ void main() {
       );
     });
 
+    testWidgets('a self-signed server says so before it is picked', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge();
+      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpAndSettle();
+
+      final items = serverField(tester).items;
+      final selfSigned = items.firstWhere(
+        (item) => item.title == 'bitcoin.lu.ke:50002',
+      );
+      expect(selfSigned.subtitle, 'Electrum · signs its own certificate');
+      // A server a public authority vouches for says nothing more.
+      expect(
+        items.firstWhere((i) => i.title == 'frigate.2140.dev:50002').subtitle,
+        'Electrum',
+      );
+
+      // Picked, it repeats it under the field: the hint line closes
+      // with the menu.
+      serverField(tester).onChanged('electrum:bitcoin.lu.ke');
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'This server signs its own certificate. Gerfaut shows you its '
+          'fingerprint before it connects.',
+        ),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('an unreachable catalogue degrades to a quiet line', (
       tester,
     ) async {
@@ -547,6 +602,326 @@ void main() {
       await tester.tap(find.text('Save backend'));
       await tester.pumpAndSettle();
       expect(bridge.savedBackends[Network.mainnet], isA<PublicEsplora>());
+    });
+  });
+
+  group('electrum certificates', () {
+    /// A workspace already pointed at a self-hosted Electrum server, so
+    /// saving the backend is one tap.
+    FakeBridge ownElectrum({Map<String, String> certs = const {}}) {
+      return FakeBridge(
+        settings: Settings(
+          activeNetwork: Network.mainnet,
+          backends: const {
+            Network.mainnet: CustomElectrum(url: 'ssl://node.local:50002'),
+          },
+          appPrefs: const {},
+          electrumCerts: certs,
+        ),
+      );
+    }
+
+    Future<void> save(WidgetTester tester) async {
+      await tester.tap(find.text('Save backend'));
+      await tester.pumpAndSettle();
+    }
+
+    const unknown = UnknownCertificate(
+      fingerprint: _fingerprint,
+      reason: 'self-signed, or signed by an authority this machine does '
+          'not know',
+      subject: 'CN=node.local',
+      expires: 1893456000,
+    );
+
+    testWidgets('an unvouched certificate is shown before anything is saved', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = ownElectrum();
+      bridge.onInspectCertificate = (_) => unknown;
+      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpAndSettle();
+      await save(tester);
+
+      // Checked over the endpoint the backend is about to use.
+      expect(bridge.inspectedCertificates, ['ssl://node.local:50002']);
+      expect(find.text('Trust this certificate?'), findsOneWidget);
+      expect(
+        find.textContaining(
+          'No public authority vouches for the certificate node.local:50002',
+        ),
+        findsOneWidget,
+      );
+
+      // The fingerprint, in mono, in rows of eight byte pairs.
+      final digits = tester.widget<Text>(
+        find.text(groupFingerprint(_fingerprint)),
+      );
+      expect(digits.style!.fontFamily, GerfautTokens.light.data.fontFamily);
+      expect(groupFingerprint(_fingerprint).split('\n'), hasLength(4));
+
+      // What the certificate says about itself, and why nothing vouches.
+      expect(
+        find.text(
+          'Reason: self-signed, or signed by an authority this machine '
+          'does not know',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Issued to: CN=node.local'), findsOneWidget);
+      expect(
+        find.text('Valid until: ${formatTimestamp(1893456000)}'),
+        findsOneWidget,
+      );
+      // And how to read the same string off the server itself.
+      expect(
+        find.text('openssl x509 -noout -fingerprint -sha256 -in <cert>'),
+        findsOneWidget,
+      );
+
+      // Nothing is decided yet.
+      expect(bridge.trustedCertificates, isEmpty);
+      expect(bridge.savedBackends, isEmpty);
+    });
+
+    testWidgets('cancelling trusts nothing and saves nothing', (tester) async {
+      useTallSurface(tester);
+      final bridge = ownElectrum();
+      bridge.onInspectCertificate = (_) => unknown;
+      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpAndSettle();
+      await save(tester);
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Trust this certificate?'), findsNothing);
+      expect(bridge.trustedCertificates, isEmpty);
+      expect(bridge.savedBackends, isEmpty);
+      expect(bridge.settings.electrumCerts, isEmpty);
+      expect(find.text('Trusted certificates'), findsNothing);
+    });
+
+    testWidgets('accepting records the fingerprint, then saves', (tester) async {
+      useTallSurface(tester);
+      final bridge = ownElectrum();
+      bridge.onInspectCertificate = (_) => unknown;
+      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpAndSettle();
+      await save(tester);
+
+      await tester.tap(find.text('Accept and remember'));
+      await tester.pumpAndSettle();
+
+      expect(bridge.trustedCertificates, [
+        (url: 'ssl://node.local:50002', fingerprint: _fingerprint),
+      ]);
+      expect(
+        (bridge.savedBackends[Network.mainnet]! as CustomElectrum).url,
+        'ssl://node.local:50002',
+      );
+      // Recorded against the socket, and listed from there on.
+      expect(bridge.settings.electrumCerts, {
+        'node.local:50002': _fingerprint,
+      });
+      expect(find.text('Trusted certificates'), findsOneWidget);
+    });
+
+    testWidgets('a certificate a public authority vouches for asks nothing', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = ownElectrum();
+      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpAndSettle();
+      await save(tester);
+
+      expect(find.text('Trust this certificate?'), findsNothing);
+      expect(bridge.trustedCertificates, isEmpty);
+      expect(bridge.savedBackends[Network.mainnet], isA<CustomElectrum>());
+    });
+
+    testWidgets('a plain TCP server is saved, and said so calmly', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = ownElectrum();
+      bridge.onInspectCertificate = (_) => const NotTlsCertificate();
+      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpAndSettle();
+      await save(tester);
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(bridge.savedBackends[Network.mainnet], isA<CustomElectrum>());
+      expect(
+        find.text(
+          'Plain TCP, no certificate: what Gerfaut asks this server and '
+          'what it answers travel in the clear.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a server that does not answer is saved anyway', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = ownElectrum();
+      bridge.onInspectCertificate = (_) =>
+          const UnreachableCertificate(detail: 'connection refused');
+      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpAndSettle();
+      await save(tester);
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(bridge.savedBackends[Network.mainnet], isA<CustomElectrum>());
+      expect(
+        find.textContaining('its certificate could not be checked yet'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a changed certificate is refused, and never by default', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = ownElectrum(certs: const {'node.local:50002': _fingerprint});
+      bridge.onInspectCertificate = (_) => const ChangedCertificate(
+        stored: _fingerprint,
+        presented: _otherFingerprint,
+      );
+      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpAndSettle();
+      await save(tester);
+
+      expect(find.text('This certificate changed'), findsOneWidget);
+      expect(
+        find.textContaining(
+          'node.local:50002 was accepted with one certificate and now '
+          'presents another',
+        ),
+        findsOneWidget,
+      );
+      // Both fingerprints, side by side, so the difference is visible.
+      expect(find.text('ACCEPTED BEFORE'), findsOneWidget);
+      expect(find.text('PRESENTED NOW'), findsOneWidget);
+      expect(find.text(groupFingerprint(_otherFingerprint)), findsOneWidget);
+      // Backing out is the prominent action, trusting is not.
+      expect(find.widgetWithText(PrimaryButton, 'Cancel'), findsOneWidget);
+      expect(
+        find.widgetWithText(PrimaryButton, 'Trust the new certificate'),
+        findsNothing,
+      );
+
+      // One tap accepts nothing: it only asks again, in so many words.
+      await tester.tap(find.text('Trust the new certificate'));
+      await tester.pumpAndSettle();
+      expect(bridge.trustedCertificates, isEmpty);
+      expect(
+        find.textContaining('Do it only if you know why it changed.'),
+        findsOneWidget,
+      );
+
+      // Backing out at the second step leaves everything as it was.
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(bridge.trustedCertificates, isEmpty);
+      expect(bridge.savedBackends, isEmpty);
+      expect(bridge.settings.electrumCerts, {
+        'node.local:50002': _fingerprint,
+      });
+    });
+
+    testWidgets('the new certificate is taken only after two deliberate taps', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = ownElectrum(certs: const {'node.local:50002': _fingerprint});
+      bridge.onInspectCertificate = (_) => const ChangedCertificate(
+        stored: _fingerprint,
+        presented: _otherFingerprint,
+      );
+      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpAndSettle();
+      await save(tester);
+
+      await tester.tap(find.text('Trust the new certificate'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Trust it anyway'));
+      await tester.pumpAndSettle();
+
+      expect(bridge.trustedCertificates, [
+        (url: 'ssl://node.local:50002', fingerprint: _otherFingerprint),
+      ]);
+      expect(bridge.savedBackends[Network.mainnet], isA<CustomElectrum>());
+      expect(bridge.settings.electrumCerts, {
+        'node.local:50002': _otherFingerprint,
+      });
+    });
+
+    testWidgets('accepted certificates are listed, and forgotten on request', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = ownElectrum(certs: const {'node.local:50002': _fingerprint});
+      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Trusted certificates'), findsOneWidget);
+      expect(find.text('node.local:50002'), findsOneWidget);
+      expect(find.text(groupFingerprint(_fingerprint)), findsOneWidget);
+
+      // Forgetting asks first.
+      await tester.tap(find.text('Forget'));
+      await tester.pumpAndSettle();
+      expect(bridge.forgottenCertificates, isEmpty);
+      expect(
+        find.text(
+          'Gerfaut asks again the next time it connects to node.local:50002.',
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(bridge.forgottenCertificates, isEmpty);
+      expect(bridge.settings.electrumCerts, isNotEmpty);
+
+      await tester.tap(find.text('Forget'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Forget certificate'));
+      await tester.pumpAndSettle();
+
+      expect(bridge.forgottenCertificates, ['node.local:50002']);
+      expect(bridge.settings.electrumCerts, isEmpty);
+      // The section goes with the last certificate it listed.
+      expect(find.text('Trusted certificates'), findsNothing);
+    });
+
+    testWidgets('only a server with a certificate of its own is inspected', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge();
+      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpAndSettle();
+
+      // A public Esplora is reached over the web PKI like any web site.
+      await save(tester);
+      expect(bridge.inspectedCertificates, isEmpty);
+
+      // So is an Electrum server a public authority vouches for.
+      serverField(tester).onChanged('electrum:frigate.2140.dev');
+      await tester.pumpAndSettle();
+      await save(tester);
+      expect(bridge.inspectedCertificates, isEmpty);
+
+      // One that signs its own is checked before anything is saved.
+      serverField(tester).onChanged('electrum:bitcoin.lu.ke');
+      await tester.pumpAndSettle();
+      await save(tester);
+      expect(bridge.inspectedCertificates, ['ssl://bitcoin.lu.ke:50002']);
     });
   });
 }
