@@ -119,20 +119,29 @@ class _Detail extends ConsumerWidget {
               tokens: tokens,
               child:
                   summary.status.confirmed && summary.status.timestamp != null
-                  ? FactValue(formatTimestamp(summary.status.timestamp!), tokens)
+                  ? FactValue(
+                      formatTimestamp(summary.status.timestamp!),
+                      tokens,
+                    )
                   : FactValue('not yet mined', tokens, muted: true),
             ),
             FactRow(
               label: 'Block',
               tokens: tokens,
               child: summary.status.confirmed
-                  ? FactValue(groupThousands('${summary.status.height}'), tokens)
+                  ? FactValue(
+                      groupThousands('${summary.status.height}'),
+                      tokens,
+                    )
                   : FactValue('—', tokens, muted: true),
             ),
             FactRow(
               label: 'Confirmations',
               tokens: tokens,
-              child: FactValue(groupThousands('${summary.confirmations}'), tokens),
+              child: FactValue(
+                groupThousands('${summary.confirmations}'),
+                tokens,
+              ),
             ),
             FactRow(
               label: 'Fee',
@@ -193,13 +202,19 @@ class _Detail extends ConsumerWidget {
                     label: 'Locktime',
                     tokens: tokens,
                     child: extras.locktime > 0
-                        ? FactValue(groupThousands('${extras.locktime}'), tokens)
+                        ? FactValue(
+                            groupThousands('${extras.locktime}'),
+                            tokens,
+                          )
                         : FactValue('none', tokens, muted: true),
                   ),
                   FactRow(
                     label: 'Sigops',
                     tokens: tokens,
-                    child: FactValue(groupThousands('${extras.sigops}'), tokens),
+                    child: FactValue(
+                      groupThousands('${extras.sigops}'),
+                      tokens,
+                    ),
                   ),
                   FactRow(
                     label: 'Flags',
