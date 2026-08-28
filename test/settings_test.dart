@@ -9,6 +9,7 @@ import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/select_field.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'fakes.dart';
@@ -223,9 +224,9 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    DropdownButton<FiatCurrency> currencyField(WidgetTester tester) {
-      return tester.widget<DropdownButton<FiatCurrency>>(
-        find.byType(DropdownButton<FiatCurrency>),
+    GerfautSelect<FiatCurrency> currencyField(WidgetTester tester) {
+      return tester.widget<GerfautSelect<FiatCurrency>>(
+        find.byType(GerfautSelect<FiatCurrency>),
       );
     }
 
@@ -243,19 +244,18 @@ void main() {
       await tester.pumpAndSettle();
       await enableFiat(tester);
 
-      final items = currencyField(tester).items!;
-      // Thirty currencies, in the core's order, plus one header each
-      // for the group they belong to.
-      expect(
-        items.where((item) => item.value != null).map((item) => item.value),
-        FiatCurrency.values,
-      );
-      final headers = items.where((item) => !item.enabled).toList();
-      expect(headers, hasLength(2));
-      expect(items.first, headers.first);
-      // The seven every source quotes come first, then the header of
-      // the ones CoinGecko alone serves.
-      expect(items[8], headers.last);
+      final groups = currencyField(tester).groups;
+      // Thirty currencies, in the core's order, in two named groups.
+      expect(groups, hasLength(2));
+      expect([
+        for (final group in groups) ...group.items.map((i) => i.value),
+      ], FiatCurrency.values);
+      // The seven every source quotes come first, then the ones
+      // CoinGecko alone serves.
+      expect(groups.first.label, 'Every source');
+      expect(groups.first.items, hasLength(7));
+      expect(groups.last.label, 'CoinGecko only');
+      expect(groups.last.items, hasLength(23));
     });
 
     testWidgets('the currency list reads group by group', (tester) async {
@@ -264,7 +264,7 @@ void main() {
       await tester.pumpAndSettle();
       await enableFiat(tester);
 
-      await tester.tap(find.byType(DropdownButton<FiatCurrency>));
+      await tester.tap(find.byType(GerfautSelect<FiatCurrency>));
       await tester.pumpAndSettle();
 
       expect(find.text('EVERY SOURCE'), findsOneWidget);
@@ -288,7 +288,7 @@ void main() {
       await tester.pumpAndSettle();
       await enableFiat(tester);
 
-      await tester.tap(find.byType(DropdownButton<FiatCurrency>));
+      await tester.tap(find.byType(GerfautSelect<FiatCurrency>));
       await tester.pumpAndSettle();
       await tester.tap(find.text('US dollar'));
       await tester.pumpAndSettle();
@@ -311,7 +311,7 @@ void main() {
       expect(bridge.appPrefs['display.fiat_source'], 'kraken');
       expect(sourcePill(tester, 'mempool.space').onTap, isNotNull);
 
-      currencyField(tester).onChanged!(FiatCurrency.ngn);
+      currencyField(tester).onChanged(FiatCurrency.ngn);
       await tester.pumpAndSettle();
 
       expect(bridge.appPrefs['display.fiat_currency'], 'ngn');
@@ -331,7 +331,7 @@ void main() {
       );
 
       // Back to a currency everyone quotes: the sources return.
-      currencyField(tester).onChanged!(FiatCurrency.chf);
+      currencyField(tester).onChanged(FiatCurrency.chf);
       await tester.pumpAndSettle();
       expect(sourcePill(tester, 'Kraken').onTap, isNotNull);
       expect(find.textContaining('the only source that quotes'), findsNothing);
@@ -365,7 +365,7 @@ void main() {
       await tester.pumpAndSettle();
       await enableFiat(tester);
 
-      currencyField(tester).onChanged!(FiatCurrency.krw);
+      currencyField(tester).onChanged(FiatCurrency.krw);
       await tester.pumpAndSettle();
 
       final kraken = tester.getSemantics(find.text('Kraken'));
@@ -407,7 +407,7 @@ void main() {
       await tester.pumpWidget(settingsApp(FakeBridge()));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(DropdownButton<String?>));
+      await tester.tap(find.byType(GerfautSelect<String?>));
       await tester.pumpAndSettle();
 
       // The seven mainnet servers, each labelled with its host.
@@ -425,7 +425,7 @@ void main() {
       await tester.pumpWidget(settingsApp(bridge));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(DropdownButton<String?>));
+      await tester.tap(find.byType(GerfautSelect<String?>));
       await tester.pumpAndSettle();
       await tester.tap(find.text('blockstream.info').last);
       await tester.pumpAndSettle();
@@ -452,10 +452,10 @@ void main() {
         findsNothing,
       );
 
-      final dropdown = tester.widget<DropdownButton<String?>>(
-        find.byType(DropdownButton<String?>),
+      final field = tester.widget<GerfautSelect<String?>>(
+        find.byType(GerfautSelect<String?>),
       );
-      dropdown.onChanged!('electrum:frigate.2140.dev');
+      field.onChanged('electrum:frigate.2140.dev');
       await tester.pumpAndSettle();
 
       expect(
@@ -489,9 +489,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        tester.widget<DropdownButton<String?>>(
-          find.byType(DropdownButton<String?>),
-        ).value,
+        tester
+            .widget<GerfautSelect<String?>>(find.byType(GerfautSelect<String?>))
+            .value,
         'blockstream.info',
       );
 
@@ -499,9 +499,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        tester.widget<DropdownButton<String?>>(
-          find.byType(DropdownButton<String?>),
-        ).value,
+        tester
+            .widget<GerfautSelect<String?>>(find.byType(GerfautSelect<String?>))
+            .value,
         'mempool.emzy.de',
       );
       // Signet has no frigate.2140.dev: the list follows the network.
@@ -520,8 +520,11 @@ void main() {
       await tester.pumpWidget(settingsApp(bridge));
       await tester.pumpAndSettle();
 
-      expect(find.byType(DropdownButton<String?>), findsNothing);
-      expect(find.textContaining('No public server exists on Regtest'), findsOneWidget);
+      expect(find.byType(GerfautSelect<String?>), findsNothing);
+      expect(
+        find.textContaining('No public server exists on Regtest'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('an unreachable catalogue degrades to a quiet line', (
@@ -535,8 +538,11 @@ void main() {
       await tester.pumpWidget(settingsApp(bridge));
       await tester.pumpAndSettle();
 
-      expect(find.byType(DropdownButton<String?>), findsNothing);
-      expect(find.textContaining('The server list is unavailable'), findsOneWidget);
+      expect(find.byType(GerfautSelect<String?>), findsNothing);
+      expect(
+        find.textContaining('The server list is unavailable'),
+        findsOneWidget,
+      );
       // The backend still saves: automatic is the fallback anyway.
       await tester.tap(find.text('Save backend'));
       await tester.pumpAndSettle();

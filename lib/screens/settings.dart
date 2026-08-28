@@ -10,6 +10,7 @@ import '../src/models.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
+import '../widgets/select_field.dart';
 
 /// Application version shown in About. Kept in step with pubspec.yaml.
 const String appVersion = '0.1.0';
@@ -942,48 +943,25 @@ class _PublicServerField extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Semantics(
-          container: true,
+        GerfautSelect<String?>.items(
           label: 'Public server',
-          child: Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: GerfautSpacing.sm + GerfautSpacing.xs,
+          value: chosen?.id,
+          items: [
+            const GerfautSelectItem<String?>(
+              value: null,
+              title: 'Automatic',
+              subtitle: 'Rotates over every public Esplora.',
             ),
-            decoration: BoxDecoration(
-              color: tokens.surfaceSunken,
-              borderRadius: BorderRadius.circular(GerfautRadius.sm),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String?>(
-                isExpanded: true,
-                // Items carry two lines, so they size themselves.
-                itemHeight: null,
-                padding: const EdgeInsets.symmetric(
-                  vertical: GerfautSpacing.sm,
-                ),
-                borderRadius: BorderRadius.circular(GerfautRadius.md),
-                dropdownColor: tokens.surface,
-                icon: Icon(
-                  LucideIcons.chevronDown,
-                  size: 18,
-                  color: tokens.textMuted,
-                ),
-                value: chosen?.id,
-                onChanged: onChanged,
-                items: [
-                  DropdownMenuItem<String?>(
-                    value: null,
-                    child: _ServerEntry(tokens: tokens),
-                  ),
-                  for (final server in servers)
-                    DropdownMenuItem<String?>(
-                      value: server.id,
-                      child: _ServerEntry(tokens: tokens, server: server),
-                    ),
-                ],
+            for (final server in servers)
+              // A host is an identifier: mono, never cut at the end.
+              GerfautSelectItem<String?>(
+                value: server.id,
+                title: server.label,
+                subtitle: server.protocol.label,
+                mono: true,
               ),
-            ),
-          ),
+          ],
+          onChanged: onChanged,
         ),
         if (chosen?.protocol == ServerProtocol.electrum) ...[
           const SizedBox(height: GerfautSpacing.sm),
@@ -992,42 +970,6 @@ class _PublicServerField extends ConsumerWidget {
             style: tokens.bodySmall.copyWith(color: tokens.pending),
           ),
         ],
-      ],
-    );
-  }
-}
-
-/// One line of the public server list: the host, then what it speaks.
-class _ServerEntry extends StatelessWidget {
-  const _ServerEntry({required this.tokens, this.server});
-
-  final GerfautTokens tokens;
-
-  /// Null for the automatic rotation, the first entry of the list.
-  final PublicServer? server;
-
-  @override
-  Widget build(BuildContext context) {
-    final entry = server;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (entry == null)
-          Text('Automatic', style: tokens.body)
-        else
-          // A host is an identifier: mono, and never cut at the end.
-          Text(
-            entry.label,
-            maxLines: 1,
-            style: tokens.data.copyWith(fontSize: 14),
-          ),
-        Text(
-          entry == null
-              ? 'Rotates over every public Esplora.'
-              : entry.protocol.label,
-          style: tokens.label.copyWith(color: tokens.textMuted),
-        ),
       ],
     );
   }
@@ -1043,120 +985,30 @@ class _CurrencyField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    return Semantics(
-      container: true,
+    return GerfautSelect<FiatCurrency>(
       label: 'Display currency',
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: GerfautSpacing.sm + GerfautSpacing.xs,
-        ),
-        decoration: BoxDecoration(
-          color: tokens.surfaceSunken,
-          borderRadius: BorderRadius.circular(GerfautRadius.sm),
-        ),
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<FiatCurrency>(
-            isExpanded: true,
-            // Group headers are shorter than the entries around them.
-            itemHeight: null,
-            padding: const EdgeInsets.symmetric(vertical: GerfautSpacing.sm),
-            borderRadius: BorderRadius.circular(GerfautRadius.md),
-            dropdownColor: tokens.surface,
-            // Thirty entries: the list scrolls rather than filling a
-            // phone from edge to edge.
-            menuMaxHeight: 360,
-            icon: Icon(
-              LucideIcons.chevronDown,
-              size: 18,
-              color: tokens.textMuted,
-            ),
-            value: selected,
-            onChanged: (value) {
-              if (value != null) onChanged(value);
-            },
+      value: selected,
+      groups: [
+        for (final reach in CurrencyReach.values)
+          GerfautSelectGroup(
+            label: reach == CurrencyReach.every
+                ? 'Every source'
+                : 'CoinGecko only',
             items: [
-              for (final reach in CurrencyReach.values) ...[
-                DropdownMenuItem<FiatCurrency>(
-                  enabled: false,
-                  child: _CurrencyGroup(tokens: tokens, reach: reach),
+              for (final currency in FiatCurrency.values.where(
+                (c) => c.reach == reach,
+              ))
+                // The ISO code, then its name so thirty codes stay
+                // readable.
+                GerfautSelectItem(
+                  value: currency,
+                  title: currency.code,
+                  subtitle: currency.label,
                 ),
-                for (final currency in FiatCurrency.values.where(
-                  (c) => c.reach == reach,
-                ))
-                  DropdownMenuItem<FiatCurrency>(
-                    value: currency,
-                    child: _CurrencyEntry(tokens: tokens, currency: currency),
-                  ),
-              ],
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Header announcing which sources quote the currencies below it.
-class _CurrencyGroup extends StatelessWidget {
-  const _CurrencyGroup({required this.tokens, required this.reach});
-
-  final GerfautTokens tokens;
-  final CurrencyReach reach;
-
-  @override
-  Widget build(BuildContext context) {
-    final first = reach == CurrencyReach.every;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (!first) ...[
-          const SizedBox(height: GerfautSpacing.xs),
-          Container(height: 1, color: tokens.border),
-          const SizedBox(height: GerfautSpacing.sm),
-        ],
-        Text(
-          first ? 'EVERY SOURCE' : 'COINGECKO ONLY',
-          style: tokens.label.copyWith(color: tokens.textMuted),
-        ),
       ],
-    );
-  }
-}
-
-/// One currency: its ISO code, then its name so thirty codes stay
-/// readable.
-class _CurrencyEntry extends StatelessWidget {
-  const _CurrencyEntry({required this.tokens, required this.currency});
-
-  final GerfautTokens tokens;
-  final FiatCurrency currency;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(
-          width: 44,
-          child: Text(
-            currency.code,
-            style: tokens.body.copyWith(
-              fontWeight: FontWeight.w500,
-              fontVariations: const [FontVariation('wght', 500)],
-            ),
-          ),
-        ),
-        Flexible(
-          child: Text(
-            currency.label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-          ),
-        ),
-      ],
+      onChanged: onChanged,
     );
   }
 }
