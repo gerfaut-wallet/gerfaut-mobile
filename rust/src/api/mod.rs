@@ -40,6 +40,7 @@ fn core_error_kind(error: &CoreError) -> &'static str {
         CoreError::Vault(_) => "vault",
         CoreError::Sync { .. } => "sync",
         CoreError::BackendUnavailable(_) => "backend_unavailable",
+        CoreError::Broadcast { .. } => "broadcast",
         CoreError::Descriptor(_) => "descriptor",
         CoreError::Internal(_) => "internal",
     }

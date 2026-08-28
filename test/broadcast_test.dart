@@ -294,9 +294,11 @@ void main() {
     final bridge = FakeBridge();
     bridge.onPreview = (_, _) => makePreview();
     bridge.onBroadcast = (_, _) {
+      // The node's own words, as the core relays them.
       throw const BridgeException(
-        'backend_unavailable',
-        'mempool.space: min relay fee not met, 1 < 141',
+        'broadcast',
+        'mempool.space refused the transaction: min relay fee not met, '
+            '1 < 141',
       );
     };
     await tester.pumpWidget(broadcastApp(bridge));
@@ -310,7 +312,10 @@ void main() {
 
     expect(find.text('The network refused this transaction'), findsOneWidget);
     expect(
-      find.text('mempool.space: min relay fee not met, 1 < 141'),
+      find.text(
+        'mempool.space refused the transaction: min relay fee not met, '
+        '1 < 141',
+      ),
       findsOneWidget,
     );
     expect(

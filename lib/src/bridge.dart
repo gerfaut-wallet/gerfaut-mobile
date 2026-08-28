@@ -12,8 +12,8 @@ import 'rust/api.dart' as rust;
 ///
 /// Kinds match the desktop app: unrecognized_input, private_material,
 /// invalid_input, network_mismatch, wallet_not_found, duplicate_wallet,
-/// vault, sync, backend_unavailable, descriptor, internal — plus the
-/// bridge-level not_initialized, bad_key, bad_json.
+/// vault, sync, backend_unavailable, broadcast, descriptor, internal —
+/// plus the bridge-level not_initialized, bad_key, bad_json.
 class BridgeException implements Exception {
   const BridgeException(this.kind, this.message);
 
