@@ -536,4 +536,131 @@ class FakeBridge implements GerfautBridge {
       updateAvailable: false,
     );
   }
+
+  /// Preview hook; throw a [BridgeException] to simulate input the core
+  /// cannot decode. Without one, every input is refused as unreadable.
+  FutureOr<TxPreview> Function(String input, Network network)? onPreview;
+
+  /// Every preview call's input, for assertions.
+  final List<String> previewInputs = [];
+
+  @override
+  Future<TxPreview> previewTransaction(String input, Network network) async {
+    previewInputs.add(input);
+    final preview = onPreview;
+    if (preview == null) {
+      throw const BridgeException(
+        'invalid_input',
+        'not a transaction: expected a PSBT (base64, hex or .psbt file) or '
+            'a signed transaction (hex or .txn file)',
+      );
+    }
+    return preview(input, network);
+  }
+
+  /// Broadcast hook; throw a [BridgeException] to simulate the node
+  /// refusing the transaction.
+  FutureOr<BroadcastReport> Function(Network network, String hex)? onBroadcast;
+
+  /// Every broadcast call's hex, for assertions.
+  final List<String> broadcastHexes = [];
+
+  @override
+  Future<BroadcastReport> broadcastTransaction(
+    Network network,
+    String hex,
+  ) async {
+    broadcastHexes.add(hex);
+    final broadcast = onBroadcast;
+    if (broadcast != null) return broadcast(network, hex);
+    return BroadcastReport(
+      txid: fakeTxid,
+      backend: 'mempool.space',
+      at: 1755000000,
+    );
+  }
+
+  /// Status hook; the default reports the transaction waiting in the
+  /// mempool. Throw a [BridgeException] to simulate a backend that
+  /// cannot be reached.
+  FutureOr<BroadcastStatus> Function(Network network, String hex)? onStatus;
+
+  int statusCalls = 0;
+
+  @override
+  Future<BroadcastStatus> transactionStatus(Network network, String hex) async {
+    statusCalls += 1;
+    final status = onStatus;
+    if (status != null) return status(network, hex);
+    return BroadcastStatus(
+      txid: fakeTxid,
+      found: true,
+      confirmed: false,
+      confirmations: 0,
+      backend: 'mempool.space',
+      at: 1755000000,
+    );
+  }
+}
+
+/// A well-formed txid for previews and reports.
+const String fakeTxid =
+    'f1e2d3c4b5a60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
+
+/// A signed-looking preview: one input from a watched wallet, one
+/// payment, one change output, a modest fee.
+TxPreview makePreview({
+  bool ready = true,
+  TxSource source = TxSource.psbt,
+  Network network = Network.mainnet,
+  List<TxWarning> warnings = const [],
+  int? feeSats = 1000,
+  double? feeRate = 7.1,
+  List<TxInputPreview>? inputs,
+  List<TxOutputPreview>? outputs,
+}) {
+  return TxPreview(
+    txid: fakeTxid,
+    source: source,
+    network: network,
+    inputs:
+        inputs ??
+        const [
+          TxInputPreview(
+            txid: 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90',
+            vout: 1,
+            valueSats: 100000,
+            address: 'bc1qspentfromcoldstorage',
+            signed: true,
+            wallet: WalletRef(id: 'w1', name: 'Cold storage'),
+          ),
+        ],
+    outputs:
+        outputs ??
+        const [
+          TxOutputPreview(
+            index: 0,
+            valueSats: 90000,
+            address: 'bc1qexternalpayee',
+          ),
+          TxOutputPreview(
+            index: 1,
+            valueSats: 9000,
+            address: 'bc1qchangeback',
+            wallet: WalletRef(id: 'w1', name: 'Cold storage'),
+            change: true,
+          ),
+        ],
+    feeSats: feeSats,
+    feeRateSatVb: feeRate,
+    vsize: 141,
+    weight: 561,
+    size: 222,
+    version: 2,
+    locktime: 0,
+    rbf: true,
+    ready: ready,
+    warnings: warnings,
+    hex: ready ? '0200000001deadbeef' : null,
+  );
 }

@@ -74,6 +74,20 @@ abstract class GerfautBridge {
   Future<void> setAppPref(String key, String value);
   Future<PriceQuote> fetchPrice(PriceSource source, FiatCurrency currency);
   Future<UpdateCheck> checkUpdate(String currentVersion);
+
+  /// Decodes a transaction somebody else signed (PSBT as base64, hex or
+  /// a binary file passed as hex; raw transaction as hex; a UR or BBQr
+  /// envelope) and previews what it does on [network]. Nothing is
+  /// signed, nothing is sent.
+  Future<TxPreview> previewTransaction(String input, Network network);
+
+  /// Hands a fully signed transaction to the backend of [network]. A
+  /// refusal comes back as a [BridgeException] carrying the node's
+  /// message verbatim.
+  Future<BroadcastReport> broadcastTransaction(Network network, String hex);
+
+  /// Where a broadcast transaction stands as the backend sees it.
+  Future<BroadcastStatus> transactionStatus(Network network, String hex);
 }
 
 /// The real bridge, backed by the generated Rust bindings.
@@ -248,5 +262,29 @@ class RustBridge implements GerfautBridge {
   Future<UpdateCheck> checkUpdate(String currentVersion) async {
     final raw = await rust.checkUpdate(currentVersion: currentVersion);
     return UpdateCheck.fromJson(_object(raw));
+  }
+
+  @override
+  Future<TxPreview> previewTransaction(String input, Network network) async {
+    final raw = await rust.previewTransaction(
+      input: input,
+      network: network.id,
+    );
+    return TxPreview.fromJson(_object(raw));
+  }
+
+  @override
+  Future<BroadcastReport> broadcastTransaction(
+    Network network,
+    String hex,
+  ) async {
+    final raw = await rust.broadcastTransaction(network: network.id, hex: hex);
+    return BroadcastReport.fromJson(_object(raw));
+  }
+
+  @override
+  Future<BroadcastStatus> transactionStatus(Network network, String hex) async {
+    final raw = await rust.transactionStatus(network: network.id, hex: hex);
+    return BroadcastStatus.fromJson(_object(raw));
   }
 }

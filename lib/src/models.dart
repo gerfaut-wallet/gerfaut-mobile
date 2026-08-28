@@ -1123,3 +1123,328 @@ class QrProgress {
   /// True while an animated code is still being collected.
   bool get inProgress => total > 1 && !complete;
 }
+
+/// The container a transaction to broadcast came in.
+enum TxSource {
+  rawTransaction('raw_transaction', 'Raw transaction'),
+  psbt('psbt', 'PSBT');
+
+  const TxSource(this.id, this.label);
+
+  final String id;
+  final String label;
+
+  static TxSource fromId(String id) =>
+      TxSource.values.firstWhere((s) => s.id == id);
+}
+
+/// A watched wallet one side of a transaction belongs to.
+class WalletRef {
+  const WalletRef({required this.id, required this.name});
+
+  factory WalletRef.fromJson(Map<String, dynamic> json) {
+    return WalletRef(id: json['id'] as String, name: json['name'] as String);
+  }
+
+  final String id;
+  final String name;
+}
+
+/// One input of a transaction to broadcast.
+class TxInputPreview {
+  const TxInputPreview({
+    required this.txid,
+    required this.vout,
+    required this.signed,
+    this.valueSats,
+    this.address,
+    this.wallet,
+  });
+
+  factory TxInputPreview.fromJson(Map<String, dynamic> json) {
+    return TxInputPreview(
+      txid: json['txid'] as String,
+      vout: json['vout'] as int,
+      valueSats: json['value_sats'] as int?,
+      address: json['address'] as String?,
+      signed: json['signed'] as bool,
+      wallet: json['wallet'] == null
+          ? null
+          : WalletRef.fromJson(json['wallet'] as Map<String, dynamic>),
+    );
+  }
+
+  final String txid;
+  final int vout;
+
+  /// Value of the coin spent, when the container, a watched wallet or
+  /// the backend knew it.
+  final int? valueSats;
+  final String? address;
+
+  /// Whether the input carries what the network needs to accept it.
+  final bool signed;
+
+  /// The watched wallet that owns the coin, when any.
+  final WalletRef? wallet;
+
+  String get outpoint => '$txid:$vout';
+}
+
+/// One output of a transaction to broadcast.
+class TxOutputPreview {
+  const TxOutputPreview({
+    required this.index,
+    required this.valueSats,
+    this.address,
+    this.opReturn,
+    this.wallet,
+    this.change = false,
+  });
+
+  factory TxOutputPreview.fromJson(Map<String, dynamic> json) {
+    return TxOutputPreview(
+      index: json['index'] as int,
+      valueSats: json['value_sats'] as int,
+      address: json['address'] as String?,
+      opReturn: json['op_return'] == null
+          ? null
+          : OpReturnData.fromJson(json['op_return'] as Map<String, dynamic>),
+      wallet: json['wallet'] == null
+          ? null
+          : WalletRef.fromJson(json['wallet'] as Map<String, dynamic>),
+      change: json['change'] as bool? ?? false,
+    );
+  }
+
+  final int index;
+  final int valueSats;
+  final String? address;
+  final OpReturnData? opReturn;
+
+  /// The watched wallet that receives this output, when any.
+  final WalletRef? wallet;
+
+  /// Output on a watched wallet's change keychain.
+  final bool change;
+}
+
+/// What a caution on the broadcast preview is about.
+enum TxWarningKind {
+  unsigned('unsigned'),
+  highFeeRate('high_fee_rate'),
+  highFeeShare('high_fee_share'),
+  locked('locked'),
+  inputUnknown('input_unknown'),
+  inputSpent('input_spent'),
+  feeUnknown('fee_unknown'),
+  dustOutput('dust_output'),
+  spendsWatched('spends_watched'),
+
+  /// A kind this build does not know; shown with a generic icon.
+  other('other');
+
+  const TxWarningKind(this.id);
+
+  final String id;
+
+  static TxWarningKind fromId(String id) {
+    for (final kind in TxWarningKind.values) {
+      if (kind.id == id) return kind;
+    }
+    return TxWarningKind.other;
+  }
+
+  /// The network will refuse the transaction, or already took the coin:
+  /// read in the alert style. Everything else is a caution.
+  bool get blocking =>
+      this == TxWarningKind.unsigned || this == TxWarningKind.inputSpent;
+}
+
+/// A caution to read before broadcasting. Never blocks: the preview
+/// only makes the transaction legible.
+class TxWarning {
+  const TxWarning({required this.kind, required this.message});
+
+  factory TxWarning.fromJson(Map<String, dynamic> json) {
+    return TxWarning(
+      kind: TxWarningKind.fromId(json['kind'] as String),
+      message: json['message'] as String,
+    );
+  }
+
+  final TxWarningKind kind;
+  final String message;
+}
+
+/// Everything shown before broadcasting a transaction.
+class TxPreview {
+  const TxPreview({
+    required this.txid,
+    required this.source,
+    required this.network,
+    required this.inputs,
+    required this.outputs,
+    required this.vsize,
+    required this.weight,
+    required this.size,
+    required this.version,
+    required this.locktime,
+    required this.rbf,
+    required this.ready,
+    this.feeSats,
+    this.feeRateSatVb,
+    this.warnings = const [],
+    this.hex,
+  });
+
+  factory TxPreview.fromJson(Map<String, dynamic> json) {
+    return TxPreview(
+      txid: json['txid'] as String,
+      source: TxSource.fromId(json['source'] as String),
+      network: Network.fromId(json['network'] as String),
+      inputs: (json['inputs'] as List)
+          .map((i) => TxInputPreview.fromJson(i as Map<String, dynamic>))
+          .toList(),
+      outputs: (json['outputs'] as List)
+          .map((o) => TxOutputPreview.fromJson(o as Map<String, dynamic>))
+          .toList(),
+      feeSats: json['fee_sats'] as int?,
+      feeRateSatVb: (json['fee_rate_sat_vb'] as num?)?.toDouble(),
+      vsize: json['vsize'] as int,
+      weight: json['weight'] as int,
+      size: json['size'] as int,
+      version: json['version'] as int,
+      locktime: json['locktime'] as int,
+      rbf: json['rbf'] as bool,
+      ready: json['ready'] as bool,
+      warnings: ((json['warnings'] as List?) ?? const [])
+          .map((w) => TxWarning.fromJson(w as Map<String, dynamic>))
+          .toList(),
+      hex: json['hex'] as String?,
+    );
+  }
+
+  final String txid;
+  final TxSource source;
+  final Network network;
+  final List<TxInputPreview> inputs;
+  final List<TxOutputPreview> outputs;
+
+  /// Fee in sats, when every input's value is known.
+  final int? feeSats;
+  final double? feeRateSatVb;
+  final int vsize;
+  final int weight;
+  final int size;
+  final int version;
+
+  /// Absolute lock time as the consensus integer: a block height below
+  /// 500 000 000, a unix timestamp above.
+  final int locktime;
+  final bool rbf;
+
+  /// Every input is signed and the transaction can be sent.
+  final bool ready;
+  final List<TxWarning> warnings;
+
+  /// The transaction as the network takes it, present only when ready.
+  final String? hex;
+}
+
+/// Outcome of a broadcast.
+class BroadcastReport {
+  const BroadcastReport({
+    required this.txid,
+    required this.backend,
+    required this.at,
+  });
+
+  factory BroadcastReport.fromJson(Map<String, dynamic> json) {
+    return BroadcastReport(
+      txid: json['txid'] as String,
+      backend: json['backend'] as String,
+      at: json['at'] as int,
+    );
+  }
+
+  final String txid;
+
+  /// Host that accepted the transaction.
+  final String backend;
+
+  /// Unix timestamp, seconds.
+  final int at;
+}
+
+/// Where a broadcast transaction stands, as the backend sees it.
+class BroadcastStatus {
+  const BroadcastStatus({
+    required this.txid,
+    required this.found,
+    required this.confirmed,
+    required this.confirmations,
+    required this.backend,
+    required this.at,
+    this.blockHeight,
+  });
+
+  factory BroadcastStatus.fromJson(Map<String, dynamic> json) {
+    return BroadcastStatus(
+      txid: json['txid'] as String,
+      found: json['found'] as bool,
+      confirmed: json['confirmed'] as bool,
+      blockHeight: json['block_height'] as int?,
+      confirmations: json['confirmations'] as int,
+      backend: json['backend'] as String,
+      at: json['at'] as int,
+    );
+  }
+
+  final String txid;
+
+  /// Whether the backend knows the transaction at all: it can drop out
+  /// of the mempool, evicted or replaced.
+  final bool found;
+  final bool confirmed;
+  final int? blockHeight;
+  final int confirmations;
+  final String backend;
+  final int at;
+}
+
+/// A transaction this app sent, kept so it can be checked again after a
+/// restart. Stored as JSON under the `broadcast.recent` preference.
+class RecentBroadcast {
+  const RecentBroadcast({
+    required this.txid,
+    required this.network,
+    required this.hex,
+    required this.at,
+  });
+
+  factory RecentBroadcast.fromJson(Map<String, dynamic> json) {
+    return RecentBroadcast(
+      txid: json['txid'] as String,
+      network: Network.fromId(json['network'] as String),
+      hex: json['hex'] as String,
+      at: json['at'] as int,
+    );
+  }
+
+  final String txid;
+  final Network network;
+
+  /// The transaction as sent: what the status check decodes.
+  final String hex;
+
+  /// Unix timestamp, seconds, of the broadcast.
+  final int at;
+
+  Map<String, dynamic> toJson() => {
+    'txid': txid,
+    'network': network.id,
+    'hex': hex,
+    'at': at,
+  };
+}
