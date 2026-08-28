@@ -529,7 +529,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 const SizedBox(height: GerfautSpacing.md),
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: SecondaryButton(
+                  child: PrimaryButton(
                     label: 'Save backend',
                     onPressed: _savingBackend || !_backendValid
                         ? null

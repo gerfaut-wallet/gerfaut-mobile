@@ -376,19 +376,19 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
               else
                 Row(
                   children: [
-                    // Sending the next transaction is an action of the
-                    // same rank as every other primary one: the same
-                    // component, not a quieter cousin.
-                    PrimaryButton(
-                      label: 'Broadcast another',
-                      onPressed: _another,
+                    // Leaving is a navigation, not the point of the
+                    // screen: it steps back so the one primary here is
+                    // the same shape as every other primary action.
+                    GhostButton(
+                      label: 'Done',
+                      onPressed: () => Navigator.of(context).pop(),
                     ),
                     const SizedBox(width: GerfautSpacing.sm),
                     Expanded(
                       child: PrimaryButton(
-                        label: 'Done',
+                        label: 'Broadcast another',
                         expand: true,
-                        onPressed: () => Navigator.of(context).pop(),
+                        onPressed: _another,
                       ),
                     ),
                   ],

@@ -440,23 +440,19 @@ void main() {
           findsOneWidget,
         );
         final another = primaryButton(tester, 'Broadcast another').style!;
-        final done = primaryButton(tester, 'Done').style!;
         const resting = <WidgetState>{};
         expect(another.backgroundColor!.resolve(resting), tokens.primary);
         expect(another.foregroundColor!.resolve(resting), tokens.onPrimary);
-        // Same fill, same radius, same height as the primary next to
-        // it, in either theme.
-        expect(
-          another.backgroundColor!.resolve(resting),
-          done.backgroundColor!.resolve(resting),
-        );
-        expect(another.shape!.resolve(resting), done.shape!.resolve(resting));
         expect(
           tester
               .getSize(find.widgetWithText(FilledButton, 'Broadcast another'))
               .height,
           44,
         );
+        // And it is the only one: leaving the screen is a navigation, so
+        // Done steps back to a ghost rather than competing with it.
+        expect(find.byType(PrimaryButton), findsOneWidget);
+        expect(find.widgetWithText(GhostButton, 'Done'), findsOneWidget);
       },
     );
   }
