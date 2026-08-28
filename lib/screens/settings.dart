@@ -15,11 +15,11 @@ import '../widgets/select_field.dart';
 /// Application version shown in About. Kept in step with pubspec.yaml.
 const String appVersion = '0.1.0';
 
-/// Said when a server did not answer the certificate check: the backend
-/// is saved all the same, and the question comes back on first contact.
+/// Said when the certificate check did not get through: the backend is
+/// saved all the same, and the question comes back on first contact.
 const String _uncheckedNote =
-    'The server did not answer, so its certificate could not be checked '
-    'yet. Gerfaut asks again on the first connection.';
+    'The certificate could not be checked yet. Gerfaut asks about it on '
+    'the first connection.';
 
 const List<({Network network, String hint})> _networkHints = [
   (network: Network.mainnet, hint: 'The Bitcoin network'),

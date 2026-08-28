@@ -777,7 +777,10 @@ void main() {
       expect(find.byType(AlertDialog), findsNothing);
       expect(bridge.savedBackends[Network.mainnet], isA<CustomElectrum>());
       expect(
-        find.textContaining('its certificate could not be checked yet'),
+        find.text(
+          'The certificate could not be checked yet. Gerfaut asks about it '
+          'on the first connection.',
+        ),
         findsOneWidget,
       );
     });
