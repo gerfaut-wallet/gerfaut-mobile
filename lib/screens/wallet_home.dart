@@ -15,6 +15,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/status_pill.dart';
 import '../widgets/sync_indicator.dart';
 import 'addresses.dart';
+import 'broadcast.dart';
 import 'export.dart';
 import 'receive.dart';
 import 'tx_detail.dart';
@@ -87,6 +88,16 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                     ),
                     const SizedBox(width: GerfautSpacing.sm),
                     Text('Addresses', style: tokens.bodySmall),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: (_) => const BroadcastScreen(),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.radio, size: 16, color: tokens.textMuted),
+                    const SizedBox(width: GerfautSpacing.sm),
+                    Text('Broadcast', style: tokens.bodySmall),
                   ],
                 ),
               ),

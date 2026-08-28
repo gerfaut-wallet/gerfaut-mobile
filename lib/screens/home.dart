@@ -10,6 +10,7 @@ import '../widgets/buttons.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/sync_indicator.dart';
 import 'add_wallet.dart';
+import 'broadcast.dart';
 import 'settings.dart';
 import 'wallet_home.dart';
 
@@ -75,10 +76,20 @@ class HomeScreen extends ConsumerWidget {
           IconButton(
             tooltip: masked ? 'Show balances' : 'Hide balances',
             onPressed: () => ref.read(maskedProvider.notifier).toggle(),
-            icon: Icon(
-              masked ? LucideIcons.eyeOff : LucideIcons.eye,
-              size: 20,
-            ),
+            icon: Icon(masked ? LucideIcons.eyeOff : LucideIcons.eye, size: 20),
+          ),
+          // A transaction belongs to the workspace network, not to one
+          // wallet: broadcasting starts from here.
+          IconButton(
+            tooltip: 'Broadcast',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const BroadcastScreen(),
+                ),
+              );
+            },
+            icon: const Icon(LucideIcons.radio, size: 20),
           ),
           IconButton(
             tooltip: 'Settings',
@@ -227,11 +238,7 @@ class _WalletCard extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Icon(
-                      LucideIcons.wallet,
-                      size: 16,
-                      color: tokens.textMuted,
-                    ),
+                    Icon(LucideIcons.wallet, size: 16, color: tokens.textMuted),
                     const SizedBox(width: GerfautSpacing.sm),
                     Expanded(
                       child: Text(

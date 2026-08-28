@@ -116,7 +116,18 @@ void main() {
     await tester.tap(find.byTooltip('More'));
     await tester.pumpAndSettle();
     expect(find.text('Addresses'), findsOneWidget);
+    expect(find.text('Broadcast'), findsOneWidget);
     expect(find.text('Export CSV'), findsOneWidget);
+
+    await tester.tap(find.text('Broadcast'));
+    await tester.pumpAndSettle();
+    expect(find.text('SIGNED TRANSACTION OR PSBT'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('More'));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Addresses'));
     await tester.pumpAndSettle();
