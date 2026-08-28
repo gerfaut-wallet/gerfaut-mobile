@@ -14,7 +14,6 @@ import '../widgets/count_badge.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/status_pill.dart';
 import '../widgets/sync_indicator.dart';
-import 'addresses.dart';
 import 'broadcast.dart';
 import 'export.dart';
 import 'receive.dart';
@@ -77,20 +76,6 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
               );
             },
             itemBuilder: (context) => [
-              PopupMenuItem(
-                value: (id) => AddressesScreen(walletId: id),
-                child: Row(
-                  children: [
-                    Icon(
-                      LucideIcons.listOrdered,
-                      size: 16,
-                      color: tokens.textMuted,
-                    ),
-                    const SizedBox(width: GerfautSpacing.sm),
-                    Text('Addresses', style: tokens.bodySmall),
-                  ],
-                ),
-              ),
               PopupMenuItem(
                 value: (_) => const BroadcastScreen(),
                 child: Row(

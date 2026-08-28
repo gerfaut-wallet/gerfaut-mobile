@@ -115,7 +115,8 @@ void main() {
 
     await tester.tap(find.byTooltip('More'));
     await tester.pumpAndSettle();
-    expect(find.text('Addresses'), findsOneWidget);
+    // The address audit lives on the Receive page now.
+    expect(find.text('Addresses'), findsNothing);
     expect(find.text('Broadcast'), findsOneWidget);
     expect(find.text('Export CSV'), findsOneWidget);
 
@@ -129,18 +130,6 @@ void main() {
     await tester.tap(find.byTooltip('More'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Addresses'));
-    await tester.pumpAndSettle();
-    expect(
-      find.text('Receive addresses, in derivation order.'),
-      findsOneWidget,
-    );
-
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byTooltip('More'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Export CSV'));
     await tester.pumpAndSettle();
     expect(
