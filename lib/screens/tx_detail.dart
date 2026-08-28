@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../src/explorer.dart';
 import '../src/format.dart';
@@ -11,12 +10,10 @@ import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/address_chip.dart';
 import '../widgets/amounts.dart';
-import '../widgets/buttons.dart';
+import '../widgets/explorer_link.dart';
+import '../widgets/facts.dart';
+import '../widgets/flow_summary.dart';
 import '../widgets/status_pill.dart';
-
-/// Width from which the flow summary sits side by side instead of
-/// stacked: a phone in landscape or a tablet.
-const double _wideFlow = 560;
 
 /// Transaction detail: the amount and its status first, the flow in
 /// one glance, then two calm fact cards, the inputs and outputs, and
@@ -89,56 +86,65 @@ class _Detail extends ConsumerWidget {
       children: [
         _Hero(detail: detail, tokens: tokens),
         const SizedBox(height: GerfautSpacing.lg),
-        _FlowSummary(
-          inputs: detail.inputs,
-          outputs: detail.outputs,
+        FlowSummary(
+          inputCount: detail.inputs.length,
+          outputCount: detail.outputs.length,
+          // A coinbase input spends nothing: what it creates is the
+          // reward.
+          inTotal: coinbase ? _sum(detail.outputs) : _sum(detail.inputs),
+          outTotal: _sum(detail.outputs),
           feeSats: summary.feeSats,
           feeRate: detail.feeRateSatVb,
-          isCoinbase: coinbase,
-          coinbasePool: extras?.coinbasePool,
+          inTitle: coinbase ? 'Coinbase' : null,
+          inSubtitle: coinbase
+              ? (extras?.coinbasePool != null
+                    ? 'Newly minted · ${extras!.coinbasePool}'
+                    : 'Newly minted coins')
+              : null,
+          inIcon: coinbase ? LucideIcons.pickaxe : null,
           tokens: tokens,
         ),
         const SizedBox(height: GerfautSpacing.lg),
-        _FactsCard(
+        FactsCard(
           title: 'Details',
           tokens: tokens,
           rows: [
-            _Fact(
+            FactRow(
               label: 'Transaction ID',
               tokens: tokens,
               child: AddressChip(value: summary.txid, head: 8, tail: 8),
             ),
-            _Fact(
+            FactRow(
               label: 'Date',
               tokens: tokens,
               child:
                   summary.status.confirmed && summary.status.timestamp != null
-                  ? _Value(formatTimestamp(summary.status.timestamp!), tokens)
-                  : _Value('not yet mined', tokens, muted: true),
+                  ? FactValue(formatTimestamp(summary.status.timestamp!), tokens)
+                  : FactValue('not yet mined', tokens, muted: true),
             ),
-            _Fact(
+            FactRow(
               label: 'Block',
               tokens: tokens,
               child: summary.status.confirmed
-                  ? _Value(groupThousands('${summary.status.height}'), tokens)
-                  : _Value('—', tokens, muted: true),
+                  ? FactValue(groupThousands('${summary.status.height}'), tokens)
+                  : FactValue('—', tokens, muted: true),
             ),
-            _Fact(
+            FactRow(
               label: 'Confirmations',
               tokens: tokens,
-              child: _Value(groupThousands('${summary.confirmations}'), tokens),
+              child: FactValue(groupThousands('${summary.confirmations}'), tokens),
             ),
-            _Fact(
+            FactRow(
               label: 'Fee',
               tokens: tokens,
               child: summary.feeSats != null
                   ? _FeeValue(sats: summary.feeSats!)
-                  : _Value('n/a', tokens, muted: true),
+                  : FactValue('n/a', tokens, muted: true),
             ),
-            _Fact(
+            FactRow(
               label: 'Fee rate',
               tokens: tokens,
-              child: _Value(
+              child: FactValue(
                 detail.feeRateSatVb != null
                     ? '${detail.feeRateSatVb!.toStringAsFixed(1)} sat/vB'
                     : 'n/a',
@@ -149,53 +155,53 @@ class _Detail extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: GerfautSpacing.gutter),
-        _FactsCard(
+        FactsCard(
           title: 'Technical',
           tokens: tokens,
           rows: extras != null
               ? [
-                  _Fact(
+                  FactRow(
                     label: 'Size',
                     tokens: tokens,
-                    child: _Value(
+                    child: FactValue(
                       '${groupThousands('${extras.sizeBytes}')} B',
                       tokens,
                     ),
                   ),
-                  _Fact(
+                  FactRow(
                     label: 'Virtual size',
                     tokens: tokens,
-                    child: _Value(
+                    child: FactValue(
                       '${groupThousands('${extras.vsize}')} vB',
                       tokens,
                     ),
                   ),
-                  _Fact(
+                  FactRow(
                     label: 'Weight',
                     tokens: tokens,
-                    child: _Value(
+                    child: FactValue(
                       '${groupThousands('${extras.weightWu}')} WU',
                       tokens,
                     ),
                   ),
-                  _Fact(
+                  FactRow(
                     label: 'Version',
                     tokens: tokens,
-                    child: _Value('${extras.version}', tokens),
+                    child: FactValue('${extras.version}', tokens),
                   ),
-                  _Fact(
+                  FactRow(
                     label: 'Locktime',
                     tokens: tokens,
                     child: extras.locktime > 0
-                        ? _Value(groupThousands('${extras.locktime}'), tokens)
-                        : _Value('none', tokens, muted: true),
+                        ? FactValue(groupThousands('${extras.locktime}'), tokens)
+                        : FactValue('none', tokens, muted: true),
                   ),
-                  _Fact(
+                  FactRow(
                     label: 'Sigops',
                     tokens: tokens,
-                    child: _Value(groupThousands('${extras.sigops}'), tokens),
+                    child: FactValue(groupThousands('${extras.sigops}'), tokens),
                   ),
-                  _Fact(
+                  FactRow(
                     label: 'Flags',
                     tokens: tokens,
                     child: _Flags(
@@ -206,10 +212,10 @@ class _Detail extends ConsumerWidget {
                   ),
                 ]
               : [
-                  _Fact(
+                  FactRow(
                     label: 'Virtual size',
                     tokens: tokens,
-                    child: _Value(
+                    child: FactValue(
                       '${groupThousands('${detail.vsize}')} vB',
                       tokens,
                     ),
@@ -243,35 +249,7 @@ class _Detail extends ConsumerWidget {
         const SizedBox(height: GerfautSpacing.sm),
         if (extras != null && extras.rawHex.isNotEmpty)
           _RawTransaction(hex: extras.rawHex, tokens: tokens),
-        if (explorer != null)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(GerfautRadius.sm),
-              onTap: () => _openExplorer(context, ref, explorer),
-              child: Padding(
-                // 44px tap target around a one-line link.
-                padding: const EdgeInsets.symmetric(
-                  vertical: GerfautSpacing.sm + GerfautSpacing.xs,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'View on mempool.space',
-                      style: tokens.bodySmall.copyWith(color: tokens.primary),
-                    ),
-                    const SizedBox(width: GerfautSpacing.xs),
-                    Icon(
-                      LucideIcons.externalLink,
-                      size: 14,
-                      color: tokens.primary,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+        if (explorer != null) ExplorerLink(url: explorer),
       ],
     );
   }
@@ -301,7 +279,7 @@ class _Hero extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _FieldLabel(direction, tokens: tokens),
+        FieldLabel(direction, tokens: tokens),
         const SizedBox(height: GerfautSpacing.xs),
         // A long amount scales down rather than overflowing: a figure
         // is never allowed to clip.
@@ -351,539 +329,6 @@ int? _sum(List<TxIo> ios) {
   return total;
 }
 
-/// The transaction in one glance: what went in, what came out, and the
-/// fee between the two. Counts and totals only — the input and output
-/// lists below carry the detail. Stacked on a phone, side by side once
-/// the width allows it.
-class _FlowSummary extends ConsumerWidget {
-  const _FlowSummary({
-    required this.inputs,
-    required this.outputs,
-    required this.feeSats,
-    required this.feeRate,
-    required this.isCoinbase,
-    required this.coinbasePool,
-    required this.tokens,
-  });
-
-  final List<TxIo> inputs;
-  final List<TxIo> outputs;
-  final int? feeSats;
-  final double? feeRate;
-  final bool isCoinbase;
-  final String? coinbasePool;
-  final GerfautTokens tokens;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final masked = ref.watch(maskedProvider);
-    final unit = ref.watch(unitProvider);
-    final outTotal = _sum(outputs);
-    // A coinbase input spends nothing: what it creates is the reward.
-    final inTotal = isCoinbase ? outTotal : _sum(inputs);
-    String amount(int? sats) => sats == null
-        ? 'n/a'
-        : masked
-        ? maskedValue
-        : formatAmount(sats, unit);
-
-    final inSide = _FlowSide(
-      title: isCoinbase
-          ? 'Coinbase'
-          : '${inputs.length} input${inputs.length == 1 ? '' : 's'}',
-      subtitle: isCoinbase
-          ? (coinbasePool != null
-                ? 'Newly minted · $coinbasePool'
-                : 'Newly minted coins')
-          : 'spent',
-      amount: amount(inTotal),
-      unknown: inTotal == null,
-      icon: isCoinbase ? LucideIcons.pickaxe : null,
-      tokens: tokens,
-    );
-    final outSide = _FlowSide(
-      title: '${outputs.length} output${outputs.length == 1 ? '' : 's'}',
-      subtitle: 'created',
-      amount: amount(outTotal),
-      unknown: outTotal == null,
-      tokens: tokens,
-    );
-    final showFee = feeSats != null && feeSats! > 0;
-    final feePill = showFee
-        ? _FeePill(feeSats: feeSats!, feeRate: feeRate, tokens: tokens)
-        : null;
-
-    return Container(
-      padding: const EdgeInsets.all(GerfautSpacing.md),
-      decoration: BoxDecoration(
-        color: tokens.surfaceSunken.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(GerfautRadius.lg),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          if (constraints.maxWidth >= _wideFlow) {
-            // Both cards share the taller one's height, the way two
-            // halves of one statement should.
-            return IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(child: inSide),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: GerfautSpacing.sm + GerfautSpacing.xs,
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          LucideIcons.arrowRight,
-                          size: 20,
-                          color: tokens.textMuted,
-                        ),
-                        if (feePill != null) ...[
-                          const SizedBox(height: GerfautSpacing.xs),
-                          feePill,
-                        ],
-                      ],
-                    ),
-                  ),
-                  Expanded(child: outSide),
-                ],
-              ),
-            );
-          }
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              inSide,
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  vertical: GerfautSpacing.sm,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      LucideIcons.arrowDown,
-                      size: 20,
-                      color: tokens.textMuted,
-                    ),
-                    if (feePill != null) ...[
-                      const SizedBox(width: GerfautSpacing.sm),
-                      Flexible(child: feePill),
-                    ],
-                  ],
-                ),
-              ),
-              outSide,
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-/// One side of the flow: a count, what it means, and the total.
-class _FlowSide extends StatelessWidget {
-  const _FlowSide({
-    required this.title,
-    required this.subtitle,
-    required this.amount,
-    required this.unknown,
-    required this.tokens,
-    this.icon,
-  });
-
-  final String title;
-  final String subtitle;
-  final String amount;
-
-  /// The total could not be computed: shown muted, never as a figure.
-  final bool unknown;
-  final GerfautTokens tokens;
-  final IconData? icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: GerfautSpacing.md,
-        vertical: GerfautSpacing.sm + GerfautSpacing.xs,
-      ),
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        borderRadius: BorderRadius.circular(GerfautRadius.md),
-        border: Border.all(color: tokens.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Row(
-            children: [
-              if (icon != null) ...[
-                Icon(icon, size: 14, color: tokens.textMuted),
-                const SizedBox(width: GerfautSpacing.xs + 2),
-              ],
-              Text(
-                title,
-                style: tokens.bodySmall.copyWith(
-                  fontWeight: FontWeight.w500,
-                  fontVariations: const [FontVariation('wght', 500)],
-                ),
-                maxLines: 1,
-                softWrap: false,
-              ),
-              const SizedBox(width: GerfautSpacing.xs + 2),
-              Flexible(
-                child: Text(
-                  subtitle,
-                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: GerfautSpacing.xs),
-          Text(
-            amount,
-            style: unknown
-                ? tokens.figureOf(size: 15, color: tokens.textMuted)
-                : tokens.figureOf(size: 15, weight: FontWeight.w600),
-            maxLines: 1,
-            softWrap: false,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Fee as a pending-tinted pill between the two sides: amount in the
-/// chosen unit, rate as small print. Never an alert.
-class _FeePill extends ConsumerWidget {
-  const _FeePill({
-    required this.feeSats,
-    required this.feeRate,
-    required this.tokens,
-  });
-
-  final int feeSats;
-  final double? feeRate;
-  final GerfautTokens tokens;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final masked = ref.watch(maskedProvider);
-    final unit = ref.watch(unitProvider);
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: GerfautSpacing.sm + 2,
-        vertical: 2,
-      ),
-      decoration: BoxDecoration(
-        color: tokens.pendingSurface,
-        borderRadius: BorderRadius.circular(GerfautRadius.full),
-        border: Border.all(color: tokens.pending.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
-        children: [
-          Text('FEE', style: tokens.label.copyWith(color: tokens.pending)),
-          const SizedBox(width: GerfautSpacing.xs + 2),
-          // The figures give way before the pill ever overflows.
-          Flexible(
-            child: Text(
-              masked ? maskedValue : formatAmount(feeSats, unit),
-              style: tokens.figureOf(
-                size: 11,
-                weight: FontWeight.w500,
-                color: tokens.pending,
-              ),
-              maxLines: 1,
-              softWrap: false,
-              overflow: TextOverflow.fade,
-            ),
-          ),
-          if (feeRate != null) ...[
-            const SizedBox(width: GerfautSpacing.xs + 2),
-            Flexible(
-              child: Text(
-                '${feeRate!.toStringAsFixed(1)} sat/vB',
-                style: tokens.figureOf(size: 11, color: tokens.textMuted),
-                maxLines: 1,
-                softWrap: false,
-                overflow: TextOverflow.fade,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// The explorer link sits behind a privacy warning: a third party can
-/// link the transaction to the viewer's IP address. Once acknowledged
-/// for good, the dialog steps aside.
-void _openExplorer(BuildContext context, WidgetRef ref, String url) {
-  void launch() {
-    launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-  }
-
-  if (ref.read(explorerAckProvider)) {
-    launch();
-    return;
-  }
-
-  final tokens = Theme.of(context).extension<GerfautTokens>()!;
-  var skipNextTime = false;
-  showDialog<void>(
-    context: context,
-    builder: (dialogContext) {
-      return StatefulBuilder(
-        builder: (dialogContext, setState) {
-          return AlertDialog(
-            backgroundColor: tokens.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(GerfautRadius.lg),
-            ),
-            title: Text('Open an external explorer', style: tokens.h2),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(GerfautSpacing.sm + 4),
-                    decoration: BoxDecoration(
-                      color: tokens.alertSurface,
-                      borderRadius: BorderRadius.circular(GerfautRadius.md),
-                      border: Border.all(
-                        color: tokens.alert.withValues(alpha: 0.25),
-                      ),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Icon(
-                            LucideIcons.triangleAlert,
-                            size: 16,
-                            color: tokens.alert,
-                          ),
-                        ),
-                        const SizedBox(width: GerfautSpacing.sm),
-                        Expanded(
-                          child: Text(
-                            'This opens the transaction on mempool.space, a '
-                            'third-party website. Its operator can link this '
-                            'transaction to your IP address.',
-                            style: tokens.bodySmall.copyWith(
-                              color: tokens.alert,
-                              fontWeight: FontWeight.w500,
-                              fontVariations: const [
-                                FontVariation('wght', 500),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: GerfautSpacing.sm),
-                  Text(
-                    'Consider a VPN or Tor if that link matters to you.',
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  ),
-                  const SizedBox(height: GerfautSpacing.sm),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(GerfautRadius.sm),
-                    onTap: () => setState(() => skipNextTime = !skipNextTime),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: GerfautSpacing.sm + 2,
-                      ),
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: Checkbox(
-                              value: skipNextTime,
-                              activeColor: tokens.primary,
-                              checkColor: tokens.onPrimary,
-                              side: BorderSide(
-                                color: tokens.textMuted,
-                                width: 1.5,
-                              ),
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
-                              onChanged: (value) =>
-                                  setState(() => skipNextTime = value ?? false),
-                            ),
-                          ),
-                          const SizedBox(width: GerfautSpacing.sm),
-                          Expanded(
-                            child: Text(
-                              'Do not show this warning again',
-                              style: tokens.bodySmall,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                style: TextButton.styleFrom(foregroundColor: tokens.textMuted),
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('Cancel'),
-              ),
-              PrimaryButton(
-                label: 'Open explorer',
-                onPressed: () {
-                  if (skipNextTime) {
-                    ref.read(explorerAckProvider.notifier).set(true);
-                  }
-                  Navigator.of(dialogContext).pop();
-                  launch();
-                },
-              ),
-            ],
-          );
-        },
-      );
-    },
-  );
-}
-
-/// Section title: uppercase label, muted.
-class _FieldLabel extends StatelessWidget {
-  const _FieldLabel(this.text, {required this.tokens});
-
-  final String text;
-  final GerfautTokens tokens;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text.toUpperCase(),
-      style: tokens.label.copyWith(color: tokens.textMuted),
-    );
-  }
-}
-
-/// A calm card of facts: a title, then label / value lines separated
-/// by hairlines, with room to breathe.
-class _FactsCard extends StatelessWidget {
-  const _FactsCard({
-    required this.title,
-    required this.rows,
-    required this.tokens,
-  });
-
-  final String title;
-  final List<Widget> rows;
-  final GerfautTokens tokens;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: GerfautSpacing.md,
-        vertical: GerfautSpacing.sm + GerfautSpacing.xs,
-      ),
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        borderRadius: BorderRadius.circular(GerfautRadius.lg),
-        border: Border.all(color: tokens.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _FieldLabel(title, tokens: tokens),
-          const SizedBox(height: GerfautSpacing.xs),
-          for (final (index, row) in rows.indexed) ...[
-            if (index > 0)
-              Divider(
-                height: 1,
-                thickness: 1,
-                color: tokens.border.withValues(alpha: 0.5),
-              ),
-            row,
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// One label / value line; values keep their own typography.
-class _Fact extends StatelessWidget {
-  const _Fact({required this.label, required this.child, required this.tokens});
-
-  final String label;
-  final Widget child;
-  final GerfautTokens tokens;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: GerfautSpacing.sm),
-      child: Row(
-        children: [
-          Text(
-            label,
-            style: tokens.bodySmall.copyWith(
-              fontSize: 13,
-              color: tokens.textMuted,
-            ),
-          ),
-          const SizedBox(width: GerfautSpacing.md),
-          Expanded(
-            child: Align(alignment: Alignment.centerRight, child: child),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// A plain fact value: UI face, tabular, one line, right-aligned.
-class _Value extends StatelessWidget {
-  const _Value(this.text, this.tokens, {this.muted = false});
-
-  final String text;
-  final GerfautTokens tokens;
-  final bool muted;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: tokens.figureOf(
-        weight: FontWeight.w500,
-        color: muted ? tokens.textMuted : null,
-      ),
-      maxLines: 1,
-      softWrap: false,
-      textAlign: TextAlign.right,
-    );
-  }
-}
-
 /// Fee in the chosen unit, no fiat: the facts stay scannable.
 class _FeeValue extends ConsumerWidget {
   const _FeeValue({required this.sats});
@@ -895,7 +340,7 @@ class _FeeValue extends ConsumerWidget {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final masked = ref.watch(maskedProvider);
     final unit = ref.watch(unitProvider);
-    return _Value(masked ? maskedValue : formatAmount(sats, unit), tokens);
+    return FactValue(masked ? maskedValue : formatAmount(sats, unit), tokens);
   }
 }
 
@@ -1113,7 +558,7 @@ class _RawTransactionState extends State<_RawTransaction> {
                   color: tokens.textMuted,
                 ),
                 const SizedBox(width: GerfautSpacing.xs),
-                _FieldLabel('Raw transaction', tokens: tokens),
+                FieldLabel('Raw transaction', tokens: tokens),
               ],
             ),
           ),
@@ -1198,7 +643,7 @@ class _IoList extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.xs),
-          child: _FieldLabel('$title (${ios.length})', tokens: tokens),
+          child: FieldLabel('$title (${ios.length})', tokens: tokens),
         ),
         const SizedBox(height: GerfautSpacing.sm),
         for (final (index, io) in ios.indexed) ...[
