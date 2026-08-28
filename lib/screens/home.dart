@@ -6,6 +6,7 @@ import '../src/models.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/amounts.dart';
+import '../widgets/brand.dart';
 import '../widgets/buttons.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/sync_button.dart';
@@ -52,7 +53,13 @@ class HomeScreen extends ConsumerWidget {
       appBar: AppBar(
         title: Row(
           children: [
-            const Text('Gerfaut'),
+            // The falcon alone: whoever opens the app knows its name,
+            // and the mark says it in the space of a glyph.
+            GerfautMark(
+              color: tokens.primary,
+              height: 26,
+              semanticLabel: 'Gerfaut',
+            ),
             if (network != null && network != Network.mainnet) ...[
               const SizedBox(width: GerfautSpacing.sm),
               Container(
@@ -132,13 +139,19 @@ class HomeScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
-                (_, AsyncData(:final value)) when value.isEmpty =>
-                  const EmptyState(
-                    title: 'No wallets yet',
-                    hint:
-                        'Import a descriptor, xpub, or address to start '
-                        'watching it.',
+                (_, AsyncData(:final value)) when value.isEmpty => EmptyState(
+                  // The first screen of the app: the full logo, once,
+                  // where every other empty state gets a watermark.
+                  art: GerfautLockup(
+                    color: tokens.primary,
+                    width: 160,
+                    semanticLabel: 'Gerfaut',
                   ),
+                  title: 'No wallets yet',
+                  hint:
+                      'Import a descriptor, xpub, or address to start '
+                      'watching it.',
+                ),
                 (_, AsyncData(:final value)) => RefreshIndicator(
                   onRefresh: () async {
                     if (network == null) return;
@@ -184,7 +197,7 @@ class HomeScreen extends ConsumerWidget {
                 ),
                 _ => Center(
                   child: Text(
-                    'Opening the vaultâ€¦',
+                    'Opening the vault…',
                     style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                   ),
                 ),

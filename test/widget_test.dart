@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
+import 'package:gerfaut/widgets/brand.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'fakes.dart';
@@ -24,6 +25,20 @@ void main() {
 
     expect(find.text('No wallets yet'), findsOneWidget);
     expect(find.text('Add a wallet'), findsOneWidget);
+    // The first screen anyone sees carries the whole logo, wordmark
+    // included: it is the one place the app introduces itself.
+    expect(find.byType(GerfautLockup), findsOneWidget);
+  });
+
+  testWidgets('the header wears the falcon, not the word', (tester) async {
+    await tester.pumpWidget(app(FakeBridge()));
+    await tester.pumpAndSettle();
+
+    // Whoever opened the app knows its name; the mark says it in the
+    // room of a glyph and leaves the bar to the actions.
+    expect(find.byType(GerfautMark), findsWidgets);
+    expect(find.text('Gerfaut'), findsNothing);
+    expect(find.bySemanticsLabel('Gerfaut'), findsWidgets);
   });
 
   testWidgets('a faked bootstrap resolves into the home screen', (
