@@ -119,7 +119,7 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                 ),
                 _ => Center(
                   child: Text(
-                    'Loading wallet…',
+                    'Loading walletâ€¦',
                     style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                   ),
                 ),
@@ -348,7 +348,7 @@ class _TxList extends ConsumerWidget {
             child: Column(
               children: [
                 SecondaryButton(
-                  label: loading ? 'Fetching…' : 'Load older transactions',
+                  label: loading ? 'Fetchingâ€¦' : 'Load older transactions',
                   icon: LucideIcons.chevronDown,
                   onPressed: loading ? null : () => _loadOlder(context, ref),
                 ),
@@ -366,6 +366,7 @@ class _TxList extends ConsumerWidget {
         final tx = sorted[index];
         final incoming = tx.netSats >= 0;
         final pending = !tx.status.confirmed;
+        final dated = tx.status.confirmed && tx.status.timestamp != null;
         return InkWell(
           onTap: () {
             Navigator.of(context).push(
@@ -403,52 +404,34 @@ class _TxList extends ConsumerWidget {
                     color: incoming && !pending
                         ? tokens.confirmed
                         : tokens.textMuted,
+                    // Said out loud, since the word is not written any
+                    // more: the arrow, the sign and the colour say it
+                    // on screen, and this says it to a screen reader.
+                    semanticLabel: incoming ? 'Received' : 'Sent',
                   ),
                 ),
                 const SizedBox(width: GerfautSpacing.sm),
+                // One line: the date reads in full, and the state is a
+                // glyph rather than a pill. "Sent" and "Received" are
+                // dropped on the phone, where the arrow, the sign and
+                // the colour already carry the direction three times.
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        incoming ? 'Received' : 'Sent',
-                        style: tokens.bodySmall,
-                      ),
-                      // Timestamp and status share the second line: on a
-                      // phone the date is what may be shortened, never
-                      // the amount.
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              tx.status.confirmed && tx.status.timestamp != null
-                                  ? formatTimestamp(tx.status.timestamp!)
-                                  : truncateMiddle(tx.txid, head: 8, tail: 8),
-                              style:
-                                  tx.status.confirmed &&
-                                      tx.status.timestamp != null
-                                  ? tokens.figureOf(
-                                      size: 12,
-                                      color: tokens.textMuted,
-                                    )
-                                  : tokens.data.copyWith(
-                                      fontSize: 12,
-                                      color: tokens.textMuted,
-                                    ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                  child: Text(
+                    dated
+                        ? formatTimestamp(tx.status.timestamp!)
+                        : truncateMiddle(tx.txid, head: 8, tail: 8),
+                    style: dated
+                        ? tokens.figureOf(size: 13)
+                        : tokens.data.copyWith(
+                            fontSize: 12,
+                            color: tokens.textMuted,
                           ),
-                          const SizedBox(width: GerfautSpacing.xs + 2),
-                          StatusPill(
-                            status: tx.status,
-                            confirmations: tx.confirmations,
-                          ),
-                        ],
-                      ),
-                    ],
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                const SizedBox(width: GerfautSpacing.sm),
+                StatusGlyph(status: tx.status),
                 const SizedBox(width: GerfautSpacing.sm),
                 ListAmount(sats: tx.netSats, pending: pending),
                 const SizedBox(width: 2),
@@ -530,7 +513,7 @@ class _UtxoList extends ConsumerWidget {
       ),
       _ => Center(
         child: Text(
-          'Loading UTXOs…',
+          'Loading UTXOsâ€¦',
           style: tokens.bodySmall.copyWith(color: tokens.textMuted),
         ),
       ),

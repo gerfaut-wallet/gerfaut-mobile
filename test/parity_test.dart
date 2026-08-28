@@ -213,7 +213,8 @@ void main() {
 
     await tester.tap(find.text('Cold storage'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Received'));
+    // The row says its direction with the arrow, not with a word.
+    await tester.tap(find.byIcon(LucideIcons.arrowDownLeft));
     await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(find.text('View on mempool.space'), 200);

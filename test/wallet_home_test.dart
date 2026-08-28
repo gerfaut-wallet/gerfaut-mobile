@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
+import 'package:gerfaut/widgets/status_pill.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:gerfaut/screens/wallet_home.dart';
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/format.dart';
@@ -48,7 +50,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('0.00123456', findRichText: true), findsNothing);
-    expect(find.textContaining('•••••', findRichText: true), findsWidgets);
+    expect(find.textContaining('â€¢â€¢â€¢â€¢â€¢', findRichText: true), findsWidgets);
     expect(bridge.appPrefs['mobile.masked'], '1');
   });
 
@@ -83,7 +85,7 @@ void main() {
 
     // Freshness line, the reason under it, and the balance note: the
     // snackbar is not the only trace of the failure.
-    expect(find.textContaining('Sync failed · last sync'), findsOneWidget);
+    expect(find.textContaining('Sync failed Â· last sync'), findsOneWidget);
     expect(find.text('mempool.space: timed out'), findsOneWidget);
     expect(
       find.text('Sync failed: showing the last known balance.'),
@@ -135,6 +137,64 @@ void main() {
     expect(
       find.text("This wallet's transaction history as a CSV file."),
       findsOneWidget,
+    );
+  });
+
+  testWidgets('a transaction row reads in one line, date included', (
+    tester,
+  ) async {
+    final meta = makeMeta(totalSats: 5000);
+    final bridge = FakeBridge(
+      wallets: [meta],
+      snapshots: {
+        'w1': makeSnapshot(
+          meta: meta,
+          totalSats: 5000,
+          txs: [
+            TxSummary(
+              txid: 'a' * 64,
+              netSats: 5000,
+              feeSats: 141,
+              status: TxStatus.confirmed(height: 100, timestamp: 1755000000),
+              confirmations: 10,
+            ),
+            TxSummary(
+              txid: 'b' * 64,
+              netSats: -2000,
+              feeSats: 141,
+              status: TxStatus.pending(),
+              confirmations: 0,
+            ),
+          ],
+        ),
+      },
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [bridgeProvider.overrideWithValue(bridge)],
+        child: MaterialApp(
+          theme: themeFrom(GerfautTokens.light, Brightness.light),
+          home: const WalletHomeScreen(walletId: 'w1'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The direction is already an arrow, a sign and a colour: the word
+    // would be a fourth telling, and it costs the date its room.
+    expect(find.text('Received'), findsNothing);
+    expect(find.text('Sent'), findsNothing);
+    expect(find.text(formatTimestamp(1755000000)), findsOneWidget);
+    expect(find.byType(StatusPill), findsNothing);
+    expect(find.byType(StatusGlyph), findsNWidgets(2));
+    // Shape, not colour: a check for a mined transaction, a clock for
+    // one still waiting.
+    expect(find.byIcon(LucideIcons.check), findsOneWidget);
+    expect(find.byIcon(LucideIcons.clock), findsOneWidget);
+    // The whole row still fits the list rhythm.
+    expect(
+      tester.getSize(find.byIcon(LucideIcons.arrowDownLeft)).height,
+      lessThanOrEqualTo(48),
     );
   });
 }
