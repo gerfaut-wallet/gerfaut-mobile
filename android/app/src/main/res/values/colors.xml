@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The canvas colour the app itself paints, so a cold start does not
+         flash white before the first frame. Dark value in values-night. -->
+    <color name="window_background">#F4F7F9</color>
+</resources>
