@@ -376,7 +376,10 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
               else
                 Row(
                   children: [
-                    GhostButton(
+                    // Sending the next transaction is an action of the
+                    // same rank as every other primary one: the same
+                    // component, not a quieter cousin.
+                    PrimaryButton(
                       label: 'Broadcast another',
                       onPressed: _another,
                     ),

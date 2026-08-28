@@ -12,15 +12,23 @@ import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/tx_file.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/buttons.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'fakes.dart';
 
-Widget broadcastApp(FakeBridge bridge) {
+/// The palette of a theme, so a test can walk both.
+GerfautTokens tokensOf(Brightness brightness) =>
+    brightness == Brightness.dark ? GerfautTokens.dark : GerfautTokens.light;
+
+Widget broadcastApp(
+  FakeBridge bridge, {
+  Brightness brightness = Brightness.light,
+}) {
   return ProviderScope(
     overrides: [bridgeProvider.overrideWithValue(bridge)],
     child: MaterialApp(
-      theme: themeFrom(GerfautTokens.light, Brightness.light),
+      theme: themeFrom(tokensOf(brightness), brightness),
       home: const BroadcastScreen(),
     ),
   );
@@ -411,4 +419,45 @@ void main() {
     expect(find.text('Waiting to be mined.'), findsOneWidget);
   });
 
+  for (final brightness in Brightness.values) {
+    testWidgets(
+      'sending the next transaction is a primary action (${brightness.name})',
+      (tester) async {
+        final tokens = tokensOf(brightness);
+        useTallSurface(tester);
+        final bridge = FakeBridge()..onPreview = (_, _) => makePreview();
+        await tester.pumpWidget(broadcastApp(bridge, brightness: brightness));
+        await tester.pumpAndSettle();
+        await preview(tester);
+        await tester.tap(find.widgetWithText(FilledButton, 'Broadcast'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Broadcast').last);
+        await tester.pumpAndSettle();
+
+        // The app's own primary component, not a quieter cousin.
+        expect(
+          find.widgetWithText(PrimaryButton, 'Broadcast another'),
+          findsOneWidget,
+        );
+        final another = primaryButton(tester, 'Broadcast another').style!;
+        final done = primaryButton(tester, 'Done').style!;
+        const resting = <WidgetState>{};
+        expect(another.backgroundColor!.resolve(resting), tokens.primary);
+        expect(another.foregroundColor!.resolve(resting), tokens.onPrimary);
+        // Same fill, same radius, same height as the primary next to
+        // it, in either theme.
+        expect(
+          another.backgroundColor!.resolve(resting),
+          done.backgroundColor!.resolve(resting),
+        );
+        expect(another.shape!.resolve(resting), done.shape!.resolve(resting));
+        expect(
+          tester
+              .getSize(find.widgetWithText(FilledButton, 'Broadcast another'))
+              .height,
+          44,
+        );
+      },
+    );
+  }
 }
