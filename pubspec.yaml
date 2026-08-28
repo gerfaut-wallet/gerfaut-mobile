@@ -45,6 +45,9 @@ dependencies:
   intl: ^0.20.3
   qr_flutter: ^4.1.0
   flutter_zxing: ^2.3.0
+  # Gerfaut drives the camera itself and hands each frame to the
+  # decoder above; the package already pulls this one in.
+  camera: ^0.12.0
   share_plus: ^13.3.0
 
 dev_dependencies:

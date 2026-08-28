@@ -1,14 +1,17 @@
 import 'dart:async';
 
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_zxing/flutter_zxing.dart' as zxing;
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/scan.dart';
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/qr_camera.dart';
 
 import 'fakes.dart';
 
@@ -262,6 +265,30 @@ void main() {
       expect(progress.complete, isTrue);
       expect(progress.text, 'tb1qexample');
       expect(progress.inProgress, isFalse);
+    });
+  });
+
+  group('the camera hands the decoder a whole frame', () {
+    test('nothing is cropped away before the code is read', () {
+      final params = QrCamera.decodeParams(1920, 1080);
+      expect(params.width, 1920);
+      expect(params.height, 1080);
+      // The failure this guards against: reading only a square in the
+      // middle of the picture. A descriptor code fills the viewfinder,
+      // so a crop cuts it in half and the scanner looks dead.
+      expect(params.cropWidth, 0);
+      expect(params.cropHeight, 0);
+    });
+
+    test('the frame is read as luminance, looking for QR codes only', () {
+      final params = QrCamera.decodeParams(1280, 720);
+      expect(params.imageFormat, zxing.ImageFormat.lum);
+      expect(params.format, zxing.Format.qrCode);
+      expect(params.tryRotate, isTrue);
+    });
+
+    test('the stream carries enough pixels for a dense code', () {
+      expect(QrCamera.resolution, ResolutionPreset.veryHigh);
     });
   });
 }

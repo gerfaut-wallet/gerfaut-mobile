@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_zxing/flutter_zxing.dart';
 
 import '../src/bridge.dart';
 import '../src/models.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
+import '../widgets/qr_camera.dart';
 
 /// Builds the camera view around the sink every decoded frame goes to.
 typedef CameraBuilder = Widget Function(ValueChanged<String> onFrame);
@@ -55,12 +55,6 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
 
   QrProgress? _progress;
   String? _error;
-
-  void _onScan(Code code) {
-    final text = code.text;
-    if (text == null || text.isEmpty) return;
-    onFrame(text);
-  }
 
   /// Feeds one decoded frame. A repeat is dropped; a new frame sends
   /// the whole collection to the core.
@@ -117,14 +111,7 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final progress = _progress;
     final camera =
-        widget.cameraBuilder?.call(onFrame) ??
-        ReaderWidget(
-          codeFormat: Format.qrCode,
-          showGallery: false,
-          showToggleCamera: false,
-          tryHarder: true,
-          onScan: _onScan,
-        );
+        widget.cameraBuilder?.call(onFrame) ?? QrCamera(onFrame: onFrame);
     return Scaffold(
       appBar: AppBar(title: const Text('Scan a QR code')),
       body: SafeArea(
