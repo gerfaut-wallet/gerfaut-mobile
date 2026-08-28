@@ -64,6 +64,11 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
   /// tree, and the camera must not be started again.
   bool _closed = false;
 
+  /// A start is under way. Two of them at once would open the sensor
+  /// twice and leak the first one, which the lifecycle makes easy: an
+  /// app can be resumed before the previous start has finished.
+  bool _starting = false;
+
   /// The decoder itself broke down, as opposed to a frame that simply
   /// held no code. The second is the normal case and says nothing; the
   /// first would otherwise look exactly like a camera pointed at a
@@ -103,6 +108,8 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
   }
 
   Future<void> _start() async {
+    if (_starting || _closed) return;
+    _starting = true;
     try {
       await zxing.zx.startCameraProcessing();
       final cameras = await availableCameras();
@@ -149,6 +156,8 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
     } catch (_) {
       if (_closed || !mounted) return;
       setState(() => _feed = _Feed.unavailable);
+    } finally {
+      _starting = false;
     }
   }
 
