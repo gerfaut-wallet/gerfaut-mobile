@@ -241,7 +241,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         return url;
       case PublicEsplora(:final server):
         final chosen = _publicServerById(network, server);
-        return chosen != null && chosen.selfSigned ? chosen.url : null;
+        return chosen?.protocol == ServerProtocol.electrum ? chosen!.url : null;
       case CustomEsplora():
         return null;
     }

@@ -902,7 +902,7 @@ void main() {
       expect(find.text('Trusted certificates'), findsNothing);
     });
 
-    testWidgets('only a server with a certificate of its own is inspected', (
+    testWidgets('every electrum server is checked before it is saved', (
       tester,
     ) async {
       useTallSurface(tester);
@@ -910,21 +910,25 @@ void main() {
       await tester.pumpWidget(settingsApp(bridge));
       await tester.pumpAndSettle();
 
-      // A public Esplora is reached over the web PKI like any web site.
+      // A public Esplora is reached over the web PKI like any web site:
+      // there is nothing to settle.
       await save(tester);
       expect(bridge.inspectedCertificates, isEmpty);
 
-      // So is an Electrum server a public authority vouches for.
+      // Every Electrum server is checked, whether the catalogue calls it
+      // self-signed or not: what it presents today is what counts.
       serverField(tester).onChanged('electrum:frigate.2140.dev');
       await tester.pumpAndSettle();
       await save(tester);
-      expect(bridge.inspectedCertificates, isEmpty);
+      expect(bridge.inspectedCertificates, ['ssl://frigate.2140.dev:50002']);
 
-      // One that signs its own is checked before anything is saved.
       serverField(tester).onChanged('electrum:bitcoin.lu.ke');
       await tester.pumpAndSettle();
       await save(tester);
-      expect(bridge.inspectedCertificates, ['ssl://bitcoin.lu.ke:50002']);
+      expect(bridge.inspectedCertificates, [
+        'ssl://frigate.2140.dev:50002',
+        'ssl://bitcoin.lu.ke:50002',
+      ]);
     });
   });
 }
