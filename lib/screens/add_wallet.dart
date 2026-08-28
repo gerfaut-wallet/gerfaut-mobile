@@ -8,6 +8,7 @@ import '../src/models.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
+import '../widgets/choice_group.dart';
 import '../widgets/select_field.dart';
 import 'scan.dart';
 import 'wallet_home.dart';
@@ -366,17 +367,21 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
         const SizedBox(height: GerfautSpacing.md),
         Text('NETWORK', style: tokens.label.copyWith(color: tokens.textMuted)),
         const SizedBox(height: GerfautSpacing.sm),
-        Wrap(
-          spacing: GerfautSpacing.sm,
-          children: [
+        // Nullable: nothing is picked until the descriptor is parsed.
+        ChoiceGroup<Network?>(
+          label: 'Network',
+          value: _network,
+          options: [
             for (final candidate in parsed.networks)
-              _NetworkPill(
-                network: candidate,
-                selected: candidate == _network,
+              ChoiceOption(
+                value: candidate,
+                label: candidate.label,
+                // A descriptor that names one network leaves nothing to
+                // choose: the option is shown, not offered.
                 enabled: parsed.networks.length > 1,
-                onTap: () => setState(() => _network = candidate),
               ),
           ],
+          onChanged: (candidate) => setState(() => _network = candidate),
         ),
         if (_error != null) ...[
           const SizedBox(height: GerfautSpacing.md),
@@ -402,46 +407,6 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
           ],
         ),
       ],
-    );
-  }
-}
-
-class _NetworkPill extends StatelessWidget {
-  const _NetworkPill({
-    required this.network,
-    required this.selected,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  final Network network;
-  final bool selected;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    return InkWell(
-      borderRadius: BorderRadius.circular(GerfautRadius.md),
-      onTap: enabled ? onTap : null,
-      child: Container(
-        height: 44,
-        padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? tokens.primary : tokens.surfaceSunken,
-          borderRadius: BorderRadius.circular(GerfautRadius.md),
-        ),
-        child: Text(
-          network.label,
-          style: tokens.bodySmall.copyWith(
-            color: selected ? tokens.onPrimary : tokens.text,
-            fontWeight: FontWeight.w500,
-            fontVariations: const [FontVariation('wght', 500)],
-          ),
-        ),
-      ),
     );
   }
 }

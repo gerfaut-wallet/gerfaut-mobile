@@ -10,6 +10,7 @@ import '../src/models.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
+import '../widgets/choice_group.dart';
 import '../widgets/select_field.dart';
 
 /// Application version shown in About. Kept in step with pubspec.yaml.
@@ -582,16 +583,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                 ),
                 const SizedBox(height: GerfautSpacing.sm),
-                Wrap(
-                  spacing: GerfautSpacing.sm,
-                  children: [
+                ChoiceGroup<AmountUnit>(
+                  label: 'Unit',
+                  value: ref.watch(unitProvider),
+                  options: [
                     for (final unit in AmountUnit.values)
-                      _Pill(
-                        label: unit.label,
-                        selected: ref.watch(unitProvider) == unit,
-                        onTap: () => ref.read(unitProvider.notifier).set(unit),
-                      ),
+                      ChoiceOption(value: unit, label: unit.label),
                   ],
+                  onChanged: (unit) =>
+                      ref.read(unitProvider.notifier).set(unit),
                 ),
                 const SizedBox(height: GerfautSpacing.md),
                 Row(
@@ -643,21 +643,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                   ),
                   const SizedBox(height: GerfautSpacing.sm),
-                  Wrap(
-                    spacing: GerfautSpacing.sm,
-                    runSpacing: GerfautSpacing.sm,
-                    children: [
+                  ChoiceGroup<PriceSource>(
+                    label: 'Price source',
+                    value: ref.watch(fiatSourceProvider),
+                    options: [
                       for (final source in PriceSource.values)
-                        _Pill(
+                        ChoiceOption(
+                          value: source,
                           label: source.label,
-                          selected: ref.watch(fiatSourceProvider) == source,
                           // A source that does not quote the currency is
                           // shown as unavailable, never silently broken.
                           enabled: source.supportsCurrency(currency),
-                          onTap: () =>
-                              ref.read(fiatSourceProvider.notifier).set(source),
                         ),
                     ],
+                    onChanged: (source) =>
+                        ref.read(fiatSourceProvider.notifier).set(source),
                   ),
                   if (currency.reach == CurrencyReach.coingeckoOnly) ...[
                     const SizedBox(height: GerfautSpacing.sm),
@@ -692,17 +692,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               children: [
                 _FieldLabel('Theme', tokens: tokens),
                 const SizedBox(height: GerfautSpacing.sm),
-                Wrap(
-                  spacing: GerfautSpacing.sm,
-                  children: [
+                ChoiceGroup<ThemePref>(
+                  label: 'Theme',
+                  value: ref.watch(themeProvider),
+                  options: [
                     for (final pref in ThemePref.values)
-                      _Pill(
+                      ChoiceOption(
+                        value: pref,
                         label: pref.label,
                         icon: _themeIcons[pref],
-                        selected: ref.watch(themeProvider) == pref,
-                        onTap: () => ref.read(themeProvider.notifier).set(pref),
                       ),
                   ],
+                  onChanged: (pref) =>
+                      ref.read(themeProvider.notifier).set(pref),
                 ),
               ],
             ),
@@ -1209,74 +1211,6 @@ const Map<ThemePref, IconData> _themeIcons = {
   ThemePref.dark: LucideIcons.moon,
   ThemePref.system: LucideIcons.monitor,
 };
-
-class _Pill extends StatelessWidget {
-  const _Pill({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-    this.icon,
-    this.enabled = true,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  /// Optional decorative glyph before the label.
-  final IconData? icon;
-
-  /// An option that cannot apply here: quiet, and out of reach.
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final color = switch ((selected, enabled)) {
-      (true, _) => tokens.onPrimary,
-      (false, false) => tokens.textMuted,
-      (false, true) => tokens.text,
-    };
-    return Semantics(
-      container: true,
-      button: true,
-      enabled: enabled,
-      selected: selected,
-      label: label,
-      excludeSemantics: true,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(GerfautRadius.md),
-        onTap: enabled ? onTap : null,
-        child: Container(
-          height: 44,
-          padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: selected ? tokens.primary : tokens.surfaceSunken,
-            borderRadius: BorderRadius.circular(GerfautRadius.md),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (icon != null) ...[
-                ExcludeSemantics(child: Icon(icon, size: 15, color: color)),
-                const SizedBox(width: 6),
-              ],
-              Text(
-                label,
-                style: tokens.bodySmall.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.w500,
-                  fontVariations: const [FontVariation('wght', 500)],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _BackendOption extends StatelessWidget {
   const _BackendOption({
