@@ -333,6 +333,40 @@ pub async fn public_servers(network: String) -> String {
     to_json(&gerfaut_core::chain::public::public_servers(network))
 }
 
+// --- certificates ------------------------------------------------------
+
+/// What an Electrum server's certificate amounts to right now, seen
+/// through the handshake a sync would open. Returns a serialized
+/// `CertificateReport`: the `host:port` an acceptance is recorded
+/// against, plus the `status` the settings screen acts on.
+pub async fn inspect_certificate(url: String) -> String {
+    let manager = try_json!(manager());
+    match manager.inspect_certificate(&url).await {
+        Ok(report) => to_json(&report),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Remembers the certificate the user accepted for this server. That
+/// host must present exactly this one from then on.
+pub async fn trust_certificate(url: String, fingerprint: String) -> String {
+    let manager = try_json!(manager());
+    match manager.trust_certificate(&url, &fingerprint).await {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Drops an accepted certificate, keyed by `host:port`: the next
+/// connection to that host asks again.
+pub async fn forget_certificate(host: String) -> String {
+    let manager = try_json!(manager());
+    match manager.forget_certificate(&host).await {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
 /// Stores one small app preference in the encrypted vault.
 pub async fn set_app_pref(key: String, value: String) -> String {
     let manager = try_json!(manager());

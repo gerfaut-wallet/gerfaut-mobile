@@ -116,6 +116,28 @@ Future<String> setBackend({
 Future<String> publicServers({required String network}) =>
     RustLib.instance.api.crateApiPublicServers(network: network);
 
+/// What an Electrum server's certificate amounts to right now, seen
+/// through the handshake a sync would open. Returns a serialized
+/// `CertificateReport`: the `host:port` an acceptance is recorded
+/// against, plus the `status` the settings screen acts on.
+Future<String> inspectCertificate({required String url}) =>
+    RustLib.instance.api.crateApiInspectCertificate(url: url);
+
+/// Remembers the certificate the user accepted for this server. That
+/// host must present exactly this one from then on.
+Future<String> trustCertificate({
+  required String url,
+  required String fingerprint,
+}) => RustLib.instance.api.crateApiTrustCertificate(
+  url: url,
+  fingerprint: fingerprint,
+);
+
+/// Drops an accepted certificate, keyed by `host:port`: the next
+/// connection to that host asks again.
+Future<String> forgetCertificate({required String host}) =>
+    RustLib.instance.api.crateApiForgetCertificate(host: host);
+
 /// Stores one small app preference in the encrypted vault.
 Future<String> setAppPref({required String key, required String value}) =>
     RustLib.instance.api.crateApiSetAppPref(key: key, value: value);

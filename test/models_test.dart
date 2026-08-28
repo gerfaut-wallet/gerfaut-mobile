@@ -196,6 +196,18 @@ void main() {
       expect(server.protocol, ServerProtocol.electrum);
       expect(server.protocol.label, 'Electrum');
       expect(server.url, 'ssl://frigate.2140.dev:50002');
+      // A public authority vouches for this one.
+      expect(server.selfSigned, isFalse);
+      expect(
+        PublicServer.fromJson(const {
+          'id': 'electrum:bitcoin.lu.ke',
+          'label': 'bitcoin.lu.ke:50002',
+          'protocol': 'electrum',
+          'url': 'ssl://bitcoin.lu.ke:50002',
+          'self_signed': true,
+        }).selfSigned,
+        isTrue,
+      );
       expect(
         PublicServer.fromJson(const {
           'id': 'mempool.space',
@@ -215,6 +227,119 @@ void main() {
       );
       final config = settings.backendFor(Network.mainnet);
       expect((config as PublicEsplora).server, isNull);
+    });
+  });
+
+  group('certificates', () {
+    test('every status the core can report is read back', () {
+      const fingerprint = '11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:'
+          '11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00';
+
+      final trusted = CertificateReport.fromJson(const {
+        'host': 'electrum.blockstream.info:50002',
+        'status': 'trusted',
+      });
+      expect(trusted.host, 'electrum.blockstream.info:50002');
+      expect(trusted.status, isA<TrustedCertificate>());
+
+      expect(
+        CertificateReport.fromJson(const {
+          'host': 'node.local:50001',
+          'status': 'not_tls',
+        }).status,
+        isA<NotTlsCertificate>(),
+      );
+      expect(
+        CertificateReport.fromJson(const {
+          'host': 'abcdefgh.onion:50002',
+          'status': 'tor',
+        }).status,
+        isA<TorCertificate>(),
+      );
+
+      final pinned = CertificateReport.fromJson({
+        'host': 'node.local:50002',
+        'status': 'pinned',
+        'fingerprint': fingerprint,
+      }).status;
+      expect((pinned as PinnedCertificate).fingerprint, fingerprint);
+
+      final unknown = CertificateReport.fromJson({
+        'host': 'node.local:50002',
+        'status': 'unknown',
+        'fingerprint': fingerprint,
+        'reason': 'self-signed, or signed by an authority this machine '
+            'does not know',
+        'subject': 'CN=node.local',
+        'expires': 1893456000,
+      }).status;
+      expect((unknown as UnknownCertificate).fingerprint, fingerprint);
+      expect(unknown.subject, 'CN=node.local');
+      expect(unknown.expires, 1893456000);
+      expect(unknown.reason, startsWith('self-signed'));
+
+      // What the certificate says about itself is optional; the
+      // fingerprint is what gets trusted.
+      final bare = CertificateReport.fromJson({
+        'host': 'node.local:50002',
+        'status': 'unknown',
+        'fingerprint': fingerprint,
+        'reason': 'expired',
+        'subject': null,
+        'expires': null,
+      }).status;
+      expect((bare as UnknownCertificate).subject, isNull);
+      expect(bare.expires, isNull);
+
+      final changed = CertificateReport.fromJson({
+        'host': 'node.local:50002',
+        'status': 'changed',
+        'stored': fingerprint,
+        'presented': 'AA:$fingerprint',
+      }).status;
+      expect((changed as ChangedCertificate).stored, fingerprint);
+      expect(changed.presented, 'AA:$fingerprint');
+
+      final unreachable = CertificateReport.fromJson(const {
+        'host': 'node.local:50002',
+        'status': 'unreachable',
+        'detail': 'connection refused',
+      }).status;
+      expect(
+        (unreachable as UnreachableCertificate).detail,
+        'connection refused',
+      );
+    });
+
+    test('a status this build does not know is refused, not guessed', () {
+      expect(
+        () => CertificateReport.fromJson(const {
+          'host': 'node.local:50002',
+          'status': 'revoked',
+        }),
+        throwsFormatException,
+      );
+    });
+
+    test('accepted certificates ride along in the settings', () {
+      final settings = Settings.fromJson(const {
+        'active_network': 'mainnet',
+        'backends': <String, dynamic>{},
+        'app_prefs': <String, dynamic>{},
+        'gap_limit': 20,
+        'electrum_certs': {'node.local:50002': 'AB:CD'},
+      });
+      expect(settings.electrumCerts, {'node.local:50002': 'AB:CD'});
+
+      // A vault written before the map existed reads as empty.
+      expect(
+        Settings.fromJson(const {
+          'active_network': 'mainnet',
+          'backends': <String, dynamic>{},
+          'app_prefs': <String, dynamic>{},
+        }).electrumCerts,
+        isEmpty,
+      );
     });
   });
 }

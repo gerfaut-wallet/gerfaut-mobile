@@ -71,6 +71,18 @@ abstract class GerfautBridge {
   /// Public servers offered for a network, in settings order. Empty on
   /// regtest, which has no public server.
   Future<List<PublicServer>> publicServers(Network network);
+
+  /// What an Electrum server's certificate amounts to right now, seen
+  /// through the handshake a sync would open.
+  Future<CertificateReport> inspectCertificate(String url);
+
+  /// Remembers the certificate the user accepted for this server. That
+  /// host must present exactly this one from then on.
+  Future<void> trustCertificate(String url, String fingerprint);
+
+  /// Drops an accepted certificate, keyed by `host:port`: the next
+  /// connection to that host asks again.
+  Future<void> forgetCertificate(String host);
   Future<void> setAppPref(String key, String value);
   Future<PriceQuote> fetchPrice(PriceSource source, FiatCurrency currency);
   Future<UpdateCheck> checkUpdate(String currentVersion);
@@ -242,6 +254,22 @@ class RustBridge implements GerfautBridge {
   Future<List<PublicServer>> publicServers(Network network) async {
     final raw = await rust.publicServers(network: network.id);
     return _list(raw).map(PublicServer.fromJson).toList();
+  }
+
+  @override
+  Future<CertificateReport> inspectCertificate(String url) async {
+    final raw = await rust.inspectCertificate(url: url);
+    return CertificateReport.fromJson(_object(raw));
+  }
+
+  @override
+  Future<void> trustCertificate(String url, String fingerprint) async {
+    _ok(await rust.trustCertificate(url: url, fingerprint: fingerprint));
+  }
+
+  @override
+  Future<void> forgetCertificate(String host) async {
+    _ok(await rust.forgetCertificate(host: host));
   }
 
   @override

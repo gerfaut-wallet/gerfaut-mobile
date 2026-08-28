@@ -5,6 +5,7 @@
 import 'dart:async';
 
 import 'package:gerfaut/src/bridge.dart';
+import 'package:gerfaut/src/electrum.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:url_launcher_platform_interface/link.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
@@ -183,6 +184,13 @@ final Map<Network, List<PublicServer>> defaultPublicServers = {
   // A local chain has no public server, by definition.
   Network.regtest: [],
 };
+
+/// The key the core records an acceptance against: `host:port`, scheme
+/// and path stripped. Mirrors `certificate_key` in gerfaut-core.
+String _certificateKey(String url) {
+  final parts = parseElectrumUrl(url);
+  return parts.port.isEmpty ? parts.host : '${parts.host}:${parts.port}';
+}
 
 class FakeBridge implements GerfautBridge {
   FakeBridge({
@@ -441,15 +449,27 @@ class FakeBridge implements GerfautBridge {
   @override
   Future<Settings> getSettings() async => settings;
 
+  /// Rewrites the stored settings one field at a time, the way the
+  /// vault does: everything left out stays as it was.
+  void _store({
+    Network? activeNetwork,
+    Map<Network, BackendConfig>? backends,
+    int? gapLimit,
+    Map<String, String>? electrumCerts,
+  }) {
+    settings = Settings(
+      activeNetwork: activeNetwork ?? settings.activeNetwork,
+      backends: backends ?? settings.backends,
+      appPrefs: settings.appPrefs,
+      gapLimit: gapLimit ?? settings.gapLimit,
+      electrumCerts: electrumCerts ?? settings.electrumCerts,
+    );
+  }
+
   @override
   Future<void> setActiveNetwork(Network network) async {
     lastActiveNetworkSet = network;
-    settings = Settings(
-      activeNetwork: network,
-      backends: settings.backends,
-      appPrefs: settings.appPrefs,
-      gapLimit: settings.gapLimit,
-    );
+    _store(activeNetwork: network);
   }
 
   /// Last accepted gap limit, for assertions; null when never set.
@@ -465,23 +485,13 @@ class FakeBridge implements GerfautBridge {
       );
     }
     lastGapLimitSet = gapLimit;
-    settings = Settings(
-      activeNetwork: settings.activeNetwork,
-      backends: settings.backends,
-      appPrefs: settings.appPrefs,
-      gapLimit: gapLimit,
-    );
+    _store(gapLimit: gapLimit);
   }
 
   @override
   Future<void> setBackend(Network network, BackendConfig config) async {
     savedBackends[network] = config;
-    settings = Settings(
-      activeNetwork: settings.activeNetwork,
-      backends: {...settings.backends, network: config},
-      appPrefs: settings.appPrefs,
-      gapLimit: settings.gapLimit,
-    );
+    _store(backends: {...settings.backends, network: config});
   }
 
   /// Catalogue hook; throw a [BridgeException] to simulate a bridge
@@ -497,6 +507,47 @@ class FakeBridge implements GerfautBridge {
     final servers = onPublicServers;
     if (servers != null) return servers(network);
     return defaultPublicServers[network] ?? const [];
+  }
+
+  /// Certificate hook; the default reports one a public authority
+  /// vouches for. Return an [UnknownCertificate] or a
+  /// [ChangedCertificate] to exercise the acceptance dialogs.
+  CertificateStatus Function(String url)? onInspectCertificate;
+
+  /// Every inspected URL, in order, for assertions.
+  final List<String> inspectedCertificates = [];
+
+  /// Every accepted certificate, in order, for assertions.
+  final List<({String url, String fingerprint})> trustedCertificates = [];
+
+  /// Every forgotten host, in order, for assertions.
+  final List<String> forgottenCertificates = [];
+
+  @override
+  Future<CertificateReport> inspectCertificate(String url) async {
+    inspectedCertificates.add(url);
+    final inspect = onInspectCertificate;
+    return CertificateReport(
+      host: _certificateKey(url),
+      status: inspect != null ? inspect(url) : const TrustedCertificate(),
+    );
+  }
+
+  @override
+  Future<void> trustCertificate(String url, String fingerprint) async {
+    trustedCertificates.add((url: url, fingerprint: fingerprint));
+    _store(
+      electrumCerts: {
+        ...settings.electrumCerts,
+        _certificateKey(url): fingerprint,
+      },
+    );
+  }
+
+  @override
+  Future<void> forgetCertificate(String host) async {
+    forgottenCertificates.add(host);
+    _store(electrumCerts: {...settings.electrumCerts}..remove(host));
   }
 
   @override

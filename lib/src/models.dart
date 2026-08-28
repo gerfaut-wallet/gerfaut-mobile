@@ -808,6 +808,7 @@ class PublicServer {
     required this.label,
     required this.protocol,
     required this.url,
+    this.selfSigned = false,
   });
 
   factory PublicServer.fromJson(Map<String, dynamic> json) {
@@ -816,6 +817,7 @@ class PublicServer {
       label: json['label'] as String,
       protocol: ServerProtocol.fromId(json['protocol'] as String),
       url: json['url'] as String,
+      selfSigned: json['self_signed'] as bool? ?? false,
     );
   }
 
@@ -828,6 +830,10 @@ class PublicServer {
 
   /// Endpoint Gerfaut talks to.
   final String url;
+
+  /// Whether this server signs its own certificate, so the picker can
+  /// say it before it is chosen rather than after.
+  final bool selfSigned;
 }
 
 /// Chain data source for one network.
@@ -889,6 +895,7 @@ class Settings {
     required this.backends,
     required this.appPrefs,
     this.gapLimit = 20,
+    this.electrumCerts = const {},
   });
 
   factory Settings.fromJson(Map<String, dynamic> json) {
@@ -905,6 +912,8 @@ class Settings {
         (key, value) => MapEntry(key, value as String),
       ),
       gapLimit: json['gap_limit'] as int? ?? 20,
+      electrumCerts: (json['electrum_certs'] as Map<String, dynamic>? ?? {})
+          .map((key, value) => MapEntry(key, value as String)),
     );
   }
 
@@ -915,9 +924,123 @@ class Settings {
   /// Global gap limit applied to every descriptor wallet on sync.
   final int gapLimit;
 
+  /// Electrum certificates the user accepted, by `host:port`. The core
+  /// stores them the way every tool prints a fingerprint: uppercase hex
+  /// pairs joined by colons.
+  final Map<String, String> electrumCerts;
+
   /// Backend for a network, falling back to the public default.
   BackendConfig backendFor(Network network) =>
       backends[network] ?? const PublicEsplora();
+}
+
+/// One server's certificate, and the key an acceptance is recorded
+/// against. The core flattens the status into the same object; this
+/// keeps the two apart so a screen can switch on the status alone.
+class CertificateReport {
+  const CertificateReport({required this.host, required this.status});
+
+  factory CertificateReport.fromJson(Map<String, dynamic> json) {
+    return CertificateReport(
+      host: json['host'] as String,
+      status: CertificateStatus.fromJson(json),
+    );
+  }
+
+  /// `host:port`, scheme and path stripped.
+  final String host;
+  final CertificateStatus status;
+}
+
+/// What a handshake concluded about a server's certificate, mirroring
+/// `CertificateStatus` in gerfaut-core.
+sealed class CertificateStatus {
+  const CertificateStatus();
+
+  factory CertificateStatus.fromJson(Map<String, dynamic> json) {
+    return switch (json['status'] as String) {
+      'not_tls' => const NotTlsCertificate(),
+      'tor' => const TorCertificate(),
+      'trusted' => const TrustedCertificate(),
+      'pinned' => PinnedCertificate(fingerprint: json['fingerprint'] as String),
+      'unknown' => UnknownCertificate(
+        fingerprint: json['fingerprint'] as String,
+        reason: json['reason'] as String,
+        subject: json['subject'] as String?,
+        expires: json['expires'] as int?,
+      ),
+      'changed' => ChangedCertificate(
+        stored: json['stored'] as String,
+        presented: json['presented'] as String,
+      ),
+      'unreachable' => UnreachableCertificate(
+        detail: json['detail'] as String,
+      ),
+      final other => throw FormatException('unknown status: $other'),
+    };
+  }
+}
+
+/// Plain TCP: there is no certificate, and nothing is encrypted.
+class NotTlsCertificate extends CertificateStatus {
+  const NotTlsCertificate();
+}
+
+/// An onion address is the server's identity; a certificate on top
+/// authenticates nothing more.
+class TorCertificate extends CertificateStatus {
+  const TorCertificate();
+}
+
+/// A public certificate authority vouches for it.
+class TrustedCertificate extends CertificateStatus {
+  const TrustedCertificate();
+}
+
+/// Exactly the certificate accepted for this host.
+class PinnedCertificate extends CertificateStatus {
+  const PinnedCertificate({required this.fingerprint});
+
+  final String fingerprint;
+}
+
+/// No authority vouches for it and this host has no accepted
+/// certificate yet: the user decides, once.
+class UnknownCertificate extends CertificateStatus {
+  const UnknownCertificate({
+    required this.fingerprint,
+    required this.reason,
+    this.subject,
+    this.expires,
+  });
+
+  final String fingerprint;
+
+  /// Why no authority vouches for it, in words a user can act on.
+  final String reason;
+
+  /// What the certificate calls itself, when it says so.
+  final String? subject;
+
+  /// When it stops being valid, in seconds since the epoch.
+  final int? expires;
+}
+
+/// This host was accepted with a different certificate. Something
+/// changed on the server, or something sits in between.
+class ChangedCertificate extends CertificateStatus {
+  const ChangedCertificate({required this.stored, required this.presented});
+
+  final String stored;
+  final String presented;
+}
+
+/// The server could not be reached, so nothing can be said about its
+/// certificate yet.
+class UnreachableCertificate extends CertificateStatus {
+  const UnreachableCertificate({required this.detail});
+
+  final String detail;
 }
 
 /// Where a fiat quote comes from. All endpoints are public and keyless.
