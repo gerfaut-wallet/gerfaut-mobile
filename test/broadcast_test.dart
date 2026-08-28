@@ -240,10 +240,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(bridge.broadcastHexes, ['0200000001deadbeef']);
-    expect(
-      find.text('Sent to mempool.space · waiting in the mempool'),
-      findsOneWidget,
-    );
+    // One sentence, and only what the user is waiting for.
+    expect(find.text('Waiting to be mined.'), findsOneWidget);
+    expect(find.textContaining('waiting in the mempool'), findsNothing);
+    expect(find.textContaining('Sent to mempool.space'), findsNothing);
     expect(bridge.statusCalls, 1);
     expect(find.text('Done'), findsOneWidget);
     expect(find.text('Broadcast another'), findsOneWidget);
@@ -408,6 +408,7 @@ void main() {
       findsNothing,
     );
     expect(bridge.statusCalls, 1);
-    expect(find.text('Waiting in the mempool · mempool.space'), findsOneWidget);
+    expect(find.text('Waiting to be mined.'), findsOneWidget);
   });
+
 }

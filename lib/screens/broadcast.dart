@@ -1132,10 +1132,14 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
     final record = widget.record;
     final status = _status;
     final sentTo = widget.sentTo;
-    final waiting = sentTo != null
-        ? 'Sent to $sentTo · waiting in the mempool'
-        : status != null
-        ? 'Waiting in the mempool · ${status.backend}'
+    // One sentence, whoever answered: which host holds it, that the
+    // mempool is where it sits and how often Gerfaut asks are facts the
+    // user can do nothing with. What is waited for is a block.
+    const waiting = 'Waiting to be mined.';
+    // A past broadcast nobody has asked about yet says when it left,
+    // not where it stands.
+    final unchecked = sentTo != null
+        ? waiting
         : 'Sent ${formatTimestamp(record.at)}';
     final (
       IconData icon,
@@ -1153,7 +1157,7 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
         LucideIcons.hourglass,
         tokens.pending,
         tokens.pendingSurface,
-        waiting,
+        unchecked,
       ),
       BroadcastStatus(confirmed: true) => (
         LucideIcons.circleCheck,
