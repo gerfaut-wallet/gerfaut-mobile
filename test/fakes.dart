@@ -433,9 +433,14 @@ class FakeBridge implements GerfautBridge {
   SyncReport Function(String id)? onSyncWallet;
   SyncAllReport Function(Network? network)? onSyncAll;
 
+  /// Holds a sync in flight, for a test that looks at what the screen
+  /// does while one runs. Completed, the sync finishes.
+  Completer<void>? syncGate;
+
   @override
   Future<SyncReport> syncWallet(String id) async {
     syncWalletCalls += 1;
+    await syncGate?.future;
     final sync = onSyncWallet;
     if (sync != null) return sync(id);
     return SyncReport(

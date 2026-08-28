@@ -136,6 +136,15 @@ ThemeData themeFrom(GerfautTokens tokens, Brightness brightness) {
       centerTitle: false,
       titleTextStyle: tokens.h2,
     ),
+    iconButtonTheme: IconButtonThemeData(
+      // 44px, the touch target of every other control in Gerfaut. The
+      // Material default is 48, which spreads a row of actions wider
+      // than the header has to give.
+      style: IconButton.styleFrom(
+        minimumSize: const Size(44, 44),
+        padding: EdgeInsets.zero,
+      ),
+    ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: tokens.text,
       contentTextStyle: tokens.bodySmall.copyWith(color: tokens.background),

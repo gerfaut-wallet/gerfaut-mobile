@@ -8,6 +8,7 @@ import '../theme/tokens.dart';
 import '../widgets/amounts.dart';
 import '../widgets/buttons.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/sync_button.dart';
 import '../widgets/sync_indicator.dart';
 import 'add_wallet.dart';
 import 'broadcast.dart';
@@ -77,6 +78,14 @@ class HomeScreen extends ConsumerWidget {
             tooltip: masked ? 'Show balances' : 'Hide balances',
             onPressed: () => ref.read(maskedProvider.notifier).toggle(),
             icon: Icon(masked ? LucideIcons.eyeOff : LucideIcons.eye, size: 20),
+          ),
+          // Syncs every wallet of the network at once, and turns for as
+          // long as any of them is still working.
+          SyncButton(
+            syncing: sync.syncingAny,
+            onPressed: network == null || (wallets.valueOrNull?.isEmpty ?? true)
+                ? null
+                : () => sync.syncAll(network),
           ),
           // A transaction belongs to the workspace network, not to one
           // wallet: broadcasting starts from here.
@@ -175,7 +184,7 @@ class HomeScreen extends ConsumerWidget {
                 ),
                 _ => Center(
                   child: Text(
-                    'Opening the vault…',
+                    'Opening the vaultâ€¦',
                     style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                   ),
                 ),

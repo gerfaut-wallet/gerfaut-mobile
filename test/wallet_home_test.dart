@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/widgets/status_pill.dart';
+import 'package:gerfaut/widgets/sync_button.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:gerfaut/screens/wallet_home.dart';
 import 'package:gerfaut/src/bridge.dart';
@@ -50,7 +53,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('0.00123456', findRichText: true), findsNothing);
-    expect(find.textContaining('â€¢â€¢â€¢â€¢â€¢', findRichText: true), findsWidgets);
+    expect(find.textContaining('•••••', findRichText: true), findsWidgets);
     expect(bridge.appPrefs['mobile.masked'], '1');
   });
 
@@ -85,7 +88,7 @@ void main() {
 
     // Freshness line, the reason under it, and the balance note: the
     // snackbar is not the only trace of the failure.
-    expect(find.textContaining('Sync failed Â· last sync'), findsOneWidget);
+    expect(find.textContaining('Sync failed · last sync'), findsOneWidget);
     expect(find.text('mempool.space: timed out'), findsOneWidget);
     expect(
       find.text('Sync failed: showing the last known balance.'),
@@ -98,7 +101,7 @@ void main() {
     );
   });
 
-  testWidgets('the overflow menu reaches addresses and export', (tester) async {
+  testWidgets('every action of the wallet is in its header', (tester) async {
     final meta = makeMeta();
     final bridge = FakeBridge(
       wallets: [meta],
@@ -115,24 +118,26 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('More'));
-    await tester.pumpAndSettle();
-    // The address audit lives on the Receive page now.
-    expect(find.text('Addresses'), findsNothing);
-    expect(find.text('Broadcast'), findsOneWidget);
-    expect(find.text('Export CSV'), findsOneWidget);
+    // Nothing hides under a menu any more, and the name keeps the room
+    // that buys: it starts against the back arrow.
+    expect(find.byTooltip('More'), findsNothing);
+    expect(find.byTooltip('Hide balances'), findsOneWidget);
+    expect(find.byTooltip('Sync'), findsOneWidget);
+    expect(find.byTooltip('Broadcast'), findsOneWidget);
+    expect(find.byTooltip('Export CSV'), findsOneWidget);
+    expect(
+      tester.getRect(find.text('Cold storage')).left,
+      lessThan(tester.getRect(find.byTooltip('Hide balances')).left),
+    );
 
-    await tester.tap(find.text('Broadcast'));
+    await tester.tap(find.byTooltip('Broadcast'));
     await tester.pumpAndSettle();
     expect(find.text('SIGNED TRANSACTION OR PSBT'), findsOneWidget);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('More'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Export CSV'));
+    await tester.tap(find.byTooltip('Export CSV'));
     await tester.pumpAndSettle();
     expect(
       find.text("This wallet's transaction history as a CSV file."),
@@ -196,5 +201,47 @@ void main() {
       tester.getSize(find.byIcon(LucideIcons.arrowDownLeft)).height,
       lessThanOrEqualTo(48),
     );
+  });
+
+  testWidgets('the sync icon turns while the sync runs', (tester) async {
+    final meta = makeMeta(totalSats: 5000);
+    final bridge = FakeBridge(
+      wallets: [meta],
+      snapshots: {'w1': makeSnapshot(meta: meta, totalSats: 5000)},
+    );
+    final gate = Completer<void>();
+    bridge.syncGate = gate;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [bridgeProvider.overrideWithValue(bridge)],
+        child: MaterialApp(
+          theme: themeFrom(GerfautTokens.light, Brightness.light),
+          home: const WalletHomeScreen(walletId: 'w1'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    RotationTransition spinner() => tester.widget<RotationTransition>(
+      find.descendant(
+        of: find.byType(SyncButton),
+        matching: find.byType(RotationTransition),
+      ),
+    );
+    expect(spinner().turns.value, 0);
+
+    await tester.tap(find.byTooltip('Sync'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    // Turning, and saying so in words as well: motion is never the only
+    // channel.
+    expect(spinner().turns.value, greaterThan(0));
+    expect(find.byTooltip('Syncing…'), findsOneWidget);
+    expect(find.textContaining('Syncing…'), findsWidgets);
+
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Sync'), findsOneWidget);
   });
 }

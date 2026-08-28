@@ -13,6 +13,7 @@ import '../widgets/buttons.dart';
 import '../widgets/count_badge.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/status_pill.dart';
+import '../widgets/sync_button.dart';
 import '../widgets/sync_indicator.dart';
 import 'broadcast.dart';
 import 'export.dart';
@@ -31,6 +32,12 @@ class WalletHomeScreen extends ConsumerStatefulWidget {
 }
 
 class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
+  void _open(Widget Function(String walletId) build) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => build(widget.walletId)),
+    );
+  }
+
   Future<void> _sync() async {
     try {
       await ref.read(syncProvider.notifier).syncWallet(widget.walletId);
@@ -50,59 +57,33 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(snapshot.valueOrNull?.meta.name ?? ''),
+        // The name sits against the back arrow: what it gives up on the
+        // left, the actions take on the right, and every action of this
+        // wallet fits in the bar instead of hiding under a menu.
+        titleSpacing: 0,
+        title: Text(
+          snapshot.valueOrNull?.meta.name ?? '',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           IconButton(
             tooltip: masked ? 'Show balances' : 'Hide balances',
             onPressed: () => ref.read(maskedProvider.notifier).toggle(),
             icon: Icon(masked ? LucideIcons.eyeOff : LucideIcons.eye, size: 20),
           ),
+          SyncButton(syncing: syncing, onPressed: _sync),
           IconButton(
-            tooltip: 'Sync',
-            onPressed: syncing ? null : _sync,
-            icon: const Icon(LucideIcons.refreshCw, size: 20),
+            tooltip: 'Broadcast',
+            onPressed: () => _open((_) => const BroadcastScreen()),
+            icon: const Icon(LucideIcons.radio, size: 20),
           ),
-          PopupMenuButton<Widget Function(String)>(
-            tooltip: 'More',
-            icon: const Icon(LucideIcons.ellipsisVertical, size: 20),
-            color: tokens.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(GerfautRadius.md),
-              side: BorderSide(color: tokens.border),
-            ),
-            onSelected: (build) {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => build(widget.walletId)),
-              );
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: (_) => const BroadcastScreen(),
-                child: Row(
-                  children: [
-                    Icon(LucideIcons.radio, size: 16, color: tokens.textMuted),
-                    const SizedBox(width: GerfautSpacing.sm),
-                    Text('Broadcast', style: tokens.bodySmall),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: (id) => ExportScreen(walletId: id),
-                child: Row(
-                  children: [
-                    Icon(
-                      LucideIcons.fileDown,
-                      size: 16,
-                      color: tokens.textMuted,
-                    ),
-                    const SizedBox(width: GerfautSpacing.sm),
-                    Text('Export CSV', style: tokens.bodySmall),
-                  ],
-                ),
-              ),
-            ],
+          IconButton(
+            tooltip: 'Export CSV',
+            onPressed: () => _open((id) => ExportScreen(walletId: id)),
+            icon: const Icon(LucideIcons.fileDown, size: 20),
           ),
-          const SizedBox(width: GerfautSpacing.sm),
+          const SizedBox(width: GerfautSpacing.xs),
         ],
       ),
       // A wallet already loaded stays on screen while it refreshes: a
@@ -119,7 +100,7 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                 ),
                 _ => Center(
                   child: Text(
-                    'Loading walletâ€¦',
+                    'Loading wallet…',
                     style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                   ),
                 ),
@@ -348,7 +329,7 @@ class _TxList extends ConsumerWidget {
             child: Column(
               children: [
                 SecondaryButton(
-                  label: loading ? 'Fetchingâ€¦' : 'Load older transactions',
+                  label: loading ? 'Fetching…' : 'Load older transactions',
                   icon: LucideIcons.chevronDown,
                   onPressed: loading ? null : () => _loadOlder(context, ref),
                 ),
@@ -513,7 +494,7 @@ class _UtxoList extends ConsumerWidget {
       ),
       _ => Center(
         child: Text(
-          'Loading UTXOsâ€¦',
+          'Loading UTXOs…',
           style: tokens.bodySmall.copyWith(color: tokens.textMuted),
         ),
       ),
