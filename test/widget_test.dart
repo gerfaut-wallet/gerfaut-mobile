@@ -36,6 +36,26 @@ void main() {
     expect(find.text('Add a wallet'), findsOneWidget);
   });
 
+  testWidgets('nothing asks the core before the vault is open', (
+    tester,
+  ) async {
+    final bridge = _ClosedUntilOpen();
+    await tester.pumpWidget(
+      app(
+        bridge,
+        bootstrap: () async {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          bridge.open = true;
+        },
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Opening the vault\u2026'), findsOneWidget);
+
+    await tester.pumpAndSettle();
+    expect(find.text('No wallets yet'), findsOneWidget);
+  });
+
   testWidgets('every wallet card carries the same generic icon', (
     tester,
   ) async {
@@ -102,4 +122,15 @@ void main() {
     expect(find.text('Gerfaut could not start'), findsOneWidget);
     expect(find.text('No wallets yet'), findsNothing);
   });
+}
+
+/// A bridge that refuses every call until the vault is open, the way the
+/// real one does before the Rust bridge has been initialized.
+class _ClosedUntilOpen extends FakeBridge {
+  bool open = false;
+
+  @override
+  Future<Settings> getSettings() => open
+      ? super.getSettings()
+      : Future.error(StateError('the core was called too early'));
 }

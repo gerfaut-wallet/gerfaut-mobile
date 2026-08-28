@@ -24,7 +24,35 @@ class _GerfautAppState extends ConsumerState<GerfautApp> {
 
   @override
   Widget build(BuildContext context) {
-    // Hydrate UI prefs from the vault once, as soon as settings load.
+    final themeMode = switch (ref.watch(themeProvider)) {
+      ThemePref.light => ThemeMode.light,
+      ThemePref.dark => ThemeMode.dark,
+      ThemePref.system => ThemeMode.system,
+    };
+
+    return MaterialApp(
+      title: 'Gerfaut',
+      theme: themeFrom(GerfautTokens.light, Brightness.light),
+      darkTheme: themeFrom(GerfautTokens.dark, Brightness.dark),
+      themeMode: themeMode,
+      home: _ready == null
+          ? const _Hydrated(child: HomeScreen())
+          : _BootstrapGate(ready: _ready),
+    );
+  }
+}
+
+/// Hydrates the UI preferences from the vault as soon as the settings
+/// load. It sits below the bootstrap gate on purpose: watching the
+/// settings is what asks the core for them, and nothing may ask before
+/// the bridge is up and the vault open.
+class _Hydrated extends ConsumerWidget {
+  const _Hydrated({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     ref.listen(settingsProvider, (_, next) {
       final settings = next.valueOrNull;
       if (settings != null && !ref.read(prefsHydratedProvider)) {
@@ -50,20 +78,7 @@ class _GerfautAppState extends ConsumerState<GerfautApp> {
             .hydrate(prefs['broadcast.recent']);
       }
     });
-
-    final themeMode = switch (ref.watch(themeProvider)) {
-      ThemePref.light => ThemeMode.light,
-      ThemePref.dark => ThemeMode.dark,
-      ThemePref.system => ThemeMode.system,
-    };
-
-    return MaterialApp(
-      title: 'Gerfaut',
-      theme: themeFrom(GerfautTokens.light, Brightness.light),
-      darkTheme: themeFrom(GerfautTokens.dark, Brightness.dark),
-      themeMode: themeMode,
-      home: _ready == null ? const HomeScreen() : _BootstrapGate(ready: _ready),
-    );
+    return child;
   }
 }
 
@@ -84,7 +99,7 @@ class _BootstrapGate extends StatelessWidget {
         if (snapshot.hasError) {
           return _StartupErrorScreen(message: '${snapshot.error}');
         }
-        return const HomeScreen();
+        return const _Hydrated(child: HomeScreen());
       },
     );
   }
