@@ -54,7 +54,14 @@ void main() {
   testWidgets('switching the theme applies it and persists the pref', (
     tester,
   ) async {
-    final bridge = FakeBridge();
+    // A vault opened before: the welcome tour is behind this user.
+    final bridge = FakeBridge(
+      settings: const Settings(
+        activeNetwork: Network.mainnet,
+        backends: {},
+        appPrefs: {'onboarding.seen': '1'},
+      ),
+    );
     await tester.pumpWidget(
       ProviderScope(
         overrides: [bridgeProvider.overrideWithValue(bridge)],

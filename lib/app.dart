@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'screens/home.dart';
+import 'screens/lock_screen.dart';
+import 'screens/welcome.dart';
+import 'src/lock.dart';
 import 'src/notifications.dart';
+import 'src/onboarding.dart';
 import 'src/state.dart';
 import 'theme/tokens.dart';
 
@@ -37,7 +41,7 @@ class _GerfautAppState extends ConsumerState<GerfautApp> {
       darkTheme: themeFrom(GerfautTokens.dark, Brightness.dark),
       themeMode: themeMode,
       home: _ready == null
-          ? const _Hydrated(child: HomeScreen())
+          ? const _Hydrated(child: _Gate())
           : _BootstrapGate(ready: _ready),
     );
   }
@@ -81,9 +85,78 @@ class _Hydrated extends ConsumerWidget {
         ref
             .read(backgroundCheckProvider.notifier)
             .hydrate(prefs['notify.background']);
+        ref
+            .read(onboardingSeenProvider.notifier)
+            .hydrate(prefs['onboarding.seen']);
       }
     });
     return child;
+  }
+}
+
+/// What the app shows once the vault is open: the lock while it is
+/// locked, the welcome tour on a vault with nothing in it, otherwise
+/// the wallets.
+///
+/// The lock replaces the app rather than covering it: nothing of a
+/// wallet is in the tree behind it, so no screenshot, no accessibility
+/// walk and no back gesture reaches one.
+class _Gate extends ConsumerStatefulWidget {
+  const _Gate();
+
+  @override
+  ConsumerState<_Gate> createState() => _GateState();
+}
+
+class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Asking the vault is what decides whether the app starts locked.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(lockProvider.notifier).load();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final lock = ref.read(lockProvider.notifier);
+    switch (state) {
+      // `inactive` alone is not leaving: a system dialog, the share
+      // sheet and the camera permission all raise it.
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+        lock.noteHidden();
+      case AppLifecycleState.resumed:
+        lock.noteResumed();
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.detached:
+        break;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lock = ref.watch(lockProvider);
+    if (!lock.loaded) return const _StartupScreen();
+    if (lock.locked) return const LockScreen();
+
+    // The tour only ever stands in front of an empty vault: someone
+    // with wallets already knows what this is.
+    final wallets = ref.watch(walletsProvider).valueOrNull;
+    final hydrated = ref.watch(prefsHydratedProvider);
+    final seen = ref.watch(onboardingSeenProvider);
+    if (hydrated && !seen && wallets != null && wallets.isEmpty) {
+      return const WelcomeScreen();
+    }
+    return const HomeScreen();
   }
 }
 
@@ -104,7 +177,7 @@ class _BootstrapGate extends StatelessWidget {
         if (snapshot.hasError) {
           return _StartupErrorScreen(message: '${snapshot.error}');
         }
-        return const _Hydrated(child: HomeScreen());
+        return const _Hydrated(child: _Gate());
       },
     );
   }

@@ -488,7 +488,18 @@ class FakeBridge implements GerfautBridge {
   }
 
   @override
-  Future<Settings> getSettings() async => settings;
+  Future<Settings> getSettings() async {
+    // The vault carries the lock: the settings screen reads it there,
+    // the same place the core keeps it.
+    return Settings(
+      activeNetwork: settings.activeNetwork,
+      backends: settings.backends,
+      appPrefs: settings.appPrefs,
+      gapLimit: settings.gapLimit,
+      electrumCerts: settings.electrumCerts,
+      appLock: lock,
+    );
+  }
 
   /// Rewrites the stored settings one field at a time, the way the
   /// vault does: everything left out stays as it was.
@@ -504,6 +515,7 @@ class FakeBridge implements GerfautBridge {
       appPrefs: settings.appPrefs,
       gapLimit: gapLimit ?? settings.gapLimit,
       electrumCerts: electrumCerts ?? settings.electrumCerts,
+      appLock: settings.appLock,
     );
   }
 

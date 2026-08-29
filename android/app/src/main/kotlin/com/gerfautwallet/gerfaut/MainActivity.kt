@@ -1,5 +1,6 @@
 package com.gerfautwallet.gerfaut
 
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 
-class MainActivity : FlutterActivity()
+// A fragment activity, which is what the biometric prompt attaches to.
+class MainActivity : FlutterFragmentActivity()

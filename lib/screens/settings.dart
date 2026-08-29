@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../src/electrum.dart';
 import '../src/format.dart';
 import '../src/models.dart';
+import '../src/onboarding.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
@@ -15,6 +16,8 @@ import '../widgets/section_card.dart';
 import '../widgets/select_field.dart';
 import 'settings/backup_section.dart';
 import 'settings/notifications_section.dart';
+import 'settings/security_section.dart';
+import 'welcome.dart';
 
 /// Application version shown in About. Kept in step with pubspec.yaml.
 const String appVersion = '0.1.0';
@@ -735,6 +738,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ],
             ),
+            const SecuritySection(),
             const NotificationsSection(),
             const BackupSection(),
             SectionCard(
@@ -893,6 +897,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       onPressed: _checkingUpdate ? null : _checkForUpdates,
                     ),
                   ],
+                ),
+                const SizedBox(height: GerfautSpacing.sm),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: GhostButton(
+                    label: 'Show the welcome tour',
+                    icon: LucideIcons.compass,
+                    onPressed: () {
+                      ref.read(onboardingSeenProvider.notifier).replay();
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const WelcomeScreen(),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ],
             ),

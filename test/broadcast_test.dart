@@ -376,6 +376,7 @@ void main() {
         activeNetwork: Network.mainnet,
         backends: const {},
         appPrefs: {
+          'onboarding.seen': '1',
           'broadcast.recent': jsonEncode([
             {
               'txid': fakeTxid,

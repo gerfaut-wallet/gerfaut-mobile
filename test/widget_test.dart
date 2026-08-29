@@ -16,11 +16,24 @@ Widget app(FakeBridge bridge, {Future<void> Function()? bootstrap}) {
   );
 }
 
+/// A vault that has been opened before: the welcome tour is behind it,
+/// so the app lands on the wallets like it does every other day.
+FakeBridge returning({List<WalletMeta> wallets = const []}) {
+  return FakeBridge(
+    wallets: wallets,
+    settings: const Settings(
+      activeNetwork: Network.mainnet,
+      backends: {},
+      appPrefs: {'onboarding.seen': '1'},
+    ),
+  );
+}
+
 void main() {
   testWidgets('empty state shows the guidance and its single action', (
     tester,
   ) async {
-    await tester.pumpWidget(app(FakeBridge()));
+    await tester.pumpWidget(app(returning()));
     await tester.pumpAndSettle();
 
     expect(find.text('No wallets yet'), findsOneWidget);
@@ -31,7 +44,7 @@ void main() {
   });
 
   testWidgets('the header wears the falcon, not the word', (tester) async {
-    await tester.pumpWidget(app(FakeBridge()));
+    await tester.pumpWidget(app(returning()));
     await tester.pumpAndSettle();
 
     // Whoever opened the app knows its name; the mark says it in the
@@ -44,7 +57,7 @@ void main() {
   testWidgets('a faked bootstrap resolves into the home screen', (
     tester,
   ) async {
-    await tester.pumpWidget(app(FakeBridge(), bootstrap: () async {}));
+    await tester.pumpWidget(app(returning(), bootstrap: () async {}));
     await tester.pumpAndSettle();
 
     expect(find.text('No wallets yet'), findsOneWidget);
@@ -140,6 +153,15 @@ void main() {
 /// A bridge that refuses every call until the vault is open, the way the
 /// real one does before the Rust bridge has been initialized.
 class _ClosedUntilOpen extends FakeBridge {
+  _ClosedUntilOpen()
+    : super(
+        settings: const Settings(
+          activeNetwork: Network.mainnet,
+          backends: {},
+          appPrefs: {'onboarding.seen': '1'},
+        ),
+      );
+
   bool open = false;
 
   @override
