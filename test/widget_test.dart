@@ -51,9 +51,7 @@ void main() {
     expect(find.text('Add a wallet'), findsOneWidget);
   });
 
-  testWidgets('nothing asks the core before the vault is open', (
-    tester,
-  ) async {
+  testWidgets('nothing asks the core before the vault is open', (tester) async {
     final bridge = _ClosedUntilOpen();
     await tester.pumpWidget(
       app(

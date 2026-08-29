@@ -101,13 +101,21 @@ const List<String> _months = [
 
 /// Block timestamp -> local date/time, unambiguous and compact.
 String formatTimestamp(int unixSeconds) {
-  final local = DateTime.fromMillisecondsSinceEpoch(
-    unixSeconds * 1000,
-  ).toLocal();
+  final local = DateTime.fromMillisecondsSinceEpoch(unixSeconds * 1000)
+      .toLocal();
   final day = local.day.toString().padLeft(2, '0');
   final hour = local.hour.toString().padLeft(2, '0');
   final minute = local.minute.toString().padLeft(2, '0');
   return '${_months[local.month - 1]} $day, ${local.year}, $hour:$minute';
+}
+
+/// A byte count the way a file manager states it: whole bytes under a
+/// kilobyte, then one decimal in binary units. `1229` -> `"1.2 KB"`.
+String formatBytes(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  final kb = bytes / 1024;
+  if (kb < 1024) return '${kb.toStringAsFixed(1)} KB';
+  return '${(kb / 1024).toStringAsFixed(1)} MB';
 }
 
 /// File-name slug of a wallet name: lowercase, runs of anything but

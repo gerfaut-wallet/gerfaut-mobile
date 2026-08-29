@@ -33,9 +33,8 @@ class WalletHomeScreen extends ConsumerStatefulWidget {
 
 class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
   void _open(Widget Function(String walletId) build) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => build(widget.walletId)),
-    );
+    Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => build(widget.walletId)));
   }
 
   Future<void> _sync() async {

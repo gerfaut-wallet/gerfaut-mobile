@@ -232,7 +232,8 @@ void main() {
 
   group('certificates', () {
     test('every status the core can report is read back', () {
-      const fingerprint = '11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:'
+      const fingerprint =
+          '11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:'
           '11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00';
 
       final trusted = CertificateReport.fromJson(const {
@@ -268,7 +269,8 @@ void main() {
         'host': 'node.local:50002',
         'status': 'unknown',
         'fingerprint': fingerprint,
-        'reason': 'self-signed, or signed by an authority this machine '
+        'reason':
+            'self-signed, or signed by an authority this machine '
             'does not know',
         'subject': 'CN=node.local',
         'expires': 1893456000,

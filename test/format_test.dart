@@ -78,10 +78,7 @@ void main() {
         formatAmountSigned(123456, AmountUnit.sats),
         '+${formatSats(123456)}',
       );
-      expect(
-        formatAmountSigned(-123456, AmountUnit.sats),
-        formatSats(-123456),
-      );
+      expect(formatAmountSigned(-123456, AmountUnit.sats), formatSats(-123456));
     });
   });
 

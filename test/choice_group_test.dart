@@ -86,10 +86,7 @@ void main() {
     Color fill(String label) => tester
         .widget<Material>(
           find
-              .ancestor(
-                of: find.text(label),
-                matching: find.byType(Material),
-              )
+              .ancestor(of: find.text(label), matching: find.byType(Material))
               .first,
         )
         .color!;
