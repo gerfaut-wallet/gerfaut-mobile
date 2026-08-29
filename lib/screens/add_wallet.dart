@@ -32,19 +32,59 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
   Network? _network;
   bool _adding = false;
 
+  /// The advanced disclosure, and what it holds. The fields survive a
+  /// re-parse: a user who tried one branch tries the next from there.
+  bool _advanced = false;
+  final _receiveController = TextEditingController();
+  final _changeController = TextEditingController();
+  final _originController = TextEditingController();
+
+  /// What the fields amount to, or null when they are at their default.
+  DerivationChoice? _derivation() {
+    final receive = _receiveController.text.trim();
+    final change = _changeController.text.trim();
+    final origin = _originController.text.trim();
+    if (receive.isEmpty) return null;
+    return DerivationChoice(
+      receive: receive,
+      change: change.isEmpty ? null : change,
+      origin: origin.isEmpty ? null : origin,
+    );
+  }
+
+  /// Seeds the fields from what the core says is in effect, so opening
+  /// the disclosure shows the paths actually used.
+  void _seedDerivation(ParsedInput parsed) {
+    final choice = parsed.derivation;
+    if (choice == null) return;
+    _receiveController.text = choice.receive;
+    _changeController.text = choice.change ?? '';
+    _originController.text = choice.origin ?? '';
+  }
+
   @override
   void dispose() {
     _rawController.dispose();
     _nameController.dispose();
+    _receiveController.dispose();
+    _changeController.dispose();
+    _originController.dispose();
     super.dispose();
   }
 
-  Future<void> _parse(String input, {ScriptKind? script}) async {
+  Future<void> _parse(
+    String input, {
+    ScriptKind? script,
+    DerivationChoice? derivation,
+  }) async {
     setState(() => _error = null);
     try {
       final parsed = await ref
           .read(bridgeProvider)
-          .parseInput(input, script: script);
+          .parseInputWithOptions(
+            input,
+            ImportOptions(script: script, derivation: derivation),
+          );
       // A re-parse keeps the network the user already picked.
       final preferred =
           _network ?? ref.read(settingsProvider).valueOrNull?.activeNetwork;
@@ -54,6 +94,7 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
             ? preferred
             : parsed.networks.first;
       });
+      _seedDerivation(parsed);
     } on BridgeException catch (error) {
       setState(() => _error = error.message);
     } catch (error) {
@@ -62,10 +103,26 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
   }
 
   /// The script type is rebuilt by the core, never patched locally: the
-  /// descriptors and the preview address must come from one place.
+  /// descriptors and the preview address must come from one place. The
+  /// derivation goes along, or picking a script would undo it.
   void _chooseScript(ScriptKind chosen) {
     // ignore: unawaited_futures
-    _parse(_rawController.text.trim(), script: chosen);
+    _parse(
+      _rawController.text.trim(),
+      script: chosen,
+      derivation: _advanced ? _derivation() : null,
+    );
+  }
+
+  /// Rebuilds the wallet on the typed paths. What comes back is the
+  /// core's answer: the card, the first address and the warnings.
+  void _applyDerivation(ScriptKind script) {
+    // ignore: unawaited_futures
+    _parse(
+      _rawController.text.trim(),
+      script: script,
+      derivation: _derivation(),
+    );
   }
 
   Future<void> _importFile() async {
@@ -338,6 +395,59 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
             style: tokens.bodySmall.copyWith(color: tokens.textMuted),
           ),
         ],
+        // Only a lone extended key leaves the branches open; everything
+        // else carries its own and the core ignores a choice here.
+        if (parsed.derivationEditable && payload is DescriptorsPayload) ...[
+          const SizedBox(height: GerfautSpacing.sm),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: GhostButton(
+              label: 'Advanced',
+              icon: _advanced ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+              onPressed: () => setState(() => _advanced = !_advanced),
+            ),
+          ),
+          if (_advanced) ...[
+            const SizedBox(height: GerfautSpacing.sm),
+            _PathField(
+              key: const Key('derivation.receive'),
+              label: 'Receive path',
+              controller: _receiveController,
+              hint: '0/*',
+              tokens: tokens,
+            ),
+            const SizedBox(height: GerfautSpacing.sm),
+            _PathField(
+              key: const Key('derivation.change'),
+              label: 'Change path',
+              controller: _changeController,
+              hint: 'Leave empty to not track change',
+              tokens: tokens,
+            ),
+            const SizedBox(height: GerfautSpacing.sm),
+            _PathField(
+              key: const Key('derivation.origin'),
+              label: 'Key origin',
+              controller: _originController,
+              hint: "[deadbeef/84'/0'/0']",
+              tokens: tokens,
+            ),
+            const SizedBox(height: GerfautSpacing.sm),
+            Text(
+              'For a key used outside the usual branches. The first '
+              'address above updates so you can check.',
+              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+            ),
+            const SizedBox(height: GerfautSpacing.sm),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SecondaryButton(
+                label: 'Apply',
+                onPressed: () => _applyDerivation(payload.script),
+              ),
+            ),
+          ],
+        ],
         const SizedBox(height: GerfautSpacing.md),
         Text('NAME', style: tokens.label.copyWith(color: tokens.textMuted)),
         const SizedBox(height: GerfautSpacing.sm),
@@ -406,6 +516,64 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
               ),
             ),
           ],
+        ),
+      ],
+    );
+  }
+}
+
+/// One derivation field: an identifier, so it reads in the mono face,
+/// at the size every mobile input uses.
+class _PathField extends StatelessWidget {
+  const _PathField({
+    super.key,
+    required this.label,
+    required this.controller,
+    required this.hint,
+    required this.tokens,
+  });
+
+  final String label;
+  final TextEditingController controller;
+  final String hint;
+  final GerfautTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: tokens.label.copyWith(color: tokens.textMuted),
+        ),
+        const SizedBox(height: GerfautSpacing.xs),
+        TextField(
+          controller: controller,
+          autocorrect: false,
+          enableSuggestions: false,
+          style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: tokens.data.copyWith(
+              fontSize: tokens.body.fontSize,
+              color: tokens.textMuted,
+            ),
+            filled: true,
+            fillColor: tokens.surfaceSunken,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: GerfautSpacing.md,
+              vertical: GerfautSpacing.sm + GerfautSpacing.xs,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(GerfautRadius.sm),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(GerfautRadius.sm),
+              borderSide: BorderSide(color: tokens.primary, width: 2),
+            ),
+          ),
         ),
       ],
     );

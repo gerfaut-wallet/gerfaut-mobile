@@ -197,4 +197,167 @@ void main() {
     // Still on the input step.
     expect(find.text('NAME'), findsNothing);
   });
+
+  testWidgets('a descriptor offers no derivation to change', (tester) async {
+    final bridge = FakeBridge(onParse: (_) => makeParsedInput());
+    await tester.pumpWidget(screen(bridge));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'wpkh(tpub.../0/*)');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Advanced'), findsNothing);
+  });
+
+  group('advanced derivation', () {
+    ParsedInput loneKey({
+      String receive = '0/*',
+      String? change = '1/*',
+      String? origin,
+      String preview = 'tb1q0segwit0preview',
+    }) {
+      return makeParsedInput(
+        kind: RecognizedKind.extendedKey,
+        payload: DescriptorsPayload(
+          external: 'wpkh(tpub...$receive)#checksum',
+          internal: change == null ? null : 'wpkh(tpub...$change)#checksum',
+          script: ScriptKind.segwit,
+        ),
+        scriptOptions: const [ScriptKind.segwit, ScriptKind.taproot],
+        previewAddress: preview,
+        derivationEditable: true,
+        derivation: DerivationChoice(
+          receive: receive,
+          change: change,
+          origin: origin,
+        ),
+      );
+    }
+
+    /// The text a derivation field holds, by its key.
+    String pathIn(WidgetTester tester, String field) {
+      return tester
+          .widget<TextField>(
+            find.descendant(
+              of: find.byKey(Key('derivation.$field')),
+              matching: find.byType(TextField),
+            ),
+          )
+          .controller!
+          .text;
+    }
+
+    Future<void> typePath(
+      WidgetTester tester,
+      String field,
+      String value,
+    ) async {
+      await tester.enterText(
+        find.descendant(
+          of: find.byKey(Key('derivation.$field')),
+          matching: find.byType(TextField),
+        ),
+        value,
+      );
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> openAdvanced(WidgetTester tester, FakeBridge bridge) async {
+      // Tall enough to hold the whole confirm step with the disclosure
+      // open: the preview address and any refusal must both be built.
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(screen(bridge));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'tpubD6NzV...');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Advanced'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the fields start on the paths the core is using', (
+      tester,
+    ) async {
+      final bridge = FakeBridge()
+        ..onParseWithOptions = (_, _) =>
+            loneKey(origin: "[deadbeef/84'/0'/0']");
+      await openAdvanced(tester, bridge);
+
+      expect(pathIn(tester, 'receive'), '0/*');
+      expect(pathIn(tester, 'change'), '1/*');
+      expect(pathIn(tester, 'origin'), "[deadbeef/84'/0'/0']");
+    });
+
+    testWidgets('applying sends the typed paths, an empty change as null', (
+      tester,
+    ) async {
+      final bridge = FakeBridge()
+        ..onParseWithOptions = (_, options) => loneKey(
+          receive: options.derivation?.receive ?? '0/*',
+          change: options.derivation?.change,
+          preview: 'tb1q0other0preview',
+        );
+      await openAdvanced(tester, bridge);
+
+      await typePath(tester, 'receive', '5/*');
+      await typePath(tester, 'change', '');
+      await tester.tap(find.text('Apply'));
+      await tester.pumpAndSettle();
+
+      final applied = bridge.parseOptions.last.derivation!;
+      expect(applied.receive, '5/*');
+      expect(applied.change, isNull);
+      // The card follows the core's answer, never a local guess.
+      expect(find.text('tb1q0other0preview'), findsOneWidget);
+    });
+
+    testWidgets('a refused path is stated and the card stands', (tester) async {
+      var calls = 0;
+      final bridge = FakeBridge()
+        ..onParseWithOptions = (_, _) {
+          calls++;
+          if (calls == 1) return loneKey();
+          throw const BridgeException(
+            'derivation path',
+            'invalid derivation path: a hardened step cannot be derived',
+          );
+        };
+      await openAdvanced(tester, bridge);
+
+      await typePath(tester, 'receive', "0'/*");
+      await tester.tap(find.text('Apply'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('a hardened step cannot be derived'),
+        findsOneWidget,
+      );
+      expect(find.text('tb1q0segwit0preview'), findsOneWidget);
+    });
+
+    testWidgets('choosing a script type afterwards keeps the paths', (
+      tester,
+    ) async {
+      final bridge = FakeBridge()
+        ..onParseWithOptions = (_, options) =>
+            loneKey(receive: options.derivation?.receive ?? '0/*');
+      await openAdvanced(tester, bridge);
+
+      await typePath(tester, 'receive', '5/*');
+      await tester.tap(find.text('Apply'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(GerfautSelect<ScriptKind>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(ScriptKind.taproot.label).last);
+      await tester.pumpAndSettle();
+
+      expect(bridge.parseOptions.last.script, ScriptKind.taproot);
+      expect(bridge.parseOptions.last.derivation?.receive, '5/*');
+    });
+  });
 }

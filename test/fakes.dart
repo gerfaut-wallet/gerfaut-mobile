@@ -102,6 +102,8 @@ ParsedInput makeParsedInput({
   List<InputWarning> warnings = const [],
   List<ScriptKind> scriptOptions = const [],
   String? previewAddress,
+  DerivationChoice? derivation,
+  bool derivationEditable = false,
 }) {
   return ParsedInput(
     kind: kind,
@@ -111,6 +113,9 @@ ParsedInput makeParsedInput({
     rawJson: '{}',
     scriptOptions: scriptOptions,
     previewAddress: previewAddress,
+    derivation:
+        derivation ?? (derivationEditable ? DerivationChoice.standard : null),
+    derivationEditable: derivationEditable,
   );
 }
 
