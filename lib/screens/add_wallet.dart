@@ -9,6 +9,7 @@ import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
 import '../widgets/choice_group.dart';
+import '../widgets/pinned_action_form.dart';
 import '../widgets/select_field.dart';
 import 'scan.dart';
 import 'wallet_home.dart';
@@ -159,8 +160,16 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
   }
 
   Widget _buildInputStep(GerfautTokens tokens) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    // The action stays at the bottom while there is room, and the form
+    // scrolls under the keyboard instead of hiding it.
+    return PinnedActionForm(
+      action: PrimaryButton(
+        label: 'Continue',
+        expand: true,
+        onPressed: _rawController.text.trim().isEmpty
+            ? null
+            : () => _parse(_rawController.text),
+      ),
       children: [
         Text(
           'DESCRIPTOR, EXTENDED PUBLIC KEY, OR ADDRESS',
@@ -221,14 +230,6 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
               onPressed: _scan,
             ),
           ],
-        ),
-        const Spacer(),
-        PrimaryButton(
-          label: 'Continue',
-          expand: true,
-          onPressed: _rawController.text.trim().isEmpty
-              ? null
-              : () => _parse(_rawController.text),
         ),
       ],
     );

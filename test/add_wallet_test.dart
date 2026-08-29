@@ -45,6 +45,35 @@ void main() {
     expect(find.text('SCRIPT TYPE'), findsNothing);
   });
 
+  testWidgets('the continue button scrolls into reach under the keyboard', (
+    tester,
+  ) async {
+    // A 16:9 phone with the keyboard up: the Pixel 2 at 411x731 keeps
+    // about 380 logical pixels for the page once the keyboard is open.
+    const ratio = 2.625;
+    tester.view.physicalSize = const Size(411 * ratio, 731 * ratio);
+    tester.view.devicePixelRatio = ratio;
+    tester.view.viewInsets = const FakeViewPadding(bottom: 350 * ratio);
+    addTearDown(tester.view.reset);
+
+    final bridge = FakeBridge(onParse: (_) => makeParsedInput());
+    await tester.pumpWidget(screen(bridge));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'wpkh(tpub.../0/*)');
+    await tester.pumpAndSettle();
+
+    // Reachable by scrolling, and fully above the keyboard once there.
+    await tester.ensureVisible(find.text('Continue'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.getRect(find.text('Continue')).bottom,
+      lessThanOrEqualTo(731 - 350),
+    );
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    expect(find.text('NAME'), findsOneWidget);
+  });
+
   ParsedInput extendedKey(ScriptKind script) {
     return makeParsedInput(
       kind: RecognizedKind.extendedKey,
