@@ -76,6 +76,11 @@ enum InputWarning {
   multipleAccountsInFile(
     'multiple_accounts_in_file',
     'The file holds several account types; the preferred one was selected.',
+  ),
+  nonStandardDerivation(
+    'non_standard_derivation',
+    'The paths chosen are not the usual 0/* and 1/*: compare the first '
+        'address with your wallet.',
   );
 
   const InputWarning(this.id, this.label);
@@ -132,6 +137,8 @@ class ParsedInput {
     required this.rawJson,
     this.scriptOptions = const [],
     this.previewAddress,
+    this.derivation,
+    this.derivationEditable = false,
   });
 
   factory ParsedInput.fromJson(Map<String, dynamic> json, String rawJson) {
@@ -149,6 +156,12 @@ class ParsedInput {
           .map((s) => ScriptKind.fromId(s as String))
           .toList(),
       previewAddress: json['preview_address'] as String?,
+      derivation: json['derivation'] == null
+          ? null
+          : DerivationChoice.fromJson(
+              json['derivation'] as Map<String, dynamic>,
+            ),
+      derivationEditable: json['derivation_editable'] as bool? ?? false,
     );
   }
 
@@ -171,6 +184,88 @@ class ParsedInput {
   /// First receive address on the first candidate network, so the user
   /// can compare it with their wallet. Null when nothing derives.
   final String? previewAddress;
+
+  /// The derivation in effect: set only for a lone extended key.
+  final DerivationChoice? derivation;
+
+  /// True when the input leaves the paths open (a lone extended key).
+  final bool derivationEditable;
+}
+
+/// Where a lone extended key derives its addresses: the receive and
+/// change branches under the key, and the key origin.
+class DerivationChoice {
+  const DerivationChoice({
+    required this.receive,
+    required this.change,
+    required this.origin,
+  });
+
+  /// The paths the core applies when nothing else is asked.
+  static const DerivationChoice standard = DerivationChoice(
+    receive: '0/*',
+    change: '1/*',
+    origin: null,
+  );
+
+  factory DerivationChoice.fromJson(Map<String, dynamic> json) {
+    return DerivationChoice(
+      receive: json['receive'] as String,
+      change: json['change'] as String?,
+      origin: json['origin'] as String?,
+    );
+  }
+
+  /// Receive branch, relative to the key: `0/*`, `*`, `2/0/*`.
+  final String receive;
+
+  /// Change branch in the same form; null leaves change untracked.
+  final String? change;
+
+  /// Key origin, `[fingerprint/path]`; null keeps the input's own.
+  final String? origin;
+
+  Map<String, dynamic> toJson() => {
+    'receive': receive,
+    'change': change,
+    'origin': origin,
+  };
+
+  DerivationChoice copyWith({
+    String? receive,
+    String? Function()? change,
+    String? Function()? origin,
+  }) {
+    return DerivationChoice(
+      receive: receive ?? this.receive,
+      change: change == null ? this.change : change(),
+      origin: origin == null ? this.origin : origin(),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is DerivationChoice &&
+      other.receive == receive &&
+      other.change == change &&
+      other.origin == origin;
+
+  @override
+  int get hashCode => Object.hash(receive, change, origin);
+}
+
+/// The advanced choices of the import screen, both optional. Inputs
+/// that fix their own script type and paths ignore them.
+class ImportOptions {
+  const ImportOptions({this.script, this.derivation});
+
+  final ScriptKind? script;
+  final DerivationChoice? derivation;
+
+  Map<String, dynamic> toJson() => {
+    'script': script?.id,
+    'derivation': derivation?.toJson(),
+  };
 }
 
 /// Balance split as BDK reports it, in sats.
@@ -720,6 +815,29 @@ class WalletSnapshot {
 }
 
 /// Outcome of syncing one wallet.
+/// A transaction a sync brought in for the first time.
+class NewTx {
+  const NewTx({
+    required this.txid,
+    required this.netSats,
+    required this.confirmed,
+  });
+
+  factory NewTx.fromJson(Map<String, dynamic> json) {
+    return NewTx(
+      txid: json['txid'] as String,
+      netSats: json['net_sats'] as int,
+      confirmed: json['confirmed'] as bool,
+    );
+  }
+
+  final String txid;
+
+  /// Net effect on the wallet, in sats, signed like a summary.
+  final int netSats;
+  final bool confirmed;
+}
+
 class SyncReport {
   const SyncReport({
     required this.walletId,
@@ -728,12 +846,16 @@ class SyncReport {
     required this.tipHeight,
     required this.tookMs,
     required this.backend,
+    this.newTxs = const [],
   });
 
   factory SyncReport.fromJson(Map<String, dynamic> json) {
     return SyncReport(
       walletId: json['wallet_id'] as String,
       newTxCount: json['new_tx_count'] as int,
+      newTxs: ((json['new_txs'] as List?) ?? const [])
+          .map((e) => NewTx.fromJson(e as Map<String, dynamic>))
+          .toList(),
       balance: BalanceSnapshot.fromJson(
         json['balance'] as Map<String, dynamic>,
       ),
@@ -745,6 +867,9 @@ class SyncReport {
 
   final String walletId;
   final int newTxCount;
+
+  /// The same transactions, one line each: what a notification says.
+  final List<NewTx> newTxs;
   final BalanceSnapshot balance;
   final int tipHeight;
   final int tookMs;
@@ -896,6 +1021,7 @@ class Settings {
     required this.appPrefs,
     this.gapLimit = 20,
     this.electrumCerts = const {},
+    this.appLock,
   });
 
   factory Settings.fromJson(Map<String, dynamic> json) {
@@ -914,6 +1040,9 @@ class Settings {
       gapLimit: json['gap_limit'] as int? ?? 20,
       electrumCerts: (json['electrum_certs'] as Map<String, dynamic>? ?? {})
           .map((key, value) => MapEntry(key, value as String)),
+      appLock: json['app_lock'] == null
+          ? null
+          : AppLock.fromJson(json['app_lock'] as Map<String, dynamic>),
     );
   }
 
@@ -929,9 +1058,77 @@ class Settings {
   /// pairs joined by colons.
   final Map<String, String> electrumCerts;
 
+  /// The lock in place, without its hash; null when there is none.
+  final AppLock? appLock;
+
   /// Backend for a network, falling back to the public default.
   BackendConfig backendFor(Network network) =>
       backends[network] ?? const PublicEsplora();
+}
+
+/// What kind of secret unlocks the app.
+enum LockKind {
+  pin('pin', 'PIN'),
+  password('password', 'Password');
+
+  const LockKind(this.id, this.label);
+
+  final String id;
+  final String label;
+
+  static LockKind fromId(String id) =>
+      LockKind.values.firstWhere((k) => k.id == id);
+}
+
+/// The app lock as the apps see it: kind and timing, never the hash.
+class AppLock {
+  const AppLock({
+    required this.kind,
+    required this.autoLockSecs,
+    required this.biometric,
+  });
+
+  factory AppLock.fromJson(Map<String, dynamic> json) {
+    return AppLock(
+      kind: LockKind.fromId(json['kind'] as String),
+      autoLockSecs: json['auto_lock_secs'] as int?,
+      biometric: json['biometric'] as bool? ?? false,
+    );
+  }
+
+  final LockKind kind;
+
+  /// Seconds away from the app before it locks again; null means only
+  /// at launch and on request.
+  final int? autoLockSecs;
+
+  /// Whether the phone's biometric prompt may stand in for the secret.
+  final bool biometric;
+}
+
+/// Outcome of an unlock attempt.
+class LockVerdict {
+  const LockVerdict({
+    required this.unlocked,
+    required this.failures,
+    required this.retryAfterSecs,
+  });
+
+  factory LockVerdict.fromJson(Map<String, dynamic> json) {
+    return LockVerdict(
+      unlocked: json['unlocked'] as bool,
+      failures: json['failures'] as int,
+      retryAfterSecs: json['retry_after_secs'] as int,
+    );
+  }
+
+  final bool unlocked;
+
+  /// Consecutive failures so far; zero once unlocked.
+  final int failures;
+
+  /// Seconds before the next attempt is looked at; zero when it can be.
+  final int retryAfterSecs;
 }
 
 /// One server's certificate, and the key an acceptance is recorded
@@ -973,9 +1170,7 @@ sealed class CertificateStatus {
         stored: json['stored'] as String,
         presented: json['presented'] as String,
       ),
-      'unreachable' => UnreachableCertificate(
-        detail: json['detail'] as String,
-      ),
+      'unreachable' => UnreachableCertificate(detail: json['detail'] as String),
       final other => throw FormatException('unknown status: $other'),
     };
   }
@@ -1570,4 +1765,138 @@ class RecentBroadcast {
     'hex': hex,
     'at': at,
   };
+}
+
+// --- backup ------------------------------------------------------------
+
+/// What to seal: which wallets (null for every wallet on every
+/// network), and whether the node settings travel with them.
+class BackupOptions {
+  const BackupOptions({this.walletIds, this.includeSettings = false});
+
+  final List<String>? walletIds;
+  final bool includeSettings;
+
+  Map<String, dynamic> toJson() => {
+    'wallet_ids': walletIds,
+    'include_settings': includeSettings,
+  };
+}
+
+/// A sealed backup in both transport forms.
+class BackupBundle {
+  const BackupBundle({
+    required this.data,
+    required this.frames,
+    required this.walletCount,
+    required this.sizeBytes,
+  });
+
+  factory BackupBundle.fromJson(Map<String, dynamic> json) {
+    return BackupBundle(
+      data: json['data'] as String,
+      frames: (json['frames'] as List).cast<String>(),
+      walletCount: json['wallet_count'] as int,
+      sizeBytes: json['size_bytes'] as int,
+    );
+  }
+
+  /// Base64 of the encrypted file bytes.
+  final String data;
+
+  /// UR frames to loop as an animated QR.
+  final List<String> frames;
+  final int walletCount;
+  final int sizeBytes;
+}
+
+/// One wallet of a backup, before it is restored.
+class BackupWalletPreview {
+  const BackupWalletPreview({
+    required this.index,
+    required this.name,
+    required this.network,
+    required this.kind,
+    required this.alreadyWatched,
+  });
+
+  factory BackupWalletPreview.fromJson(Map<String, dynamic> json) {
+    return BackupWalletPreview(
+      index: json['index'] as int,
+      name: json['name'] as String,
+      network: Network.fromId(json['network'] as String),
+      kind: WalletKind.fromJson(json['kind'] as Map<String, dynamic>),
+      alreadyWatched: json['already_watched'] as bool,
+    );
+  }
+
+  final int index;
+  final String name;
+  final Network network;
+  final WalletKind kind;
+
+  /// The same material is already watched here: restoring it again
+  /// would be a duplicate.
+  final bool alreadyWatched;
+}
+
+/// What a backup holds, listed before anything is added.
+class BackupPreview {
+  const BackupPreview({
+    required this.createdAt,
+    required this.wallets,
+    required this.hasSettings,
+  });
+
+  factory BackupPreview.fromJson(Map<String, dynamic> json) {
+    return BackupPreview(
+      createdAt: json['created_at'] as int,
+      wallets: (json['wallets'] as List)
+          .map((w) => BackupWalletPreview.fromJson(w as Map<String, dynamic>))
+          .toList(),
+      hasSettings: json['has_settings'] as bool,
+    );
+  }
+
+  final int createdAt;
+  final List<BackupWalletPreview> wallets;
+  final bool hasSettings;
+}
+
+/// Which wallets to restore (null for all) and whether to apply the
+/// node settings the backup carries.
+class ImportChoices {
+  const ImportChoices({this.indexes, this.applySettings = false});
+
+  final List<int>? indexes;
+  final bool applySettings;
+
+  Map<String, dynamic> toJson() => {
+    'indexes': indexes,
+    'apply_settings': applySettings,
+  };
+}
+
+class ImportReport {
+  const ImportReport({
+    required this.added,
+    required this.skipped,
+    required this.settingsApplied,
+  });
+
+  factory ImportReport.fromJson(Map<String, dynamic> json) {
+    return ImportReport(
+      added: (json['added'] as List)
+          .map((w) => WalletMeta.fromJson(w as Map<String, dynamic>))
+          .toList(),
+      skipped: json['skipped'] as int,
+      settingsApplied: json['settings_applied'] as bool,
+    );
+  }
+
+  final List<WalletMeta> added;
+
+  /// Wallets left out: already watched, or not chosen.
+  final int skipped;
+  final bool settingsApplied;
 }

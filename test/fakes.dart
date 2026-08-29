@@ -688,6 +688,188 @@ class FakeBridge implements GerfautBridge {
       at: 1755000000,
     );
   }
+
+  /// Advanced import hook; the default routes to [parseInput] with the
+  /// script of the options, so screens keep their existing fakes.
+  FutureOr<ParsedInput> Function(String input, ImportOptions options)?
+  onParseWithOptions;
+
+  /// The options of every parseInputWithOptions call, for assertions.
+  final List<ImportOptions> parseOptions = [];
+
+  @override
+  Future<ParsedInput> parseInputWithOptions(
+    String input,
+    ImportOptions options,
+  ) async {
+    parseOptions.add(options);
+    final parse = onParseWithOptions;
+    if (parse != null) return parse(input, options);
+    return parseInput(input, script: options.script);
+  }
+
+  int rescanCalls = 0;
+
+  /// Rescan hook; the default behaves like a sync.
+  FutureOr<SyncReport> Function(String id)? onRescan;
+
+  @override
+  Future<SyncReport> rescanWallet(String id) async {
+    rescanCalls += 1;
+    final rescan = onRescan;
+    if (rescan != null) return rescan(id);
+    return syncWallet(id);
+  }
+
+  /// The lock in place; null when none. Tests set it directly.
+  AppLock? lock;
+
+  /// The secret behind [lock]; every verify compares against it.
+  String lockSecret = '1234';
+  int lockFailures = 0;
+
+  /// Every lock operation, in order, for assertions.
+  final List<String> lockCalls = [];
+
+  @override
+  Future<AppLock?> appLock() async => lock;
+
+  @override
+  Future<void> setAppLock(
+    LockKind kind,
+    String secret, {
+    String? current,
+  }) async {
+    lockCalls.add('set:${kind.id}');
+    if (lock != null && current != lockSecret) {
+      throw const BridgeException('lock', 'wrong PIN or password');
+    }
+    lockSecret = secret;
+    lock = AppLock(
+      kind: kind,
+      autoLockSecs: lock == null ? 60 : lock!.autoLockSecs,
+      biometric: lock?.biometric ?? false,
+    );
+  }
+
+  @override
+  Future<void> clearAppLock(String current) async {
+    lockCalls.add('clear');
+    if (current != lockSecret) {
+      throw const BridgeException('lock', 'wrong PIN or password');
+    }
+    lock = null;
+  }
+
+  @override
+  Future<LockVerdict> verifyAppLock(String secret) async {
+    lockCalls.add('verify');
+    if (lock == null) throw const BridgeException('lock', 'no lock is set');
+    if (secret == lockSecret) {
+      lockFailures = 0;
+      return const LockVerdict(unlocked: true, failures: 0, retryAfterSecs: 0);
+    }
+    lockFailures += 1;
+    return LockVerdict(
+      unlocked: false,
+      failures: lockFailures,
+      retryAfterSecs: lockFailures >= 3 ? 5 : 0,
+    );
+  }
+
+  @override
+  Future<void> setAutoLock(int? secs) async {
+    lockCalls.add('auto:$secs');
+    final current = lock;
+    if (current == null) throw const BridgeException('lock', 'no lock is set');
+    lock = AppLock(
+      kind: current.kind,
+      autoLockSecs: secs,
+      biometric: current.biometric,
+    );
+  }
+
+  @override
+  Future<void> setBiometricUnlock(bool enabled) async {
+    lockCalls.add('biometric:$enabled');
+    final current = lock;
+    if (current == null) throw const BridgeException('lock', 'no lock is set');
+    lock = AppLock(
+      kind: current.kind,
+      autoLockSecs: current.autoLockSecs,
+      biometric: enabled,
+    );
+  }
+
+  /// Backup hooks. The defaults seal nothing: a bundle with one frame
+  /// per wallet, and a preview listing the fake's wallets.
+  FutureOr<BackupBundle> Function(BackupOptions options, String password)?
+  onExportBackup;
+  FutureOr<BackupPreview> Function(String source, String password)?
+  onPreviewBackup;
+  FutureOr<ImportReport> Function(
+    String source,
+    String password,
+    ImportChoices choices,
+  )?
+  onImportBackup;
+  final List<BackupOptions> backupExportCalls = [];
+  final List<ImportChoices> importCalls = [];
+
+  @override
+  Future<BackupBundle> exportBackup(
+    BackupOptions options,
+    String password,
+  ) async {
+    backupExportCalls.add(options);
+    final export = onExportBackup;
+    if (export != null) return export(options, password);
+    final ids = options.walletIds;
+    final chosen = ids == null
+        ? wallets
+        : wallets.where((w) => ids.contains(w.id)).toList();
+    return BackupBundle(
+      data: 'R0ZCQUNLVVA=',
+      frames: [
+        for (var i = 0; i < chosen.length; i++)
+          'ur:bytes/${i + 1}-${chosen.length}/fake',
+      ],
+      walletCount: chosen.length,
+      sizeBytes: 512,
+    );
+  }
+
+  @override
+  Future<BackupPreview> previewBackup(String source, String password) async {
+    final preview = onPreviewBackup;
+    if (preview != null) return preview(source, password);
+    return BackupPreview(
+      createdAt: 1755000000,
+      hasSettings: false,
+      wallets: [
+        for (final (i, w) in wallets.indexed)
+          BackupWalletPreview(
+            index: i,
+            name: w.name,
+            network: w.network,
+            kind: w.kind,
+            alreadyWatched: true,
+          ),
+      ],
+    );
+  }
+
+  @override
+  Future<ImportReport> importBackup(
+    String source,
+    String password,
+    ImportChoices choices,
+  ) async {
+    importCalls.add(choices);
+    final import = onImportBackup;
+    if (import != null) return import(source, password, choices);
+    return const ImportReport(added: [], skipped: 0, settingsApplied: false);
+  }
 }
 
 /// A well-formed txid for previews and reports.

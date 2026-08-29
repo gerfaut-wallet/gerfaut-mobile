@@ -100,6 +100,45 @@ abstract class GerfautBridge {
 
   /// Where a broadcast transaction stands as the backend sees it.
   Future<BroadcastStatus> transactionStatus(Network network, String hex);
+
+  /// Classifies wallet material with the advanced choices (script type,
+  /// derivation paths). Inputs that fix their own ignore them.
+  Future<ParsedInput> parseInputWithOptions(
+    String input,
+    ImportOptions options,
+  );
+
+  /// Scans a wallet again from its first address with the current gap
+  /// limit, for funds an incremental sync can no longer see.
+  Future<SyncReport> rescanWallet(String id);
+
+  /// The lock in place, without its hash; null when there is none.
+  Future<AppLock?> appLock();
+
+  /// Sets a lock, or replaces its secret; replacing needs the current one.
+  Future<void> setAppLock(LockKind kind, String secret, {String? current});
+  Future<void> clearAppLock(String current);
+
+  /// Tries a secret. The verdict carries the delay after repeated
+  /// failures: while it runs, even the right secret is not looked at.
+  Future<LockVerdict> verifyAppLock(String secret);
+
+  /// Seconds away from the app before it locks again; null means only
+  /// at launch and on request.
+  Future<void> setAutoLock(int? secs);
+  Future<void> setBiometricUnlock(bool enabled);
+
+  /// Seals the chosen wallets under a password: a file and QR frames.
+  Future<BackupBundle> exportBackup(BackupOptions options, String password);
+
+  /// Opens a backup (base64 of the file, or the text a scan yields) and
+  /// lists what it holds, before anything is added.
+  Future<BackupPreview> previewBackup(String source, String password);
+  Future<ImportReport> importBackup(
+    String source,
+    String password,
+    ImportChoices choices,
+  );
 }
 
 /// The real bridge, backed by the generated Rust bindings.
@@ -314,5 +353,92 @@ class RustBridge implements GerfautBridge {
   Future<BroadcastStatus> transactionStatus(Network network, String hex) async {
     final raw = await rust.transactionStatus(network: network.id, hex: hex);
     return BroadcastStatus.fromJson(_object(raw));
+  }
+
+  @override
+  Future<ParsedInput> parseInputWithOptions(
+    String input,
+    ImportOptions options,
+  ) async {
+    final raw = await rust.parseInputWithOptions(
+      input: input,
+      optionsJson: jsonEncode(options.toJson()),
+    );
+    return ParsedInput.fromJson(_object(raw), raw);
+  }
+
+  @override
+  Future<SyncReport> rescanWallet(String id) async {
+    return SyncReport.fromJson(_object(await rust.rescanWallet(id: id)));
+  }
+
+  @override
+  Future<AppLock?> appLock() async {
+    final decoded = _decode(await rust.appLock());
+    if (decoded == null) return null;
+    return AppLock.fromJson(decoded as Map<String, dynamic>);
+  }
+
+  @override
+  Future<void> setAppLock(
+    LockKind kind,
+    String secret, {
+    String? current,
+  }) async {
+    _ok(await rust.setAppLock(kind: kind.id, secret: secret, current: current));
+  }
+
+  @override
+  Future<void> clearAppLock(String current) async {
+    _ok(await rust.clearAppLock(current: current));
+  }
+
+  @override
+  Future<LockVerdict> verifyAppLock(String secret) async {
+    return LockVerdict.fromJson(
+      _object(await rust.verifyAppLock(secret: secret)),
+    );
+  }
+
+  @override
+  Future<void> setAutoLock(int? secs) async {
+    _ok(await rust.setAutoLock(secs: secs));
+  }
+
+  @override
+  Future<void> setBiometricUnlock(bool enabled) async {
+    _ok(await rust.setBiometricUnlock(enabled: enabled));
+  }
+
+  @override
+  Future<BackupBundle> exportBackup(
+    BackupOptions options,
+    String password,
+  ) async {
+    final raw = await rust.exportBackup(
+      optionsJson: jsonEncode(options.toJson()),
+      password: password,
+    );
+    return BackupBundle.fromJson(_object(raw));
+  }
+
+  @override
+  Future<BackupPreview> previewBackup(String source, String password) async {
+    final raw = await rust.previewBackup(source: source, password: password);
+    return BackupPreview.fromJson(_object(raw));
+  }
+
+  @override
+  Future<ImportReport> importBackup(
+    String source,
+    String password,
+    ImportChoices choices,
+  ) async {
+    final raw = await rust.importBackup(
+      source: source,
+      password: password,
+      choicesJson: jsonEncode(choices.toJson()),
+    );
+    return ImportReport.fromJson(_object(raw));
   }
 }
