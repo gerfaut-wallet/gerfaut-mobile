@@ -149,38 +149,46 @@ class _Page extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.lg),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const SizedBox(height: GerfautSpacing.xl),
-          if (first)
-            GerfautLockup(
-              color: tokens.primary,
-              width: 160,
-              semanticLabel: 'Gerfaut',
-            )
-          else
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: tokens.surfaceSunken,
-                shape: BoxShape.circle,
+    // Centred in the page, not stacked at its top: a scroll view sizes
+    // itself to its content, so it needs the viewport's height back
+    // before `center` means anything.
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.lg),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const SizedBox(height: GerfautSpacing.xl),
+              if (first)
+                GerfautLockup(
+                  color: tokens.primary,
+                  width: 160,
+                  semanticLabel: 'Gerfaut',
+                )
+              else
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: tokens.surfaceSunken,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(page.icon, size: 32, color: tokens.primary),
+                ),
+              const SizedBox(height: GerfautSpacing.lg),
+              Text(page.title, style: tokens.h1, textAlign: TextAlign.center),
+              const SizedBox(height: GerfautSpacing.sm),
+              Text(
+                page.body,
+                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                textAlign: TextAlign.center,
               ),
-              child: Icon(page.icon, size: 32, color: tokens.primary),
-            ),
-          const SizedBox(height: GerfautSpacing.lg),
-          Text(page.title, style: tokens.h1, textAlign: TextAlign.center),
-          const SizedBox(height: GerfautSpacing.sm),
-          Text(
-            page.body,
-            style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-            textAlign: TextAlign.center,
+              const SizedBox(height: GerfautSpacing.xl),
+            ],
           ),
-          const SizedBox(height: GerfautSpacing.xl),
-        ],
+        ),
       ),
     );
   }
