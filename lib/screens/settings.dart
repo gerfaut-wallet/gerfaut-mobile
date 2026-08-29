@@ -11,6 +11,7 @@ import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
 import '../widgets/choice_group.dart';
+import '../widgets/section_card.dart';
 import '../widgets/select_field.dart';
 
 /// Application version shown in About. Kept in step with pubspec.yaml.
@@ -374,10 +375,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         child: ListView(
           padding: const EdgeInsets.all(GerfautSpacing.md),
           children: [
-            _SectionCard(
+            SectionCard(
               icon: LucideIcons.globe,
               title: 'Network',
-              tokens: tokens,
               children: [
                 for (var row = 0; row < _networkHints.length; row += 2) ...[
                   IntrinsicHeight(
@@ -414,10 +414,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ],
             ),
-            _SectionCard(
+            SectionCard(
               icon: LucideIcons.server,
               title: 'Backend · ${network.label}',
-              tokens: tokens,
               children: [
                 _BackendOption(
                   value: 'public_esplora',
@@ -547,10 +546,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ],
             ),
             if (settings.electrumCerts.isNotEmpty)
-              _SectionCard(
+              SectionCard(
                 icon: LucideIcons.shieldCheck,
                 title: 'Trusted certificates',
-                tokens: tokens,
                 children: [
                   Text(
                     'Servers whose certificate you accepted. Each one must '
@@ -571,10 +569,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                 ],
               ),
-            _SectionCard(
+            SectionCard(
               icon: LucideIcons.coins,
               title: 'Display',
-              tokens: tokens,
               children: [
                 _FieldLabel('Unit', tokens: tokens),
                 const SizedBox(height: GerfautSpacing.xs),
@@ -685,10 +682,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ],
               ],
             ),
-            _SectionCard(
+            SectionCard(
               icon: LucideIcons.sunMoon,
               title: 'Appearance',
-              tokens: tokens,
               children: [
                 _FieldLabel('Theme', tokens: tokens),
                 const SizedBox(height: GerfautSpacing.sm),
@@ -708,10 +704,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ],
             ),
-            _SectionCard(
+            SectionCard(
               icon: LucideIcons.wallet,
               title: 'Wallets',
-              tokens: tokens,
               children: [
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -799,10 +794,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ],
               ],
             ),
-            _SectionCard(
+            SectionCard(
               icon: LucideIcons.info,
               title: 'About',
-              tokens: tokens,
               children: [
                 Text.rich(
                   TextSpan(
@@ -862,47 +856,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: GerfautSpacing.lg),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({
-    required this.icon,
-    required this.title,
-    required this.tokens,
-    required this.children,
-  });
-
-  final IconData icon;
-  final String title;
-  final GerfautTokens tokens;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: GerfautSpacing.gutter),
-      padding: const EdgeInsets.all(GerfautSpacing.md),
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        borderRadius: BorderRadius.circular(GerfautRadius.lg),
-        border: Border.all(color: tokens.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 18, color: tokens.textMuted),
-              const SizedBox(width: GerfautSpacing.sm),
-              Text(title, style: tokens.h2),
-            ],
-          ),
-          const SizedBox(height: GerfautSpacing.md),
-          ...children,
-        ],
       ),
     );
   }
@@ -1588,10 +1541,7 @@ class _UnknownCertificateDialog extends StatelessWidget {
                   label: 'Valid until',
                   value: formatTimestamp(expires),
                 ),
-              _CertificateFact(
-                label: 'Why it is asked',
-                value: status.reason,
-              ),
+              _CertificateFact(label: 'Why it is asked', value: status.reason),
               const SizedBox(height: GerfautSpacing.md),
               Text(
                 'On the machine that runs the server, this prints the same '
