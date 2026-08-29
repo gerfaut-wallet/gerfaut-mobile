@@ -7,7 +7,7 @@ import 'frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `core_error_json`, `core_error_kind`, `decode_key`, `error_json`, `manager`, `ok_json`, `parse_network_opt`, `parse_network`, `parse_variant`, `to_json`
+// These functions are ignored because they are not marked as `pub`: `core_error_json`, `core_error_kind`, `decode_key`, `error_json`, `from_json`, `manager`, `ok_json`, `parse_network_opt`, `parse_network`, `parse_variant`, `to_json`
 
 /// Opens (or creates) the vault under `data_dir` with a 32-byte key given
 /// as 64 hex characters. Idempotent: once initialized, later calls (hot
@@ -21,6 +21,18 @@ Future<String> initManager({required String dataDir, required String keyHex}) =>
 /// (`legacy`, `nested_segwit`, `segwit`, `taproot`), ignored otherwise.
 Future<String> parseInput({required String input, String? script}) =>
     RustLib.instance.api.crateApiParseInput(input: input, script: script);
+
+/// Classifies wallet material with the advanced choices of the import
+/// screen: `options_json` is a serialized `ImportOptions` (script type
+/// and derivation paths), both parts optional. Everything the input
+/// fixes by itself ignores them.
+Future<String> parseInputWithOptions({
+  required String input,
+  required String optionsJson,
+}) => RustLib.instance.api.crateApiParseInputWithOptions(
+  input: input,
+  optionsJson: optionsJson,
+);
 
 /// Assembles the QR frames scanned so far (plain text, UR, BBQr) from a
 /// JSON array of strings. Returns the serialized `QrProgress`: feed the
@@ -82,6 +94,12 @@ Future<String> exportTransactions({
 
 Future<String> syncWallet({required String id}) =>
     RustLib.instance.api.crateApiSyncWallet(id: id);
+
+/// Scans a wallet again from its first address with the current gap
+/// limit, for funds an incremental sync can no longer see. Returns a
+/// serialized `SyncReport`.
+Future<String> rescanWallet({required String id}) =>
+    RustLib.instance.api.crateApiRescanWallet(id: id);
 
 /// Fetches an older round of history for a watched address. Returns how
 /// many transactions were added; zero means the history is exhausted.
@@ -172,6 +190,71 @@ Future<String> transactionStatus({
   required String hex,
 }) =>
     RustLib.instance.api.crateApiTransactionStatus(network: network, hex: hex);
+
+/// The lock in place without its hash, serialized, or `null`.
+Future<String> appLock() => RustLib.instance.api.crateApiAppLock();
+
+/// Sets a lock (`kind` is `pin` or `password`), or replaces its secret;
+/// replacing needs the current one.
+Future<String> setAppLock({
+  required String kind,
+  required String secret,
+  String? current,
+}) => RustLib.instance.api.crateApiSetAppLock(
+  kind: kind,
+  secret: secret,
+  current: current,
+);
+
+Future<String> clearAppLock({required String current}) =>
+    RustLib.instance.api.crateApiClearAppLock(current: current);
+
+/// Tries a secret. Returns a serialized `LockVerdict`, whose delay says
+/// when the next attempt is looked at after repeated failures.
+Future<String> verifyAppLock({required String secret}) =>
+    RustLib.instance.api.crateApiVerifyAppLock(secret: secret);
+
+/// Seconds away from the app before it locks again; `None` means only
+/// at launch and on request.
+Future<String> setAutoLock({int? secs}) =>
+    RustLib.instance.api.crateApiSetAutoLock(secs: secs);
+
+/// Whether the phone's biometric prompt may stand in for the secret.
+Future<String> setBiometricUnlock({required bool enabled}) =>
+    RustLib.instance.api.crateApiSetBiometricUnlock(enabled: enabled);
+
+/// Seals the chosen wallets under a password from serialized
+/// `BackupOptions`. Returns a serialized `BackupBundle`: base64 for a
+/// file, UR frames for an animated QR.
+Future<String> exportBackup({
+  required String optionsJson,
+  required String password,
+}) => RustLib.instance.api.crateApiExportBackup(
+  optionsJson: optionsJson,
+  password: password,
+);
+
+/// Opens a backup (base64 of the file, or the `gerfaut-backup:` text a
+/// scan yields) and lists what it holds. Returns a `BackupPreview`.
+Future<String> previewBackup({
+  required String source,
+  required String password,
+}) => RustLib.instance.api.crateApiPreviewBackup(
+  source: source,
+  password: password,
+);
+
+/// Restores the chosen wallets from serialized `ImportChoices`. Returns
+/// a serialized `ImportReport`.
+Future<String> importBackup({
+  required String source,
+  required String password,
+  required String choicesJson,
+}) => RustLib.instance.api.crateApiImportBackup(
+  source: source,
+  password: password,
+  choicesJson: choicesJson,
+);
 
 /// Fetches the current BTC price. `source` is one of `coingecko`,
 /// `kraken`, `mempool_space`; `currency` is one of the `FiatCurrency`

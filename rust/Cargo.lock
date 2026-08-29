@@ -900,6 +900,7 @@ dependencies = [
  "rustls 0.23.43",
  "serde",
  "serde_json",
+ "subtle",
  "thiserror 2.0.20",
  "tokio",
  "ur",

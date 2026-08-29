@@ -6,9 +6,11 @@
 //! `{"error": {"kind": "...", "message": "..."}}`. Nothing panics across
 //! the FFI boundary.
 
+use gerfaut_core::backup::{BackupOptions, ImportChoices};
 use gerfaut_core::chain::BackendConfig;
 use gerfaut_core::export::ExportOptions;
-use gerfaut_core::input::{ParsedInput, ScriptKind};
+use gerfaut_core::input::{ImportOptions, ParsedInput, ScriptKind};
+use gerfaut_core::lock::LockKind;
 use gerfaut_core::price::{FiatCurrency, PriceSource};
 use gerfaut_core::store::VaultKey;
 use gerfaut_core::{CoreError, Network, WalletManager};
@@ -44,6 +46,11 @@ fn core_error_kind(error: &CoreError) -> &'static str {
         CoreError::Descriptor(_) => "descriptor",
         CoreError::Internal(_) => "internal",
     }
+}
+
+/// Deserializes one JSON argument, naming what it should have been.
+fn from_json<T: serde::de::DeserializeOwned>(raw: &str, what: &str) -> Result<T, String> {
+    serde_json::from_str(raw).map_err(|e| error_json("bad_json", format!("invalid {what} JSON: {e}")))
 }
 
 fn core_error_json(error: &CoreError) -> String {
@@ -139,6 +146,18 @@ pub async fn parse_input(input: String, script: Option<String>) -> String {
         },
     };
     match gerfaut_core::input::parse_input_with(&input, script) {
+        Ok(parsed) => to_json(&parsed),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Classifies wallet material with the advanced choices of the import
+/// screen: `options_json` is a serialized `ImportOptions` (script type
+/// and derivation paths), both parts optional. Everything the input
+/// fixes by itself ignores them.
+pub async fn parse_input_with_options(input: String, options_json: String) -> String {
+    let options: ImportOptions = try_json!(from_json(&options_json, "ImportOptions"));
+    match gerfaut_core::input::parse_input_with_options(&input, &options) {
         Ok(parsed) => to_json(&parsed),
         Err(e) => core_error_json(&e),
     }
@@ -264,6 +283,17 @@ pub async fn export_transactions(id: String, options_json: String) -> String {
 pub async fn sync_wallet(id: String) -> String {
     let manager = try_json!(manager());
     match manager.sync_wallet(&id).await {
+        Ok(report) => to_json(&report),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Scans a wallet again from its first address with the current gap
+/// limit, for funds an incremental sync can no longer see. Returns a
+/// serialized `SyncReport`.
+pub async fn rescan_wallet(id: String) -> String {
+    let manager = try_json!(manager());
+    match manager.rescan_wallet(&id).await {
         Ok(report) => to_json(&report),
         Err(e) => core_error_json(&e),
     }
@@ -410,6 +440,97 @@ pub async fn transaction_status(network: String, hex: String) -> String {
     let network = try_json!(parse_network(&network));
     match manager.transaction_status(network, &hex).await {
         Ok(status) => to_json(&status),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+// --- app lock ----------------------------------------------------------
+
+/// The lock in place without its hash, serialized, or `null`.
+pub async fn app_lock() -> String {
+    let manager = try_json!(manager());
+    to_json(&manager.app_lock().await)
+}
+
+/// Sets a lock (`kind` is `pin` or `password`), or replaces its secret;
+/// replacing needs the current one.
+pub async fn set_app_lock(kind: String, secret: String, current: Option<String>) -> String {
+    let manager = try_json!(manager());
+    let kind: LockKind = try_json!(parse_variant(&kind, "lock kind"));
+    match manager.set_app_lock(kind, &secret, current.as_deref()).await {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+pub async fn clear_app_lock(current: String) -> String {
+    let manager = try_json!(manager());
+    match manager.clear_app_lock(&current).await {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Tries a secret. Returns a serialized `LockVerdict`, whose delay says
+/// when the next attempt is looked at after repeated failures.
+pub async fn verify_app_lock(secret: String) -> String {
+    let manager = try_json!(manager());
+    match manager.verify_app_lock(&secret).await {
+        Ok(verdict) => to_json(&verdict),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Seconds away from the app before it locks again; `None` means only
+/// at launch and on request.
+pub async fn set_auto_lock(secs: Option<u32>) -> String {
+    let manager = try_json!(manager());
+    match manager.set_auto_lock(secs).await {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Whether the phone's biometric prompt may stand in for the secret.
+pub async fn set_biometric_unlock(enabled: bool) -> String {
+    let manager = try_json!(manager());
+    match manager.set_biometric_unlock(enabled).await {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+// --- backup ------------------------------------------------------------
+
+/// Seals the chosen wallets under a password from serialized
+/// `BackupOptions`. Returns a serialized `BackupBundle`: base64 for a
+/// file, UR frames for an animated QR.
+pub async fn export_backup(options_json: String, password: String) -> String {
+    let manager = try_json!(manager());
+    let options: BackupOptions = try_json!(from_json(&options_json, "BackupOptions"));
+    match manager.export_backup(&options, &password).await {
+        Ok(bundle) => to_json(&bundle),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Opens a backup (base64 of the file, or the `gerfaut-backup:` text a
+/// scan yields) and lists what it holds. Returns a `BackupPreview`.
+pub async fn preview_backup(source: String, password: String) -> String {
+    let manager = try_json!(manager());
+    match manager.preview_backup(&source, &password).await {
+        Ok(preview) => to_json(&preview),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Restores the chosen wallets from serialized `ImportChoices`. Returns
+/// a serialized `ImportReport`.
+pub async fn import_backup(source: String, password: String, choices_json: String) -> String {
+    let manager = try_json!(manager());
+    let choices: ImportChoices = try_json!(from_json(&choices_json, "ImportChoices"));
+    match manager.import_backup(&source, &password, &choices).await {
+        Ok(report) => to_json(&report),
         Err(e) => core_error_json(&e),
     }
 }
