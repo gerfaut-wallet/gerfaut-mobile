@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- A watch-only wallet still needs the network to watch the chain. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- The camera is used for one thing: scanning a descriptor, xpub,
@@ -6,6 +7,14 @@
          recorded and no image leaves the device. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- Plugins merge permissions Gerfaut has no use for: the camera
+         plugin brings the microphone (no sound is ever captured), the
+         file plugins bring legacy external storage (files are opened
+         and shared through the system picker). A wallet that promises
+         to send nothing out cannot ask for a microphone. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove" />
     <application
         android:label="Gerfaut"
         android:name="${applicationName}"
