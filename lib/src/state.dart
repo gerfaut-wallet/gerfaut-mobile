@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'bridge.dart';
 import 'format.dart';
 import 'models.dart';
+import 'notifications.dart';
 
 /// The bridge to the core. Widget tests override this with a fake.
 final bridgeProvider = Provider<GerfautBridge>((ref) => const RustBridge());
@@ -381,6 +382,9 @@ class SyncController extends Notifier<Set<String>> {
     try {
       final report = await operation(ref.read(bridgeProvider));
       ref.read(syncErrorsProvider.notifier).clear(id);
+      // Said after the fact, never in place of it: a notification that
+      // cannot be posted must not look like a failed sync.
+      await ref.read(syncAnnouncerProvider).announce([report]);
       return report;
     } catch (error) {
       ref.read(syncErrorsProvider.notifier).set(id, '$error');
@@ -415,6 +419,7 @@ class SyncController extends Notifier<Set<String>> {
       for (final failure in report.failures) {
         errors.set(failure.walletId, failure.message);
       }
+      await ref.read(syncAnnouncerProvider).announce(report.reports);
       return report;
     } finally {
       state = {...state}..remove(syncAllId);

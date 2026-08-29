@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'screens/home.dart';
+import 'src/notifications.dart';
 import 'src/state.dart';
 import 'theme/tokens.dart';
 
@@ -76,6 +77,10 @@ class _Hydrated extends ConsumerWidget {
         ref
             .read(recentBroadcastsProvider.notifier)
             .hydrate(prefs['broadcast.recent']);
+        ref.read(notifyNewTxProvider.notifier).hydrate(prefs['notify.new_tx']);
+        ref
+            .read(backgroundCheckProvider.notifier)
+            .hydrate(prefs['notify.background']);
       }
     });
     return child;

@@ -14,6 +14,7 @@ import '../widgets/choice_group.dart';
 import '../widgets/section_card.dart';
 import '../widgets/select_field.dart';
 import 'settings/backup_section.dart';
+import 'settings/notifications_section.dart';
 
 /// Application version shown in About. Kept in step with pubspec.yaml.
 const String appVersion = '0.1.0';
@@ -734,6 +735,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ],
             ),
+            const NotificationsSection(),
             const BackupSection(),
             SectionCard(
               icon: LucideIcons.wallet,

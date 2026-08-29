@@ -2,6 +2,9 @@
     xmlns:tools="http://schemas.android.com/tools">
     <!-- A watch-only wallet still needs the network to watch the chain. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Android 13+ asks before an app may post a notification. Gerfaut
+         only asks once the user turns on the new-transaction notice. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- The camera is used for one thing: scanning a descriptor, xpub,
          or address QR code on the add-wallet screen. Nothing is
          recorded and no image leaves the device. -->
