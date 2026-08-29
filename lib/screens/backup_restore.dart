@@ -84,9 +84,22 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
     );
   }
 
+  /// Largest file worth reading, mirroring the core's own cap: a
+  /// backup of a hundred wallets weighs a few tens of kilobytes.
+  static const int _maxBackupBytes = 8 * 1024 * 1024;
+
   Future<void> _openFile() async {
     final file = await (widget.filePicker ?? _pickBackupFile)();
     if (file == null) return;
+    // Checked before reading: picking a video by mistake must cost a
+    // sentence, not the memory of the whole file.
+    if (await file.length() > _maxBackupBytes) {
+      if (!mounted) return;
+      setState(
+        () => _error = 'This file is far too large to be a Gerfaut backup.',
+      );
+      return;
+    }
     final bytes = await file.readAsBytes();
     if (!mounted) return;
     setState(() {
