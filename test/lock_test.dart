@@ -353,7 +353,9 @@ void main() {
       expect(bridge.lock, isNotNull);
     });
 
-    testWidgets('the delay before it asks again is persisted', (tester) async {
+    testWidgets('the delay before it asks again asks for the secret', (
+      tester,
+    ) async {
       useTallSurface(tester);
       final bridge = locked();
       await tester.pumpWidget(settingsApp(bridge));
@@ -361,8 +363,34 @@ void main() {
 
       await tester.tap(find.text('5 minutes'));
       await tester.pumpAndSettle();
+      // Setting "Never" would turn the lock off by another name: the
+      // secret is asked, the same as turning it off.
+      expect(find.text('Change when the lock comes back'), findsOneWidget);
+      expect(bridge.lock?.autoLockSecs, 60);
+
+      await tester.enterText(find.byKey(const Key('lock.current')), '1234');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirm'));
+      await tester.pumpAndSettle();
 
       expect(bridge.lock?.autoLockSecs, 300);
+    });
+
+    testWidgets('a wrong secret leaves the delay where it was', (tester) async {
+      useTallSurface(tester);
+      final bridge = locked();
+      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('5 minutes'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('lock.current')), '0000');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirm'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('wrong PIN or password'), findsOneWidget);
+      expect(bridge.lock?.autoLockSecs, 60);
     });
 
     testWidgets('biometrics are offered only where the phone can answer', (

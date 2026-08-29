@@ -61,7 +61,11 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
     final current = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => _ConfirmSecretSheet(kind: kind),
+      builder: (_) => _ConfirmSecretSheet(
+        kind: kind,
+        title: 'Turn off the app lock',
+        action: 'Turn off',
+      ),
     );
     if (current == null) return;
     setState(() => _error = null);
@@ -73,17 +77,38 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
     }
   }
 
-  Future<void> _setAutoLock(int? seconds) async {
+  /// Changing when the lock comes back is a change to the lock: it
+  /// asks for the secret, like turning it off does. Someone holding
+  /// the unlocked phone must not be able to set "Never" quietly.
+  Future<void> _setAutoLock(int? seconds, LockKind kind) async {
+    final current = await _askSecret(kind, 'Change when the lock comes back');
+    if (current == null) return;
     try {
-      await ref.read(bridgeProvider).setAutoLock(seconds);
+      await ref.read(bridgeProvider).setAutoLock(seconds, current);
       _afterChange();
     } on BridgeException catch (error) {
       if (mounted) setState(() => _error = error.message);
     }
   }
 
-  Future<void> _setBiometric(bool on) async {
-    // Prove the phone answers before storing a promise it cannot keep.
+  /// Asks for the secret in place and hands it back, or null when the
+  /// sheet was dismissed.
+  Future<String?> _askSecret(LockKind kind, String title) {
+    setState(() => _error = null);
+    return showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _ConfirmSecretSheet(kind: kind, title: title),
+    );
+  }
+
+  Future<void> _setBiometric(bool on, LockKind kind) async {
+    // The secret first: whoever has their own finger enrolled on this
+    // phone must not be able to make it a key to this vault.
+    final current = await _askSecret(kind, 'Unlock with biometrics');
+    if (current == null) return;
+    // Then prove the phone answers, before storing a promise it
+    // cannot keep.
     if (on) {
       final passed = await ref
           .read(biometricGateProvider)
@@ -98,7 +123,7 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
       }
     }
     try {
-      await ref.read(bridgeProvider).setBiometricUnlock(on);
+      await ref.read(bridgeProvider).setBiometricUnlock(on, current);
       _afterChange();
     } on BridgeException catch (error) {
       if (mounted) setState(() => _error = error.message);
@@ -174,7 +199,7 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
               for (final choice in autoLockChoices)
                 ChoiceOption(value: choice.seconds, label: choice.label),
             ],
-            onChanged: _setAutoLock,
+            onChanged: (seconds) => _setAutoLock(seconds, lock.kind),
           ),
           const SizedBox(height: GerfautSpacing.sm),
           Text(
@@ -194,7 +219,10 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
                     ),
                   ),
                 ),
-                Switch(value: lock.biometric, onChanged: _setBiometric),
+                Switch(
+                  value: lock.biometric,
+                  onChanged: (on) => _setBiometric(on, lock.kind),
+                ),
               ],
             ),
           ],
@@ -362,9 +390,15 @@ class _SetLockSheetState extends State<_SetLockSheet> {
 /// Asks only for the secret in place: turning the lock off is an unlock
 /// like any other.
 class _ConfirmSecretSheet extends StatefulWidget {
-  const _ConfirmSecretSheet({required this.kind});
+  const _ConfirmSecretSheet({
+    required this.kind,
+    required this.title,
+    this.action = 'Confirm',
+  });
 
   final LockKind kind;
+  final String title;
+  final String action;
 
   @override
   State<_ConfirmSecretSheet> createState() => _ConfirmSecretSheetState();
@@ -393,7 +427,7 @@ class _ConfirmSecretSheetState extends State<_ConfirmSecretSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Turn off the app lock', style: tokens.h2),
+          Text(widget.title, style: tokens.h2),
           const SizedBox(height: GerfautSpacing.md),
           PasswordField(
             key: const Key('lock.current'),
@@ -404,7 +438,7 @@ class _ConfirmSecretSheetState extends State<_ConfirmSecretSheet> {
           ),
           const SizedBox(height: GerfautSpacing.md),
           PrimaryButton(
-            label: 'Turn off',
+            label: widget.action,
             expand: true,
             onPressed: () => Navigator.of(context).pop(_controller.text),
           ),

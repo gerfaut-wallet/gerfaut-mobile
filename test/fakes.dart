@@ -798,25 +798,31 @@ class FakeBridge implements GerfautBridge {
   }
 
   @override
-  Future<void> setAutoLock(int? secs) async {
+  Future<void> setAutoLock(int? secs, String current) async {
     lockCalls.add('auto:$secs');
-    final current = lock;
-    if (current == null) throw const BridgeException('lock', 'no lock is set');
+    final existing = lock;
+    if (existing == null) throw const BridgeException('lock', 'no lock is set');
+    if (current != lockSecret) {
+      throw const BridgeException('lock', 'wrong PIN or password');
+    }
     lock = AppLock(
-      kind: current.kind,
+      kind: existing.kind,
       autoLockSecs: secs,
-      biometric: current.biometric,
+      biometric: existing.biometric,
     );
   }
 
   @override
-  Future<void> setBiometricUnlock(bool enabled) async {
+  Future<void> setBiometricUnlock(bool enabled, String current) async {
     lockCalls.add('biometric:$enabled');
-    final current = lock;
-    if (current == null) throw const BridgeException('lock', 'no lock is set');
+    final existing = lock;
+    if (existing == null) throw const BridgeException('lock', 'no lock is set');
+    if (current != lockSecret) {
+      throw const BridgeException('lock', 'wrong PIN or password');
+    }
     lock = AppLock(
-      kind: current.kind,
-      autoLockSecs: current.autoLockSecs,
+      kind: existing.kind,
+      autoLockSecs: existing.autoLockSecs,
       biometric: enabled,
     );
   }

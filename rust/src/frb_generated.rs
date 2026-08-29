@@ -1206,12 +1206,14 @@ fn wire__crate__api__set_auto_lock_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_secs = <Option<u32>>::sse_decode(&mut deserializer);
+            let api_current = <String>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, ()>(
                     (move || async move {
-                        let output_ok =
-                            Result::<_, ()>::Ok(crate::api::set_auto_lock(api_secs).await)?;
+                        let output_ok = Result::<_, ()>::Ok(
+                            crate::api::set_auto_lock(api_secs, api_current).await,
+                        )?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -1282,12 +1284,13 @@ fn wire__crate__api__set_biometric_unlock_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_enabled = <bool>::sse_decode(&mut deserializer);
+            let api_current = <String>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, ()>(
                     (move || async move {
                         let output_ok = Result::<_, ()>::Ok(
-                            crate::api::set_biometric_unlock(api_enabled).await,
+                            crate::api::set_biometric_unlock(api_enabled, api_current).await,
                         )?;
                         Ok(output_ok)
                     })()

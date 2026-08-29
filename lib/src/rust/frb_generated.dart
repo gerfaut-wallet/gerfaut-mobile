@@ -186,14 +186,17 @@ abstract class RustLibApi extends BaseApi {
     required String value,
   });
 
-  Future<String> crateApiSetAutoLock({int? secs});
+  Future<String> crateApiSetAutoLock({int? secs, required String current});
 
   Future<String> crateApiSetBackend({
     required String network,
     required String configJson,
   });
 
-  Future<String> crateApiSetBiometricUnlock({required bool enabled});
+  Future<String> crateApiSetBiometricUnlock({
+    required bool enabled,
+    required String current,
+  });
 
   Future<String> crateApiSetGapLimit({required int gapLimit});
 
@@ -1169,12 +1172,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
-  Future<String> crateApiSetAutoLock({int? secs}) {
+  Future<String> crateApiSetAutoLock({int? secs, required String current}) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_opt_box_autoadd_u_32(secs, serializer);
+          sse_encode_String(current, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -1187,14 +1191,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: null,
         ),
         constMeta: kCrateApiSetAutoLockConstMeta,
-        argValues: [secs],
+        argValues: [secs, current],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiSetAutoLockConstMeta =>
-      const TaskConstMeta(debugName: "set_auto_lock", argNames: ["secs"]);
+  TaskConstMeta get kCrateApiSetAutoLockConstMeta => const TaskConstMeta(
+    debugName: "set_auto_lock",
+    argNames: ["secs", "current"],
+  );
 
   @override
   Future<String> crateApiSetBackend({
@@ -1231,12 +1237,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
-  Future<String> crateApiSetBiometricUnlock({required bool enabled}) {
+  Future<String> crateApiSetBiometricUnlock({
+    required bool enabled,
+    required String current,
+  }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_bool(enabled, serializer);
+          sse_encode_String(current, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -1249,7 +1259,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: null,
         ),
         constMeta: kCrateApiSetBiometricUnlockConstMeta,
-        argValues: [enabled],
+        argValues: [enabled, current],
         apiImpl: this,
       ),
     );
@@ -1257,7 +1267,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   TaskConstMeta get kCrateApiSetBiometricUnlockConstMeta => const TaskConstMeta(
     debugName: "set_biometric_unlock",
-    argNames: ["enabled"],
+    argNames: ["enabled", "current"],
   );
 
   @override

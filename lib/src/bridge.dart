@@ -125,8 +125,11 @@ abstract class GerfautBridge {
 
   /// Seconds away from the app before it locks again; null means only
   /// at launch and on request.
-  Future<void> setAutoLock(int? secs);
-  Future<void> setBiometricUnlock(bool enabled);
+  /// Both are changes to the lock, so both ask for the secret in
+  /// place: an unlocked phone in the wrong hands must not be able to
+  /// turn the lock off by another name.
+  Future<void> setAutoLock(int? secs, String current);
+  Future<void> setBiometricUnlock(bool enabled, String current);
 
   /// Seals the chosen wallets under a password: a file and QR frames.
   Future<BackupBundle> exportBackup(BackupOptions options, String password);
@@ -409,13 +412,13 @@ class RustBridge implements GerfautBridge {
   }
 
   @override
-  Future<void> setAutoLock(int? secs) async {
-    _ok(await rust.setAutoLock(secs: secs));
+  Future<void> setAutoLock(int? secs, String current) async {
+    _ok(await rust.setAutoLock(secs: secs, current: current));
   }
 
   @override
-  Future<void> setBiometricUnlock(bool enabled) async {
-    _ok(await rust.setBiometricUnlock(enabled: enabled));
+  Future<void> setBiometricUnlock(bool enabled, String current) async {
+    _ok(await rust.setBiometricUnlock(enabled: enabled, current: current));
   }
 
   @override

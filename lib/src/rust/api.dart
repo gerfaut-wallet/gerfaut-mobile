@@ -231,12 +231,17 @@ Future<String> verifyAppLock({required String secret}) =>
 
 /// Seconds away from the app before it locks again; `None` means only
 /// at launch and on request.
-Future<String> setAutoLock({int? secs}) =>
-    RustLib.instance.api.crateApiSetAutoLock(secs: secs);
+Future<String> setAutoLock({int? secs, required String current}) =>
+    RustLib.instance.api.crateApiSetAutoLock(secs: secs, current: current);
 
 /// Whether the phone's biometric prompt may stand in for the secret.
-Future<String> setBiometricUnlock({required bool enabled}) =>
-    RustLib.instance.api.crateApiSetBiometricUnlock(enabled: enabled);
+Future<String> setBiometricUnlock({
+  required bool enabled,
+  required String current,
+}) => RustLib.instance.api.crateApiSetBiometricUnlock(
+  enabled: enabled,
+  current: current,
+);
 
 /// Seals the chosen wallets under a password from serialized
 /// `BackupOptions`. Returns a serialized `BackupBundle`: base64 for a
