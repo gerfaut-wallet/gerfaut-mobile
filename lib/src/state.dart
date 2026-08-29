@@ -368,13 +368,18 @@ class SyncController extends Notifier<Set<String>> {
     ref.invalidate(txDetailProvider);
   }
 
-  /// Syncs one wallet. Rethrows the core error after cleanup so the
-  /// caller can show it; the failure also lands in [syncErrorsProvider].
-  Future<SyncReport?> syncWallet(String id) async {
+  /// Runs one wallet operation with the sync bookkeeping: the wallet is
+  /// marked in flight, its last failure is recorded or cleared, and
+  /// what the operation changed is refreshed. Null when one is already
+  /// running for that wallet.
+  Future<SyncReport?> _run(
+    String id,
+    Future<SyncReport> Function(GerfautBridge bridge) operation,
+  ) async {
     if (state.contains(id)) return null;
     state = {...state, id};
     try {
-      final report = await ref.read(bridgeProvider).syncWallet(id);
+      final report = await operation(ref.read(bridgeProvider));
       ref.read(syncErrorsProvider.notifier).clear(id);
       return report;
     } catch (error) {
@@ -385,6 +390,16 @@ class SyncController extends Notifier<Set<String>> {
       _invalidateWallet(id);
     }
   }
+
+  /// Syncs one wallet. Rethrows the core error after cleanup so the
+  /// caller can show it; the failure also lands in [syncErrorsProvider].
+  Future<SyncReport?> syncWallet(String id) =>
+      _run(id, (bridge) => bridge.syncWallet(id));
+
+  /// Scans one wallet again from its first address, with the same
+  /// bookkeeping as [syncWallet].
+  Future<SyncReport?> rescanWallet(String id) =>
+      _run(id, (bridge) => bridge.rescanWallet(id));
 
   /// Syncs every wallet of a network. Failures are reported per wallet
   /// inside the returned report, never thrown.

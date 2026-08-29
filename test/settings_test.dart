@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' show Tristate;
 
 import 'package:flutter/material.dart';
@@ -628,7 +629,8 @@ void main() {
 
     const unknown = UnknownCertificate(
       fingerprint: _fingerprint,
-      reason: 'self-signed, or signed by an authority this machine does '
+      reason:
+          'self-signed, or signed by an authority this machine does '
           'not know',
       subject: 'CN=node.local',
       expires: 1893456000,
@@ -646,7 +648,10 @@ void main() {
 
       // Checked over the endpoint the backend is about to use.
       expect(bridge.inspectedCertificates, ['ssl://node.local:50002']);
-      expect(find.text('This server signs its own certificate'), findsOneWidget);
+      expect(
+        find.text('This server signs its own certificate'),
+        findsOneWidget,
+      );
       expect(
         find.textContaining(
           'No public authority vouches for the certificate of node.local:50002',
@@ -703,7 +708,9 @@ void main() {
       expect(find.text('Trusted certificates'), findsNothing);
     });
 
-    testWidgets('accepting records the fingerprint, then saves', (tester) async {
+    testWidgets('accepting records the fingerprint, then saves', (
+      tester,
+    ) async {
       useTallSurface(tester);
       final bridge = ownElectrum();
       bridge.onInspectCertificate = (_) => unknown;
@@ -722,9 +729,7 @@ void main() {
         'ssl://node.local:50002',
       );
       // Recorded against the socket, and listed from there on.
-      expect(bridge.settings.electrumCerts, {
-        'node.local:50002': _fingerprint,
-      });
+      expect(bridge.settings.electrumCerts, {'node.local:50002': _fingerprint});
       expect(find.text('Trusted certificates'), findsOneWidget);
     });
 
@@ -789,7 +794,9 @@ void main() {
       tester,
     ) async {
       useTallSurface(tester);
-      final bridge = ownElectrum(certs: const {'node.local:50002': _fingerprint});
+      final bridge = ownElectrum(
+        certs: const {'node.local:50002': _fingerprint},
+      );
       bridge.onInspectCertificate = (_) => const ChangedCertificate(
         stored: _fingerprint,
         presented: _otherFingerprint,
@@ -831,16 +838,16 @@ void main() {
       await tester.pumpAndSettle();
       expect(bridge.trustedCertificates, isEmpty);
       expect(bridge.savedBackends, isEmpty);
-      expect(bridge.settings.electrumCerts, {
-        'node.local:50002': _fingerprint,
-      });
+      expect(bridge.settings.electrumCerts, {'node.local:50002': _fingerprint});
     });
 
     testWidgets('the new certificate is taken only after two deliberate taps', (
       tester,
     ) async {
       useTallSurface(tester);
-      final bridge = ownElectrum(certs: const {'node.local:50002': _fingerprint});
+      final bridge = ownElectrum(
+        certs: const {'node.local:50002': _fingerprint},
+      );
       bridge.onInspectCertificate = (_) => const ChangedCertificate(
         stored: _fingerprint,
         presented: _otherFingerprint,
@@ -867,7 +874,9 @@ void main() {
       tester,
     ) async {
       useTallSurface(tester);
-      final bridge = ownElectrum(certs: const {'node.local:50002': _fingerprint});
+      final bridge = ownElectrum(
+        certs: const {'node.local:50002': _fingerprint},
+      );
       await tester.pumpWidget(settingsApp(bridge));
       await tester.pumpAndSettle();
 
@@ -929,6 +938,98 @@ void main() {
         'ssl://frigate.2140.dev:50002',
         'ssl://bitcoin.lu.ke:50002',
       ]);
+    });
+  });
+
+  group('rescan', () {
+    TextButton button(WidgetTester tester, String label) {
+      return tester.widget<TextButton>(
+        find.ancestor(of: find.text(label), matching: find.byType(TextButton)),
+      );
+    }
+
+    SyncReport report(String id, int newTxCount) => SyncReport(
+      walletId: id,
+      newTxCount: newTxCount,
+      balance: makeBalance(0),
+      tipHeight: 100,
+      tookMs: 1,
+      backend: 'mempool.space',
+    );
+
+    testWidgets('rescanning says so, then how many transactions it found', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final gate = Completer<void>();
+      var found = 2;
+      final bridge = FakeBridge(wallets: [makeMeta()]);
+      bridge.onRescan = (id) => gate.future.then((_) => report(id, found));
+      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Rescan a wallet to look again from its first address.'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Rescan'));
+      await tester.pump();
+
+      expect(bridge.rescanCalls, 1);
+      expect(find.text('Rescanning…'), findsOneWidget);
+      expect(find.text('Rescan'), findsNothing);
+      // The row's other actions wait for it.
+      expect(button(tester, 'Rescanning…').onPressed, isNull);
+      expect(button(tester, 'Rename').onPressed, isNull);
+      expect(button(tester, 'Remove').onPressed, isNull);
+
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Rescanned · 2 new transactions'), findsOneWidget);
+      expect(find.text('Rescan'), findsOneWidget);
+      expect(button(tester, 'Rename').onPressed, isNotNull);
+      expect(button(tester, 'Remove').onPressed, isNotNull);
+
+      // Flush the snackbar timer.
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+
+      // Singular, and nothing found, are said as such.
+      found = 1;
+      await tester.tap(find.text('Rescan'));
+      await tester.pumpAndSettle();
+      expect(find.text('Rescanned · 1 new transaction'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+
+      found = 0;
+      await tester.tap(find.text('Rescan'));
+      await tester.pumpAndSettle();
+      expect(find.text('Rescanned · no new transactions'), findsOneWidget);
+      expect(bridge.rescanCalls, 3);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a failed rescan states why under the row', (tester) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge(wallets: [makeMeta()]);
+      bridge.onRescan = (_) =>
+          throw const BridgeException('sync', 'backend unreachable: timed out');
+      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Rescan'));
+      await tester.pumpAndSettle();
+
+      expect(bridge.rescanCalls, 1);
+      expect(find.text('backend unreachable: timed out'), findsOneWidget);
+      expect(find.textContaining('Rescanned'), findsNothing);
+      // Back to an offer, with the row's other actions in reach.
+      expect(find.text('Rescan'), findsOneWidget);
+      expect(button(tester, 'Rename').onPressed, isNotNull);
     });
   });
 }

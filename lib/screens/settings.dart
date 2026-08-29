@@ -64,6 +64,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String? _confirmRemoveId;
   String? _walletError;
 
+  /// Wallet whose rescan was started here; its row says so meanwhile.
+  String? _rescanningId;
+
   // Gap limit. Seeded from the vault, committed on blur or submit.
   final _gapLimitController = TextEditingController();
   final _gapLimitFocus = FocusNode();
@@ -331,6 +334,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  Future<void> _rescan(String id) async {
+    setState(() {
+      _rescanningId = id;
+      _walletError = null;
+    });
+    try {
+      final report = await ref.read(syncProvider.notifier).rescanWallet(id);
+      if (report != null && mounted) _toast(_rescanSummary(report.newTxCount));
+    } catch (error) {
+      if (mounted) setState(() => _walletError = '$error');
+    } finally {
+      if (mounted) setState(() => _rescanningId = null);
+    }
+  }
+
+  static String _rescanSummary(int count) {
+    final found = switch (count) {
+      0 => 'no new transactions',
+      1 => '1 new transaction',
+      _ => '$count new transactions',
+    };
+    return 'Rescanned · $found';
+  }
+
   Future<void> _checkForUpdates() async {
     setState(() {
       _checkingUpdate = true;
@@ -352,6 +379,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final settings = ref.watch(settingsProvider).valueOrNull;
     final wallets = ref.watch(walletsProvider).valueOrNull ?? [];
+    ref.watch(syncProvider);
+    final sync = ref.read(syncProvider.notifier);
 
     if (settings == null) {
       return Scaffold(
@@ -731,6 +760,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               color: tokens.textMuted,
                             ),
                           ),
+                          Text(
+                            'Rescan a wallet to look again from its first '
+                            'address.',
+                            style: tokens.bodySmall.copyWith(
+                              color: tokens.textMuted,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -784,6 +820,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           _confirmRemoveId = null;
                         });
                       },
+                      rescanning: _rescanningId == wallet.id,
+                      busy: sync.isSyncing(wallet.id),
+                      onRescan: () => _rescan(wallet.id),
                     ),
                 if (_walletError != null) ...[
                   const SizedBox(height: GerfautSpacing.sm),
@@ -1254,6 +1293,9 @@ class _WalletRow extends StatelessWidget {
     required this.onRemoveStart,
     required this.onRemoveConfirm,
     required this.onCancel,
+    required this.rescanning,
+    required this.busy,
+    required this.onRescan,
   });
 
   final WalletMeta wallet;
@@ -1266,6 +1308,14 @@ class _WalletRow extends StatelessWidget {
   final VoidCallback onRemoveStart;
   final VoidCallback onRemoveConfirm;
   final VoidCallback onCancel;
+
+  /// A rescan started from this row is running: the button says so.
+  final bool rescanning;
+
+  /// A sync or rescan of this wallet is in flight, wherever it was
+  /// started: every action waits for it.
+  final bool busy;
+  final VoidCallback onRescan;
 
   @override
   Widget build(BuildContext context) {
@@ -1407,17 +1457,29 @@ class _WalletRow extends StatelessWidget {
             ),
           ] else if (!renaming) ...[
             const SizedBox(height: GerfautSpacing.xs),
-            Row(
+            // Three actions do not fit one line on a narrow phone: the
+            // last one flows under the others rather than overflowing.
+            Wrap(
               children: [
                 GhostButton(
                   label: 'Rename',
                   icon: LucideIcons.pencil,
-                  onPressed: onRenameStart,
+                  onPressed: busy ? null : onRenameStart,
+                ),
+                // An incremental sync only looks at the addresses already
+                // revealed. Funds past them — a gap limit raised too late,
+                // or a descriptor also used by another wallet that went
+                // further — only turn up by scanning again from the first
+                // address.
+                GhostButton(
+                  label: rescanning ? 'Rescanning…' : 'Rescan',
+                  icon: LucideIcons.scanSearch,
+                  onPressed: busy ? null : onRescan,
                 ),
                 _AlertGhostButton(
                   label: 'Remove',
                   icon: LucideIcons.trash2,
-                  onPressed: onRemoveStart,
+                  onPressed: busy ? null : onRemoveStart,
                 ),
               ],
             ),
@@ -1812,7 +1874,7 @@ class _AlertGhostButton extends StatelessWidget {
 
   final String label;
   final IconData icon;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
