@@ -8,6 +8,7 @@
 
 use gerfaut_core::backup::{BackupOptions, ImportChoices};
 use gerfaut_core::chain::BackendConfig;
+use gerfaut_core::chain::tor::TorSettings;
 use gerfaut_core::export::ExportOptions;
 use gerfaut_core::input::{ImportOptions, ParsedInput, ScriptKind};
 use gerfaut_core::lock::LockKind;
@@ -44,6 +45,7 @@ fn core_error_kind(error: &CoreError) -> &'static str {
         CoreError::BackendUnavailable(_) => "backend_unavailable",
         CoreError::Broadcast { .. } => "broadcast",
         CoreError::Descriptor(_) => "descriptor",
+        CoreError::Tor(_) => "tor",
         CoreError::Internal(_) => "internal",
     }
 }
@@ -440,6 +442,38 @@ pub async fn transaction_status(network: String, hex: String) -> String {
     let network = try_json!(parse_network(&network));
     match manager.transaction_status(network, &hex).await {
         Ok(status) => to_json(&status),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+// --- tor ---------------------------------------------------------------
+
+/// Where Tor stands for `.onion` backends. Returns a serialized
+/// `TorStatus`: the mode, the route in use, and how far the built-in
+/// client has bootstrapped.
+pub async fn tor_status() -> String {
+    let manager = try_json!(manager());
+    to_json(&manager.tor_status().await)
+}
+
+/// Sets how `.onion` backends reach Tor from serialized `TorSettings`
+/// (`mode`: auto, system, embedded; `socks_proxy`: `host:port` or null).
+pub async fn set_tor_settings(settings_json: String) -> String {
+    let manager = try_json!(manager());
+    let settings: TorSettings = try_json!(from_json(&settings_json, "TorSettings"));
+    match manager.set_tor_settings(settings).await {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Resolves the route now, bootstrapping the built-in client if that is
+/// the path. Up to a minute and a half on a first run. Returns a
+/// serialized `TorRoute`.
+pub async fn tor_connect() -> String {
+    let manager = try_json!(manager());
+    match manager.tor_connect().await {
+        Ok(route) => to_json(&route),
         Err(e) => core_error_json(&e),
     }
 }

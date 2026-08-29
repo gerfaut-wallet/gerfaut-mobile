@@ -1022,6 +1022,7 @@ class Settings {
     this.gapLimit = 20,
     this.electrumCerts = const {},
     this.appLock,
+    this.tor = TorSettings.automatic,
   });
 
   factory Settings.fromJson(Map<String, dynamic> json) {
@@ -1043,6 +1044,9 @@ class Settings {
       appLock: json['app_lock'] == null
           ? null
           : AppLock.fromJson(json['app_lock'] as Map<String, dynamic>),
+      tor: json['tor'] == null
+          ? TorSettings.automatic
+          : TorSettings.fromJson(json['tor'] as Map<String, dynamic>),
     );
   }
 
@@ -1060,6 +1064,9 @@ class Settings {
 
   /// The lock in place, without its hash; null when there is none.
   final AppLock? appLock;
+
+  /// How `.onion` backends reach Tor.
+  final TorSettings tor;
 
   /// Backend for a network, falling back to the public default.
   BackendConfig backendFor(Network network) =>
@@ -1899,4 +1906,119 @@ class ImportReport {
   /// Wallets left out: already watched, or not chosen.
   final int skipped;
   final bool settingsApplied;
+}
+
+// --- tor ---------------------------------------------------------------
+
+/// How `.onion` backends reach Tor.
+enum TorMode {
+  auto('auto', 'Automatic'),
+  system('system', 'System Tor'),
+  embedded('embedded', 'Built-in');
+
+  const TorMode(this.id, this.label);
+
+  final String id;
+  final String label;
+
+  static TorMode fromId(String id) =>
+      TorMode.values.firstWhere((m) => m.id == id, orElse: () => TorMode.auto);
+}
+
+class TorSettings {
+  const TorSettings({required this.mode, this.socksProxy});
+
+  /// The default: a system daemon if one answers, else the built-in.
+  static const TorSettings automatic = TorSettings(mode: TorMode.auto);
+
+  factory TorSettings.fromJson(Map<String, dynamic> json) {
+    return TorSettings(
+      mode: TorMode.fromId(json['mode'] as String? ?? 'auto'),
+      socksProxy: json['socks_proxy'] as String?,
+    );
+  }
+
+  final TorMode mode;
+
+  /// `host:port` of the system SOCKS proxy; null means 127.0.0.1:9050.
+  final String? socksProxy;
+
+  Map<String, dynamic> toJson() => {'mode': mode.id, 'socks_proxy': socksProxy};
+}
+
+/// Which Tor a route goes through.
+enum TorVia {
+  system('system', 'system Tor'),
+  embedded('embedded', 'built-in Tor');
+
+  const TorVia(this.id, this.label);
+
+  final String id;
+  final String label;
+
+  static TorVia? fromId(String? id) {
+    for (final via in TorVia.values) {
+      if (via.id == id) return via;
+    }
+    return null;
+  }
+}
+
+class TorRoute {
+  const TorRoute({required this.socks, required this.via});
+
+  factory TorRoute.fromJson(Map<String, dynamic> json) {
+    return TorRoute(
+      socks: json['socks'] as String,
+      via: TorVia.fromId(json['via'] as String?) ?? TorVia.system,
+    );
+  }
+
+  final String socks;
+  final TorVia via;
+}
+
+/// Where Tor stands right now.
+class TorStatus {
+  const TorStatus({
+    required this.mode,
+    required this.socksProxy,
+    required this.via,
+    required this.socks,
+    required this.running,
+    required this.bootstrapped,
+    required this.bootstrapPercent,
+    required this.error,
+    required this.embeddedAvailable,
+  });
+
+  factory TorStatus.fromJson(Map<String, dynamic> json) {
+    return TorStatus(
+      mode: TorMode.fromId(json['mode'] as String? ?? 'auto'),
+      socksProxy: json['socks_proxy'] as String? ?? '127.0.0.1:9050',
+      via: TorVia.fromId(json['via'] as String?),
+      socks: json['socks'] as String?,
+      running: json['running'] as bool? ?? false,
+      bootstrapped: json['bootstrapped'] as bool? ?? false,
+      bootstrapPercent: json['bootstrap_percent'] as int? ?? 0,
+      error: json['error'] as String?,
+      embeddedAvailable: json['embedded_available'] as bool? ?? false,
+    );
+  }
+
+  final TorMode mode;
+
+  /// The effective system proxy address.
+  final String socksProxy;
+  final TorVia? via;
+
+  /// The SOCKS address in use, once a route was resolved.
+  final String? socks;
+  final bool running;
+  final bool bootstrapped;
+  final int bootstrapPercent;
+  final String? error;
+
+  /// Whether this build carries the built-in client.
+  final bool embeddedAvailable;
 }

@@ -413,7 +413,15 @@ void main() {
       await tester.pumpWidget(settingsApp(bridge));
       await tester.pumpAndSettle();
 
-      expect(find.text('Automatic'), findsOneWidget);
+      // The Tor card offers an "Automatic" of its own: this one is the
+      // server picker's.
+      expect(
+        find.descendant(
+          of: find.byType(GerfautSelect<String?>),
+          matching: find.text('Automatic'),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Rotates over every public Esplora.'), findsOneWidget);
       // The hint says who answers and what else they serve.
       expect(find.textContaining('fee estimates'), findsOneWidget);

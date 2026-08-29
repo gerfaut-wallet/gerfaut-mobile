@@ -139,6 +139,14 @@ abstract class GerfautBridge {
     String password,
     ImportChoices choices,
   );
+
+  /// Where Tor stands for `.onion` backends.
+  Future<TorStatus> torStatus();
+  Future<void> setTorSettings(TorSettings settings);
+
+  /// Resolves the route now, bootstrapping the built-in client if that
+  /// is the path. Up to a minute and a half on a first run.
+  Future<TorRoute> torConnect();
 }
 
 /// The real bridge, backed by the generated Rust bindings.
@@ -440,5 +448,20 @@ class RustBridge implements GerfautBridge {
       choicesJson: jsonEncode(choices.toJson()),
     );
     return ImportReport.fromJson(_object(raw));
+  }
+
+  @override
+  Future<TorStatus> torStatus() async {
+    return TorStatus.fromJson(_object(await rust.torStatus()));
+  }
+
+  @override
+  Future<void> setTorSettings(TorSettings settings) async {
+    _ok(await rust.setTorSettings(settingsJson: jsonEncode(settings.toJson())));
+  }
+
+  @override
+  Future<TorRoute> torConnect() async {
+    return TorRoute.fromJson(_object(await rust.torConnect()));
   }
 }

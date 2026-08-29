@@ -17,6 +17,7 @@ import '../widgets/select_field.dart';
 import 'settings/backup_section.dart';
 import 'settings/notifications_section.dart';
 import 'settings/security_section.dart';
+import 'settings/tor_section.dart';
 import 'welcome.dart';
 
 /// Application version shown in About. Kept in step with pubspec.yaml.
@@ -738,6 +739,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ],
             ),
+            const TorSection(),
             const SecuritySection(),
             const NotificationsSection(),
             const BackupSection(),

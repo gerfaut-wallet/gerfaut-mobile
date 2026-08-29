@@ -498,6 +498,7 @@ class FakeBridge implements GerfautBridge {
       gapLimit: settings.gapLimit,
       electrumCerts: settings.electrumCerts,
       appLock: lock,
+      tor: settings.tor,
     );
   }
 
@@ -508,6 +509,7 @@ class FakeBridge implements GerfautBridge {
     Map<Network, BackendConfig>? backends,
     int? gapLimit,
     Map<String, String>? electrumCerts,
+    TorSettings? tor,
   }) {
     settings = Settings(
       activeNetwork: activeNetwork ?? settings.activeNetwork,
@@ -516,6 +518,7 @@ class FakeBridge implements GerfautBridge {
       gapLimit: gapLimit ?? settings.gapLimit,
       electrumCerts: electrumCerts ?? settings.electrumCerts,
       appLock: settings.appLock,
+      tor: tor ?? settings.tor,
     );
   }
 
@@ -886,6 +889,50 @@ class FakeBridge implements GerfautBridge {
     final import = onImportBackup;
     if (import != null) return import(source, password, choices);
     return const ImportReport(added: [], skipped: 0, settingsApplied: false);
+  }
+
+  /// Tor hooks. The default status reports the settings' mode with
+  /// nothing running; connect answers a system route.
+  TorStatus Function(TorSettings settings)? onTorStatus;
+  FutureOr<TorRoute> Function()? onTorConnect;
+  final List<TorSettings> torSettingsCalls = [];
+
+  @override
+  Future<TorStatus> torStatus() async {
+    final status = onTorStatus;
+    if (status != null) return status(settings.tor);
+    return TorStatus(
+      mode: settings.tor.mode,
+      socksProxy: settings.tor.socksProxy ?? '127.0.0.1:9050',
+      via: null,
+      socks: null,
+      running: false,
+      bootstrapped: false,
+      bootstrapPercent: 0,
+      error: null,
+      embeddedAvailable: true,
+    );
+  }
+
+  @override
+  Future<void> setTorSettings(TorSettings tor) async {
+    torSettingsCalls.add(tor);
+    settings = Settings(
+      activeNetwork: settings.activeNetwork,
+      backends: settings.backends,
+      appPrefs: settings.appPrefs,
+      gapLimit: settings.gapLimit,
+      electrumCerts: settings.electrumCerts,
+      appLock: settings.appLock,
+      tor: tor,
+    );
+  }
+
+  @override
+  Future<TorRoute> torConnect() async {
+    final connect = onTorConnect;
+    if (connect != null) return connect();
+    return const TorRoute(socks: '127.0.0.1:9050', via: TorVia.system);
   }
 }
 

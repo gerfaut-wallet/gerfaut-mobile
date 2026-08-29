@@ -191,6 +191,21 @@ Future<String> transactionStatus({
 }) =>
     RustLib.instance.api.crateApiTransactionStatus(network: network, hex: hex);
 
+/// Where Tor stands for `.onion` backends. Returns a serialized
+/// `TorStatus`: the mode, the route in use, and how far the built-in
+/// client has bootstrapped.
+Future<String> torStatus() => RustLib.instance.api.crateApiTorStatus();
+
+/// Sets how `.onion` backends reach Tor from serialized `TorSettings`
+/// (`mode`: auto, system, embedded; `socks_proxy`: `host:port` or null).
+Future<String> setTorSettings({required String settingsJson}) =>
+    RustLib.instance.api.crateApiSetTorSettings(settingsJson: settingsJson);
+
+/// Resolves the route now, bootstrapping the built-in client if that is
+/// the path. Up to a minute and a half on a first run. Returns a
+/// serialized `TorRoute`.
+Future<String> torConnect() => RustLib.instance.api.crateApiTorConnect();
+
 /// The lock in place without its hash, serialized, or `null`.
 Future<String> appLock() => RustLib.instance.api.crateApiAppLock();
 
