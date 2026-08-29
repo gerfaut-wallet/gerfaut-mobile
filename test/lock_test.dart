@@ -410,6 +410,34 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Unlock with biometrics'), findsOneWidget);
     });
+
+    testWidgets('locking from a pushed screen brings the lock to the front', (
+      tester,
+    ) async {
+      // The settings live above the home route: a lock that only
+      // replaced the home would sit behind them, in plain view.
+      useTallSurface(tester);
+      final bridge = locked(wallets: [makeMeta()]);
+      await tester.pumpWidget(app(bridge));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), '1234');
+      await tester.tap(find.text('Unlock'));
+      await tester.pumpAndSettle();
+      expect(find.byType(LockScreen), findsNothing);
+
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+      expect(find.text('Network'), findsOneWidget);
+
+      await tester.tap(find.text('Lock now'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(LockScreen), findsOneWidget);
+      // Nothing of the settings, and nothing of a wallet, is behind it.
+      expect(find.text('Network'), findsNothing);
+      expect(find.text('Cold storage'), findsNothing);
+    });
   });
 
   group('the welcome tour', () {

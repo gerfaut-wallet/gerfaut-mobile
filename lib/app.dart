@@ -145,6 +145,17 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    // Locking while a screen is pushed would leave that screen in front
+    // of the lock: this gate is the navigator's first route, so every
+    // route above it has to go before the lock can mean anything.
+    ref.listen(lockProvider, (previous, next) {
+      if (next.locked && !(previous?.locked ?? false)) {
+        final navigator = Navigator.of(context);
+        if (navigator.canPop()) {
+          navigator.popUntil((route) => route.isFirst);
+        }
+      }
+    });
     // Watching the settings is what asks the core for them, and their
     // arrival is what tells the lock whether to show.
     final settings = ref.watch(settingsProvider);
