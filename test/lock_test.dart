@@ -474,14 +474,28 @@ void main() {
       final container = ProviderContainer(overrides: _overrides(bridge, null));
       addTearDown(container.dispose);
 
-      await container.read(lockProvider.notifier).load();
+      final notifier = container.read(lockProvider.notifier);
+      notifier.syncFromSettings(pinLock);
       expect(container.read(lockProvider).locked, isTrue);
-      await container.read(lockProvider.notifier).unlock('1234');
+      await notifier.unlock('1234');
       expect(container.read(lockProvider).locked, isFalse);
 
       // Back at once, under the minute: still open.
-      container.read(lockProvider.notifier).noteHidden();
-      container.read(lockProvider.notifier).noteResumed();
+      notifier.noteHidden();
+      notifier.noteResumed();
+      expect(container.read(lockProvider).locked, isFalse);
+
+      // Away past the minute: the secret is asked again.
+      notifier.noteHidden();
+      notifier.leftAtForTest(
+        DateTime.now().subtract(const Duration(minutes: 2)),
+      );
+      notifier.noteResumed();
+      expect(container.read(lockProvider).locked, isTrue);
+
+      // A settings refetch never re-locks an app already open.
+      await notifier.unlock('1234');
+      notifier.syncFromSettings(pinLock);
       expect(container.read(lockProvider).locked, isFalse);
     });
 
@@ -491,7 +505,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      await container.read(lockProvider.notifier).load();
+      container.read(lockProvider.notifier).syncFromSettings(null);
       expect(container.read(lockProvider).locked, isFalse);
       container.read(lockProvider.notifier).lockNow();
       expect(container.read(lockProvider).locked, isFalse);

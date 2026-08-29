@@ -170,6 +170,9 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
     });
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
+    // Held before the first await: `ref` belongs to this widget and
+    // throws once it is gone, but the container it points at does not.
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
       final bridge = ref.read(bridgeProvider);
       final report = await bridge.importBackup(
@@ -188,12 +191,18 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
         active = added.first.network;
         await bridge.setActiveNetwork(active);
       }
-      ref.invalidate(settingsProvider);
-      ref.invalidate(walletsProvider);
+      // Leaving the screen mid-import must not swallow the result: the
+      // wallets are in the vault either way, and the lists have to be
+      // told even if this widget is gone. The container outlives it.
+      container.invalidate(settingsProvider);
+      container.invalidate(walletsProvider);
       // First sync in the background; its outcome lands on each wallet's
       // freshness indicator.
       unawaited(
-        ref.read(syncProvider.notifier).syncAll(active).catchError((_) => null),
+        container
+            .read(syncProvider.notifier)
+            .syncAll(active)
+            .catchError((_) => null),
       );
       if (!mounted) return;
       navigator.pop();

@@ -33,10 +33,9 @@ class SecuritySection extends ConsumerStatefulWidget {
 class _SecuritySectionState extends ConsumerState<SecuritySection> {
   String? _error;
 
-  Future<void> _afterChange() async {
-    ref.invalidate(settingsProvider);
-    await ref.read(lockProvider.notifier).refresh();
-  }
+  /// The vault is the source of truth: invalidating the settings is
+  /// what tells the lock screen, through the gate that watches them.
+  void _afterChange() => ref.invalidate(settingsProvider);
 
   Future<void> _setLock({LockKind? kind}) async {
     final chosen = await showModalBottomSheet<_NewSecret>(
@@ -52,7 +51,7 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
       await ref
           .read(bridgeProvider)
           .setAppLock(chosen.kind, chosen.secret, current: chosen.current);
-      await _afterChange();
+      _afterChange();
     } on BridgeException catch (error) {
       if (mounted) setState(() => _error = error.message);
     }
@@ -68,7 +67,7 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
     setState(() => _error = null);
     try {
       await ref.read(bridgeProvider).clearAppLock(current);
-      await _afterChange();
+      _afterChange();
     } on BridgeException catch (error) {
       if (mounted) setState(() => _error = error.message);
     }
@@ -77,7 +76,7 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
   Future<void> _setAutoLock(int? seconds) async {
     try {
       await ref.read(bridgeProvider).setAutoLock(seconds);
-      await _afterChange();
+      _afterChange();
     } on BridgeException catch (error) {
       if (mounted) setState(() => _error = error.message);
     }
@@ -100,7 +99,7 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
     }
     try {
       await ref.read(bridgeProvider).setBiometricUnlock(on);
-      await _afterChange();
+      _afterChange();
     } on BridgeException catch (error) {
       if (mounted) setState(() => _error = error.message);
     }

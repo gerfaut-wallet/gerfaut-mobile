@@ -85,6 +85,7 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
             input,
             ImportOptions(script: script, derivation: derivation),
           );
+      if (!mounted) return;
       // A re-parse keeps the network the user already picked.
       final preferred =
           _network ?? ref.read(settingsProvider).valueOrNull?.activeNetwork;
@@ -157,19 +158,25 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
     });
     try {
       final bridge = ref.read(bridgeProvider);
+      // Held before the await: `ref` belongs to this widget, the
+      // container it points at outlives it.
+      final container = ProviderScope.containerOf(context, listen: false);
       final meta = await bridge.addWallet(name, parsed, network);
       // The workspace follows the wallet that was just added, otherwise
       // it would land invisible on another network.
-      final active = ref.read(settingsProvider).valueOrNull?.activeNetwork;
+      final active = container
+          .read(settingsProvider)
+          .valueOrNull
+          ?.activeNetwork;
       if (network != active) {
         await bridge.setActiveNetwork(network);
-        ref.invalidate(settingsProvider);
+        container.invalidate(settingsProvider);
       }
-      ref.invalidate(walletsProvider);
+      container.invalidate(walletsProvider);
       // First sync in the background; its outcome lands on the wallet
       // screen's freshness indicator.
       // ignore: unawaited_futures
-      ref
+      container
           .read(syncProvider.notifier)
           .syncWallet(meta.id)
           .catchError((_) => null);

@@ -43,6 +43,7 @@ class _TorSectionState extends ConsumerState<TorSection> {
           .setTorSettings(
             TorSettings(mode: mode, socksProxy: settings?.tor.socksProxy),
           );
+      if (!mounted) return;
       ref.invalidate(settingsProvider);
     } on BridgeException catch (error) {
       if (mounted) setState(() => _error = error.message);
@@ -61,8 +62,12 @@ class _TorSectionState extends ConsumerState<TorSection> {
     } on BridgeException catch (error) {
       if (mounted) setState(() => _error = error.message);
     } finally {
-      if (mounted) setState(() => _connecting = false);
-      ref.invalidate(torStatusProvider);
+      // A bootstrap can take a minute and a half: by the time it
+      // answers the screen may be gone, and `ref` would throw.
+      if (mounted) {
+        setState(() => _connecting = false);
+        ref.invalidate(torStatusProvider);
+      }
     }
   }
 

@@ -119,28 +119,23 @@ class LockController extends Notifier<LockState> {
   @override
   LockState build() => const LockState();
 
-  /// Reads the lock the vault holds. A lock present means the app
-  /// starts locked: the first thing it asks is the secret.
-  Future<void> load() async {
-    try {
-      final lock = await ref.read(bridgeProvider).appLock();
-      state = LockState(lock: lock, locked: lock != null, loaded: true);
-    } catch (_) {
-      // A vault that cannot say has no lock to show: the startup error
-      // screen is the one that speaks, not a lock nobody can pass.
-      state = const LockState(loaded: true);
-    }
-  }
-
-  /// Reloads after the settings changed the lock, keeping the screen as
-  /// it is: turning a lock on does not lock the user out at once.
-  Future<void> refresh() async {
-    try {
-      final lock = await ref.read(bridgeProvider).appLock();
-      state = state.copyWith(lock: lock, clearLock: lock == null, loaded: true);
-    } catch (_) {
-      // Keep what is on screen: a failed read is not an unlock.
-    }
+  /// Takes the lock from the settings the vault just handed over.
+  ///
+  /// The vault is the single source of truth; this notifier only knows
+  /// whether the screen is up right now. Reading it separately would
+  /// mean a failed read could open the app on a guess — and the
+  /// settings are loaded before anything shows anyway.
+  ///
+  /// Only the first reading with a lock in it locks: a later one never
+  /// does, so turning a lock on does not shut the user out of the
+  /// screen they are standing on.
+  void syncFromSettings(AppLock? lock) {
+    final first = !state.loaded;
+    state = LockState(
+      lock: lock,
+      loaded: true,
+      locked: first ? lock != null : state.locked,
+    );
   }
 
   /// Tries the secret. The verdict carries the delay the core imposes
@@ -167,6 +162,11 @@ class LockController extends Notifier<LockState> {
 
   /// Gerfaut left the screen: the clock starts.
   void noteHidden() => _leftAt = DateTime.now();
+
+  /// Backdates that departure, so a test can be away for two minutes
+  /// without waiting two minutes.
+  @visibleForTesting
+  void leftAtForTest(DateTime when) => _leftAt = when;
 
   /// Gerfaut is back: lock again if it was away long enough.
   void noteResumed() {

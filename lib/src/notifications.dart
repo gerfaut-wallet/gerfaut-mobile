@@ -83,6 +83,10 @@ class LocalNotificationService implements NotificationService {
           transactionsChannelId,
           _transactionsChannelName,
           importance: Importance.defaultImportance,
+          // The phone's own lock screen shows the title, never the
+          // amount: an app that hides balances behind a PIN cannot
+          // print them where anyone walking past can read them.
+          visibility: NotificationVisibility.private,
         ),
       ),
     );
@@ -224,6 +228,17 @@ class SyncAnnouncer {
   Future<void> announce(List<SyncReport> reports) async {
     if (!_ref.read(notifyNewTxProvider)) return;
     if (reports.every((r) => r.newTxs.isEmpty && r.newTxCount == 0)) return;
+    // A wallet seen for the first time hands over its whole history as
+    // "new". Telling someone about a payment from three years ago is
+    // noise, and the first sync of a restore would be a burst of it.
+    final known = _ref.read(announcedWalletsProvider.notifier);
+    final firstTime = <SyncReport>[];
+    for (final report in reports) {
+      if (!known.remembers(report.walletId)) firstTime.add(report);
+    }
+    known.remember(reports.map((r) => r.walletId));
+    reports = reports.where((r) => !firstTime.contains(r)).toList();
+    if (reports.isEmpty) return;
     try {
       final wallets =
           _ref.read(walletsProvider).valueOrNull ??
@@ -288,6 +303,22 @@ final notifyNewTxProvider = NotifierProvider<NotifyNewTxNotifier, bool>(
 
 /// The system refused notifications the last time the toggle asked.
 final notificationsRefusedProvider = StateProvider<bool>((ref) => false);
+
+/// Wallets this run has already synced once, so their history is not
+/// announced as new. Kept in memory: a restart syncing them again is
+/// the same "first sync of this run", and a wallet whose whole history
+/// is already on screen does not need to be told twice.
+class AnnouncedWallets extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  bool remembers(String walletId) => state.contains(walletId);
+
+  void remember(Iterable<String> ids) => state = {...state, ...ids};
+}
+
+final announcedWalletsProvider =
+    NotifierProvider<AnnouncedWallets, Set<String>>(AnnouncedWallets.new);
 
 /// How often the background check runs; the seconds are what the
 /// preference stores.

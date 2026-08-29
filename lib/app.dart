@@ -89,6 +89,11 @@ class _Hydrated extends ConsumerWidget {
             .read(onboardingSeenProvider.notifier)
             .hydrate(prefs['onboarding.seen']);
       }
+      // The vault says whether a lock exists, every time it is read:
+      // the first reading with one in it is what puts the screen up.
+      if (settings != null) {
+        ref.read(lockProvider.notifier).syncFromSettings(settings.appLock);
+      }
     });
     return child;
   }
@@ -113,10 +118,6 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Asking the vault is what decides whether the app starts locked.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(lockProvider.notifier).load();
-    });
   }
 
   @override
@@ -144,7 +145,13 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    // Watching the settings is what asks the core for them, and their
+    // arrival is what tells the lock whether to show.
+    final settings = ref.watch(settingsProvider);
     final lock = ref.watch(lockProvider);
+    if (settings.hasError) {
+      return _StartupErrorScreen(message: '${settings.error}');
+    }
     if (!lock.loaded) return const _StartupScreen();
     if (lock.locked) return const LockScreen();
 

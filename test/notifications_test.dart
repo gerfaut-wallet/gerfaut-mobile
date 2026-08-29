@@ -180,6 +180,21 @@ void main() {
       expect(service.posted, isEmpty);
     });
 
+    test('the first sync of a wallet is not announced', () async {
+      // A wallet seen for the first time hands over its whole history
+      // as new: telling someone about a payment from three years ago
+      // is noise, and a restore would be a burst of it.
+      final service = FakeNotifications();
+      final bridge = FakeBridge(wallets: [makeMeta()]);
+      bridge.onSyncWallet = (id) =>
+          report([tx(1000, txid: 'a'), tx(2000, txid: 'b')], id: id);
+      final made = container(bridge, service);
+      await made.read(notifyNewTxProvider.notifier).set(true);
+
+      await made.read(syncProvider.notifier).syncWallet('w1');
+      expect(service.posted, isEmpty);
+    });
+
     test('with the notice on, one line per transaction', () async {
       final service = FakeNotifications();
       final bridge = FakeBridge(wallets: [makeMeta()]);
@@ -187,6 +202,9 @@ void main() {
       final made = container(bridge, service);
       await made.read(notifyNewTxProvider.notifier).set(true);
 
+      // The first sync settles what the wallet already held; what the
+      // next one finds is genuinely new.
+      await made.read(syncProvider.notifier).syncWallet('w1');
       await made.read(syncProvider.notifier).syncWallet('w1');
       expect(service.posted, hasLength(1));
       expect(service.posted.single.title, 'Cold storage');
