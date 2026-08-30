@@ -15,6 +15,7 @@ import '../widgets/buttons.dart';
 import '../widgets/choice_group.dart';
 import '../widgets/section_card.dart';
 import '../widgets/select_field.dart';
+import 'scan.dart';
 import 'settings/backup_section.dart';
 import 'settings/notifications_section.dart';
 import 'settings/security_section.dart';
@@ -39,7 +40,15 @@ const List<({Network network, String hint})> _networkHints = [
 
 /// Settings: workspace, backend, display, appearance, wallets, about.
 class SettingsScreen extends ConsumerStatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({super.key, @visibleForTesting this.cameraBuilder});
+
+  /// What the scanner expects when it is opened for a server address.
+  static const String backendScanCaption =
+      'Point the camera at the QR code your node prints beside its '
+      'Electrum or Esplora app.';
+
+  /// Replaces the camera view of the scanner; tests push frames by hand.
+  final CameraBuilder? cameraBuilder;
 
   @override
   ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
@@ -61,6 +70,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   /// What the last save had to say about the server's certificate, when
   /// it is worth saying at all. Cleared at the start of the next save.
   String? _certificateNote;
+
+  /// Why the core refused the last scanned code, in its own words. Shown
+  /// under the field the scan was meant to fill.
+  String? _scanError;
 
   /// Host whose accepted certificate is one tap from being forgotten.
   String? _forgettingHost;
@@ -200,11 +213,68 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   /// Switches the backend form. What the last save said about a
-  /// certificate belongs to that backend, so it goes with it.
+  /// certificate belongs to that backend, so it goes with it, and so
+  /// does a refused scan.
   void _pickBackendKind(String kind) {
     setState(() {
       _backendKind = kind;
       _certificateNote = null;
+      _scanError = null;
+    });
+  }
+
+  /// A backend field was typed in: the Save button follows what it now
+  /// holds, and a refused scan no longer describes it.
+  void _onBackendFieldChanged() {
+    setState(() => _scanError = null);
+  }
+
+  /// Reads a server address off a QR code: the one a node prints beside
+  /// its Electrum app, or an Esplora endpoint. The core says which of
+  /// the two it is and the form follows — a scanned `https://` while
+  /// Electrum is selected picks Esplora rather than being refused,
+  /// which is plainly what was meant. Nothing is saved: the fields are
+  /// filled and the person still presses Save.
+  Future<void> _scanBackend() async {
+    final text = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        builder: (_) => ScanScreen(
+          caption: SettingsScreen.backendScanCaption,
+          // A test seam of ScanScreen; this screen only forwards its
+          // own, which is null outside a test.
+          // ignore: invalid_use_of_visible_for_testing_member
+          cameraBuilder: widget.cameraBuilder,
+        ),
+      ),
+    );
+    if (text == null || text.trim().isEmpty || !mounted) return;
+    final ScannedBackend backend;
+    try {
+      backend = await ref.read(bridgeProvider).parseBackend(text.trim());
+    } catch (error) {
+      // Pointing the wrong QR at it is the likely slip, so the refusal
+      // names what was read instead: a BridgeException prints the words
+      // the core refused it in.
+      if (mounted) setState(() => _scanError = '$error');
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _scanError = null;
+      _certificateNote = null;
+      if (backend.kind == 'esplora') {
+        _backendKind = 'custom_esplora';
+        _esploraController.text = backend.url;
+      } else {
+        _backendKind = 'custom_electrum';
+        // An IPv6 literal goes back into its brackets: host and port are
+        // joined again on save, and without them the two cannot be told
+        // apart.
+        final host = backend.host;
+        _hostController.text = host.contains(':') ? '[$host]' : host;
+        _portController.text = '${backend.port ?? ''}';
+        _tls = backend.tls;
+      }
     });
   }
 
@@ -491,23 +561,53 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   const SizedBox(height: GerfautSpacing.sm),
                   _FieldLabel('Server URL', tokens: tokens),
                   const SizedBox(height: GerfautSpacing.sm),
-                  _MonoField(
-                    controller: _esploraController,
-                    hint: 'https://node.example.org:3002/api',
-                    onChanged: () => setState(() {}),
-                    tokens: tokens,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _MonoField(
+                          controller: _esploraController,
+                          hint: 'https://node.example.org:3002/api',
+                          onChanged: _onBackendFieldChanged,
+                          tokens: tokens,
+                        ),
+                      ),
+                      const SizedBox(width: GerfautSpacing.sm),
+                      _ScanButton(onPressed: _scanBackend),
+                    ],
                   ),
+                  if (_scanError != null) ...[
+                    const SizedBox(height: GerfautSpacing.sm),
+                    Text(
+                      _scanError!,
+                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                    ),
+                  ],
                 ],
                 if (_backendKind == 'custom_electrum') ...[
                   const SizedBox(height: GerfautSpacing.sm),
                   _FieldLabel('Host', tokens: tokens),
                   const SizedBox(height: GerfautSpacing.sm),
-                  _MonoField(
-                    controller: _hostController,
-                    hint: 'node.example.org or xxxxxxxx.onion',
-                    onChanged: () => setState(() {}),
-                    tokens: tokens,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _MonoField(
+                          controller: _hostController,
+                          hint: 'node.example.org or xxxxxxxx.onion',
+                          onChanged: _onBackendFieldChanged,
+                          tokens: tokens,
+                        ),
+                      ),
+                      const SizedBox(width: GerfautSpacing.sm),
+                      _ScanButton(onPressed: _scanBackend),
+                    ],
                   ),
+                  if (_scanError != null) ...[
+                    const SizedBox(height: GerfautSpacing.sm),
+                    Text(
+                      _scanError!,
+                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                    ),
+                  ],
                   const SizedBox(height: GerfautSpacing.sm),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -523,7 +623,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               controller: _portController,
                               hint: '50002',
                               numeric: true,
-                              onChanged: () => setState(() {}),
+                              onChanged: _onBackendFieldChanged,
                               tokens: tokens,
                             ),
                           ],
@@ -992,6 +1092,29 @@ class _NetworkCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Opens the camera on the QR code a node prints beside its Electrum or
+/// Esplora app. Nobody retypes a 56-character onion address.
+class _ScanButton extends StatelessWidget {
+  const _ScanButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      // "Scan" alone says nothing once the field is out of sight.
+      label: 'Scan a server address QR code',
+      excludeSemantics: true,
+      child: SecondaryButton(
+        label: 'Scan',
+        icon: LucideIcons.scanLine,
+        onPressed: onPressed,
       ),
     );
   }

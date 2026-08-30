@@ -34,6 +34,12 @@ abstract class GerfautBridge {
   /// BBQr). Feed the growing list until [QrProgress.complete], then
   /// hand [QrProgress.text] to [parseInput].
   Future<QrProgress> assembleQr(List<String> frames);
+
+  /// Reads a server address scanned or pasted into the backend form:
+  /// the Electrum one-liner `host:port:s|t` node dashboards print, an
+  /// `ssl://`/`tcp://` address, or an `http(s)://` Esplora endpoint.
+  /// What comes back fills the fields; nothing is saved.
+  Future<ScannedBackend> parseBackend(String input);
   Future<WalletMeta> addWallet(
     String name,
     ParsedInput parsed,
@@ -188,6 +194,12 @@ class RustBridge implements GerfautBridge {
   Future<QrProgress> assembleQr(List<String> frames) async {
     final raw = await rust.assembleQr(framesJson: jsonEncode(frames));
     return QrProgress.fromJson(_object(raw));
+  }
+
+  @override
+  Future<ScannedBackend> parseBackend(String input) async {
+    final raw = await rust.parseBackend(input: input);
+    return ScannedBackend.fromJson(_object(raw));
   }
 
   @override

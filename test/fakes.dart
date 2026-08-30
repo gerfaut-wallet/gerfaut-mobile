@@ -321,6 +321,24 @@ class FakeBridge implements GerfautBridge {
     );
   }
 
+  /// Server address hook; the default refuses everything the way the
+  /// core refuses what is not an address. Return a [ScannedBackend] to
+  /// stand in for a QR code a node printed.
+  ScannedBackend Function(String input)? onParseBackend;
+
+  /// Every address handed to parseBackend, for assertions.
+  final List<String> parsedBackends = [];
+
+  @override
+  Future<ScannedBackend> parseBackend(String input) async {
+    parsedBackends.add(input);
+    final parse = onParseBackend;
+    if (parse == null) {
+      throw const BridgeException('server', 'nothing to read');
+    }
+    return parse(input);
+  }
+
   @override
   Future<WalletMeta> addWallet(
     String name,
@@ -479,6 +497,30 @@ class FakeBridge implements GerfautBridge {
       for (final wallet in wallets)
         if (wallet.id == id) makeMeta(id: id, name: name) else wallet,
     ];
+    // The core keeps one record per wallet: the snapshot carries the new
+    // name too, not only the list.
+    final snapshot = snapshots[id];
+    if (snapshot == null) return;
+    final meta = snapshot.meta;
+    snapshots[id] = WalletSnapshot(
+      meta: WalletMeta(
+        id: meta.id,
+        name: name,
+        network: meta.network,
+        kind: meta.kind,
+        recognizedAs: meta.recognizedAs,
+        createdAt: meta.createdAt,
+        gapLimit: meta.gapLimit,
+        scanGap: meta.scanGap,
+        lastSync: meta.lastSync,
+        cachedBalance: meta.cachedBalance,
+        cachedTxCount: meta.cachedTxCount,
+      ),
+      balance: snapshot.balance,
+      txs: snapshot.txs,
+      tipHeight: snapshot.tipHeight,
+      truncated: snapshot.truncated,
+    );
   }
 
   @override

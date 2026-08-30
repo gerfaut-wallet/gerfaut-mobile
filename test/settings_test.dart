@@ -956,6 +956,192 @@ void main() {
     });
   });
 
+  group('scanning a server address', () {
+    /// The settings screen with the camera replaced by a button that
+    /// hands one frame over, the way a printed code in front of the
+    /// lens does.
+    Widget settingsWithCamera(FakeBridge bridge, String frame) {
+      return ProviderScope(
+        overrides: [bridgeProvider.overrideWithValue(bridge)],
+        child: MaterialApp(
+          theme: themeFrom(GerfautTokens.light, Brightness.light),
+          home: SettingsScreen(
+            cameraBuilder: (onFrame) => TextButton(
+              onPressed: () => onFrame(frame),
+              child: const Text('frame'),
+            ),
+          ),
+        ),
+      );
+    }
+
+    /// A workspace already pointed at an Electrum server over TLS: the
+    /// form a scan comes to overwrite.
+    FakeBridge ownElectrum() {
+      return FakeBridge(
+        settings: const Settings(
+          activeNetwork: Network.mainnet,
+          backends: {
+            Network.mainnet: CustomElectrum(url: 'ssl://node.local:50002'),
+          },
+          appPrefs: {},
+        ),
+      );
+    }
+
+    Future<void> scan(WidgetTester tester) async {
+      await tester.tap(find.text('Scan'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('frame'));
+      await tester.pumpAndSettle();
+    }
+
+    /// What every field of the form holds, in reading order: the
+    /// backend fields first, the gap limit last.
+    List<String> fieldTexts(WidgetTester tester) {
+      return tester
+          .widgetList<TextField>(find.byType(TextField))
+          .map((field) => field.controller!.text)
+          .toList();
+    }
+
+    /// Where the TLS toggle of the Electrum form stands.
+    bool tlsOn(WidgetTester tester) {
+      return tester
+          .widget<Switch>(
+            find.descendant(
+              of: find
+                  .ancestor(of: find.text('TLS'), matching: find.byType(Row))
+                  .first,
+              matching: find.byType(Switch),
+            ),
+          )
+          .value;
+    }
+
+    testWidgets('the one-liner a node prints fills the form as scanned', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = ownElectrum();
+      bridge.onParseBackend = (_) => const ScannedBackend(
+        kind: 'electrum',
+        url: 'tcp://gerfautexample123.onion:50001',
+        host: 'gerfautexample123.onion',
+        port: 50001,
+        tls: false,
+        onion: true,
+      );
+      await tester.pumpWidget(
+        settingsWithCamera(bridge, 'gerfautexample123.onion:50001:t'),
+      );
+      await tester.pumpAndSettle();
+      expect(tlsOn(tester), isTrue);
+
+      // The same scanner as the wallet import, told what it is for.
+      await tester.tap(find.text('Scan'));
+      await tester.pumpAndSettle();
+      expect(find.text(SettingsScreen.backendScanCaption), findsOneWidget);
+      await tester.tap(find.text('frame'));
+      await tester.pumpAndSettle();
+
+      // Read by the core, never by the screen.
+      expect(bridge.parsedBackends, ['gerfautexample123.onion:50001:t']);
+      expect(fieldTexts(tester).take(2), ['gerfautexample123.onion', '50001']);
+      expect(tlsOn(tester), isFalse);
+      // The onion address is not the Tor card's business to decide.
+      expect(bridge.savedBackends, isEmpty);
+
+      await tester.tap(find.text('Save backend'));
+      await tester.pumpAndSettle();
+      expect(
+        (bridge.savedBackends[Network.mainnet]! as CustomElectrum).url,
+        'tcp://gerfautexample123.onion:50001',
+      );
+    });
+
+    testWidgets('an Esplora endpoint scanned here switches the choice', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = ownElectrum();
+      bridge.onParseBackend = (_) => const ScannedBackend(
+        kind: 'esplora',
+        url: 'https://esplora.example.org/api',
+        host: 'esplora.example.org',
+        port: null,
+        tls: true,
+        onion: false,
+      );
+      await tester.pumpWidget(
+        settingsWithCamera(bridge, 'https://esplora.example.org/api'),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('HOST'), findsOneWidget);
+
+      await scan(tester);
+
+      // Refusing it would be pedantic: the QR says which backend it is.
+      expect(find.text('SERVER URL'), findsOneWidget);
+      expect(find.text('HOST'), findsNothing);
+      expect(fieldTexts(tester).first, 'https://esplora.example.org/api');
+
+      await tester.tap(find.text('Save backend'));
+      await tester.pumpAndSettle();
+      expect(
+        (bridge.savedBackends[Network.mainnet]! as CustomEsplora).url,
+        'https://esplora.example.org/api',
+      );
+    });
+
+    testWidgets('wallet material is refused in the words of the core', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      const reason =
+          'this is an extended public key, not the address of a server';
+      final bridge = ownElectrum();
+      bridge.onParseBackend = (_) =>
+          throw const BridgeException('server', reason);
+      await tester.pumpWidget(
+        settingsWithCamera(bridge, 'xpub661MyMwAqRbcFexample'),
+      );
+      await tester.pumpAndSettle();
+
+      await scan(tester);
+
+      expect(find.text(reason), findsOneWidget);
+      // Not one field moved, and the choice is where it was.
+      expect(find.text('HOST'), findsOneWidget);
+      expect(fieldTexts(tester).take(2), ['node.local', '50002']);
+      expect(tlsOn(tester), isTrue);
+      expect(bridge.savedBackends, isEmpty);
+
+      // Typing drops the refusal: it no longer describes the field.
+      await tester.enterText(find.byType(TextField).first, 'other.local');
+      await tester.pumpAndSettle();
+      expect(find.text(reason), findsNothing);
+    });
+
+    testWidgets('a scan that reads nothing leaves the form alone', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = ownElectrum();
+      await tester.pumpWidget(settingsWithCamera(bridge, 'node.local:50002:s'));
+      await tester.pumpAndSettle();
+
+      // Backing out of the scanner asks the core nothing.
+      await tester.tap(find.text('Scan'));
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(bridge.parsedBackends, isEmpty);
+      expect(fieldTexts(tester).take(2), ['node.local', '50002']);
+    });
+  });
+
   group('rescan', () {
     TextButton button(WidgetTester tester, String label) {
       return tester.widget<TextButton>(
