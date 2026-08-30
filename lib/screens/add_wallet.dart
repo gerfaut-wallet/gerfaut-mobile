@@ -10,6 +10,7 @@ import '../theme/tokens.dart';
 import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/choice_group.dart';
+import '../widgets/notice.dart';
 import '../widgets/pinned_action_form.dart';
 import '../widgets/select_field.dart';
 import 'scan.dart';
@@ -347,35 +348,16 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
                 const SizedBox(height: 2),
                 SelectableText(parsed.previewAddress!, style: tokens.data),
               ],
-              if (parsed.warnings.isNotEmpty) ...[
-                const SizedBox(height: GerfautSpacing.sm),
-                for (final warning in parsed.warnings)
-                  Padding(
-                    padding: const EdgeInsets.only(top: GerfautSpacing.xs),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          LucideIcons.info,
-                          size: 14,
-                          color: tokens.textMuted,
-                        ),
-                        const SizedBox(width: GerfautSpacing.sm),
-                        Expanded(
-                          child: Text(
-                            warning.label,
-                            style: tokens.bodySmall.copyWith(
-                              color: tokens.textMuted,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
             ],
           ),
         ),
+        // What was recognized stays in the card; what was not gets its
+        // own panel. Amber, never red: none of these costs the user
+        // funds or privacy, they state a convention that was applied.
+        for (final warning in parsed.warnings) ...[
+          const SizedBox(height: GerfautSpacing.gutter),
+          GerfautNotice(tone: NoticeTone.info, message: warning.label),
+        ],
         if (parsed.scriptOptions.isNotEmpty &&
             payload is DescriptorsPayload) ...[
           const SizedBox(height: GerfautSpacing.md),

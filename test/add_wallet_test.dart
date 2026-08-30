@@ -7,7 +7,9 @@ import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/notice.dart';
 import 'package:gerfaut/widgets/select_field.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'fakes.dart';
 
@@ -128,6 +130,59 @@ void main() {
     expect(bridge.parseScripts, [null]);
   });
 
+  testWidgets('a bare key states its missing script type outside the card', (
+    tester,
+  ) async {
+    final tokens = GerfautTokens.light;
+    final bridge = FakeBridge(
+      onParseWith: (_, script) => extendedKey(script ?? ScriptKind.segwit),
+    );
+    await tester.pumpWidget(screen(bridge));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'tpubD6NzV...');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    // The card says what was recognized; the note is not in it.
+    final card = find
+        .ancestor(
+          of: find.text('First address'),
+          matching: find.byType(Container),
+        )
+        .first;
+    expect(
+      find.descendant(of: card, matching: find.byType(GerfautNotice)),
+      findsNothing,
+    );
+
+    // Amber, and reading as a panel rather than as small print.
+    final notice = find.byType(GerfautNotice);
+    expect(tester.widget<GerfautNotice>(notice).tone, NoticeTone.info);
+    expect(
+      tester.widget<Icon>(find.byIcon(LucideIcons.info)).color,
+      tokens.pending,
+    );
+    expect(
+      tester
+          .widget<Text>(find.text(InputWarning.assumedSegwit.label))
+          .style
+          ?.color,
+      tokens.pending,
+    );
+
+    // Under the card, above the choice it comments on.
+    expect(
+      tester.getRect(notice).top,
+      greaterThanOrEqualTo(tester.getRect(card).bottom),
+    );
+    expect(
+      tester.getRect(find.text('SCRIPT TYPE')).top,
+      greaterThanOrEqualTo(tester.getRect(notice).bottom),
+    );
+  });
+
   testWidgets('choosing a script type re-parses through the core', (
     tester,
   ) async {
@@ -142,10 +197,15 @@ void main() {
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
 
-    // Pick another network first: the re-parse must not reset it.
+    // Pick another network first: the re-parse must not reset it. The
+    // note pushes the choices past the fold on this small viewport.
+    await tester.ensureVisible(find.text('Testnet 4'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Testnet 4'));
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.byType(GerfautSelect<ScriptKind>));
+    await tester.pumpAndSettle();
     await tester.tap(find.byType(GerfautSelect<ScriptKind>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Taproot (P2TR)').last);
