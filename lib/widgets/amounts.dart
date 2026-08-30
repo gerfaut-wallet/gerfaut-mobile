@@ -64,6 +64,48 @@ class BalanceAmount extends ConsumerWidget {
   }
 }
 
+/// What a row carries, in the chosen unit and nothing else.
+///
+/// A fiat figure beside an input reads as the value on the day of the
+/// transaction to one person and as the value now to the next, and
+/// nothing on the row settles it. A figure nobody can interpret is
+/// worse than no figure, so this one stays in bitcoin.
+class UnitAmount extends ConsumerWidget {
+  const UnitAmount({super.key, required this.sats, required this.tokens});
+
+  /// What the row is worth, null when no one could price it.
+  final int? sats;
+  final GerfautTokens tokens;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final value = sats;
+    if (value == null) {
+      return Text(
+        'n/a',
+        style: tokens.figureOf(color: tokens.textMuted),
+        maxLines: 1,
+        softWrap: false,
+      );
+    }
+    final masked = ref.watch(maskedProvider);
+    final unit = ref.watch(unitProvider);
+    // A long figure scales down rather than overflowing, as the hero
+    // does: a figure is never allowed to clip.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerRight,
+      child: Text(
+        masked ? maskedValue : formatAmount(value, unit),
+        style: tokens.figureOf(weight: FontWeight.w500),
+        maxLines: 1,
+        softWrap: false,
+        textAlign: TextAlign.right,
+      ),
+    );
+  }
+}
+
 /// Signed list amount with an optional fiat subline. Direction is also
 /// carried by icon and sign elsewhere in the row.
 class ListAmount extends ConsumerWidget {
