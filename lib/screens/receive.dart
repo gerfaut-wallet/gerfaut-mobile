@@ -14,6 +14,7 @@ import '../widgets/amounts.dart';
 import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/count_badge.dart';
+import '../widgets/notice.dart';
 import '../widgets/status_pill.dart';
 
 /// Side of the small QR code in the address block; tapping it opens the
@@ -290,11 +291,9 @@ class _AddressBlock extends StatelessWidget {
           const SizedBox(height: GerfautSpacing.md),
           // Peeking this far outruns what scanning software derives:
           // state it in the pending tint, not as an alarm.
-          _Notice(
-            color: tokens.pending,
-            surface: tokens.pendingSurface,
-            bordered: false,
-            title:
+          GerfautNotice(
+            tone: NoticeTone.info,
+            message:
                 'This is $offset addresses past the next unused one. Beyond '
                 'the gap limit of $gapLimit, other wallet software may not '
                 'detect funds received here.',
@@ -303,82 +302,13 @@ class _AddressBlock extends StatelessWidget {
         const SizedBox(height: GerfautSpacing.md),
         // The one warning that must not read as small print: a
         // highlighted panel, not a muted footnote.
-        _Notice(
-          color: tokens.alert,
-          surface: tokens.alertSurface,
-          bordered: true,
-          title:
+        const GerfautNotice(
+          tone: NoticeTone.alert,
+          message:
               'Verify this address on your signing device before sharing it.',
           hint: 'Gerfaut only watches: it never holds the keys behind it.',
         ),
       ],
-    );
-  }
-}
-
-/// A tinted panel with an icon, a line that matters and an optional
-/// quieter one under it.
-class _Notice extends StatelessWidget {
-  const _Notice({
-    required this.color,
-    required this.surface,
-    required this.bordered,
-    required this.title,
-    this.hint,
-  });
-
-  final Color color;
-  final Color surface;
-  final bool bordered;
-  final String title;
-  final String? hint;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    return Container(
-      padding: const EdgeInsets.all(GerfautSpacing.sm + 4),
-      decoration: BoxDecoration(
-        color: surface,
-        borderRadius: BorderRadius.circular(GerfautRadius.md),
-        border: bordered
-            ? Border.all(color: color.withValues(alpha: 0.25))
-            : null,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(LucideIcons.triangleAlert, size: 16, color: color),
-          ),
-          const SizedBox(width: GerfautSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: tokens.bodySmall.copyWith(
-                    color: color,
-                    fontWeight: hint != null ? FontWeight.w500 : null,
-                    fontVariations: hint != null
-                        ? const [FontVariation('wght', 500)]
-                        : null,
-                  ),
-                ),
-                if (hint != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    hint!,
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

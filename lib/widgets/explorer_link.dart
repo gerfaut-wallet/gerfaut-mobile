@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../src/state.dart';
 import '../theme/tokens.dart';
+import 'notice.dart';
 import 'buttons.dart';
 
 /// The "View on mempool.space" row: a 44px tap target around a one-line
@@ -75,43 +76,15 @@ void openExplorer(BuildContext context, WidgetRef ref, String url) {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(GerfautSpacing.sm + 4),
-                    decoration: BoxDecoration(
-                      color: tokens.alertSurface,
-                      borderRadius: BorderRadius.circular(GerfautRadius.md),
-                      border: Border.all(
-                        color: tokens.alert.withValues(alpha: 0.25),
-                      ),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Icon(
-                            LucideIcons.triangleAlert,
-                            size: 16,
-                            color: tokens.alert,
-                          ),
-                        ),
-                        const SizedBox(width: GerfautSpacing.sm),
-                        Expanded(
-                          child: Text(
-                            'This opens the transaction on mempool.space, a '
-                            'third-party website. Its operator can link this '
-                            'transaction to your IP address.',
-                            style: tokens.bodySmall.copyWith(
-                              color: tokens.alert,
-                              fontWeight: FontWeight.w500,
-                              fontVariations: const [
-                                FontVariation('wght', 500),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                  // Handing an explorer operator the link between this
+                  // transaction and an IP address is a privacy loss:
+                  // red, by the rule, not by the tone of the sentence.
+                  const GerfautNotice(
+                    tone: NoticeTone.alert,
+                    message:
+                        'This opens the transaction on mempool.space, a '
+                        'third-party website. Its operator can link this '
+                        'transaction to your IP address.',
                   ),
                   const SizedBox(height: GerfautSpacing.sm),
                   Text(

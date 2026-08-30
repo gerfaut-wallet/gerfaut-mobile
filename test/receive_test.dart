@@ -207,8 +207,11 @@ void main() {
         ),
         findsOneWidget,
       );
-      // The verify panel and the gap panel each carry the triangle.
-      expect(find.byIcon(LucideIcons.triangleAlert), findsNWidgets(2));
+      // Two panels, two tones, and the glyph says which is which: the
+      // triangle is the verify warning, which is about funds; the gap
+      // note only states a convention, so it carries the info glyph.
+      expect(find.byIcon(LucideIcons.triangleAlert), findsOneWidget);
+      expect(find.byIcon(LucideIcons.info), findsOneWidget);
       expect(
         find.text(
           'Verify this address on your signing device before sharing it.',
