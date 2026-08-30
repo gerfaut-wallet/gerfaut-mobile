@@ -64,12 +64,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
 
   void _done() => ref.read(onboardingSeenProvider.notifier).markSeen();
 
-  void _next(BuildContext context) {
-    if (_index == welcomePages.length - 1) {
-      _done();
-      return;
-    }
-    final target = _index + 1;
+  void _goTo(BuildContext context, int target) {
     // A device asking for less motion gets the page, not the slide.
     if (MediaQuery.disableAnimationsOf(context)) {
       _pages.jumpToPage(target);
@@ -82,6 +77,14 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
     }
   }
 
+  void _next(BuildContext context) {
+    if (_index == welcomePages.length - 1) {
+      _done();
+      return;
+    }
+    _goTo(context, _index + 1);
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
@@ -91,11 +94,22 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            Align(
-              alignment: Alignment.centerRight,
-              child: Padding(
-                padding: const EdgeInsets.all(GerfautSpacing.sm),
-                child: GhostButton(label: 'Skip', onPressed: _done),
+            Padding(
+              padding: const EdgeInsets.all(GerfautSpacing.sm),
+              child: Row(
+                children: [
+                  // A page one can only leave or pass is re-read by
+                  // starting the tour over. The swipe already goes back;
+                  // the button is what makes it visible. It takes the
+                  // left of the row Skip has to itself on the first page.
+                  if (_index > 0)
+                    GhostButton(
+                      label: 'Back',
+                      onPressed: () => _goTo(context, _index - 1),
+                    ),
+                  const Spacer(),
+                  GhostButton(label: 'Skip', onPressed: _done),
+                ],
               ),
             ),
             Expanded(
