@@ -11,7 +11,6 @@ import '../widgets/brand.dart';
 import '../widgets/buttons.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/sync_button.dart';
-import '../widgets/sync_indicator.dart';
 import 'add_wallet.dart';
 import 'broadcast.dart';
 import 'settings.dart';
@@ -182,7 +181,6 @@ class HomeScreen extends ConsumerWidget {
                       final wallet = value[index];
                       return _WalletCard(
                         wallet: wallet,
-                        syncing: sync.isSyncing(wallet.id),
                         error: ref.watch(syncErrorsProvider)[wallet.id],
                         onTap: () {
                           Navigator.of(context).push(
@@ -226,17 +224,23 @@ class HomeScreen extends ConsumerWidget {
 }
 
 /// One watched wallet: surface card, hairline border, no shadow.
+///
+/// The name and the balance, nothing else. A freshness line repeated on
+/// every card spends a whole row on an answer nobody looks for while
+/// scanning a list; it belongs on the wallet's own page, where a single
+/// balance is being read and "where does this number come from?" is
+/// actually the question. What stays is what tells the cards apart, and
+/// they shrink by the line they lost: more wallets fit on screen, which
+/// is the one thing this list has to do.
 class _WalletCard extends StatelessWidget {
-  const _WalletCard({
-    required this.wallet,
-    required this.syncing,
-    required this.onTap,
-    this.error,
-  });
+  const _WalletCard({required this.wallet, required this.onTap, this.error});
 
   final WalletMeta wallet;
-  final bool syncing;
   final VoidCallback onTap;
+
+  /// The one exception to the rule above: a sync that failed contradicts
+  /// the figure right above it, and a stale balance stated as fact is a
+  /// lie. A sync that went well has nothing to say.
   final String? error;
 
   @override
@@ -274,12 +278,33 @@ class _WalletCard extends StatelessWidget {
                 ),
                 const SizedBox(height: GerfautSpacing.sm),
                 BalanceAmount(sats: wallet.cachedBalance.total),
-                const SizedBox(height: GerfautSpacing.sm),
-                SyncIndicator(
-                  stamp: wallet.lastSync,
-                  syncing: syncing,
-                  error: error,
-                ),
+                if (error != null) ...[
+                  const SizedBox(height: GerfautSpacing.sm),
+                  // One line, amber: the reason is a long press away
+                  // here, and spelled out on the wallet's page.
+                  Tooltip(
+                    message: error!,
+                    triggerMode: TooltipTriggerMode.longPress,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          LucideIcons.triangleAlert,
+                          size: 13,
+                          color: tokens.pending,
+                        ),
+                        const SizedBox(width: GerfautSpacing.xs),
+                        Flexible(
+                          child: Text(
+                            'Sync failed',
+                            style: tokens.label.copyWith(color: tokens.pending),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
