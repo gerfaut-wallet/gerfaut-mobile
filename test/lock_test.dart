@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
@@ -31,11 +32,7 @@ class FakeBiometrics implements BiometricGate {
   }
 }
 
-const AppLock pinLock = AppLock(
-  kind: LockKind.pin,
-  autoLockSecs: 60,
-  biometric: false,
-);
+const AppLock pinLock = AppLock(kind: LockKind.pin, biometric: false);
 
 FakeBridge locked({
   AppLock lock = pinLock,
@@ -70,6 +67,44 @@ Widget app(FakeBridge bridge, {FakeBiometrics? biometrics}) {
   );
 }
 
+/// Sends a lifecycle state the way the platform does, so the test
+/// walks the states the framework really synthesizes in between — the
+/// hidden state lands on the way back in as well as on the way out.
+Future<void> sendLifecycle(WidgetTester tester, AppLifecycleState state) {
+  return tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+    SystemChannels.lifecycle.name,
+    const StringCodec().encodeMessage('$state'),
+    (_) {},
+  );
+}
+
+/// The lock as the vault hands it over: a PIN is set, so the screen
+/// is up and the test unlocks it the way the user would.
+({ProviderContainer container, LockController lock}) lockedApp() {
+  final container = ProviderContainer(overrides: _overrides(locked(), null));
+  addTearDown(container.dispose);
+  final lock = container.read(lockProvider.notifier);
+  lock.syncFromSettings(pinLock);
+  return (container: container, lock: lock);
+}
+
+/// Pumps the whole app on a container the test keeps hold of, and
+/// walks past the lock screen the way the user does.
+Future<ProviderContainer> pumpUnlocked(WidgetTester tester) async {
+  final container = ProviderContainer(
+    overrides: _overrides(locked(wallets: [makeMeta()]), null),
+  );
+  addTearDown(container.dispose);
+  await tester.pumpWidget(
+    UncontrolledProviderScope(container: container, child: const GerfautApp()),
+  );
+  await tester.pumpAndSettle();
+  await tester.enterText(find.byType(TextField), '1234');
+  await tester.tap(find.text('Unlock'));
+  await tester.pumpAndSettle();
+  return container;
+}
+
 Widget settingsApp(FakeBridge bridge, {FakeBiometrics? biometrics}) {
   return ProviderScope(
     overrides: _overrides(bridge, biometrics),
@@ -87,34 +122,6 @@ void useTallSurface(WidgetTester tester) {
 }
 
 void main() {
-  group('when the lock comes back', () {
-    test('never on return when the timing is off', () {
-      expect(
-        shouldLock(away: const Duration(hours: 5), autoLockSecs: null),
-        isFalse,
-      );
-    });
-
-    test('at once when the timing is zero', () {
-      expect(shouldLock(away: Duration.zero, autoLockSecs: 0), isTrue);
-    });
-
-    test('only past the chosen delay', () {
-      expect(
-        shouldLock(away: const Duration(seconds: 59), autoLockSecs: 60),
-        isFalse,
-      );
-      expect(
-        shouldLock(away: const Duration(seconds: 60), autoLockSecs: 60),
-        isTrue,
-      );
-      expect(
-        shouldLock(away: const Duration(minutes: 5), autoLockSecs: 60),
-        isTrue,
-      );
-    });
-  });
-
   group('the lock screen', () {
     testWidgets('a vault with a lock opens locked, and nothing is behind it', (
       tester,
@@ -194,13 +201,7 @@ void main() {
       final biometrics = FakeBiometrics();
       await tester.pumpWidget(
         app(
-          locked(
-            lock: const AppLock(
-              kind: LockKind.pin,
-              autoLockSecs: 60,
-              biometric: true,
-            ),
-          ),
+          locked(lock: const AppLock(kind: LockKind.pin, biometric: true)),
           biometrics: biometrics,
         ),
       );
@@ -214,13 +215,7 @@ void main() {
       final biometrics = FakeBiometrics(passes: false);
       await tester.pumpWidget(
         app(
-          locked(
-            lock: const AppLock(
-              kind: LockKind.pin,
-              autoLockSecs: 60,
-              biometric: true,
-            ),
-          ),
+          locked(lock: const AppLock(kind: LockKind.pin, biometric: true)),
           biometrics: biometrics,
         ),
       );
@@ -353,44 +348,23 @@ void main() {
       expect(bridge.lock, isNotNull);
     });
 
-    testWidgets('the delay before it asks again asks for the secret', (
+    testWidgets('there is no delay to choose, and the card says so', (
       tester,
     ) async {
       useTallSurface(tester);
-      final bridge = locked();
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(settingsApp(locked()));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('5 minutes'));
-      await tester.pumpAndSettle();
-      // Setting "Never" would turn the lock off by another name: the
-      // secret is asked, the same as turning it off.
-      expect(find.text('Change when the lock comes back'), findsOneWidget);
-      expect(bridge.lock?.autoLockSecs, 60);
-
-      await tester.enterText(find.byKey(const Key('lock.current')), '1234');
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Confirm'));
-      await tester.pumpAndSettle();
-
-      expect(bridge.lock?.autoLockSecs, 300);
-    });
-
-    testWidgets('a wrong secret leaves the delay where it was', (tester) async {
-      useTallSurface(tester);
-      final bridge = locked();
-      await tester.pumpWidget(settingsApp(bridge));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('5 minutes'));
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byKey(const Key('lock.current')), '0000');
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Confirm'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('wrong PIN or password'), findsOneWidget);
-      expect(bridge.lock?.autoLockSecs, 60);
+      expect(find.text('Lock after'), findsNothing);
+      expect(find.text('Immediately'), findsNothing);
+      expect(find.text('Never'), findsNothing);
+      expect(
+        find.textContaining('every time it comes back from the background'),
+        findsOneWidget,
+      );
+      // What the card still offers is unchanged.
+      expect(find.text('Change PIN'), findsOneWidget);
+      expect(find.text('Lock now'), findsOneWidget);
     });
 
     testWidgets('biometrics are offered only where the phone can answer', (
@@ -558,35 +532,32 @@ void main() {
     });
   });
 
-  group('locking again on its own', () {
-    test('an app away longer than the delay comes back locked', () async {
-      final bridge = locked();
-      final container = ProviderContainer(overrides: _overrides(bridge, null));
-      addTearDown(container.dispose);
+  group('coming back from the background', () {
+    test('any trip away at all asks for the secret again', () async {
+      final app = lockedApp();
+      expect(app.container.read(lockProvider).locked, isTrue);
+      await app.lock.unlock('1234');
+      expect(app.container.read(lockProvider).locked, isFalse);
 
-      final notifier = container.read(lockProvider.notifier);
-      notifier.syncFromSettings(pinLock);
-      expect(container.read(lockProvider).locked, isTrue);
-      await notifier.unlock('1234');
-      expect(container.read(lockProvider).locked, isFalse);
-
-      // Back at once, under the minute: still open.
-      notifier.noteHidden();
-      notifier.noteResumed();
-      expect(container.read(lockProvider).locked, isFalse);
-
-      // Away past the minute: the secret is asked again.
-      notifier.noteHidden();
-      notifier.leftAtForTest(
-        DateTime.now().subtract(const Duration(minutes: 2)),
-      );
-      notifier.noteResumed();
-      expect(container.read(lockProvider).locked, isTrue);
+      // Straight there and straight back: no delay to outlast.
+      app.lock.noteHidden();
+      app.lock.noteResumed();
+      expect(app.container.read(lockProvider).locked, isTrue);
 
       // A settings refetch never re-locks an app already open.
-      await notifier.unlock('1234');
-      notifier.syncFromSettings(pinLock);
-      expect(container.read(lockProvider).locked, isFalse);
+      await app.lock.unlock('1234');
+      app.lock.syncFromSettings(pinLock);
+      expect(app.container.read(lockProvider).locked, isFalse);
+    });
+
+    test('a return with no trip behind it leaves the app open', () async {
+      final app = lockedApp();
+      await app.lock.unlock('1234');
+
+      // A permission dialog and the notification shade never hide the
+      // app: there is nothing to come back from.
+      app.lock.noteResumed();
+      expect(app.container.read(lockProvider).locked, isFalse);
     });
 
     test('with no lock set, nothing ever locks', () async {
@@ -594,11 +565,150 @@ void main() {
         overrides: _overrides(FakeBridge(), null),
       );
       addTearDown(container.dispose);
+      final lock = container.read(lockProvider.notifier);
 
-      container.read(lockProvider.notifier).syncFromSettings(null);
+      lock.syncFromSettings(null);
       expect(container.read(lockProvider).locked, isFalse);
-      container.read(lockProvider.notifier).lockNow();
+      lock.noteHidden();
+      lock.noteResumed();
       expect(container.read(lockProvider).locked, isFalse);
+      lock.lockNow();
+      expect(container.read(lockProvider).locked, isFalse);
+    });
+  });
+
+  group('a system screen Gerfaut opened itself', () {
+    test('coming back from a picker does not lock', () async {
+      final app = lockedApp();
+      await app.lock.unlock('1234');
+
+      app.lock.expectExcursion();
+      app.lock.noteHidden();
+      app.lock.noteResumed();
+      expect(app.container.read(lockProvider).locked, isFalse);
+    });
+
+    test('it covers its own return and nothing after it', () async {
+      final app = lockedApp();
+      await app.lock.unlock('1234');
+
+      // Picked or waved away, the file picker gives back the same
+      // return, and that return is the one it was announced for.
+      app.lock.expectExcursion();
+      app.lock.noteHidden();
+      app.lock.noteResumed();
+      expect(app.container.read(lockProvider).locked, isFalse);
+
+      app.lock.noteHidden();
+      app.lock.noteResumed();
+      expect(app.container.read(lockProvider).locked, isTrue);
+    });
+
+    test('one the phone never shows does not outlive its return', () async {
+      final app = lockedApp();
+      await app.lock.unlock('1234');
+
+      // The permission was granted already, so nothing came up and the
+      // app never left the screen.
+      app.lock.expectExcursion();
+      app.lock.noteResumed();
+
+      app.lock.noteHidden();
+      app.lock.noteResumed();
+      expect(app.container.read(lockProvider).locked, isTrue);
+    });
+
+    test('two in a row each cover their own return', () async {
+      final app = lockedApp();
+      await app.lock.unlock('1234');
+
+      for (var trip = 0; trip < 2; trip++) {
+        app.lock.expectExcursion();
+        app.lock.noteHidden();
+        app.lock.noteResumed();
+        expect(app.container.read(lockProvider).locked, isFalse);
+      }
+
+      app.lock.noteHidden();
+      app.lock.noteResumed();
+      expect(app.container.read(lockProvider).locked, isTrue);
+    });
+
+    test('asking twice before leaving still buys one return', () async {
+      final app = lockedApp();
+      await app.lock.unlock('1234');
+
+      // A screen that announces the same excursion twice has not
+      // bought a second one.
+      app.lock.expectExcursion();
+      app.lock.expectExcursion();
+      app.lock.noteHidden();
+      app.lock.noteResumed();
+      expect(app.container.read(lockProvider).locked, isFalse);
+
+      app.lock.noteHidden();
+      app.lock.noteResumed();
+      expect(app.container.read(lockProvider).locked, isTrue);
+    });
+
+    test('one asked for while locked leaves the screen up', () async {
+      final app = lockedApp();
+      expect(app.container.read(lockProvider).locked, isTrue);
+
+      app.lock.expectExcursion();
+      app.lock.noteHidden();
+      app.lock.noteResumed();
+      expect(app.container.read(lockProvider).locked, isTrue);
+
+      // And it was spent there: the first trip after the unlock locks.
+      await app.lock.unlock('1234');
+      app.lock.noteHidden();
+      app.lock.noteResumed();
+      expect(app.container.read(lockProvider).locked, isTrue);
+    });
+  });
+
+  group('the app as the platform moves it', () {
+    testWidgets('a trip through the background brings the lock back', (
+      tester,
+    ) async {
+      await pumpUnlocked(tester);
+      expect(find.text('Cold storage'), findsOneWidget);
+
+      await sendLifecycle(tester, AppLifecycleState.paused);
+      await sendLifecycle(tester, AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(LockScreen), findsOneWidget);
+      expect(find.text('Cold storage'), findsNothing);
+    });
+
+    testWidgets('a picker Gerfaut opened leaves the flow where it was', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final container = await pumpUnlocked(tester);
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+      expect(find.text('Network'), findsOneWidget);
+
+      container.read(lockProvider.notifier).expectExcursion();
+      await sendLifecycle(tester, AppLifecycleState.paused);
+      await sendLifecycle(tester, AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+
+      // Back from a file picker the user opened two seconds ago: the
+      // screen they were on is still there, with no lock in front.
+      expect(find.byType(LockScreen), findsNothing);
+      expect(find.text('Network'), findsOneWidget);
+
+      // A real absence right after still locks, and takes the pushed
+      // screen with it.
+      await sendLifecycle(tester, AppLifecycleState.paused);
+      await sendLifecycle(tester, AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(find.byType(LockScreen), findsOneWidget);
+      expect(find.text('Network'), findsNothing);
     });
   });
 }

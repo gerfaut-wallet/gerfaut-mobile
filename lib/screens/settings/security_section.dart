@@ -12,17 +12,7 @@ import '../../widgets/choice_group.dart';
 import '../../widgets/password_field.dart';
 import '../../widgets/section_card.dart';
 
-/// How long Gerfaut may stay away before it asks again.
-const List<({int? seconds, String label})> autoLockChoices = [
-  (seconds: 0, label: 'Immediately'),
-  (seconds: 60, label: '1 minute'),
-  (seconds: 300, label: '5 minutes'),
-  (seconds: 900, label: '15 minutes'),
-  (seconds: null, label: 'Never'),
-];
-
-/// The settings card that turns the lock on, changes its secret, and
-/// says when it comes back.
+/// The settings card that turns the lock on and changes its secret.
 class SecuritySection extends ConsumerStatefulWidget {
   const SecuritySection({super.key});
 
@@ -71,20 +61,6 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
     setState(() => _error = null);
     try {
       await ref.read(bridgeProvider).clearAppLock(current);
-      _afterChange();
-    } on BridgeException catch (error) {
-      if (mounted) setState(() => _error = error.message);
-    }
-  }
-
-  /// Changing when the lock comes back is a change to the lock: it
-  /// asks for the secret, like turning it off does. Someone holding
-  /// the unlocked phone must not be able to set "Never" quietly.
-  Future<void> _setAutoLock(int? seconds, LockKind kind) async {
-    final current = await _askSecret(kind, 'Change when the lock comes back');
-    if (current == null) return;
-    try {
-      await ref.read(bridgeProvider).setAutoLock(seconds, current);
       _afterChange();
     } on BridgeException catch (error) {
       if (mounted) setState(() => _error = error.message);
@@ -158,9 +134,10 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
                     ),
                   ),
                   Text(
-                    'Asked when Gerfaut opens and after it stays away for '
-                    'a while. The vault is encrypted either way; the lock '
-                    'is what stops someone holding your unlocked phone.',
+                    'Asked when Gerfaut opens and every time it comes back '
+                    'from the background. The vault is encrypted either way; '
+                    'the lock is what stops someone holding your unlocked '
+                    'phone.',
                     style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                   ),
                 ],
@@ -190,21 +167,6 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
                 onPressed: ref.read(lockProvider.notifier).lockNow,
               ),
             ],
-          ),
-          const SizedBox(height: GerfautSpacing.md),
-          ChoiceGroup<int?>(
-            label: 'Lock after',
-            value: lock.autoLockSecs,
-            options: [
-              for (final choice in autoLockChoices)
-                ChoiceOption(value: choice.seconds, label: choice.label),
-            ],
-            onChanged: (seconds) => _setAutoLock(seconds, lock.kind),
-          ),
-          const SizedBox(height: GerfautSpacing.sm),
-          Text(
-            'Never still asks at launch.',
-            style: tokens.bodySmall.copyWith(color: tokens.textMuted),
           ),
           if (canBiometrics) ...[
             const SizedBox(height: GerfautSpacing.md),

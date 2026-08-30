@@ -813,11 +813,7 @@ class FakeBridge implements GerfautBridge {
       throw const BridgeException('lock', 'wrong PIN or password');
     }
     lockSecret = secret;
-    lock = AppLock(
-      kind: kind,
-      autoLockSecs: lock == null ? 60 : lock!.autoLockSecs,
-      biometric: lock?.biometric ?? false,
-    );
+    lock = AppLock(kind: kind, biometric: lock?.biometric ?? false);
   }
 
   @override
@@ -846,21 +842,6 @@ class FakeBridge implements GerfautBridge {
   }
 
   @override
-  Future<void> setAutoLock(int? secs, String current) async {
-    lockCalls.add('auto:$secs');
-    final existing = lock;
-    if (existing == null) throw const BridgeException('lock', 'no lock is set');
-    if (current != lockSecret) {
-      throw const BridgeException('lock', 'wrong PIN or password');
-    }
-    lock = AppLock(
-      kind: existing.kind,
-      autoLockSecs: secs,
-      biometric: existing.biometric,
-    );
-  }
-
-  @override
   Future<void> setBiometricUnlock(bool enabled, String current) async {
     lockCalls.add('biometric:$enabled');
     final existing = lock;
@@ -868,11 +849,7 @@ class FakeBridge implements GerfautBridge {
     if (current != lockSecret) {
       throw const BridgeException('lock', 'wrong PIN or password');
     }
-    lock = AppLock(
-      kind: existing.kind,
-      autoLockSecs: existing.autoLockSecs,
-      biometric: enabled,
-    );
+    lock = AppLock(kind: existing.kind, biometric: enabled);
   }
 
   /// Backup hooks. The defaults seal nothing: a bundle with one frame

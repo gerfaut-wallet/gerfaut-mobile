@@ -527,16 +527,6 @@ pub async fn verify_app_lock(secret: String) -> String {
     }
 }
 
-/// Seconds away from the app before it locks again; `None` means only
-/// at launch and on request.
-pub async fn set_auto_lock(secs: Option<u32>, current: String) -> String {
-    let manager = try_json!(manager());
-    match manager.set_auto_lock(secs, &current).await {
-        Ok(()) => ok_json(),
-        Err(e) => core_error_json(&e),
-    }
-}
-
 /// Whether the phone's biometric prompt may stand in for the secret.
 pub async fn set_biometric_unlock(enabled: bool, current: String) -> String {
     let manager = try_json!(manager());

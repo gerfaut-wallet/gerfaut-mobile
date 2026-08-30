@@ -129,12 +129,6 @@ abstract class GerfautBridge {
   /// failures: while it runs, even the right secret is not looked at.
   Future<LockVerdict> verifyAppLock(String secret);
 
-  /// Seconds away from the app before it locks again; null means only
-  /// at launch and on request.
-  /// Both are changes to the lock, so both ask for the secret in
-  /// place: an unlocked phone in the wrong hands must not be able to
-  /// turn the lock off by another name.
-  Future<void> setAutoLock(int? secs, String current);
   Future<void> setBiometricUnlock(bool enabled, String current);
 
   /// Seals the chosen wallets under a password: a file and QR frames.
@@ -421,11 +415,6 @@ class RustBridge implements GerfautBridge {
     return LockVerdict.fromJson(
       _object(await rust.verifyAppLock(secret: secret)),
     );
-  }
-
-  @override
-  Future<void> setAutoLock(int? secs, String current) async {
-    _ok(await rust.setAutoLock(secs: secs, current: current));
   }
 
   @override

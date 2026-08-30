@@ -3,7 +3,12 @@
 // The vault is encrypted whatever happens; the lock is the curtain in
 // front of it. The secret never leaves the core, which hashes it and
 // slows repeated guesses down; this file holds only whether the screen
-// is showing and when it should show again.
+// is showing.
+//
+// There is no delay to sit out. The secret is asked when Gerfaut opens
+// and again every time it comes back from the background. The one trip
+// that does not count is the one Gerfaut sends the user on itself — a
+// file picker, a save dialog, a share sheet.
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,16 +16,6 @@ import 'package:local_auth/local_auth.dart';
 
 import 'models.dart';
 import 'state.dart';
-
-/// Whether coming back after `away` should ask for the secret again.
-///
-/// `null` never locks on return — the lock is then a launch-time
-/// question only. Zero locks the moment Gerfaut leaves the screen.
-bool shouldLock({required Duration away, required int? autoLockSecs}) {
-  if (autoLockSecs == null) return false;
-  if (autoLockSecs == 0) return true;
-  return away.inSeconds >= autoLockSecs;
-}
 
 /// The phone's own prompt, behind an interface so no test ever reaches
 /// the platform. The core never sees a biometric: the system answers,
@@ -112,9 +107,11 @@ class LockState {
 }
 
 class LockController extends Notifier<LockState> {
-  /// When Gerfaut left the screen, so returning knows how long it was
-  /// away. Null while it is in front.
-  DateTime? _leftAt;
+  /// Gerfaut has been out of sight since the last time it came back.
+  bool _away = false;
+
+  /// The next return comes from a system screen Gerfaut opened itself.
+  bool _excursion = false;
 
   @override
   LockState build() => const LockState();
@@ -160,26 +157,29 @@ class LockController extends Notifier<LockState> {
     if (state.lock != null) state = state.copyWith(locked: true);
   }
 
-  /// Gerfaut left the screen: the clock starts.
-  void noteHidden() => _leftAt = DateTime.now();
+  /// Gerfaut left the screen. A flag and not a clock, because the
+  /// framework walks the whole chain back on the way in as well: the
+  /// hidden state lands again a beat before the resume that reads it.
+  void noteHidden() => _away = true;
 
-  /// Backdates that departure, so a test can be away for two minutes
-  /// without waiting two minutes.
-  @visibleForTesting
-  void leftAtForTest(DateTime when) => _leftAt = when;
+  /// Gerfaut is about to open a system screen of its own — a file
+  /// picker, a save dialog, a share sheet. Coming back from one is not
+  /// coming back from the background, so the next return does not lock.
+  ///
+  /// The next return spends it whether the excursion happened or not:
+  /// a picker waved away, or a permission the phone never asked about,
+  /// must not leave the door open for a real absence later.
+  void expectExcursion() => _excursion = true;
 
-  /// Gerfaut is back: lock again if it was away long enough.
+  /// Gerfaut is back: having been away is the whole rule, unless the
+  /// trip was one Gerfaut sent the user on.
   void noteResumed() {
-    final left = _leftAt;
-    _leftAt = null;
-    final lock = state.lock;
-    if (lock == null || left == null || state.locked) return;
-    if (shouldLock(
-      away: DateTime.now().difference(left),
-      autoLockSecs: lock.autoLockSecs,
-    )) {
-      state = state.copyWith(locked: true);
-    }
+    final away = _away;
+    final excursion = _excursion;
+    _away = false;
+    _excursion = false;
+    if (!away || excursion || state.locked) return;
+    lockNow();
   }
 }
 

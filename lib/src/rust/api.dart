@@ -237,11 +237,6 @@ Future<String> clearAppLock({required String current}) =>
 Future<String> verifyAppLock({required String secret}) =>
     RustLib.instance.api.crateApiVerifyAppLock(secret: secret);
 
-/// Seconds away from the app before it locks again; `None` means only
-/// at launch and on request.
-Future<String> setAutoLock({int? secs, required String current}) =>
-    RustLib.instance.api.crateApiSetAutoLock(secs: secs, current: current);
-
 /// Whether the phone's biometric prompt may stand in for the secret.
 Future<String> setBiometricUnlock({
   required bool enabled,

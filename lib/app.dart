@@ -130,15 +130,17 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final lock = ref.read(lockProvider.notifier);
     switch (state) {
-      // `inactive` alone is not leaving: a system dialog, the share
-      // sheet and the camera permission all raise it.
+      // `inactive` alone is not leaving: a permission dialog, an
+      // incoming call and the notification shade all raise it, and so
+      // does every step on the way out and back. Out of sight is
+      // `hidden`, `paused`, and `detached` when the view goes with it.
       case AppLifecycleState.paused:
       case AppLifecycleState.hidden:
+      case AppLifecycleState.detached:
         lock.noteHidden();
       case AppLifecycleState.resumed:
         lock.noteResumed();
       case AppLifecycleState.inactive:
-      case AppLifecycleState.detached:
         break;
     }
   }

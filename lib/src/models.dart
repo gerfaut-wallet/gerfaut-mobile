@@ -1132,27 +1132,21 @@ enum LockKind {
       LockKind.values.firstWhere((k) => k.id == id);
 }
 
-/// The app lock as the apps see it: kind and timing, never the hash.
+/// The app lock as the apps see it: kind, never the hash.
+///
+/// When it comes back is not a setting: the secret is asked when the
+/// app opens and again once Gerfaut has been to the background.
 class AppLock {
-  const AppLock({
-    required this.kind,
-    required this.autoLockSecs,
-    required this.biometric,
-  });
+  const AppLock({required this.kind, required this.biometric});
 
   factory AppLock.fromJson(Map<String, dynamic> json) {
     return AppLock(
       kind: LockKind.fromId(json['kind'] as String),
-      autoLockSecs: json['auto_lock_secs'] as int?,
       biometric: json['biometric'] as bool? ?? false,
     );
   }
 
   final LockKind kind;
-
-  /// Seconds away from the app before it locks again; null means only
-  /// at launch and on request.
-  final int? autoLockSecs;
 
   /// Whether the phone's biometric prompt may stand in for the secret.
   final bool biometric;
