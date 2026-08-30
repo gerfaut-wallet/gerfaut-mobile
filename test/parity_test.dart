@@ -565,8 +565,10 @@ void main() {
     expect(find.text(formatAmount(4859, AmountUnit.btc)), findsNWidgets(2));
     // The output side totals what its two rows carry.
     expect(find.text(formatAmount(9859, AmountUnit.btc)), findsOneWidget);
-    // The fee: the node under the diagram, then the fact card.
-    expect(find.text('Fee'), findsNWidgets(2));
+    // The fee: the node under the diagram, which shouts its label the
+    // way desktop's CSS does, then the fact card's own row.
+    expect(find.text('FEE'), findsOneWidget);
+    expect(find.text('Fee'), findsOneWidget);
     expect(find.text(formatAmount(141, AmountUnit.btc)), findsNWidgets(2));
     // The rate is a fact and stays one: the node never repeats it.
     expect(find.text('1.0 sat/vB'), findsOneWidget);
@@ -625,8 +627,8 @@ void main() {
 
     expect(find.text('INPUTS (12)'), findsOneWidget);
     // The list keeps all twelve; the diagram folds the tail into one
-    // row so it still fits, and says how many it stands for.
-    expect(find.text('+8 more'), findsOneWidget);
+    // box so it still fits, and says how many of what it stands for.
+    expect(find.text('+8 more inputs'), findsOneWidget);
     expect(find.byIcon(LucideIcons.ellipsis), findsOneWidget);
     expect(find.byIcon(LucideIcons.arrowUpRight), findsNWidgets(18));
   });
