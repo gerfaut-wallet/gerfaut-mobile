@@ -13,6 +13,7 @@ import '../theme/tokens.dart';
 import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/choice_group.dart';
+import '../widgets/notice.dart';
 import '../widgets/section_card.dart';
 import '../widgets/select_field.dart';
 import 'scan.dart';
@@ -1381,29 +1382,34 @@ class _BackendOption extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 20,
-              height: 20,
-              margin: const EdgeInsets.only(top: 2),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: selected ? tokens.primary : tokens.border,
-                  width: 2,
+            // The dot rides the first line of a label that wraps, by
+            // measurement — the 2px nudge it replaces was right at one
+            // font size and wrong at every other.
+            FirstLine(
+              style: tokens.bodySmall,
+              child: Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: selected ? tokens.primary : tokens.border,
+                    width: 2,
+                  ),
                 ),
-              ),
-              child: selected
-                  ? Center(
-                      child: Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: tokens.primary,
+                child: selected
+                    ? Center(
+                        child: Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: tokens.primary,
+                          ),
                         ),
-                      ),
-                    )
-                  : null,
+                      )
+                    : null,
+              ),
             ),
             const SizedBox(width: GerfautSpacing.sm),
             Expanded(
@@ -1483,8 +1489,8 @@ class _WalletRow extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
+              FirstLine(
+                style: tokens.body,
                 child: Icon(
                   LucideIcons.wallet,
                   size: 16,
@@ -1845,8 +1851,8 @@ class _ChangedCertificateDialogState extends State<_ChangedCertificateDialog> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
+                    FirstLine(
+                      style: tokens.bodySmall,
                       child: Icon(
                         LucideIcons.triangleAlert,
                         size: 16,
