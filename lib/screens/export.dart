@@ -11,6 +11,7 @@ import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
+import '../widgets/choice_group.dart';
 
 /// CSV export of one wallet's history: date and direction filters, a
 /// live count of what they keep, and the system share sheet at the end.
@@ -175,21 +176,20 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                   const SizedBox(height: GerfautSpacing.md),
                   _SectionLabel('Direction', tokens: tokens),
                   const SizedBox(height: GerfautSpacing.sm),
-                  Wrap(
-                    spacing: GerfautSpacing.sm,
-                    children: [
-                      _Pill(
-                        label: 'All',
-                        selected: _direction == null,
-                        onTap: () => setState(() => _direction = null),
-                      ),
+                  ChoiceGroup<ExportDirection?>(
+                    label: 'Direction',
+                    value: _direction,
+                    options: [
+                      // Null keeps both, and reads as its own option.
+                      const ChoiceOption(value: null, label: 'All'),
                       for (final direction in ExportDirection.values)
-                        _Pill(
+                        ChoiceOption(
+                          value: direction,
                           label: direction.label,
-                          selected: _direction == direction,
-                          onTap: () => setState(() => _direction = direction),
                         ),
                     ],
+                    onChanged: (direction) =>
+                        setState(() => _direction = direction),
                   ),
                   const SizedBox(height: GerfautSpacing.md),
                   Row(
@@ -394,45 +394,6 @@ class _DateField extends StatelessWidget {
             else
               const SizedBox(width: GerfautSpacing.md),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Direction filter pill, mirroring the settings pills.
-class _Pill extends StatelessWidget {
-  const _Pill({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    return InkWell(
-      borderRadius: BorderRadius.circular(GerfautRadius.md),
-      onTap: onTap,
-      child: Container(
-        height: 44,
-        padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? tokens.primary : tokens.surfaceSunken,
-          borderRadius: BorderRadius.circular(GerfautRadius.md),
-        ),
-        child: Text(
-          label,
-          style: tokens.bodySmall.copyWith(
-            color: selected ? tokens.onPrimary : tokens.text,
-            fontWeight: FontWeight.w500,
-            fontVariations: const [FontVariation('wght', 500)],
-          ),
         ),
       ),
     );

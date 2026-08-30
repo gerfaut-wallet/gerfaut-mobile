@@ -7,6 +7,7 @@ import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/share.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/choice_group.dart';
 
 import 'fakes.dart';
 
@@ -90,6 +91,50 @@ void main() {
     await tester.tap(pendingSwitch);
     await tester.pumpAndSettle();
     expect(find.text('2 of 3 transactions selected'), findsOneWidget);
+  });
+
+  testWidgets('the direction filter is the shared choice group', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(exportApp(makeBridge(), FakeCsvSharer()));
+    await tester.pumpAndSettle();
+
+    // The last row of tight pills in the app: it goes through the same
+    // component as Unit, Theme and the rest, so it cannot drift again.
+    expect(find.byType(ChoiceGroup<ExportDirection?>), findsOneWidget);
+
+    Rect option(String label) =>
+        tester.getRect(find.widgetWithText(InkWell, label));
+    final all = option('All');
+    final received = option('Received');
+    final sent = option('Sent');
+    // Stacked full-width rows, 44px each, with room between them.
+    expect(received.top - all.bottom, GerfautSpacing.sm);
+    expect(sent.top - received.bottom, GerfautSpacing.sm);
+    expect(all.height, 44);
+    expect(received.width, all.width);
+    expect(sent.left, all.left);
+
+    // Null is an option of its own, and it is the one selected first.
+    final tokens = GerfautTokens.light;
+    Color fill(String label) => tester
+        .widget<Material>(
+          find
+              .ancestor(of: find.text(label), matching: find.byType(Material))
+              .first,
+        )
+        .color!;
+    expect(fill('All'), tokens.primary);
+    expect(fill('Sent'), tokens.surfaceSunken);
+
+    await tester.tap(find.text('Sent'));
+    await tester.pumpAndSettle();
+    expect(fill('Sent'), tokens.primary);
+    expect(fill('All'), tokens.surfaceSunken);
+    expect(find.text('1 of 3 transactions selected'), findsOneWidget);
   });
 
   testWidgets('a date bound excludes pending and disables an empty export', (
