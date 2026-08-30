@@ -11,6 +11,7 @@ import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/address_chip.dart';
 import '../widgets/amounts.dart';
+import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/count_badge.dart';
 import '../widgets/status_pill.dart';
@@ -77,7 +78,7 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
     final audit = ref.watch(addressListProvider(widget.walletId));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Receive')),
+      appBar: GerfautAppBar.text('Receive'),
       body: SafeArea(
         child: addresses.hasError
             ? Center(

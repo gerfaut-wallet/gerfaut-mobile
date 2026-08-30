@@ -9,6 +9,7 @@ import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/address_chip.dart';
 import '../widgets/amounts.dart';
+import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/count_badge.dart';
 import '../widgets/empty_state.dart';
@@ -55,11 +56,7 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
     final loaded = snapshot.valueOrNull;
 
     return Scaffold(
-      appBar: AppBar(
-        // The name sits against the back arrow: what it gives up on the
-        // left, the actions take on the right, and every action of this
-        // wallet fits in the bar instead of hiding under a menu.
-        titleSpacing: 0,
+      appBar: GerfautAppBar(
         title: Text(
           snapshot.valueOrNull?.meta.name ?? '',
           maxLines: 1,

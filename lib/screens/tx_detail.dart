@@ -10,6 +10,7 @@ import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/address_chip.dart';
 import '../widgets/amounts.dart';
+import '../widgets/app_bar.dart';
 import '../widgets/explorer_link.dart';
 import '../widgets/facts.dart';
 import '../widgets/flow_summary.dart';
@@ -39,7 +40,7 @@ class TxDetailScreen extends ConsumerWidget {
     );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Transaction')),
+      appBar: GerfautAppBar.text('Transaction'),
       body: SafeArea(
         child: switch (detail) {
           AsyncData(:final value) => _Detail(detail: value, network: network),

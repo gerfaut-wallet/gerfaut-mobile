@@ -7,6 +7,7 @@ import '../src/bridge.dart';
 import '../src/models.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
+import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/choice_group.dart';
 import '../widgets/pinned_action_form.dart';
@@ -211,7 +212,7 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     return Scaffold(
-      appBar: AppBar(title: const Text('Add a wallet')),
+      appBar: GerfautAppBar.text('Add a wallet'),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(GerfautSpacing.md),

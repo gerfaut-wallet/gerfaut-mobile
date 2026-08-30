@@ -14,6 +14,7 @@ import '../src/tx_file.dart';
 import '../theme/tokens.dart';
 import '../widgets/address_chip.dart';
 import '../widgets/amounts.dart';
+import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/explorer_link.dart';
 import '../widgets/facts.dart';
@@ -166,7 +167,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     final network = ref.watch(settingsProvider).valueOrNull?.activeNetwork;
     final preview = _preview;
     return Scaffold(
-      appBar: AppBar(title: const Text('Broadcast')),
+      appBar: GerfautAppBar.text('Broadcast'),
       body: SafeArea(
         child: network == null
             ? Center(

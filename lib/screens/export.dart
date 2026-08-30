@@ -9,6 +9,7 @@ import '../src/models.dart';
 import '../src/share.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
+import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 
 /// CSV export of one wallet's history: date and direction filters, a
@@ -129,7 +130,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
     final selected = snapshot?.txs.where(_passes).length ?? 0;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Export')),
+      appBar: GerfautAppBar.text('Export'),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

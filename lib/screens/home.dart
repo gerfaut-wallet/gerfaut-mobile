@@ -6,6 +6,7 @@ import '../src/models.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/amounts.dart';
+import '../widgets/app_bar.dart';
 import '../widgets/brand.dart';
 import '../widgets/buttons.dart';
 import '../widgets/empty_state.dart';
@@ -50,7 +51,7 @@ class HomeScreen extends ConsumerWidget {
     final network = settings.valueOrNull?.activeNetwork;
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: GerfautAppBar(
         title: Row(
           children: [
             // The falcon alone: whoever opens the app knows its name,

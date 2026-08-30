@@ -10,6 +10,7 @@ import '../src/models.dart';
 import '../src/share.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
+import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/choice_group.dart';
 import '../widgets/facts.dart';
@@ -132,7 +133,7 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final bundle = _bundle;
     return Scaffold(
-      appBar: AppBar(title: const Text('Export a backup')),
+      appBar: GerfautAppBar.text('Export a backup'),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(GerfautSpacing.md),

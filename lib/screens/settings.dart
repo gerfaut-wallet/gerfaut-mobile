@@ -10,6 +10,7 @@ import '../src/models.dart';
 import '../src/onboarding.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
+import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/choice_group.dart';
 import '../widgets/section_card.dart';
@@ -390,7 +391,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     if (settings == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Settings')),
+        appBar: GerfautAppBar.text('Settings'),
         body: Center(
           child: Text(
             'Loading…',
@@ -405,7 +406,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final currency = ref.watch(fiatCurrencyProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: GerfautAppBar.text('Settings'),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(GerfautSpacing.md),

@@ -11,6 +11,7 @@ import '../src/format.dart';
 import '../src/models.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
+import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/password_field.dart';
 import '../widgets/pinned_action_form.dart';
@@ -237,7 +238,7 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final preview = _preview;
     return Scaffold(
-      appBar: AppBar(title: const Text('Restore a backup')),
+      appBar: GerfautAppBar.text('Restore a backup'),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(GerfautSpacing.md),

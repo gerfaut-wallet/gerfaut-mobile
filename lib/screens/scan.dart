@@ -5,6 +5,7 @@ import '../src/bridge.dart';
 import '../src/models.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
+import '../widgets/app_bar.dart';
 import '../widgets/qr_camera.dart';
 
 /// Builds the camera view around the sink every decoded frame goes to.
@@ -113,7 +114,7 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
     final camera =
         widget.cameraBuilder?.call(onFrame) ?? QrCamera(onFrame: onFrame);
     return Scaffold(
-      appBar: AppBar(title: const Text('Scan a QR code')),
+      appBar: GerfautAppBar.text('Scan a QR code'),
       body: SafeArea(
         child: Column(
           children: [

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../theme/tokens.dart';
+import '../widgets/app_bar.dart';
 
 /// How long each frame of the animated code stays on screen.
 const Duration frameInterval = Duration(milliseconds: 200);
@@ -47,7 +48,7 @@ class _BackupQrScreenState extends State<BackupQrScreen> {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     return Scaffold(
-      appBar: AppBar(title: const Text('Backup QR code')),
+      appBar: GerfautAppBar.text('Backup QR code'),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(GerfautSpacing.md),
