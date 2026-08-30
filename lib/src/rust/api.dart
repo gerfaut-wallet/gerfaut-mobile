@@ -34,6 +34,14 @@ Future<String> parseInputWithOptions({
   optionsJson: optionsJson,
 );
 
+/// Reads a server address scanned or pasted into the backend settings:
+/// the Electrum one-liner `host:port:s|t` that node dashboards print,
+/// an `ssl://`/`tcp://` address, or an `http(s)://` Esplora endpoint.
+/// Returns the serialized `ScannedBackend`; the screen fills its fields
+/// with it and the person still presses Save.
+Future<String> parseBackend({required String input}) =>
+    RustLib.instance.api.crateApiParseBackend(input: input);
+
 /// Assembles the QR frames scanned so far (plain text, UR, BBQr) from a
 /// JSON array of strings. Returns the serialized `QrProgress`: feed the
 /// growing list until `complete` is true, then pass `text` to

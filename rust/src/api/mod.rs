@@ -165,6 +165,18 @@ pub async fn parse_input_with_options(input: String, options_json: String) -> St
     }
 }
 
+/// Reads a server address scanned or pasted into the backend settings:
+/// the Electrum one-liner `host:port:s|t` that node dashboards print,
+/// an `ssl://`/`tcp://` address, or an `http(s)://` Esplora endpoint.
+/// Returns the serialized `ScannedBackend`; the screen fills its fields
+/// with it and the person still presses Save.
+pub async fn parse_backend(input: String) -> String {
+    match gerfaut_core::chain::connect::parse_backend(&input) {
+        Ok(backend) => to_json(&backend),
+        Err(e) => core_error_json(&e),
+    }
+}
+
 /// Assembles the QR frames scanned so far (plain text, UR, BBQr) from a
 /// JSON array of strings. Returns the serialized `QrProgress`: feed the
 /// growing list until `complete` is true, then pass `text` to
