@@ -14,6 +14,7 @@ class PasswordField extends StatefulWidget {
     super.key,
     required this.label,
     required this.controller,
+    this.focusNode,
     this.onChanged,
     this.onSubmitted,
     this.autofocus = false,
@@ -22,6 +23,9 @@ class PasswordField extends StatefulWidget {
   /// Caption above the field, also what assistive technology reads.
   final String label;
   final TextEditingController controller;
+
+  /// Set when the screen has to put the caret here itself.
+  final FocusNode? focusNode;
   final VoidCallback? onChanged;
 
   /// Keyboard action; null leaves the key inert.
@@ -48,6 +52,7 @@ class _PasswordFieldState extends State<PasswordField> {
         const SizedBox(height: GerfautSpacing.sm),
         TextField(
           controller: widget.controller,
+          focusNode: widget.focusNode,
           obscureText: _hidden,
           autofocus: widget.autofocus,
           autocorrect: false,

@@ -8,6 +8,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/bridge.dart';
 import '../src/format.dart';
+import '../src/lock.dart';
 import '../src/models.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
@@ -23,6 +24,23 @@ typedef BackupFilePicker = Future<XFile?> Function();
 /// Said when the core cannot open the backup: the two causes are one
 /// and the same to the cipher, so they are stated together.
 const String wrongPasswordMessage = 'Wrong password, or the file is damaged.';
+
+/// Where the backup being restored was read from.
+///
+/// A scan opens a camera over the whole screen and a file picker is a
+/// screen of the system's, so in both cases the person comes back to a
+/// page that has to say what it now holds — rather than leave a greyed
+/// button to explain itself. [name] is the file's, null for a scan.
+@immutable
+class _BackupSource {
+  const _BackupSource.qr() : name = null;
+  const _BackupSource.file(String this.name);
+
+  final String? name;
+
+  /// What the page states, in the same words for either source.
+  String get sentence => 'Backup read from ${name ?? 'the QR code'}';
+}
 
 /// Restoring a backup: a file or a scanned QR code and its password,
 /// then what it holds, wallet by wallet, before anything is added.
@@ -51,13 +69,14 @@ class BackupRestoreScreen extends ConsumerStatefulWidget {
 
 class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
   final _passwordController = TextEditingController();
+  final _passwordFocus = FocusNode();
 
   /// The backup as the core takes it: base64 of the file, or the text a
   /// scan yields.
   String? _source;
 
-  /// Where the source came from, for the line under the buttons.
-  String? _sourceLabel;
+  /// Where that source came from, for the panel under the buttons.
+  _BackupSource? _from;
   bool _opening = false;
   String? _error;
   BackupPreview? _preview;
@@ -71,7 +90,21 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
   @override
   void dispose() {
     _passwordController.dispose();
+    _passwordFocus.dispose();
     super.dispose();
+  }
+
+  /// A backup has landed. The page says so and the caret follows it:
+  /// the scanner and the picker both hand focus back to the button that
+  /// opened them, which is a step already taken — the password is the
+  /// one that is not.
+  void _landed(String source, _BackupSource from) {
+    setState(() {
+      _source = source;
+      _from = from;
+      _error = null;
+    });
+    _passwordFocus.requestFocus();
   }
 
   static Future<XFile?> _pickBackupFile() {
@@ -90,6 +123,10 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
   static const int _maxBackupBytes = 8 * 1024 * 1024;
 
   Future<void> _openFile() async {
+    // The picker is a screen of the system's: Android pauses Gerfaut
+    // behind it, and coming back from a picker the user opened here is
+    // not coming back from the background.
+    ref.read(lockProvider.notifier).expectExcursion();
     final file = await (widget.filePicker ?? _pickBackupFile)();
     if (file == null) return;
     // Checked before reading: picking a video by mistake must cost a
@@ -103,11 +140,7 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
     }
     final bytes = await file.readAsBytes();
     if (!mounted) return;
-    setState(() {
-      _source = base64Encode(bytes);
-      _sourceLabel = 'File: ${file.name} · ${formatBytes(bytes.length)}';
-      _error = null;
-    });
+    _landed(base64Encode(bytes), _BackupSource.file(file.name));
   }
 
   Future<void> _scan() async {
@@ -123,11 +156,7 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
       ),
     );
     if (text == null || text.trim().isEmpty || !mounted) return;
-    setState(() {
-      _source = text.trim();
-      _sourceLabel = 'QR code scanned';
-      _error = null;
-    });
+    _landed(text.trim(), const _BackupSource.qr());
   }
 
   String _messageOf(BridgeException error) =>
@@ -251,6 +280,7 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
   }
 
   Widget _buildSourceStep(GerfautTokens tokens) {
+    final from = _from;
     final ready =
         !_opening && _source != null && _passwordController.text.isNotEmpty;
     return PinnedActionForm(
@@ -285,19 +315,15 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
             ),
           ],
         ),
-        if (_sourceLabel != null) ...[
-          const SizedBox(height: GerfautSpacing.sm),
-          Text(
-            _sourceLabel!,
-            style: tokens.figureOf(size: 14),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
+        if (from != null) ...[
+          const SizedBox(height: GerfautSpacing.md),
+          _ReadPanel(source: from),
         ],
         const SizedBox(height: GerfautSpacing.md),
         PasswordField(
           label: 'Password',
           controller: _passwordController,
+          focusNode: _passwordFocus,
           onChanged: () => setState(() => _error = null),
           onSubmitted: ready ? _open : null,
         ),
@@ -399,6 +425,51 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
         ],
         const SizedBox(height: GerfautSpacing.md),
       ],
+    );
+  }
+}
+
+/// What the page now holds, once a file or a scan has landed.
+///
+/// It is a card and not the grey aside it replaced: a scanner closing
+/// over the page and returning a line the weight of a caption reads as
+/// a crash, which is what it was taken for. Stated as a fact, at the
+/// weight of one, on the ordinary card surface — a backup read is not
+/// an event to celebrate and carries no colour of its own.
+///
+/// It describes the field below it rather than announcing itself: a
+/// region that appears together with its own text is read out
+/// unreliably, while the caret landing in the password field is not.
+/// Its two lines are one stop, since neither can be acted on alone.
+class _ReadPanel extends StatelessWidget {
+  const _ReadPanel({required this.source});
+
+  final _BackupSource source;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    return MergeSemantics(
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(GerfautSpacing.md),
+        decoration: BoxDecoration(
+          color: tokens.surface,
+          borderRadius: BorderRadius.circular(GerfautRadius.lg),
+          border: Border.all(color: tokens.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(source.sentence, style: tokens.bodySmall),
+            const SizedBox(height: GerfautSpacing.xs),
+            Text(
+              'Type its password to open it.',
+              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

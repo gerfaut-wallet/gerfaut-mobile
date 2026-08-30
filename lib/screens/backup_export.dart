@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/bridge.dart';
 import '../src/format.dart' show formatBytes;
+import '../src/lock.dart';
 import '../src/models.dart';
 import '../src/share.dart';
 import '../src/state.dart';
@@ -112,6 +113,10 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
     final now = DateTime.now();
     final month = now.month.toString().padLeft(2, '0');
     final day = now.day.toString().padLeft(2, '0');
+    // The sheet that picks where the file goes is a screen of the
+    // system's: Android pauses Gerfaut behind it, and coming back from
+    // it is not coming back from the background.
+    ref.read(lockProvider.notifier).expectExcursion();
     await ref
         .read(backupSharerProvider)
         .shareBackup(

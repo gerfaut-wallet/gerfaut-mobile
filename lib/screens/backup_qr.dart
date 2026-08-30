@@ -67,8 +67,15 @@ class _BackupQrScreenState extends State<BackupQrScreen> {
                   : 'Backup QR code',
             ),
             const SizedBox(height: GerfautSpacing.md),
+            // The counter below is a place in the loop, not a count of
+            // what has been sent — the scanner shows a counter that
+            // looks exactly the same and does mean progress. The caption
+            // names which one this is, so the two are never read as one.
             Text(
-              'Scan it with Gerfaut on the other device',
+              _animated
+                  ? 'Scan it with Gerfaut on the other device. The code '
+                        'loops: start at any frame.'
+                  : 'Scan it with Gerfaut on the other device.',
               style: tokens.bodySmall.copyWith(color: tokens.textMuted),
               textAlign: TextAlign.center,
             ),

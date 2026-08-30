@@ -236,6 +236,93 @@ void main() {
     expect(bridge.assembleCalls, hasLength(1));
   });
 
+  testWidgets('the same refused code is not handed back again', (tester) async {
+    final bridge = FakeBridge()
+      ..onAssembleQr = (_) => throw const BridgeException('invalid_input', _psbt);
+    final outcome = _Outcome();
+    final state = await _open(tester, bridge, outcome);
+
+    state.onFrame('ur:crypto-psbt/1-2/part-one');
+    await tester.pumpAndSettle();
+    expect(bridge.assembleCalls, hasLength(1));
+    expect(find.text(_psbt), findsOneWidget);
+
+    // The refused code stays under the camera and decodes several times
+    // a second. Asking again buys the same answer and nothing else.
+    state.onFrame('ur:crypto-psbt/1-2/part-one');
+    await tester.pumpAndSettle();
+    state.onFrame('ur:crypto-psbt/1-2/part-one');
+    await tester.pumpAndSettle();
+
+    expect(bridge.assembleCalls, hasLength(1));
+    expect(find.text(_psbt), findsOneWidget);
+    expect(outcome.pops, 0);
+  });
+
+  testWidgets('a code that assembles to nothing is said, not popped', (
+    tester,
+  ) async {
+    final bridge = FakeBridge();
+    // Every part arrived and they add up to no text at all.
+    bridge.onAssembleQr = (_) => const QrProgress(
+      format: QrFormat.ur,
+      received: 1,
+      total: 1,
+      complete: true,
+    );
+    final outcome = _Outcome();
+    final state = await _open(tester, bridge, outcome);
+
+    state.onFrame('ur:bytes/nothing-inside');
+    await tester.pumpAndSettle();
+
+    // Closing on an empty scan is exactly what a crash looks like from
+    // the page underneath: the scanner stays, and says so.
+    expect(outcome.pops, 0);
+    expect(find.byType(ScanScreen), findsOneWidget);
+    expect(find.text('This code came out empty.'), findsOneWidget);
+    expect(find.text(_caption), findsNothing);
+  });
+
+  testWidgets('an assembly still running when the screen is left is dropped', (
+    tester,
+  ) async {
+    final never = Completer<QrProgress>();
+    final bridge = FakeBridge()..onAssembleQr = (_) => never.future;
+    final outcome = _Outcome();
+    final state = await _open(tester, bridge, outcome);
+
+    state.onFrame('ur:crypto-output/1-3/part-one');
+    await tester.pump();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(outcome.pops, 1);
+    expect(outcome.text, isNull);
+
+    // The core answering after the user walked away must not reach a
+    // screen that is gone, nor hand the caller a late scan.
+    never.complete(threeParts(['ur:crypto-output/1-3/part-one']));
+    await tester.pumpAndSettle();
+    expect(outcome.pops, 1);
+    expect(outcome.text, isNull);
+  });
+
+  testWidgets('the progress bar says how many frames landed', (tester) async {
+    final bridge = FakeBridge()..onAssembleQr = threeParts;
+    final outcome = _Outcome();
+    final state = await _open(tester, bridge, outcome);
+
+    state.onFrame('ur:crypto-output/1-3/part-one');
+    await tester.pumpAndSettle();
+
+    // A progress bar speaks its value as a percentage, which says
+    // nothing about how many frames are still to come.
+    final bar = tester.widget<LinearProgressIndicator>(
+      find.byType(LinearProgressIndicator),
+    );
+    expect(bar.semanticsLabel, 'Animated code progress, 1 of 3 frames received');
+  });
+
   group('QrProgress.fromJson', () {
     test('reads a part of an animated code', () {
       final progress = QrProgress.fromJson({

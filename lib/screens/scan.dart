@@ -46,6 +46,11 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
   final List<String> _frames = [];
   final Set<String> _seen = {};
 
+  /// Frames the core turned down on their own. Without them the code
+  /// left under the camera is handed back several times a second, for
+  /// the same answer every time.
+  final Set<String> _refused = {};
+
   /// True once the screen popped: frames still decoded are ignored.
   bool _done = false;
 
@@ -57,11 +62,13 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
   QrProgress? _progress;
   String? _error;
 
-  /// Feeds one decoded frame. A repeat is dropped; a new frame sends
-  /// the whole collection to the core.
+  /// Feeds one decoded frame. A repeat and a frame already turned down
+  /// are dropped; a new frame sends the whole collection to the core.
   @visibleForTesting
   void onFrame(String text) {
-    if (_done || !mounted || !_seen.add(text)) return;
+    if (_done || !mounted || _refused.contains(text) || !_seen.add(text)) {
+      return;
+    }
     _frames.add(text);
     if (_busy) {
       _pending = true;
@@ -80,21 +87,27 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
         try {
           progress = await bridge.assembleQr(List.of(_frames));
         } on BridgeException catch (e) {
+          // A refusal landing after the pop belongs to a scan the user
+          // has walked away from.
           if (!mounted || _done) return;
-          // The core refused what was collected (a PSBT, an envelope it
-          // cannot open): start over, the camera keeps running.
-          _frames.clear();
-          _seen.clear();
-          setState(() {
-            _progress = null;
-            _error = e.message;
-          });
+          // The core refused what was collected: a PSBT, an envelope it
+          // cannot open.
+          _startOver(e.message);
           return;
         }
         if (!mounted || _done) return;
+        final text = progress.text;
         if (progress.complete) {
+          if (text == null || text.trim().isEmpty) {
+            // Every part arrived and they add up to nothing. Popping on
+            // that hands the caller an empty scan, which is exactly what
+            // a scanner closing on its own looks like from the page
+            // underneath.
+            _startOver('This code came out empty.');
+            return;
+          }
           _done = true;
-          Navigator.of(context).pop(progress.text);
+          Navigator.of(context).pop(text);
           return;
         }
         setState(() {
@@ -105,6 +118,22 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
     } finally {
       _busy = false;
     }
+  }
+
+  /// Drops the collection and says why, leaving the camera running.
+  ///
+  /// The counter goes with it: what it counted is no longer being
+  /// assembled, and a bar left standing would show progress towards
+  /// nothing. Only a lone frame is provably the one at fault — further
+  /// along any of them could be, so none is barred from a fresh try.
+  void _startOver(String reason) {
+    if (_frames.length == 1) _refused.add(_frames.first);
+    _frames.clear();
+    _seen.clear();
+    setState(() {
+      _progress = null;
+      _error = reason;
+    });
   }
 
   @override
@@ -135,10 +164,16 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
             ),
             Padding(
               padding: const EdgeInsets.all(GerfautSpacing.md),
-              child: Text(
-                _error ?? widget.caption,
-                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                textAlign: TextAlign.center,
+              // A refusal arrives while the camera holds the eye, so it
+              // is announced; the standing caption is not, or it would
+              // be read out on every rebuild.
+              child: Semantics(
+                liveRegion: _error != null,
+                child: Text(
+                  _error ?? widget.caption,
+                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                  textAlign: TextAlign.center,
+                ),
               ),
             ),
           ],
@@ -197,7 +232,12 @@ class _AssemblyPanel extends StatelessWidget {
               minHeight: GerfautSpacing.xs,
               backgroundColor: dark.surfaceSunken,
               color: dark.primary,
-              semanticsLabel: 'Animated code progress',
+              // The value of a progress bar is spoken as a percentage,
+              // and the count of frames is the whole point here; the
+              // label is the only part that takes words.
+              semanticsLabel:
+                  'Animated code progress, ${progress.received} of '
+                  '${progress.total} frames received',
             ),
           ),
         ],
