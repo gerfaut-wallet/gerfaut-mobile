@@ -320,14 +320,22 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                 ],
               ],
               const SizedBox(height: GerfautSpacing.lg),
-              FieldLabel('Inputs (${preview.inputs.length})', tokens: tokens),
+              IoListHeading(
+                title: 'Inputs',
+                count: preview.inputs.length,
+                totalSats: sideTotal(preview.inputs.map((i) => i.valueSats)),
+              ),
               const SizedBox(height: GerfautSpacing.sm),
               for (final (index, input) in preview.inputs.indexed) ...[
                 if (index > 0) const SizedBox(height: GerfautSpacing.sm - 2),
                 _InputRow(input: input, tokens: tokens),
               ],
               const SizedBox(height: GerfautSpacing.lg),
-              FieldLabel('Outputs (${preview.outputs.length})', tokens: tokens),
+              IoListHeading(
+                title: 'Outputs',
+                count: preview.outputs.length,
+                totalSats: sideTotal(preview.outputs.map((o) => o.valueSats)),
+              ),
               const SizedBox(height: GerfautSpacing.sm),
               for (final (index, output) in preview.outputs.indexed) ...[
                 if (index > 0) const SizedBox(height: GerfautSpacing.sm - 2),
@@ -571,8 +579,7 @@ IconData _warningIcon(TxWarningKind kind) => switch (kind) {
   TxWarningKind.other => LucideIcons.info,
 };
 
-/// One caution: what will go wrong reads in the alert style, what is
-/// worth a look in the pending one.
+/// One caution, in the tone the core gave it.
 class _WarningRow extends StatelessWidget {
   const _WarningRow({required this.warning, required this.tokens});
 
@@ -581,12 +588,15 @@ class _WarningRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // The tone says how much it matters, the glyph says what it is
-    // about; both come from the kind the core gave the caution. A
-    // blocking caution is one the person could act on believing the
-    // transaction went out — the case the red is kept for.
+    // The tone is read, never decided here: the core asks the one
+    // question — can funds or privacy be lost? — and answers it for
+    // both applications. The glyph is all this screen picks, and it
+    // only says what the caution is about.
     return GerfautNotice(
-      tone: warning.kind.blocking ? NoticeTone.alert : NoticeTone.info,
+      tone: switch (warning.severity) {
+        TxSeverity.alert => NoticeTone.alert,
+        TxSeverity.info => NoticeTone.info,
+      },
       icon: _warningIcon(warning.kind),
       message: warning.message,
     );
@@ -893,10 +903,6 @@ class _OutputRow extends StatelessWidget {
   }
 }
 
-/// Block heights and unix times share the locktime field: below this
-/// value it is a height (BIP-65).
-const int _locktimeThreshold = 500000000;
-
 class _TechnicalCard extends StatelessWidget {
   const _TechnicalCard({required this.preview, required this.tokens});
 
@@ -915,6 +921,8 @@ class _TechnicalCard extends StatelessWidget {
           tokens: tokens,
           child: FactValue(preview.network.label, tokens),
         ),
+        // Same order as the transaction detail, down to where RBF sits:
+        // one card read twice should not have to be relearned.
         FactRow(
           label: 'Size',
           tokens: tokens,
@@ -938,11 +946,21 @@ class _TechnicalCard extends StatelessWidget {
         FactRow(
           label: 'Locktime',
           tokens: tokens,
-          child: locktime == 0
-              ? FactValue('none', tokens, muted: true)
-              : locktime < _locktimeThreshold
-              ? FactValue('block ${groupThousands('$locktime')}', tokens)
-              : FactValue(formatTimestamp(locktime), tokens),
+          child: FactValue(
+            formatLocktime(locktime),
+            tokens,
+            muted: locktime <= 0,
+          ),
+        ),
+        // RBF, the word the chain gave it and the one people look for
+        // — the same name the transaction detail uses.
+        FactRow(
+          label: 'RBF',
+          tokens: tokens,
+          child: FactValue(
+            preview.rbf ? 'signalled (BIP-125)' : 'not signalled',
+            tokens,
+          ),
         ),
         FactRow(
           label: 'Fee',
@@ -960,16 +978,6 @@ class _TechnicalCard extends StatelessWidget {
                 : 'n/a',
             tokens,
             muted: preview.feeRateSatVb == null,
-          ),
-        ),
-        // RBF, the word the chain gave it and the one people look for
-        // — the same name the transaction detail uses.
-        FactRow(
-          label: 'RBF',
-          tokens: tokens,
-          child: FactValue(
-            preview.rbf ? 'signalled (BIP-125)' : 'not signalled',
-            tokens,
           ),
         ),
       ],
@@ -993,8 +1001,13 @@ class _FeeValue extends ConsumerWidget {
   }
 }
 
-/// The node's refusal, verbatim, in the alert style: a refused
+/// The node's refusal, verbatim, under the preview: a refused
 /// broadcast is not a form error and must not vanish like a toast.
+///
+/// Amber, not red. The node said no: nothing moved, nothing leaked,
+/// and the transaction can be sent again once whatever it objected to
+/// is fixed. Red is what an unexpected outflow or a changed certificate
+/// costs, and spending it here is what makes it inaudible there.
 class _RefusalBlock extends StatelessWidget {
   const _RefusalBlock({required this.message, required this.tokens});
 
@@ -1003,43 +1016,13 @@ class _RefusalBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(GerfautSpacing.sm + 4),
-      decoration: BoxDecoration(
-        color: tokens.alertSurface,
-        borderRadius: BorderRadius.circular(GerfautRadius.md),
-        border: Border.all(color: tokens.alert.withValues(alpha: 0.25)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          FirstLine(
-            style: tokens.bodySmall,
-            child: Icon(LucideIcons.circleX, size: 16, color: tokens.alert),
-          ),
-          const SizedBox(width: GerfautSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'The network refused this transaction',
-                  style: tokens.bodySmall.copyWith(
-                    color: tokens.alert,
-                    fontWeight: FontWeight.w500,
-                    fontVariations: const [FontVariation('wght', 500)],
-                  ),
-                ),
-                const SizedBox(height: 2),
-                SelectableText(
-                  message,
-                  style: tokens.bodySmall.copyWith(color: tokens.text),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return GerfautNotice(
+      tone: NoticeTone.info,
+      // It lands in reaction to the tap that sent the transaction, and
+      // nothing else on the page says the send failed.
+      liveRegion: true,
+      message: 'The network refused this transaction.',
+      detail: message,
     );
   }
 }

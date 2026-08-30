@@ -9,6 +9,8 @@ import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/facts.dart';
+import 'package:gerfaut/widgets/notice.dart';
 import 'package:gerfaut/widgets/tx_diagram.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
@@ -362,8 +364,10 @@ void main() {
     expect(find.text('Pending'), findsOneWidget);
     expect(find.textContaining('block '), findsNothing);
     expect(find.text('not yet mined'), findsOneWidget);
-    // The date says it once; no empty block line is left to read.
-    expect(find.text('—'), findsNothing);
+    // The Block row is there and says it has none, rather than being
+    // absent and leaving the reader to wonder whether it was missed.
+    expect(find.text('Block'), findsOneWidget);
+    expect(find.text('—'), findsOneWidget);
   });
 
   testWidgets('neutral badges share the tinted badges\' border', (
@@ -390,8 +394,59 @@ void main() {
     // Final and Locktime are neutral, yet bordered like the others.
     expect(badgeDecoration('Final').border, isNotNull);
     expect(badgeDecoration('Locktime').border, isNotNull);
-    // The locktime value sits on its own fact line, not in the chip.
-    expect(find.text(groupThousands('840000')), findsOneWidget);
+    // The locktime value sits on its own fact line, not in the chip,
+    // and it is decoded: 840000 is a height, and says so.
+    expect(find.text('block ${groupThousands('840000')}'), findsOneWidget);
+  });
+
+  testWidgets('a time-based locktime reads as a time, hint included', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    // Above 500 000 000 the field names a moment. Printed raw it read
+    // as an absurd block height, and the chip promised a block that
+    // does not exist — the broadcast preview had decoded it for a
+    // while, the detail had not.
+    const stamp = 1755000000;
+    final bridge = FakeBridge(
+      txDetails: {
+        'w1:${'f' * 64}': makeTxDetail(extras: makeExtras(locktime: stamp)),
+      },
+    );
+    await tester.pumpWidget(txDetailApp(bridge));
+    await tester.pumpAndSettle();
+
+    expect(find.text(groupThousands('$stamp')), findsNothing);
+    expect(find.text(formatTimestamp(stamp)), findsNWidgets(2));
+    expect(
+      find.byTooltip('Earliest time this transaction could be mined'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('the block height keeps a row of its own', (tester) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge(
+      txDetails: {'w1:${'f' * 64}': makeTxDetail(extras: makeExtras())},
+    );
+    await tester.pumpWidget(txDetailApp(bridge));
+    await tester.pumpAndSettle();
+
+    // Once beside the status pill, where it reads as part of the
+    // state, and once labelled in the facts, where somebody comparing
+    // against another tool goes looking for it.
+    expect(find.text('block ${groupThousands('100')}'), findsOneWidget);
+    expect(find.text('Block'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.ancestor(
+          of: find.text('Block'),
+          matching: find.byType(FactRow),
+        ),
+        matching: find.text(groupThousands('100')),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('the tx detail header never echoes the other unit', (
@@ -503,10 +558,13 @@ void main() {
     expect(find.byType(TxDiagram), findsOneWidget);
     expect(find.text('TX'), findsOneWidget);
     // Every branch states its amount and the row of the list below
-    // states it again: each figure twice over, nowhere else.
-    expect(find.text(formatAmount(10000, AmountUnit.btc)), findsNWidgets(2));
+    // states it again. The lone input is also the whole input side, so
+    // its heading total says it a third time.
+    expect(find.text(formatAmount(10000, AmountUnit.btc)), findsNWidgets(3));
     expect(find.text(formatAmount(5000, AmountUnit.btc)), findsNWidgets(2));
     expect(find.text(formatAmount(4859, AmountUnit.btc)), findsNWidgets(2));
+    // The output side totals what its two rows carry.
+    expect(find.text(formatAmount(9859, AmountUnit.btc)), findsOneWidget);
     // The fee: the node under the diagram, then the fact card.
     expect(find.text('Fee'), findsNWidgets(2));
     expect(find.text(formatAmount(141, AmountUnit.btc)), findsNWidgets(2));
@@ -543,8 +601,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('INPUTS (2)'), findsOneWidget);
-    // Neither the branch nor the row invents a value it never got.
-    expect(find.text('n/a'), findsNWidgets(2));
+    // Neither the branch nor the row invents a value it never got —
+    // and neither does the side total: one unknown value makes the
+    // whole sum a guess, so it says so instead of coming up short.
+    expect(find.text('n/a'), findsNWidgets(3));
     expect(find.text('Unknown input'), findsNWidgets(2));
   });
 
@@ -587,14 +647,14 @@ void main() {
     expect(find.text(formatAmount(10000, AmountUnit.btc)), findsNothing);
     expect(find.text(formatAmount(141, AmountUnit.btc)), findsNothing);
     expect(find.text(formatAmountSigned(5000, AmountUnit.btc)), findsNothing);
-    // Hero, three branches, the fee node, three list rows, the fee
-    // fact: every figure of the page, and no other.
-    expect(find.text(maskedValue), findsNWidgets(9));
+    // Hero, three branches, the fee node, three list rows, the two
+    // side totals, the fee fact: every figure of the page, and no
+    // other. A total that stayed legible would give away what the rows
+    // are covering up.
+    expect(find.text(maskedValue), findsNWidgets(11));
   });
 
-  testWidgets('removing a wallet confirms with the alert banner', (
-    tester,
-  ) async {
+  testWidgets('removing a wallet confirms in its own panel', (tester) async {
     final meta = makeMeta(name: 'Cold storage');
     final bridge = FakeBridge(
       wallets: [meta],
@@ -616,7 +676,32 @@ void main() {
       find.textContaining('You are removing "Cold storage" from Gerfaut'),
       findsOneWidget,
     );
-    expect(find.text('Remove wallet'), findsOneWidget);
+    // Amber, and the copy says why: this only stops watching, nothing
+    // moves on chain. Red on a list row is red spent where it costs
+    // nothing, and it is the one colour that cannot be overspent.
+    final panel = tester.widget<GerfautNotice>(
+      find.ancestor(
+        of: find.textContaining('This only stops watching'),
+        matching: find.byType(GerfautNotice),
+      ),
+    );
+    expect(panel.tone, NoticeTone.info);
+    // The destructive button is never on its own: the way out sits
+    // with it, inside the panel that asks.
+    expect(
+      find.descendant(
+        of: find.byType(GerfautNotice),
+        matching: find.text('Remove wallet'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(GerfautNotice),
+        matching: find.text('Cancel'),
+      ),
+      findsOneWidget,
+    );
 
     await tester.ensureVisible(find.text('Remove wallet'));
     await tester.pumpAndSettle();
@@ -735,11 +820,13 @@ void main() {
     );
     expect(find.byIcon(LucideIcons.pickaxe), findsNWidgets(3));
     // A coinbase input spends nothing, so the reward stands in for
-    // it: both branches of the diagram, then both rows.
+    // it: both branches of the diagram, both rows, then both side
+    // totals — the input side included, or it would read n/a on a
+    // transaction whose every value is known.
     expect(find.text('n/a'), findsNothing);
     expect(
       find.text(formatAmount(312500000, AmountUnit.btc)),
-      findsNWidgets(4),
+      findsNWidgets(6),
     );
   });
 

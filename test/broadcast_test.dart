@@ -12,7 +12,9 @@ import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/tx_file.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/amounts.dart';
 import 'package:gerfaut/widgets/buttons.dart';
+import 'package:gerfaut/widgets/notice.dart';
 import 'package:gerfaut/widgets/tx_diagram.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -141,6 +143,22 @@ void main() {
     // Inputs and outputs: the wallet pill and the change marker.
     expect(find.text('INPUTS (1)'), findsOneWidget);
     expect(find.text('OUTPUTS (2)'), findsOneWidget);
+    // Each side states what it carries in all: the gap between the two
+    // is the fee, which no row says on its own.
+    expect(
+      find.descendant(
+        of: find.byType(IoListHeading),
+        matching: find.text(formatAmount(100000, AmountUnit.btc)),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(IoListHeading),
+        matching: find.text(formatAmount(99000, AmountUnit.btc)),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Cold storage'), findsNWidgets(2));
     expect(find.text('Change'), findsOneWidget);
     // Once on the branch of the diagram, once on the output row.
@@ -153,6 +171,17 @@ void main() {
     expect(find.text('RBF'), findsOneWidget);
     expect(find.text('signalled (BIP-125)'), findsOneWidget);
     expect(find.text('none'), findsOneWidget);
+    // And in the same place as on the desktop: after Locktime, before
+    // Fee. One card read on two platforms is not relearned. The first
+    // "Fee" on the page is the diagram's node; the card's is the last.
+    expect(
+      tester.getCenter(find.text('RBF')).dy,
+      greaterThan(tester.getCenter(find.text('Locktime')).dy),
+    );
+    expect(
+      tester.getCenter(find.text('RBF')).dy,
+      lessThan(tester.getCenter(find.text('Fee').last).dy),
+    );
     // No warning block when the core raised none.
     expect(find.text('BEFORE YOU SEND'), findsNothing);
     expect(primaryButton(tester, 'Broadcast').onPressed, isNotNull);
@@ -164,14 +193,18 @@ void main() {
       ..onPreview = (_, _) => makePreview(
         ready: false,
         source: TxSource.rawTransaction,
+        // The severities are the core's, carried on the wire: the
+        // screen only reads them.
         warnings: const [
           TxWarning(
             kind: TxWarningKind.unsigned,
             message: '1 of 1 inputs carry no signature.',
+            severity: TxSeverity.alert,
           ),
           TxWarning(
             kind: TxWarningKind.spendsWatched,
             message: 'Spends coins of Cold storage.',
+            severity: TxSeverity.info,
           ),
         ],
         inputs: const [
@@ -193,8 +226,8 @@ void main() {
     expect(primaryButton(tester, 'Broadcast').onPressed, isNull);
     expect(find.text('BEFORE YOU SEND'), findsOneWidget);
 
-    // What the network will refuse reads in the alert style; a caution
-    // reads in the pending one.
+    // The tone is the core's, read off the caution: this screen has no
+    // table of its own to drift out of step with the desktop's.
     final light = GerfautTokens.light;
     expect(
       blockOf(tester, '1 of 1 inputs carry no signature.').color,
@@ -206,7 +239,15 @@ void main() {
     );
     // The readiness pill, the warning and the input marker all say it.
     expect(find.byIcon(LucideIcons.penOff), findsNWidgets(3));
+    // The marker is `Unsigned`, the same word as the desktop, and it
+    // stays red: a transaction believed ready that cannot be sent is
+    // exactly what the budget is kept for.
     expect(find.text('Unsigned'), findsOneWidget);
+    expect(blockOf(tester, 'Unsigned').color, light.alertSurface);
+    expect(
+      tester.widget<Text>(find.text('Unsigned')).style?.color,
+      light.alert,
+    );
     // An input without an address shows its outpoint.
     expect(
       find.text(
@@ -322,7 +363,8 @@ void main() {
     await tester.tap(find.text('Broadcast').last);
     await tester.pumpAndSettle();
 
-    expect(find.text('The network refused this transaction'), findsOneWidget);
+    // The same sentence as the desktop, period and all.
+    expect(find.text('The network refused this transaction.'), findsOneWidget);
     expect(
       find.text(
         'mempool.space refused the transaction: min relay fee not met, '
@@ -330,14 +372,75 @@ void main() {
       ),
       findsOneWidget,
     );
+    // Amber, not red: the node said no, nothing moved and nothing
+    // leaked. Red is the budget kept for what costs funds or privacy.
     expect(
-      blockOf(tester, 'The network refused this transaction').color,
-      GerfautTokens.light.alertSurface,
+      blockOf(tester, 'The network refused this transaction.').color,
+      GerfautTokens.light.pendingSurface,
     );
     expect(find.byType(SnackBar), findsNothing);
+    // It lands in reaction to the tap that sent the transaction, so it
+    // is announced rather than waiting to be walked into.
+    expect(
+      tester
+          .widget<GerfautNotice>(
+            find.ancestor(
+              of: find.text('The network refused this transaction.'),
+              matching: find.byType(GerfautNotice),
+            ),
+          )
+          .liveRegion,
+      isTrue,
+    );
     // Nothing was recorded, and the transaction can be sent again.
     expect(bridge.appPrefs.containsKey('broadcast.recent'), isFalse);
     expect(primaryButton(tester, 'Broadcast').onPressed, isNotNull);
+  });
+
+  testWidgets('a side nobody can price totals n/a, not a short sum', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge()
+      ..onPreview = (_, _) => makePreview(
+        feeSats: null,
+        feeRate: null,
+        inputs: const [
+          TxInputPreview(
+            txid: 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90',
+            vout: 0,
+            valueSats: 100000,
+            signed: true,
+          ),
+          TxInputPreview(
+            txid: 'b1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90',
+            vout: 12,
+            signed: true,
+          ),
+        ],
+      );
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+    await preview(tester);
+
+    expect(find.text('INPUTS (2)'), findsOneWidget);
+    // A total short by an input nobody could price is worse than no
+    // total: it would read as the real figure.
+    expect(
+      find.descendant(
+        of: find.byType(IoListHeading),
+        matching: find.text('n/a'),
+      ),
+      findsOneWidget,
+    );
+    // The output side is whole, so it states its sum.
+    expect(
+      find.descendant(
+        of: find.byType(IoListHeading),
+        matching: find.text(formatAmount(99000, AmountUnit.btc)),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a transaction the backend lost says so', (tester) async {

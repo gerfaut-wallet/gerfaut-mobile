@@ -170,7 +170,9 @@ List<TxBranch> _outputBranches(TxDetail detail) {
             : io.isMine
             ? TxBranchRole.walletOutput
             : TxBranchRole.externalOutput,
-        label: io.opReturn != null ? 'OP_RETURN' : io.address ?? 'Script output',
+        label: io.opReturn != null
+            ? 'OP_RETURN'
+            : io.address ?? 'Script output',
         sats: io.valueSats,
         mine: io.isMine,
       ),
@@ -372,6 +374,17 @@ class _TechnicalCard extends StatelessWidget {
       title: 'Technical',
       tokens: tokens,
       rows: [
+        // The height, said in full and with its name on it. The hero
+        // carries "block N" beside the status pill, which reads as part
+        // of the state; this row is where somebody comparing it against
+        // another tool goes looking for it.
+        FactRow(
+          label: 'Block',
+          tokens: tokens,
+          child: summary.status.confirmed
+              ? FactValue(groupThousands('${summary.status.height}'), tokens)
+              : FactValue('—', tokens, muted: true),
+        ),
         FactRow(
           label: 'Confirmations',
           tokens: tokens,
@@ -408,12 +421,16 @@ class _TechnicalCard extends StatelessWidget {
             tokens: tokens,
             child: FactValue('${extras.version}', tokens),
           ),
+          // Decoded, as on the broadcast preview: printed raw, a
+          // time-based locktime reads as an absurd block height.
           FactRow(
             label: 'Locktime',
             tokens: tokens,
-            child: extras.locktime > 0
-                ? FactValue(groupThousands('${extras.locktime}'), tokens)
-                : FactValue('none', tokens, muted: true),
+            child: FactValue(
+              formatLocktime(extras.locktime),
+              tokens,
+              muted: extras.locktime <= 0,
+            ),
           ),
           FactRow(
             label: 'Sigops',
@@ -624,7 +641,9 @@ class _Flags extends StatelessWidget {
             tone: _BadgeTone.neutral,
             icon: LucideIcons.clock,
             label: 'Locktime',
-            hint: 'Earliest block this transaction could be mined in',
+            // Above the threshold the field names a moment, not a
+            // block: one hint for both was wrong half the time.
+            hint: locktimeHint(extras.locktime),
             tokens: tokens,
           ),
         if (hasOpReturn)
@@ -772,7 +791,17 @@ class _IoList extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.xs),
-          child: FieldLabel('$title (${ios.length})', tokens: tokens),
+          child: IoListHeading(
+            title: title,
+            count: ios.length,
+            // A coinbase input spends nothing: what the side carries is
+            // the sum of the outputs, the same figure its row states.
+            totalSats: sideTotal(
+              ios.map(
+                (io) => io.valueSats ?? (coinbase ? coinbaseValue : null),
+              ),
+            ),
+          ),
         ),
         const SizedBox(height: GerfautSpacing.sm),
         for (final (index, io) in ios.indexed) ...[

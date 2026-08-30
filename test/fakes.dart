@@ -491,8 +491,14 @@ class FakeBridge implements GerfautBridge {
     return const SyncAllReport(reports: [], failures: []);
   }
 
+  /// Held open by a test that wants the screen to go away while a
+  /// rename is still in flight.
+  Completer<void>? renameGate;
+
   @override
   Future<void> renameWallet(String id, String name) async {
+    final gate = renameGate;
+    if (gate != null) await gate.future;
     wallets = [
       for (final wallet in wallets)
         if (wallet.id == id) makeMeta(id: id, name: name) else wallet,
