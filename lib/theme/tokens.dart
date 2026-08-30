@@ -245,6 +245,16 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
 
   // --- style constructors ----------------------------------------------
 
+  /// Where the line's spare leading goes. Flutter's default splits it in
+  /// proportion to the font's ascent and descent, so a face with a tall
+  /// ascender takes more of it above the glyphs and the word ends up
+  /// sitting about a pixel low — visible the moment it stands next to a
+  /// 16px icon in a row. Splitting it evenly puts the optical centre of
+  /// the text on the centre of its box, which is what a `Row` aligns.
+  /// Set on every style of the theme so no screen has to correct for it.
+  static const TextLeadingDistribution _even = TextLeadingDistribution.even;
+
+
   static TextStyle _bricolage({
     required double size,
     required double height,
@@ -253,6 +263,7 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
   }) {
     return TextStyle(
       fontFamily: GerfautFonts.display,
+      leadingDistribution: _even,
       fontSize: size,
       height: height,
       letterSpacing: tracking,
@@ -274,6 +285,7 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
   static TextStyle _body(Color color) {
     return TextStyle(
       fontFamily: GerfautFonts.ui,
+      leadingDistribution: _even,
       fontSize: 16,
       height: 1.55,
       color: color,
@@ -285,6 +297,7 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
   static TextStyle _bodySmall(Color color) {
     return TextStyle(
       fontFamily: GerfautFonts.ui,
+      leadingDistribution: _even,
       fontSize: 14,
       height: 1.5,
       color: color,
@@ -296,6 +309,7 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
   static TextStyle _label(Color color) {
     return TextStyle(
       fontFamily: GerfautFonts.ui,
+      leadingDistribution: _even,
       fontSize: 12,
       height: 1.4,
       letterSpacing: 0.48,
@@ -318,6 +332,7 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
   }) {
     return TextStyle(
       fontFamily: GerfautFonts.ui,
+      leadingDistribution: _even,
       fontSize: size,
       height: size >= 24 ? 1.1 : 1.4,
       // DESIGN.md: -0.01em under 24px, -0.02em above, the way a
@@ -336,6 +351,7 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
   static TextStyle _data(Color color) {
     return TextStyle(
       fontFamily: GerfautFonts.data,
+      leadingDistribution: _even,
       fontSize: 13,
       height: 1.6,
       color: color,
