@@ -60,6 +60,10 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
     if (name == null || name.isEmpty || name == current) return;
     try {
       await ref.read(bridgeProvider).renameWallet(widget.walletId, name);
+      // The name is written either way; what is left is refreshing a
+      // screen that may be gone. Touching `ref` after the widget is
+      // disposed throws on a call nothing was waiting for.
+      if (!mounted) return;
       ref.invalidate(walletsProvider);
       ref.invalidate(snapshotProvider(widget.walletId));
       messenger.showSnackBar(const SnackBar(content: Text('Wallet renamed')));

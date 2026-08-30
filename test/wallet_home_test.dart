@@ -256,6 +256,60 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('leaving mid-rename does not fault on a dead screen', (
+    tester,
+  ) async {
+    final meta = makeMeta();
+    final bridge = FakeBridge(
+      wallets: [meta],
+      snapshots: {'w1': makeSnapshot(meta: meta)},
+    );
+    final gate = Completer<void>();
+    bridge.renameGate = gate;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [bridgeProvider.overrideWithValue(bridge)],
+        child: MaterialApp(
+          theme: themeFrom(GerfautTokens.light, Brightness.light),
+          home: const WalletHomeScreen(walletId: 'w1'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Cold storage'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextField),
+      ),
+      'Vault',
+    );
+    await tester.tap(find.text('Save'));
+    await tester.pump();
+
+    // The screen goes while the core is still writing. All that is
+    // left to do is refresh a page that no longer exists.
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [bridgeProvider.overrideWithValue(bridge)],
+        child: MaterialApp(
+          theme: themeFrom(GerfautTokens.light, Brightness.light),
+          home: const SizedBox.shrink(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    // The name was written; nothing was thrown on the way back.
+    expect(bridge.wallets.single.name, 'Vault');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('an empty or unchanged name writes nothing', (tester) async {
     final meta = makeMeta();
     final bridge = FakeBridge(
