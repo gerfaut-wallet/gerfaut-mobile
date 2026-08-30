@@ -9,6 +9,7 @@ import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/tx_diagram.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
@@ -309,16 +310,19 @@ void main() {
     await tester.pumpWidget(txDetailApp(bridge));
     await tester.pumpAndSettle();
 
-    expect(find.text('Replaceable'), findsOneWidget);
+    // The word the chain uses, never a synonym.
+    expect(find.text('RBF'), findsOneWidget);
+    expect(find.text('Replaceable'), findsNothing);
     expect(find.text('SegWit'), findsOneWidget);
     expect(find.text('Taproot'), findsNothing);
     // The version lives in the technical card, never as a badge.
     expect(find.text('Version 2'), findsNothing);
     expect(find.text('Version'), findsOneWidget);
 
-    // The two fact cards carry the full fact set.
-    expect(find.text('DETAILS'), findsOneWidget);
+    // One card of technical facts, below the lists, and nothing lost
+    // on the way there.
     expect(find.text('TECHNICAL'), findsOneWidget);
+    expect(find.text('DETAILS'), findsNothing);
     expect(find.text('226 B'), findsOneWidget);
     expect(find.text('564 WU'), findsOneWidget);
     expect(find.text('Sigops'), findsOneWidget);
@@ -327,6 +331,9 @@ void main() {
     expect(find.text('none'), findsOneWidget);
     expect(find.text('Confirmations'), findsOneWidget);
     expect(find.text('10'), findsOneWidget);
+    expect(find.text('Fee rate'), findsOneWidget);
+    // The first three facts read right under the hero.
+    expect(find.text('TRANSACTION ID'), findsOneWidget);
     expect(find.text(formatTimestamp(1755000000)), findsOneWidget);
   });
 
@@ -355,7 +362,8 @@ void main() {
     expect(find.text('Pending'), findsOneWidget);
     expect(find.textContaining('block '), findsNothing);
     expect(find.text('not yet mined'), findsOneWidget);
-    expect(find.text('—'), findsOneWidget);
+    // The date says it once; no empty block line is left to read.
+    expect(find.text('—'), findsNothing);
   });
 
   testWidgets('neutral badges share the tinted badges\' border', (
@@ -422,11 +430,11 @@ void main() {
     await tester.pumpWidget(txDetailApp(bridge));
     await tester.pumpAndSettle();
 
-    // The tag shows once as a flag and once on the output row; the
-    // decoded text only on the row.
-    expect(find.text('OP_RETURN'), findsNWidgets(2));
+    // The tag shows as a flag, as a branch of the diagram and on the
+    // output row; the decoded text only on the row.
+    expect(find.text('OP_RETURN'), findsNWidgets(3));
     expect(find.text('hello gerfaut'), findsOneWidget);
-    expect(find.byIcon(LucideIcons.scrollText), findsNWidgets(2));
+    expect(find.byIcon(LucideIcons.scrollText), findsNWidgets(3));
   });
 
   testWidgets('the raw transaction is revealed on tap', (tester) async {
@@ -471,16 +479,19 @@ void main() {
 
     expect(find.text('CHANGE'), findsNothing);
     expect(find.text('MINE'), findsNothing);
-    // One role chip per row, plus a plain-words subline.
-    expect(find.byIcon(LucideIcons.undo2), findsOneWidget);
-    expect(find.byIcon(LucideIcons.arrowDownLeft), findsOneWidget);
-    expect(find.byIcon(LucideIcons.arrowUpRight), findsOneWidget);
+    // One role chip per row, plus a plain-words subline. The diagram
+    // names each role with the very same icon.
+    expect(find.byIcon(LucideIcons.undo2), findsNWidgets(2));
+    expect(find.byIcon(LucideIcons.arrowDownLeft), findsNWidgets(2));
+    expect(find.byIcon(LucideIcons.arrowUpRight), findsNWidgets(2));
     expect(find.text('Received by this wallet'), findsOneWidget);
     expect(find.text('Change back to this wallet'), findsOneWidget);
     expect(find.text('Spent from this wallet'), findsNothing);
   });
 
-  testWidgets('the flow summary counts and totals both sides', (tester) async {
+  testWidgets('the diagram carries a branch per input and output', (
+    tester,
+  ) async {
     useTallSurface(tester);
     final bridge = FakeBridge(
       txDetails: {'w1:${'f' * 64}': makeTxDetail(extras: makeExtras())},
@@ -489,33 +500,31 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('RECEIVED'), findsOneWidget);
-    expect(find.text('1 input'), findsOneWidget);
-    expect(find.text('spent'), findsOneWidget);
-    expect(find.text('2 outputs'), findsOneWidget);
-    expect(find.text('created'), findsOneWidget);
-    // The input total equals the lone input row; the output total is
-    // a figure of its own.
+    expect(find.byType(TxDiagram), findsOneWidget);
+    expect(find.text('TX'), findsOneWidget);
+    // Every branch states its amount and the row of the list below
+    // states it again: each figure twice over, nowhere else.
     expect(find.text(formatAmount(10000, AmountUnit.btc)), findsNWidgets(2));
-    expect(find.text(formatAmount(9859, AmountUnit.btc)), findsOneWidget);
-    // The fee pill, then the fee facts.
-    expect(find.text('FEE'), findsOneWidget);
+    expect(find.text(formatAmount(5000, AmountUnit.btc)), findsNWidgets(2));
+    expect(find.text(formatAmount(4859, AmountUnit.btc)), findsNWidgets(2));
+    // The fee: the node under the diagram, then the fact card.
+    expect(find.text('Fee'), findsNWidgets(2));
     expect(find.text(formatAmount(141, AmountUnit.btc)), findsNWidgets(2));
-    expect(find.text('1.0 sat/vB'), findsNWidgets(2));
-    // No diagram left: no TX block, no lanes.
-    expect(find.text('TX'), findsNothing);
+    // The rate is a fact and stays one: the node never repeats it.
+    expect(find.text('1.0 sat/vB'), findsOneWidget);
   });
 
-  testWidgets('the flow summary stacks on a narrow screen', (tester) async {
-    tester.view.physicalSize = const Size(400, 2400);
+  testWidgets('the diagram fits the page on a phone', (tester) async {
+    tester.view.physicalSize = const Size(411, 2400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final bridge = FakeBridge(txDetails: {'w1:${'f' * 64}': makeTxDetail()});
     await tester.pumpWidget(txDetailApp(bridge));
     await tester.pumpAndSettle();
 
-    expect(find.byIcon(LucideIcons.arrowDown), findsOneWidget);
-    expect(find.byIcon(LucideIcons.arrowRight), findsNothing);
-    expect(find.text('FEE'), findsOneWidget);
+    expect(find.byType(TxDiagram), findsOneWidget);
+    expect(find.text('TX'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('an unknown input value makes the total n/a', (tester) async {
@@ -533,11 +542,10 @@ void main() {
     await tester.pumpWidget(txDetailApp(bridge));
     await tester.pumpAndSettle();
 
-    expect(find.text('2 inputs'), findsOneWidget);
-    // Once for the total, once for the row without a value.
+    expect(find.text('INPUTS (2)'), findsOneWidget);
+    // Neither the branch nor the row invents a value it never got.
     expect(find.text('n/a'), findsNWidgets(2));
-    expect(find.text('Unknown input'), findsOneWidget);
-    expect(find.text(formatAmount(9859, AmountUnit.btc)), findsOneWidget);
+    expect(find.text('Unknown input'), findsNWidgets(2));
   });
 
   testWidgets('every input gets its own row, however many', (tester) async {
@@ -556,12 +564,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('INPUTS (12)'), findsOneWidget);
-    expect(find.text('12 inputs'), findsOneWidget);
-    expect(find.byIcon(LucideIcons.arrowUpRight), findsNWidgets(13));
-    expect(find.textContaining('more inputs'), findsNothing);
+    // The list keeps all twelve; the diagram folds the tail into one
+    // row so it still fits, and says how many it stands for.
+    expect(find.text('+8 more'), findsOneWidget);
+    expect(find.byIcon(LucideIcons.ellipsis), findsOneWidget);
+    expect(find.byIcon(LucideIcons.arrowUpRight), findsNWidgets(18));
   });
 
-  testWidgets('masking hides the flow totals and the fee', (tester) async {
+  testWidgets('masking hides every amount of the page', (tester) async {
     useTallSurface(tester);
     final bridge = FakeBridge(txDetails: {'w1:${'f' * 64}': makeTxDetail()});
     await tester.pumpWidget(txDetailApp(bridge));
@@ -577,8 +587,9 @@ void main() {
     expect(find.text(formatAmount(10000, AmountUnit.btc)), findsNothing);
     expect(find.text(formatAmount(141, AmountUnit.btc)), findsNothing);
     expect(find.text(formatAmountSigned(5000, AmountUnit.btc)), findsNothing);
-    // Hero, two totals, fee pill, fee fact, three rows.
-    expect(find.text(maskedValue), findsNWidgets(8));
+    // Hero, three branches, the fee node, three list rows, the fee
+    // fact: every figure of the page, and no other.
+    expect(find.text(maskedValue), findsNWidgets(9));
   });
 
   testWidgets('removing a wallet confirms with the alert banner', (
@@ -716,16 +727,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('BLOCK REWARD'), findsOneWidget);
-    // The flow summary names the source, the input row its block.
+    // The branch names the source, the input row names its block.
     expect(find.text('Coinbase'), findsNWidgets(2));
-    expect(find.text('Newly minted · Foundry USA'), findsOneWidget);
     expect(
       find.text('block ${groupThousands('840000')} · Foundry USA'),
       findsOneWidget,
     );
     expect(find.byIcon(LucideIcons.pickaxe), findsNWidgets(3));
     // A coinbase input spends nothing, so the reward stands in for
-    // it: both flow totals, the input row and the output row.
+    // it: both branches of the diagram, then both rows.
     expect(find.text('n/a'), findsNothing);
     expect(
       find.text(formatAmount(312500000, AmountUnit.btc)),

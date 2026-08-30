@@ -11,15 +11,16 @@ import '../theme/tokens.dart';
 import '../widgets/address_chip.dart';
 import '../widgets/amounts.dart';
 import '../widgets/app_bar.dart';
+import '../widgets/buttons.dart';
 import '../widgets/explorer_link.dart';
 import '../widgets/facts.dart';
-import '../widgets/flow_summary.dart';
 import '../widgets/status_pill.dart';
+import '../widgets/tx_diagram.dart';
 
-/// Transaction detail: the amount and its status first, the flow in
-/// one glance, then two calm fact cards, the inputs and outputs, and
-/// the raw transaction behind a disclosure. Same facts as before, read
-/// in the order a person asks for them.
+/// Transaction detail, read in the order the questions come: how much
+/// and where it stands, the three facts one looks for first, the
+/// diagram, the two lists, then the technical facts and the raw bytes
+/// for whoever goes that far.
 class TxDetailScreen extends ConsumerWidget {
   const TxDetailScreen({
     super.key,
@@ -73,7 +74,6 @@ class _Detail extends ConsumerWidget {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final summary = detail.summary;
     final extras = detail.extras;
-    final explorer = explorerTxUrl(network, summary.txid);
     final coinbase = extras?.isCoinbase ?? false;
     // A coinbase input spends nothing: what it creates is the sum of the
     // outputs, which is the figure worth showing on that row.
@@ -85,158 +85,18 @@ class _Detail extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(GerfautSpacing.md),
       children: [
-        _Hero(detail: detail, tokens: tokens),
+        _Hero(detail: detail, network: network, tokens: tokens),
         const SizedBox(height: GerfautSpacing.lg),
-        FlowSummary(
-          inputCount: detail.inputs.length,
-          outputCount: detail.outputs.length,
-          // A coinbase input spends nothing: what it creates is the
-          // reward.
-          inTotal: coinbase ? _sum(detail.outputs) : _sum(detail.inputs),
-          outTotal: _sum(detail.outputs),
+        _QuickFacts(summary: summary, tokens: tokens),
+        const SizedBox(height: GerfautSpacing.lg),
+        TxDiagram(
+          inputs: _inputBranches(
+            detail,
+            coinbase: coinbase,
+            coinbaseValue: outputTotal,
+          ),
+          outputs: _outputBranches(detail),
           feeSats: summary.feeSats,
-          feeRate: detail.feeRateSatVb,
-          inTitle: coinbase ? 'Coinbase' : null,
-          inSubtitle: coinbase
-              ? (extras?.coinbasePool != null
-                    ? 'Newly minted · ${extras!.coinbasePool}'
-                    : 'Newly minted coins')
-              : null,
-          inIcon: coinbase ? LucideIcons.pickaxe : null,
-          tokens: tokens,
-        ),
-        const SizedBox(height: GerfautSpacing.lg),
-        FactsCard(
-          title: 'Details',
-          tokens: tokens,
-          rows: [
-            FactRow(
-              label: 'Transaction ID',
-              tokens: tokens,
-              child: AddressChip(value: summary.txid, head: 8, tail: 8),
-            ),
-            FactRow(
-              label: 'Date',
-              tokens: tokens,
-              child:
-                  summary.status.confirmed && summary.status.timestamp != null
-                  ? FactValue(
-                      formatTimestamp(summary.status.timestamp!),
-                      tokens,
-                    )
-                  : FactValue('not yet mined', tokens, muted: true),
-            ),
-            FactRow(
-              label: 'Block',
-              tokens: tokens,
-              child: summary.status.confirmed
-                  ? FactValue(
-                      groupThousands('${summary.status.height}'),
-                      tokens,
-                    )
-                  : FactValue('—', tokens, muted: true),
-            ),
-            FactRow(
-              label: 'Confirmations',
-              tokens: tokens,
-              child: FactValue(
-                groupThousands('${summary.confirmations}'),
-                tokens,
-              ),
-            ),
-            FactRow(
-              label: 'Fee',
-              tokens: tokens,
-              child: summary.feeSats != null
-                  ? _FeeValue(sats: summary.feeSats!)
-                  : FactValue('n/a', tokens, muted: true),
-            ),
-            FactRow(
-              label: 'Fee rate',
-              tokens: tokens,
-              child: FactValue(
-                detail.feeRateSatVb != null
-                    ? '${detail.feeRateSatVb!.toStringAsFixed(1)} sat/vB'
-                    : 'n/a',
-                tokens,
-                muted: detail.feeRateSatVb == null,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: GerfautSpacing.gutter),
-        FactsCard(
-          title: 'Technical',
-          tokens: tokens,
-          rows: extras != null
-              ? [
-                  FactRow(
-                    label: 'Size',
-                    tokens: tokens,
-                    child: FactValue(
-                      '${groupThousands('${extras.sizeBytes}')} B',
-                      tokens,
-                    ),
-                  ),
-                  FactRow(
-                    label: 'Virtual size',
-                    tokens: tokens,
-                    child: FactValue(
-                      '${groupThousands('${extras.vsize}')} vB',
-                      tokens,
-                    ),
-                  ),
-                  FactRow(
-                    label: 'Weight',
-                    tokens: tokens,
-                    child: FactValue(
-                      '${groupThousands('${extras.weightWu}')} WU',
-                      tokens,
-                    ),
-                  ),
-                  FactRow(
-                    label: 'Version',
-                    tokens: tokens,
-                    child: FactValue('${extras.version}', tokens),
-                  ),
-                  FactRow(
-                    label: 'Locktime',
-                    tokens: tokens,
-                    child: extras.locktime > 0
-                        ? FactValue(
-                            groupThousands('${extras.locktime}'),
-                            tokens,
-                          )
-                        : FactValue('none', tokens, muted: true),
-                  ),
-                  FactRow(
-                    label: 'Sigops',
-                    tokens: tokens,
-                    child: FactValue(
-                      groupThousands('${extras.sigops}'),
-                      tokens,
-                    ),
-                  ),
-                  FactRow(
-                    label: 'Flags',
-                    tokens: tokens,
-                    child: _Flags(
-                      extras: extras,
-                      outputs: detail.outputs,
-                      tokens: tokens,
-                    ),
-                  ),
-                ]
-              : [
-                  FactRow(
-                    label: 'Virtual size',
-                    tokens: tokens,
-                    child: FactValue(
-                      '${groupThousands('${detail.vsize}')} vB',
-                      tokens,
-                    ),
-                  ),
-                ],
         ),
         const SizedBox(height: GerfautSpacing.lg),
         _IoList(
@@ -257,6 +117,8 @@ class _Detail extends ConsumerWidget {
           tokens: tokens,
         ),
         const SizedBox(height: GerfautSpacing.lg),
+        _TechnicalCard(detail: detail, tokens: tokens),
+        const SizedBox(height: GerfautSpacing.lg),
         Divider(
           height: 1,
           thickness: 1,
@@ -265,17 +127,75 @@ class _Detail extends ConsumerWidget {
         const SizedBox(height: GerfautSpacing.sm),
         if (extras != null && extras.rawHex.isNotEmpty)
           _RawTransaction(hex: extras.rawHex, tokens: tokens),
-        if (explorer != null) ExplorerLink(url: explorer),
       ],
     );
   }
 }
 
-/// What happened, in one glance: direction, amount, status.
+/// The inputs as branches of the diagram. An input is named by its
+/// outpoint: two inputs can carry the same address, never the same
+/// outpoint. One the wallet knows nothing about still has one — it
+/// comes from the transaction, not from the backend.
+List<TxBranch> _inputBranches(
+  TxDetail detail, {
+  required bool coinbase,
+  required int coinbaseValue,
+}) {
+  return [
+    for (final io in detail.inputs)
+      TxBranch(
+        role: coinbase
+            ? TxBranchRole.coinbase
+            : io.isMine
+            ? TxBranchRole.walletInput
+            : TxBranchRole.externalInput,
+        label: coinbase
+            ? 'Coinbase'
+            : _outpointOf(io) ?? io.address ?? 'Unknown input',
+        sats: io.valueSats ?? (coinbase ? coinbaseValue : null),
+        mine: io.isMine,
+      ),
+  ];
+}
+
+/// The outputs as branches: an output is named by where it goes.
+List<TxBranch> _outputBranches(TxDetail detail) {
+  return [
+    for (final io in detail.outputs)
+      TxBranch(
+        role: io.opReturn != null
+            ? TxBranchRole.opReturn
+            : io.isMine && io.change
+            ? TxBranchRole.change
+            : io.isMine
+            ? TxBranchRole.walletOutput
+            : TxBranchRole.externalOutput,
+        label: io.opReturn != null ? 'OP_RETURN' : io.address ?? 'Script output',
+        sats: io.valueSats,
+        mine: io.isMine,
+      ),
+  ];
+}
+
+String? _outpointOf(TxIo io) {
+  final txid = io.prevTxid;
+  final vout = io.prevVout;
+  if (txid == null || vout == null) return null;
+  return '$txid:$vout';
+}
+
+/// What happened, in one glance: direction, amount, status, and the
+/// explorer within reach — a gesture wanted the moment the page opens,
+/// not one buried at the foot of it.
 class _Hero extends ConsumerWidget {
-  const _Hero({required this.detail, required this.tokens});
+  const _Hero({
+    required this.detail,
+    required this.network,
+    required this.tokens,
+  });
 
   final TxDetail detail;
+  final Network network;
   final GerfautTokens tokens;
 
   @override
@@ -286,16 +206,11 @@ class _Hero extends ConsumerWidget {
     final sats = summary.netSats;
     // The subline carries only the fiat value, when that display is on.
     final fiat = fiatValueOf(ref, sats);
-    final coinbase = detail.extras?.isCoinbase ?? false;
-    final direction = coinbase
-        ? 'Block reward'
-        : sats >= 0
-        ? 'Received'
-        : 'Sent';
+    final explorer = explorerTxUrl(network, summary.txid);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        FieldLabel(direction, tokens: tokens),
+        FieldLabel(_directionOf(detail), tokens: tokens),
         const SizedBox(height: GerfautSpacing.xs),
         // A long amount scales down rather than overflowing: a figure
         // is never allowed to clip.
@@ -328,21 +243,215 @@ class _Hero extends ConsumerWidget {
             ],
           ],
         ),
+        if (explorer != null) ...[
+          const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
+          Align(
+            alignment: Alignment.centerLeft,
+            // Still behind the privacy warning: what moved up is the
+            // button, never the question it asks first.
+            child: SecondaryButton(
+              label: 'View on mempool.space',
+              icon: LucideIcons.externalLink,
+              onPressed: () => openExplorer(context, ref, explorer),
+            ),
+          ),
+        ],
       ],
     );
   }
 }
 
-/// Sum of the values, or null as soon as one of them is unknown: a
-/// partial total would read as a fact.
-int? _sum(List<TxIo> ios) {
-  var total = 0;
-  for (final io in ios) {
-    final value = io.valueSats;
-    if (value == null) return null;
-    total += value;
+/// What this transaction did to the wallet, in the words a person
+/// would use. Every input and every output the wallet's own means the
+/// coins never left: the net is the fee alone, and "Sent" would be a
+/// lie.
+String _directionOf(TxDetail detail) {
+  if (detail.extras?.isCoinbase ?? false) return 'Block reward';
+  final own =
+      detail.inputs.isNotEmpty &&
+      detail.outputs.isNotEmpty &&
+      detail.inputs.every((io) => io.isMine) &&
+      detail.outputs.every((io) => io.isMine);
+  if (own) return 'Sent to yourself';
+  return detail.summary.netSats >= 0 ? 'Received' : 'Sent';
+}
+
+/// The three facts one looks for first, in one row under the hero:
+/// which transaction, when, and at what price. Three things, not ten —
+/// everything else is technical and waits below the lists.
+class _QuickFacts extends ConsumerWidget {
+  const _QuickFacts({required this.summary, required this.tokens});
+
+  final TxSummary summary;
+  final GerfautTokens tokens;
+
+  /// The rate the fiat figures on this page are built from. The chain
+  /// carries no historical price, so it is stated as the rate and never
+  /// dressed up as the one that ruled the day of the transaction.
+  String? _rate(WidgetRef ref) {
+    if (!ref.watch(fiatEnabledProvider) || ref.watch(maskedProvider)) {
+      return null;
+    }
+    final quote = ref.watch(priceProvider).valueOrNull;
+    if (quote == null) return null;
+    return formatFiat(satsPerBtc, quote.rate, quote.currency);
   }
-  return total;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final rate = _rate(ref);
+    final confirmed = summary.status.confirmed;
+    final at = summary.status.timestamp;
+    return Wrap(
+      spacing: GerfautSpacing.lg,
+      runSpacing: GerfautSpacing.sm + GerfautSpacing.xs,
+      children: [
+        _QuickFact(
+          label: 'Transaction ID',
+          tokens: tokens,
+          child: AddressChip(value: summary.txid, head: 8, tail: 8),
+        ),
+        _QuickFact(
+          label: 'Date',
+          tokens: tokens,
+          child: confirmed && at != null
+              ? FactValue(formatTimestamp(at), tokens)
+              : FactValue('not yet mined', tokens, muted: true),
+        ),
+        if (rate != null)
+          _QuickFact(
+            label: 'Rate',
+            tokens: tokens,
+            child: FactValue(rate, tokens),
+          ),
+      ],
+    );
+  }
+}
+
+/// One of those three: its name over its value, so the row folds into
+/// as many lines as the phone needs and never truncates a value.
+class _QuickFact extends StatelessWidget {
+  const _QuickFact({
+    required this.label,
+    required this.child,
+    required this.tokens,
+  });
+
+  final String label;
+  final Widget child;
+  final GerfautTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        FieldLabel(label, tokens: tokens),
+        const SizedBox(height: GerfautSpacing.xs),
+        child,
+      ],
+    );
+  }
+}
+
+/// The facts one goes looking for rather than reads, in one card under
+/// the lists: sizes, options, and what the fee cost.
+class _TechnicalCard extends StatelessWidget {
+  const _TechnicalCard({required this.detail, required this.tokens});
+
+  final TxDetail detail;
+  final GerfautTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = detail.summary;
+    final extras = detail.extras;
+    return FactsCard(
+      title: 'Technical',
+      tokens: tokens,
+      rows: [
+        FactRow(
+          label: 'Confirmations',
+          tokens: tokens,
+          child: FactValue(groupThousands('${summary.confirmations}'), tokens),
+        ),
+        if (extras != null)
+          FactRow(
+            label: 'Size',
+            tokens: tokens,
+            child: FactValue(
+              '${groupThousands('${extras.sizeBytes}')} B',
+              tokens,
+            ),
+          ),
+        FactRow(
+          label: 'Virtual size',
+          tokens: tokens,
+          child: FactValue(
+            '${groupThousands('${extras?.vsize ?? detail.vsize}')} vB',
+            tokens,
+          ),
+        ),
+        if (extras != null) ...[
+          FactRow(
+            label: 'Weight',
+            tokens: tokens,
+            child: FactValue(
+              '${groupThousands('${extras.weightWu}')} WU',
+              tokens,
+            ),
+          ),
+          FactRow(
+            label: 'Version',
+            tokens: tokens,
+            child: FactValue('${extras.version}', tokens),
+          ),
+          FactRow(
+            label: 'Locktime',
+            tokens: tokens,
+            child: extras.locktime > 0
+                ? FactValue(groupThousands('${extras.locktime}'), tokens)
+                : FactValue('none', tokens, muted: true),
+          ),
+          FactRow(
+            label: 'Sigops',
+            tokens: tokens,
+            child: FactValue(groupThousands('${extras.sigops}'), tokens),
+          ),
+        ],
+        FactRow(
+          label: 'Fee',
+          tokens: tokens,
+          child: summary.feeSats != null
+              ? _FeeValue(sats: summary.feeSats!)
+              : FactValue('n/a', tokens, muted: true),
+        ),
+        FactRow(
+          label: 'Fee rate',
+          tokens: tokens,
+          child: FactValue(
+            detail.feeRateSatVb != null
+                ? '${detail.feeRateSatVb!.toStringAsFixed(1)} sat/vB'
+                : 'n/a',
+            tokens,
+            muted: detail.feeRateSatVb == null,
+          ),
+        ),
+        if (extras != null)
+          FactRow(
+            label: 'Flags',
+            tokens: tokens,
+            child: _Flags(
+              extras: extras,
+              outputs: detail.outputs,
+              tokens: tokens,
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 /// Fee in the chosen unit, no fiat: the facts stay scannable.
@@ -445,6 +554,10 @@ class _Badge extends StatelessWidget {
 
 /// The transaction's options as a tidy row of chips inside the facts.
 /// The locktime value lives on its own line, so its chip stays bare.
+///
+/// A flag is named the way the chain names it: `RBF`, never
+/// "Replaceable". That is the word people look for on the page, and
+/// the only one they will meet again in another wallet.
 class _Flags extends StatelessWidget {
   const _Flags({
     required this.extras,
@@ -478,8 +591,8 @@ class _Flags extends StatelessWidget {
           _Badge(
             tone: _BadgeTone.pending,
             icon: LucideIcons.repeat2,
-            label: 'Replaceable',
-            hint: 'Replaceable: the sender can bump the fee (BIP-125)',
+            label: 'RBF',
+            hint: 'RBF: the sender can still bump the fee (BIP-125)',
             tokens: tokens,
           )
         else

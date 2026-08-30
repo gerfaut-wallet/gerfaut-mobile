@@ -18,7 +18,7 @@ import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/explorer_link.dart';
 import '../widgets/facts.dart';
-import '../widgets/flow_summary.dart';
+import '../widgets/tx_diagram.dart';
 import 'scan.dart';
 
 /// How often a sent transaction is checked with the backend.
@@ -304,17 +304,10 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                 ),
               ],
               const SizedBox(height: GerfautSpacing.lg),
-              FlowSummary(
-                inputCount: preview.inputs.length,
-                outputCount: preview.outputs.length,
-                inTotal: _inputTotal(preview.inputs),
-                outTotal: preview.outputs.fold<int>(
-                  0,
-                  (sum, o) => sum + o.valueSats,
-                ),
+              TxDiagram(
+                inputs: _inputBranches(preview.inputs),
+                outputs: _outputBranches(preview.outputs),
                 feeSats: preview.feeSats,
-                feeRate: preview.feeRateSatVb,
-                tokens: tokens,
               ),
               if (preview.warnings.isNotEmpty) ...[
                 const SizedBox(height: GerfautSpacing.lg),
@@ -402,16 +395,42 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
   }
 }
 
-/// Sum of the inputs, or null as soon as one value is unknown: a
-/// partial total would read as a fact.
-int? _inputTotal(List<TxInputPreview> inputs) {
-  var total = 0;
-  for (final input in inputs) {
-    final value = input.valueSats;
-    if (value == null) return null;
-    total += value;
-  }
-  return total;
+/// The inputs as branches of the diagram. An outpoint names an input
+/// the way the chain does: two inputs can carry the same address, never
+/// the same outpoint.
+List<TxBranch> _inputBranches(List<TxInputPreview> inputs) {
+  return [
+    for (final input in inputs)
+      TxBranch(
+        role: input.wallet != null
+            ? TxBranchRole.walletInput
+            : TxBranchRole.externalInput,
+        label: input.outpoint,
+        sats: input.valueSats,
+        mine: input.wallet != null,
+      ),
+  ];
+}
+
+/// The outputs as branches: an output is named by where it goes.
+List<TxBranch> _outputBranches(List<TxOutputPreview> outputs) {
+  return [
+    for (final output in outputs)
+      TxBranch(
+        role: output.opReturn != null
+            ? TxBranchRole.opReturn
+            : output.change
+            ? TxBranchRole.change
+            : output.wallet != null
+            ? TxBranchRole.walletOutput
+            : TxBranchRole.externalOutput,
+        label: output.opReturn != null
+            ? 'OP_RETURN'
+            : output.address ?? 'Script output',
+        sats: output.valueSats,
+        mine: output.wallet != null,
+      ),
+  ];
 }
 
 /// The transaction's identity and where it stands: txid, container,
@@ -943,12 +962,46 @@ class _TechnicalCard extends StatelessWidget {
               : FactValue(formatTimestamp(locktime), tokens),
         ),
         FactRow(
+          label: 'Fee',
+          tokens: tokens,
+          child: preview.feeSats != null
+              ? _FeeValue(sats: preview.feeSats!)
+              : FactValue('n/a', tokens, muted: true),
+        ),
+        FactRow(
+          label: 'Fee rate',
+          tokens: tokens,
+          child: FactValue(
+            preview.feeRateSatVb != null
+                ? '${preview.feeRateSatVb!.toStringAsFixed(1)} sat/vB'
+                : 'n/a',
+            tokens,
+            muted: preview.feeRateSatVb == null,
+          ),
+        ),
+        FactRow(
           label: 'Replaceable',
           tokens: tokens,
           child: FactValue(preview.rbf ? 'Yes (BIP-125)' : 'No', tokens),
         ),
       ],
     );
+  }
+}
+
+/// Fee in the chosen unit, no fiat: the facts stay scannable. The
+/// diagram carries the same amount, the rate lives here alone.
+class _FeeValue extends ConsumerWidget {
+  const _FeeValue({required this.sats});
+
+  final int sats;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final masked = ref.watch(maskedProvider);
+    final unit = ref.watch(unitProvider);
+    return FactValue(masked ? maskedValue : formatAmount(sats, unit), tokens);
   }
 }
 

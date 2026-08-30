@@ -13,6 +13,7 @@ import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/tx_file.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/buttons.dart';
+import 'package:gerfaut/widgets/tx_diagram.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'fakes.dart';
@@ -132,17 +133,18 @@ void main() {
       tester.widget<Text>(find.text('Ready to broadcast')).style!.color,
       GerfautTokens.light.confirmed,
     );
-    // Flow: counts, totals, fee.
-    expect(find.text('1 input'), findsOneWidget);
-    expect(find.text('2 outputs'), findsOneWidget);
-    expect(find.text('FEE'), findsOneWidget);
+    // The diagram, the same one the transaction detail draws.
+    expect(find.byType(TxDiagram), findsOneWidget);
+    expect(find.text('TX'), findsOneWidget);
+    // The fee node carries the amount; the rate stays a fact.
     expect(find.text('7.1 sat/vB'), findsOneWidget);
     // Inputs and outputs: the wallet pill and the change marker.
     expect(find.text('INPUTS (1)'), findsOneWidget);
     expect(find.text('OUTPUTS (2)'), findsOneWidget);
     expect(find.text('Cold storage'), findsNWidgets(2));
     expect(find.text('Change'), findsOneWidget);
-    expect(find.textContaining('0.00090000'), findsOneWidget);
+    // Once on the branch of the diagram, once on the output row.
+    expect(find.textContaining('0.00090000'), findsNWidgets(2));
     // Technical facts.
     expect(find.text('TECHNICAL'), findsOneWidget);
     expect(find.text('141 vB'), findsOneWidget);
