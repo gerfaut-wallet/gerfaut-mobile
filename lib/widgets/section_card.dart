@@ -35,7 +35,11 @@ class SectionCard extends StatelessWidget {
             children: [
               Icon(icon, size: 18, color: tokens.textMuted),
               const SizedBox(width: GerfautSpacing.sm),
-              Text(title, style: tokens.h2),
+              // Flexible, because a Row hands an inflexible child
+              // unbounded width: at a doubled text scale on a narrow
+              // frame a one-word title ran off the card rather than
+              // wrapping onto a second line.
+              Flexible(child: Text(title, style: tokens.h2)),
             ],
           ),
           const SizedBox(height: GerfautSpacing.md),
