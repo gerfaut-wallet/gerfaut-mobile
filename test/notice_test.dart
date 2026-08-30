@@ -66,10 +66,7 @@ void main() {
     expect(decoration.color, tokens.alertSurface);
     expect(decoration.border!.top.color, tokens.alert.withValues(alpha: 0.25));
     expect(decoration.border!.top.width, 1);
-    expect(
-      decoration.borderRadius,
-      BorderRadius.circular(GerfautRadius.md),
-    );
+    expect(decoration.borderRadius, BorderRadius.circular(GerfautRadius.md));
   });
 
   testWidgets('the info tone is amber, with the info glyph', (tester) async {
@@ -161,6 +158,101 @@ void main() {
       expect(text.height, closeTo(style.fontSize! * style.height!, 0.5));
       expect(icon.center.dy, closeTo(text.center.dy, 0.5));
     });
+  });
+
+  group('a style with pieces missing', () {
+    testWidgets('does not take the screen down with it', (tester) async {
+      // A TextStyle that only names a colour is an ordinary thing to
+      // hand a public widget, and most Material styles leave `height`
+      // null. Neither is a caller's mistake.
+      await tester.pumpWidget(
+        host(
+          const Row(
+            children: [
+              FirstLine(
+                style: TextStyle(color: Color(0xFF000000)),
+                child: Icon(LucideIcons.info, size: 16),
+              ),
+              Expanded(child: Text('Bare style.')),
+            ],
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.byIcon(LucideIcons.info), findsOneWidget);
+      // The fallback measures a body-small line, so the icon still has
+      // a box to be centred in.
+      expect(tester.getSize(find.byType(FirstLine)).height, 14 * 1.5);
+    });
+
+    testWidgets('still scales the fallback with the text', (tester) async {
+      await tester.pumpWidget(
+        host(
+          const FirstLine(
+            style: TextStyle(color: Color(0xFF000000)),
+            child: Icon(LucideIcons.info, size: 16),
+          ),
+          textScaler: const TextScaler.linear(2),
+        ),
+      );
+
+      expect(tester.getSize(find.byType(FirstLine)).height, 28 * 1.5);
+    });
+  });
+
+  testWidgets('a live region is opt-in', (tester) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(
+      host(const GerfautNotice(tone: NoticeTone.info, message: short)),
+    );
+    // A note that was on the page all along announces nothing: a region
+    // that speaks on every rebuild is noise.
+    expect(
+      tester
+          .getSemantics(find.byType(GerfautNotice))
+          .flagsCollection
+          .isLiveRegion,
+      isFalse,
+    );
+
+    await tester.pumpWidget(
+      host(
+        const GerfautNotice(
+          tone: NoticeTone.info,
+          message: short,
+          liveRegion: true,
+        ),
+      ),
+    );
+    expect(
+      tester
+          .getSemantics(find.byType(GerfautNotice))
+          .flagsCollection
+          .isLiveRegion,
+      isTrue,
+    );
+    handle.dispose();
+  });
+
+  testWidgets("another system's words stay mono and selectable", (
+    tester,
+  ) async {
+    const refusal = 'min relay fee not met, 1 < 141';
+    await tester.pumpWidget(
+      host(
+        const GerfautNotice(
+          tone: NoticeTone.info,
+          message: 'The network refused this transaction.',
+          detail: refusal,
+        ),
+      ),
+    );
+
+    // It is a string to compare and to quote, not prose of ours.
+    final detail = tester.widget<SelectableText>(find.byType(SelectableText));
+    expect(detail.data, refusal);
+    expect(detail.style?.fontFamily, GerfautTokens.light.data.fontFamily);
   });
 
   testWidgets('a trailing action rides along', (tester) async {

@@ -41,8 +41,10 @@ class GerfautNotice extends StatelessWidget {
     required this.tone,
     required this.message,
     this.hint,
+    this.detail,
     this.icon,
     this.action,
+    this.liveRegion = false,
   });
 
   final NoticeTone tone;
@@ -55,6 +57,11 @@ class GerfautNotice extends StatelessWidget {
   /// one that is read first.
   final String? hint;
 
+  /// A second line in another system's own words — a node's refusal,
+  /// verbatim. Mono and selectable, because it is a string to compare
+  /// and to quote, not prose of ours. Takes the place of [hint].
+  final String? detail;
+
   /// A glyph in place of the tone's own, for a panel that names a
   /// specific kind of caution — the broadcast warnings pick one per
   /// kind. It never changes the tone: the colour still says how much
@@ -64,6 +71,12 @@ class GerfautNotice extends StatelessWidget {
   /// What to do about it, if anything: a ghost button, a link. Centred
   /// on the panel because it answers the whole note, not its first line.
   final Widget? action;
+
+  /// Set it when the note appears in reaction to something the person
+  /// just did, so a screen reader announces it instead of waiting to be
+  /// walked into. Off for a note that was on the page all along: a
+  /// region that announces itself on every rebuild is noise.
+  final bool liveRegion;
 
   @override
   Widget build(BuildContext context) {
@@ -84,8 +97,19 @@ class GerfautNotice extends StatelessWidget {
       ),
     };
     final style = tokens.bodySmall.copyWith(color: ink);
+    // A second line, whichever kind it is: our own quieter words, or
+    // another system's, verbatim in mono so it can be compared and
+    // copied.
+    final Widget? second = detail != null
+        ? SelectableText(
+            detail!,
+            style: tokens.data.copyWith(fontSize: 12, color: tokens.textMuted),
+          )
+        : hint != null
+        ? Text(hint!, style: tokens.bodySmall.copyWith(color: tokens.textMuted))
+        : null;
 
-    return Container(
+    final panel = Container(
       padding: const EdgeInsets.all(GerfautSpacing.sm + 4),
       decoration: BoxDecoration(
         // Dark theme: coloured text on the card surface, no tint. A
@@ -109,7 +133,7 @@ class GerfautNotice extends StatelessWidget {
                 Expanded(
                   // One line stays one Text: a paragraph in a Column
                   // would report an overflow the plain text never had.
-                  child: hint == null
+                  child: second == null
                       ? Text(message, style: style)
                       : Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -127,12 +151,7 @@ class GerfautNotice extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(height: 2),
-                            Text(
-                              hint!,
-                              style: tokens.bodySmall.copyWith(
-                                color: tokens.textMuted,
-                              ),
-                            ),
+                            second,
                           ],
                         ),
                 ),
@@ -146,6 +165,8 @@ class GerfautNotice extends StatelessWidget {
         ],
       ),
     );
+
+    return liveRegion ? Semantics(liveRegion: true, child: panel) : panel;
   }
 }
 
@@ -165,6 +186,15 @@ class GerfautNotice extends StatelessWidget {
 class FirstLine extends StatelessWidget {
   const FirstLine({super.key, required this.style, required this.child});
 
+  /// Falls back to the body-small size and leading of the theme when
+  /// [style] leaves them unset. Neither is a caller's mistake: most
+  /// Material styles carry no `height`, and a `TextStyle` that only
+  /// names a colour is a perfectly ordinary thing to hand a public
+  /// widget. Measuring a line one point too tall misplaces an icon;
+  /// crashing on the null loses the whole screen.
+  static const double _fallbackSize = 14;
+  static const double _fallbackHeight = 1.5;
+
   final TextStyle style;
   final Widget child;
 
@@ -172,7 +202,9 @@ class FirstLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final scaler = MediaQuery.textScalerOf(context);
     return SizedBox(
-      height: scaler.scale(style.fontSize!) * style.height!,
+      height:
+          scaler.scale(style.fontSize ?? _fallbackSize) *
+          (style.height ?? _fallbackHeight),
       child: Center(child: child),
     );
   }
