@@ -149,7 +149,9 @@ void main() {
     expect(find.text('TECHNICAL'), findsOneWidget);
     expect(find.text('141 vB'), findsOneWidget);
     expect(find.text('561 WU'), findsOneWidget);
-    expect(find.text('Yes (BIP-125)'), findsOneWidget);
+    // The chain's own word for it, the same as the transaction detail.
+    expect(find.text('RBF'), findsOneWidget);
+    expect(find.text('signalled (BIP-125)'), findsOneWidget);
     expect(find.text('none'), findsOneWidget);
     // No warning block when the core raised none.
     expect(find.text('BEFORE YOU SEND'), findsNothing);
