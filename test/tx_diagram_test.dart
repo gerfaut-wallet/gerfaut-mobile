@@ -76,9 +76,8 @@ void _labelsFitTheirColumn(WidgetTester tester) {
 }
 
 /// The hairline box a node label sits in.
-Finder nodeAround(String label) => find
-    .ancestor(of: find.text(label), matching: find.byType(Container))
-    .first;
+Finder nodeAround(String label) =>
+    find.ancestor(of: find.text(label), matching: find.byType(Container)).first;
 
 /// A phone of a given width, the two that matter: the common one and
 /// the smallest one still sold.
@@ -86,6 +85,21 @@ void useWidth(WidgetTester tester, double width) {
   tester.view.physicalSize = Size(width, 900);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
+}
+
+/// The truncated outpoint drawn on the input side, as it reaches the
+/// glass. Picked out by the head of the txid it was built from, so an
+/// output address cut the same way is never mistaken for it.
+String drawnOutpoint(WidgetTester tester) {
+  final drawn = <String>[];
+  for (final element in find.byType(Text).evaluate()) {
+    final data = (element.widget as Text).data;
+    if (data != null && data.contains('...') && data.startsWith('a1')) {
+      drawn.add(data);
+    }
+  }
+  expect(drawn, hasLength(1), reason: 'expected one truncated outpoint');
+  return drawn.single;
 }
 
 /// A plain payment: one coin of the wallet spent, one payee, one
@@ -413,6 +427,64 @@ void main() {
     expect(find.text(maskedValue), findsNWidgets(4));
     expect(find.text(formatAmount(100000, AmountUnit.btc)), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  // An outpoint is named by its index, and a fixed tail count kept the
+  // `:0` of a first output by luck alone: anything longer was swallowed
+  // into the txid's tail, leaving nowhere to see where the index began.
+  for (final width in [320.0, 411.0]) {
+    for (final vout in [0, 12, 345]) {
+      testWidgets('an outpoint keeps vout $vout whole at ${width.round()}dp', (
+        tester,
+      ) async {
+        useWidth(tester, width);
+        await tester.pumpWidget(
+          diagramApp(
+            inputs: [
+              TxBranch(
+                role: TxBranchRole.walletInput,
+                label: '$_prev:$vout',
+                sats: 100000,
+                mine: true,
+              ),
+            ],
+            outputs: _sendOutputs,
+            feeSats: 1000,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final drawn = drawnOutpoint(tester);
+        expect(
+          drawn,
+          endsWith(':$vout'),
+          reason: '"$drawn" lost the index that names the input',
+        );
+        // And the head of the txid survived with it: an index alone
+        // names nothing either.
+        expect(drawn, startsWith('a1'));
+        // Whatever came back has to fit, or the fade eats the tail it
+        // was cut to protect.
+        _labelsFitTheirColumn(tester);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
+  testWidgets('the picture names itself and its two sides', (tester) async {
+    useWidth(tester, 411);
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(
+      diagramApp(inputs: _sendInputs, outputs: _sendOutputs, feeSats: 1000),
+    );
+    await tester.pumpAndSettle();
+
+    // Without them a reader walks into a run of outpoints belonging to
+    // nothing: which side a row is on is the drawing's doing alone.
+    expect(find.bySemanticsLabel('Transaction diagram'), findsOneWidget);
+    expect(find.bySemanticsLabel('Inputs'), findsOneWidget);
+    expect(find.bySemanticsLabel('Outputs'), findsOneWidget);
+    handle.dispose();
   });
 
   testWidgets('the drawing itself is not read out loud', (tester) async {

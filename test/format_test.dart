@@ -53,6 +53,67 @@ void main() {
     });
   });
 
+  group('shortenBranchLabel', () {
+    const txid =
+        'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
+
+    test('keeps the whole index, however many digits it runs to', () {
+      // The bug this exists for: a fixed tail count keeps `:0` by luck
+      // and swallows anything longer into the txid's tail.
+      expect(shortenBranchLabel('$txid:0'), 'a1b2c3...8f90:0');
+      expect(shortenBranchLabel('$txid:12'), 'a1b2c3...8f90:12');
+      expect(shortenBranchLabel('$txid:345'), 'a1b2c3...8f90:345');
+      expect(shortenBranchLabel('$txid:1000000'), 'a1b2c3...8f90:1000000');
+    });
+
+    test('cuts the txid alone, at the size it is given', () {
+      expect(
+        shortenBranchLabel('$txid:12', head: 10, tail: 8),
+        'a1b2c3d4e5...6d7e8f90:12',
+      );
+    });
+
+    test('leaves anything that is not an outpoint to the middle cut', () {
+      // An output is named by its address, and no address carries a
+      // colon.
+      expect(
+        shortenBranchLabel('bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4'),
+        'bc1qw5...f3t4',
+      );
+      expect(shortenBranchLabel('OP_RETURN'), 'OP_RETURN');
+      expect(shortenBranchLabel('Coinbase'), 'Coinbase');
+      // A colon with nothing numeric behind it names no index.
+      expect(outpointSuffix('Unknown input'), '');
+      expect(outpointSuffix('$txid:beef'), '');
+      expect(outpointSuffix('$txid:12'), ':12');
+    });
+  });
+
+  group('formatLocktime', () {
+    test('reads a value under the threshold as a height', () {
+      expect(formatLocktime(840000), 'block 840 000');
+      expect(locktimeIsTime(840000), isFalse);
+      expect(
+        locktimeHint(840000),
+        'Earliest block this transaction could be mined in',
+      );
+    });
+
+    test('reads a value at or above the threshold as a moment', () {
+      // Printed raw, 1 755 000 000 reads as an absurd block height.
+      expect(formatLocktime(1755000000), formatTimestamp(1755000000));
+      expect(locktimeIsTime(locktimeThreshold), isTrue);
+      expect(
+        locktimeHint(1755000000),
+        'Earliest time this transaction could be mined',
+      );
+    });
+
+    test('says none when there is none', () {
+      expect(formatLocktime(0), 'none');
+    });
+  });
+
   group('relativeTime', () {
     final now = DateTime.fromMillisecondsSinceEpoch(1755000000000);
     final nowSecs = 1755000000;

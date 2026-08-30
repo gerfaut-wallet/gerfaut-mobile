@@ -196,112 +196,133 @@ class _TxDiagramState extends ConsumerState<TxDiagram> {
             ),
         ];
 
-        return Stack(
-          children: [
-            Positioned.fill(
-              // The strokes say nothing a row does not already say.
-              child: ExcludeSemantics(
-                child: CustomPaint(
-                  painter: _WirePainter(
-                    geometry: _geometry,
-                    gutter: gutter,
-                    inputs: dotsOf(inputs),
-                    outputs: dotsOf(outputs),
-                    fee: feeSats != null ? tokens.border : null,
+        return Semantics(
+          // The picture is a section of the page, and it says so: found
+          // by its name, a reader knows what the rows below belong to
+          // instead of walking into a run of unattributed outpoints.
+          label: 'Transaction diagram',
+          explicitChildNodes: true,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                // The strokes say nothing a row does not already say.
+                child: ExcludeSemantics(
+                  child: CustomPaint(
+                    painter: _WirePainter(
+                      geometry: _geometry,
+                      gutter: gutter,
+                      inputs: dotsOf(inputs),
+                      outputs: dotsOf(outputs),
+                      fee: feeSats != null ? tokens.border : null,
+                    ),
                   ),
                 ),
               ),
-            ),
-            Column(
-              // The diagram is as tall as its rows, wherever it is put:
-              // a Column left to its own devices would claim the whole
-              // height of a bounded parent.
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: _RowsColumn(
-                        spacing: _rowGap,
-                        onLaidOut: (centres, height) => _geometry.setSide(
-                          input: true,
-                          centres: centres,
-                          height: height,
+              Column(
+                // The diagram is as tall as its rows, wherever it is put:
+                // a Column left to its own devices would claim the whole
+                // height of a bounded parent.
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        // Which side a row is on is the picture's doing,
+                        // and a reader gets none of it: the column says
+                        // its own name so the rows under it mean
+                        // something.
+                        child: Semantics(
+                          label: 'Inputs',
+                          explicitChildNodes: true,
+                          child: _RowsColumn(
+                            spacing: _rowGap,
+                            onLaidOut: (centres, height) => _geometry.setSide(
+                              input: true,
+                              centres: centres,
+                              height: height,
+                            ),
+                            children: rowsOf(inputs, input: true),
+                          ),
                         ),
-                        children: rowsOf(inputs, input: true),
                       ),
-                    ),
-                    SizedBox(
-                      width: gutter,
-                      child: Center(
-                        child: _Measured(
-                          onLaidOut: _geometry.setNode,
-                          child: _NodeBox(
-                            tokens: tokens,
-                            child: Text(
-                              'TX',
-                              style: tokens.data.copyWith(
-                                fontSize: _rowText,
-                                color: tokens.textMuted,
+                      SizedBox(
+                        width: gutter,
+                        child: Center(
+                          child: _Measured(
+                            onLaidOut: _geometry.setNode,
+                            child: _NodeBox(
+                              tokens: tokens,
+                              child: Text(
+                                'TX',
+                                style: tokens.data.copyWith(
+                                  fontSize: _rowText,
+                                  color: tokens.textMuted,
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                    Expanded(
-                      child: _RowsColumn(
-                        spacing: _rowGap,
-                        onLaidOut: (centres, height) => _geometry.setSide(
-                          input: false,
-                          centres: centres,
-                          height: height,
+                      Expanded(
+                        child: Semantics(
+                          label: 'Outputs',
+                          explicitChildNodes: true,
+                          child: _RowsColumn(
+                            spacing: _rowGap,
+                            onLaidOut: (centres, height) => _geometry.setSide(
+                              input: false,
+                              centres: centres,
+                              height: height,
+                            ),
+                            children: rowsOf(outputs, input: false),
+                          ),
                         ),
-                        children: rowsOf(outputs, input: false),
+                      ),
+                    ],
+                  ),
+                  if (feeSats != null) ...[
+                    const SizedBox(height: _feeGap),
+                    Center(
+                      child: _Measured(
+                        onLaidOut: _geometry.setFee,
+                        child: _NodeBox(
+                          tokens: tokens,
+                          // The amount alone: the sat/vB rate is a fact of
+                          // the card below, and repeating it here muddies
+                          // the one thing this node has to say.
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Fee',
+                                style: tokens.label.copyWith(
+                                  fontSize: _rowText,
+                                  color: tokens.textMuted,
+                                ),
+                              ),
+                              const SizedBox(width: GerfautSpacing.sm - 2),
+                              Text(
+                                masked
+                                    ? maskedValue
+                                    : formatAmount(feeSats, unit),
+                                style: tokens.figureOf(
+                                  size: _rowText,
+                                  weight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                softWrap: false,
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ],
-                ),
-                if (feeSats != null) ...[
-                  const SizedBox(height: _feeGap),
-                  Center(
-                    child: _Measured(
-                      onLaidOut: _geometry.setFee,
-                      child: _NodeBox(
-                        tokens: tokens,
-                        // The amount alone: the sat/vB rate is a fact of
-                        // the card below, and repeating it here muddies
-                        // the one thing this node has to say.
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Fee',
-                              style: tokens.label.copyWith(
-                                fontSize: _rowText,
-                                color: tokens.textMuted,
-                              ),
-                            ),
-                            const SizedBox(width: GerfautSpacing.sm - 2),
-                            Text(
-                              masked ? maskedValue : formatAmount(feeSats, unit),
-                              style: tokens.figureOf(
-                                size: _rowText,
-                                weight: FontWeight.w500,
-                              ),
-                              maxLines: 1,
-                              softWrap: false,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
                 ],
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         );
       },
     );
@@ -550,15 +571,24 @@ String _shortenToFit(
   // the fade on screen — so the count starts under a bound that cannot
   // be wrong, and the measurement below only ever shortens it further.
   final ceiling = (width / (_rowText * scaler.scale(1) * 0.68)).floor();
+  // Only the txid of an outpoint is up for cutting: the index is put
+  // back whole, so the budget leaves room for it rather than counting
+  // it among the characters it may drop.
+  final suffix = outpointSuffix(value);
+  final body = value.substring(0, value.length - suffix.length);
   // Longest first: the first form that fits is the one to keep.
-  for (var chars = math.min(value.length - 1, ceiling); chars >= 5; chars--) {
+  for (
+    var chars = math.min(body.length - 1, ceiling - suffix.length);
+    chars >= 5;
+    chars--
+  ) {
     final tail = math.min(6, math.max(2, (chars - 4) ~/ 2));
     final head = math.max(2, chars - 3 - tail);
-    if (head + tail + 3 >= value.length) continue;
-    final candidate = truncateMiddle(value, head: head, tail: tail);
+    if (head + tail + 3 >= body.length) continue;
+    final candidate = shortenBranchLabel(value, head: head, tail: tail);
     if (widthOf(candidate) <= width) return candidate;
   }
-  return truncateMiddle(value, head: 2, tail: 2);
+  return shortenBranchLabel(value, head: 2, tail: 2);
 }
 
 /// The crossroads, and the stop the fee makes: a hairline box on the
@@ -747,7 +777,14 @@ class _WirePainter extends CustomPainter {
       canvas.drawPath(
         Path()
           ..moveTo(dotX, y)
-          ..cubicTo(dotX + span * 0.2, y, dotX + span * 0.8, nodeY, nodeX, nodeY),
+          ..cubicTo(
+            dotX + span * 0.2,
+            y,
+            dotX + span * 0.8,
+            nodeY,
+            nodeX,
+            nodeY,
+          ),
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = _wire

@@ -46,6 +46,61 @@ String truncateMiddle(String value, {int head = 6, int tail = 4}) {
   return '${value.substring(0, head)}...${value.substring(value.length - tail)}';
 }
 
+/// An index at the end of a label, after the last colon.
+final RegExp _outpointIndex = RegExp(r'^\d+$');
+
+/// The `:12` an outpoint ends with, empty for anything else — an
+/// address carries no colon, and neither does `OP_RETURN`.
+///
+/// It is never cut, so whoever budgets room for a label sets it aside
+/// before counting the characters it may drop.
+String outpointSuffix(String value) {
+  final colon = value.lastIndexOf(':');
+  if (colon > 0 && _outpointIndex.hasMatch(value.substring(colon + 1))) {
+    return value.substring(colon);
+  }
+  return '';
+}
+
+/// A branch label cut to size, with an outpoint's index kept whole:
+/// `a1b2c3...8f90:12`.
+///
+/// Two inputs can carry the same address, never the same outpoint, so
+/// the index is the half that names one. A fixed tail count keeps `:0`
+/// by luck and loses the index the moment the vout runs to two digits:
+/// it is swallowed into the txid's tail and the reader can no longer
+/// tell where it starts. Split on the last colon, cut the txid, put the
+/// whole index back. Anything without one is cut in the middle as usual.
+String shortenBranchLabel(String value, {int head = 6, int tail = 4}) {
+  final suffix = outpointSuffix(value);
+  if (suffix.isEmpty) return truncateMiddle(value, head: head, tail: tail);
+  final txid = value.substring(0, value.length - suffix.length);
+  return '${truncateMiddle(txid, head: head, tail: tail)}$suffix';
+}
+
+/// Block heights and unix times share the locktime field: below this
+/// value it names a block, at or above it a moment (BIP-65).
+const int locktimeThreshold = 500000000;
+
+/// True when a locktime names a moment rather than a block.
+bool locktimeIsTime(int locktime) => locktime >= locktimeThreshold;
+
+/// A locktime in the terms it was written in. Printed raw, a
+/// time-based one reads as an absurd block height — the two surfaces
+/// that show it must not each decode it their own way, or one of them
+/// will not decode it at all.
+String formatLocktime(int locktime) {
+  if (locktime <= 0) return 'none';
+  if (locktimeIsTime(locktime)) return formatTimestamp(locktime);
+  return 'block ${groupThousands('$locktime')}';
+}
+
+/// What a locktime promises, which is not the same thing on either
+/// side of the threshold: a block below it, a clock above it.
+String locktimeHint(int locktime) => locktimeIsTime(locktime)
+    ? 'Earliest time this transaction could be mined'
+    : 'Earliest block this transaction could be mined in';
+
 /// A certificate fingerprint in rows two eyes can compare: eight byte
 /// pairs a line, the colons the core stores kept, so what is on screen
 /// is what `openssl x509 -noout -fingerprint -sha256` prints.
