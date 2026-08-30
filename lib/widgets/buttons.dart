@@ -50,7 +50,16 @@ class PrimaryButton extends StatelessWidget {
                 children: [
                   Icon(icon, size: 16),
                   const SizedBox(width: GerfautSpacing.sm),
-                  Text(label),
+                  // The height is fixed, so a label wider than the
+                  // phone at a large text size gives ground at its end
+                  // rather than running past the button.
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               ),
       ),
@@ -101,7 +110,13 @@ class SecondaryButton extends StatelessWidget {
                 children: [
                   Icon(icon, size: 16),
                   const SizedBox(width: GerfautSpacing.sm),
-                  Text(label),
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               ),
       ),
@@ -148,7 +163,13 @@ class GhostButton extends StatelessWidget {
                 children: [
                   Icon(icon, size: 16),
                   const SizedBox(width: GerfautSpacing.sm),
-                  Text(label),
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               ),
       ),

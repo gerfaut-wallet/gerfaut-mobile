@@ -81,20 +81,31 @@ class FactRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: GerfautSpacing.sm),
-      child: Row(
-        children: [
-          Text(
-            label,
-            style: tokens.bodySmall.copyWith(
-              fontSize: 13,
-              color: tokens.textMuted,
+      child: LayoutBuilder(
+        builder: (context, constraints) => Row(
+          children: [
+            // Two thirds is all a name may claim, so a long one folds
+            // at a large text size instead of pushing its value off
+            // the card. Every name is well under that at normal size,
+            // where the row keeps the width it always had.
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: constraints.maxWidth * 2 / 3,
+              ),
+              child: Text(
+                label,
+                style: tokens.bodySmall.copyWith(
+                  fontSize: 13,
+                  color: tokens.textMuted,
+                ),
+              ),
             ),
-          ),
-          const SizedBox(width: GerfautSpacing.md),
-          Expanded(
-            child: Align(alignment: Alignment.centerRight, child: child),
-          ),
-        ],
+            const SizedBox(width: GerfautSpacing.md),
+            Expanded(
+              child: Align(alignment: Alignment.centerRight, child: child),
+            ),
+          ],
+        ),
       ),
     );
   }

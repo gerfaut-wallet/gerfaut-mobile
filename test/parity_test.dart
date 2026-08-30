@@ -534,13 +534,16 @@ void main() {
 
     expect(find.text('CHANGE'), findsNothing);
     expect(find.text('MINE'), findsNothing);
-    // One role chip per row, plus a plain-words subline. The diagram
-    // names each role with the very same icon.
+    // One role chip per row. The diagram names each role with the very
+    // same icon.
     expect(find.byIcon(LucideIcons.undo2), findsNWidgets(2));
     expect(find.byIcon(LucideIcons.arrowDownLeft), findsNWidgets(2));
     expect(find.byIcon(LucideIcons.arrowUpRight), findsNWidgets(2));
-    expect(find.text('Received by this wallet'), findsOneWidget);
-    expect(find.text('Change back to this wallet'), findsOneWidget);
+    // Where the desktop spells the role out under the address, the
+    // phone lets the icon and the wash carry it: a line on every wallet
+    // row is a lot of screen for a sentence read once.
+    expect(find.text('Received by this wallet'), findsNothing);
+    expect(find.text('Change back to this wallet'), findsNothing);
     expect(find.text('Spent from this wallet'), findsNothing);
   });
 

@@ -18,9 +18,10 @@ import '../widgets/status_pill.dart';
 import '../widgets/tx_diagram.dart';
 
 /// Transaction detail, read in the order the questions come: how much
-/// and where it stands, the three facts one looks for first, the
+/// and where it stands, the two facts one looks for first, the
 /// diagram, the two lists, then the technical facts and the raw bytes
-/// for whoever goes that far.
+/// for whoever goes that far. A hairline stands between each pair of
+/// those five sections.
 class TxDetailScreen extends ConsumerWidget {
   const TxDetailScreen({
     super.key,
@@ -81,6 +82,7 @@ class _Detail extends ConsumerWidget {
       0,
       (sum, io) => sum + (io.valueSats ?? 0),
     );
+    final raw = extras != null && extras.rawHex.isNotEmpty;
 
     return ListView(
       padding: const EdgeInsets.all(GerfautSpacing.md),
@@ -88,7 +90,7 @@ class _Detail extends ConsumerWidget {
         _Hero(detail: detail, network: network, tokens: tokens),
         const SizedBox(height: GerfautSpacing.lg),
         _QuickFacts(summary: summary, tokens: tokens),
-        const SizedBox(height: GerfautSpacing.lg),
+        _SectionRule(tokens: tokens),
         TxDiagram(
           inputs: _inputBranches(
             detail,
@@ -98,7 +100,7 @@ class _Detail extends ConsumerWidget {
           outputs: _outputBranches(detail),
           feeSats: summary.feeSats,
         ),
-        const SizedBox(height: GerfautSpacing.lg),
+        _SectionRule(tokens: tokens),
         _IoList(
           title: 'Inputs',
           ios: detail.inputs,
@@ -107,6 +109,8 @@ class _Detail extends ConsumerWidget {
           coinbaseValue: outputTotal,
           tokens: tokens,
         ),
+        // The two sides are one section: the space alone groups them,
+        // and a rule here would read as a seam that is not there.
         const SizedBox(height: GerfautSpacing.lg),
         _IoList(
           title: 'Outputs',
@@ -116,18 +120,35 @@ class _Detail extends ConsumerWidget {
           coinbaseValue: null,
           tokens: tokens,
         ),
-        const SizedBox(height: GerfautSpacing.lg),
+        _SectionRule(tokens: tokens),
         _TechnicalCard(detail: detail, tokens: tokens),
-        const SizedBox(height: GerfautSpacing.lg),
-        Divider(
-          height: 1,
-          thickness: 1,
-          color: tokens.border.withValues(alpha: 0.6),
-        ),
-        const SizedBox(height: GerfautSpacing.sm),
-        if (extras != null && extras.rawHex.isNotEmpty)
+        if (raw) ...[
+          _SectionRule(tokens: tokens),
           _RawTransaction(hex: extras.rawHex, tokens: tokens),
+        ],
       ],
+    );
+  }
+}
+
+/// The seam between two sections of the page. Desktop reads as distinct
+/// panels; on a phone the sections ran into one another with only the
+/// raw bytes set apart, so every seam now carries the same hairline —
+/// and the same room around it, twice the gap that groups a section.
+class _SectionRule extends StatelessWidget {
+  const _SectionRule({required this.tokens});
+
+  final GerfautTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: GerfautSpacing.lg),
+      child: Divider(
+        height: 1,
+        thickness: 1,
+        color: tokens.border.withValues(alpha: 0.6),
+      ),
     );
   }
 }
@@ -230,19 +251,22 @@ class _Hero extends ConsumerWidget {
           Text(fiat, style: tokens.figureOf(color: tokens.textMuted)),
         ],
         const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
-        Row(
+        // The height sits beside the pill and drops under it at a large
+        // text size, where the two together are wider than the phone.
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: GerfautSpacing.sm,
+          runSpacing: GerfautSpacing.xs,
           children: [
             StatusPill(
               status: summary.status,
               confirmations: summary.confirmations,
             ),
-            if (summary.status.confirmed) ...[
-              const SizedBox(width: GerfautSpacing.sm),
+            if (summary.status.confirmed)
               Text(
                 'block ${groupThousands('${summary.status.height}')}',
                 style: tokens.figureOf(size: 12, color: tokens.textMuted),
               ),
-            ],
           ],
         ),
         if (explorer != null) ...[
@@ -278,30 +302,22 @@ String _directionOf(TxDetail detail) {
   return detail.summary.netSats >= 0 ? 'Received' : 'Sent';
 }
 
-/// The three facts one looks for first, in one row under the hero:
-/// which transaction, when, and at what price. Three things, not ten —
-/// everything else is technical and waits below the lists.
-class _QuickFacts extends ConsumerWidget {
+/// The two facts one looks for first, in one row under the hero: which
+/// transaction, and when. Two things, not ten — everything else is
+/// technical and waits below the lists.
+///
+/// The price is not one of them. What this page can quote is today's
+/// rate, never the one that ruled the day of the transaction; the rate
+/// as it stood belongs to the paid export, which knows the date it is
+/// pricing.
+class _QuickFacts extends StatelessWidget {
   const _QuickFacts({required this.summary, required this.tokens});
 
   final TxSummary summary;
   final GerfautTokens tokens;
 
-  /// The rate the fiat figures on this page are built from. The chain
-  /// carries no historical price, so it is stated as the rate and never
-  /// dressed up as the one that ruled the day of the transaction.
-  String? _rate(WidgetRef ref) {
-    if (!ref.watch(fiatEnabledProvider) || ref.watch(maskedProvider)) {
-      return null;
-    }
-    final quote = ref.watch(priceProvider).valueOrNull;
-    if (quote == null) return null;
-    return formatFiat(satsPerBtc, quote.rate, quote.currency);
-  }
-
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final rate = _rate(ref);
+  Widget build(BuildContext context) {
     final confirmed = summary.status.confirmed;
     final at = summary.status.timestamp;
     return Wrap(
@@ -320,18 +336,12 @@ class _QuickFacts extends ConsumerWidget {
               ? FactValue(formatTimestamp(at), tokens)
               : FactValue('not yet mined', tokens, muted: true),
         ),
-        if (rate != null)
-          _QuickFact(
-            label: 'Rate',
-            tokens: tokens,
-            child: FactValue(rate, tokens),
-          ),
       ],
     );
   }
 }
 
-/// One of those three: its name over its value, so the row folds into
+/// One of those two: its name over its value, so the row folds into
 /// as many lines as the phone needs and never truncates a value.
 class _QuickFact extends StatelessWidget {
   const _QuickFact({
@@ -552,15 +562,21 @@ class _Badge extends StatelessWidget {
               Icon(icon, size: 12, color: ink),
               const SizedBox(width: GerfautSpacing.xs),
             ],
-            Text(
-              label,
-              style: tokens.figureOf(
-                size: 11,
-                weight: FontWeight.w500,
-                color: ink,
+            // A chip stays one line, and at a large text size the long
+            // ones — a pool name behind "Coinbase" — are wider than the
+            // card: the end gives way, the tooltip still has it whole.
+            Flexible(
+              child: Text(
+                label,
+                style: tokens.figureOf(
+                  size: 11,
+                  weight: FontWeight.w500,
+                  color: ink,
+                ),
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
               ),
-              maxLines: 1,
-              softWrap: false,
             ),
           ],
         ),
@@ -706,7 +722,9 @@ class _RawTransactionState extends State<_RawTransaction> {
                   color: tokens.textMuted,
                 ),
                 const SizedBox(width: GerfautSpacing.xs),
-                FieldLabel('Raw transaction', tokens: tokens),
+                // Tracked and uppercase, the label runs past the edge of
+                // a phone at a large text size: it wraps instead.
+                Flexible(child: FieldLabel('Raw transaction', tokens: tokens)),
               ],
             ),
           ),
@@ -851,29 +869,30 @@ class _IoRow extends StatelessWidget {
           color: mine ? tokens.primary.withValues(alpha: 0.4) : tokens.border,
         ),
       ),
-      child: Row(
-        children: [
-          _RoleChip(io: io, side: side, coinbase: coinbase, tokens: tokens),
-          const SizedBox(width: GerfautSpacing.sm + 2),
-          Expanded(
-            child: _IoIdentity(
-              io: io,
-              side: side,
-              coinbase: coinbase,
-              extras: extras,
-              tokens: tokens,
+      child: LayoutBuilder(
+        builder: (context, constraints) => Row(
+          children: [
+            _RoleChip(io: io, side: side, coinbase: coinbase, tokens: tokens),
+            const SizedBox(width: GerfautSpacing.sm + 2),
+            Expanded(
+              child: _IoIdentity(
+                io: io,
+                side: side,
+                coinbase: coinbase,
+                extras: extras,
+                tokens: tokens,
+              ),
             ),
-          ),
-          const SizedBox(width: GerfautSpacing.sm),
-          if (value != null)
-            StackedAmount(sats: value)
-          else
-            Text(
-              'n/a',
-              style: tokens.figureOf(color: tokens.textMuted),
-              maxLines: 1,
+            const SizedBox(width: GerfautSpacing.sm),
+            // At a large text size the figure alone is wider than the
+            // row. Half of it is the most it may claim; past that it
+            // scales down, and the address keeps a place to live.
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: constraints.maxWidth / 2),
+              child: UnitAmount(sats: value, tokens: tokens),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -955,22 +974,11 @@ class _IoIdentity extends StatelessWidget {
         ),
       ];
     } else if (io.address != null) {
+      // The role chip and the accent wash say what the address is to
+      // this wallet. Spelling it out again under it cost a line on
+      // every wallet row, on the screen with the least room to spare.
       lines = [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: AddressChip(
-            value: io.address!,
-            head: 10,
-            tail: 8,
-            emphasis: io.isMine,
-          ),
-        ),
-        if (io.isMine)
-          _subline(switch (side) {
-            _IoSide.input => 'Spent from this wallet',
-            _IoSide.output when io.change => 'Change back to this wallet',
-            _IoSide.output => 'Received by this wallet',
-          }),
+        AddressChip(value: io.address!, head: 10, tail: 8, emphasis: io.isMine),
       ];
     } else {
       lines = [
