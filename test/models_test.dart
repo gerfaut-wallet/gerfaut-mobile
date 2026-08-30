@@ -230,6 +230,55 @@ void main() {
     });
   });
 
+  group('TxWarning.fromJson', () {
+    test('reads the tone the core sent rather than deriving one', () {
+      final alert = TxWarning.fromJson(const {
+        'kind': 'unsigned',
+        'message': '1 of 1 inputs carry no signature.',
+        'severity': 'alert',
+      });
+      expect(alert.kind, TxWarningKind.unsigned);
+      expect(alert.severity, TxSeverity.alert);
+
+      final info = TxWarning.fromJson(const {
+        'kind': 'spends_watched',
+        'message': 'Spends coins of Cold storage.',
+        'severity': 'info',
+      });
+      expect(info.severity, TxSeverity.info);
+    });
+
+    test('a kind added by a newer core still arrives with its tone', () {
+      // The whole point of carrying severity on the wire: a kind this
+      // build cannot name no longer falls through a hand-written table.
+      final warning = TxWarning.fromJson(const {
+        'kind': 'something_this_build_never_heard_of',
+        'message': 'Worth reading all the same.',
+        'severity': 'alert',
+      });
+      expect(warning.kind, TxWarningKind.other);
+      expect(warning.severity, TxSeverity.alert);
+    });
+
+    test('a tone it cannot name reads as info', () {
+      // Quiet is the safe way to be wrong about a tone: the red is a
+      // budget, and it must not be spent by a string nobody parsed.
+      expect(
+        TxWarning.fromJson(const {
+          'kind': 'other',
+          'message': 'Something.',
+          'severity': 'catastrophic',
+        }).severity,
+        TxSeverity.info,
+      );
+      expect(
+        TxWarning.fromJson(const {'kind': 'other', 'message': 'Something.'})
+            .severity,
+        TxSeverity.info,
+      );
+    });
+  });
+
   group('certificates', () {
     test('every status the core can report is read back', () {
       const fingerprint =

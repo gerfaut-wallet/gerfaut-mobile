@@ -1624,27 +1624,59 @@ enum TxWarningKind {
     }
     return TxWarningKind.other;
   }
+}
 
-  /// The network will refuse the transaction, or already took the coin:
-  /// read in the alert style. Everything else is a caution.
-  bool get blocking =>
-      this == TxWarningKind.unsigned || this == TxWarningKind.inputSpent;
+/// How loudly a caution is read.
+///
+/// The core answers the one question — can the person lose funds or
+/// lose privacy? — and sends the answer along with the caution. A
+/// screen reads it and never derives it: two hand-written tables, one
+/// per platform, is precisely how the tones drifted apart.
+enum TxSeverity {
+  /// Funds or privacy are at stake: the red panel.
+  alert('alert'),
+
+  /// Worth reading; nothing is at risk: the amber one.
+  info('info');
+
+  const TxSeverity(this.id);
+
+  final String id;
+
+  /// Anything this build cannot name reads as [info] — the tone a
+  /// [TxWarningKind.other] gets too. A kind added by a newer core still
+  /// arrives with its own severity, so this only applies to a wire that
+  /// carries none, and quiet is the safe way to be wrong about a tone.
+  static TxSeverity fromId(String? id) {
+    for (final severity in TxSeverity.values) {
+      if (severity.id == id) return severity;
+    }
+    return TxSeverity.info;
+  }
 }
 
 /// A caution to read before broadcasting. Never blocks: the preview
 /// only makes the transaction legible.
 class TxWarning {
-  const TxWarning({required this.kind, required this.message});
+  const TxWarning({
+    required this.kind,
+    required this.message,
+    required this.severity,
+  });
 
   factory TxWarning.fromJson(Map<String, dynamic> json) {
     return TxWarning(
       kind: TxWarningKind.fromId(json['kind'] as String),
       message: json['message'] as String,
+      severity: TxSeverity.fromId(json['severity'] as String?),
     );
   }
 
   final TxWarningKind kind;
   final String message;
+
+  /// The tone to read it in, as the core decided it.
+  final TxSeverity severity;
 }
 
 /// Everything shown before broadcasting a transaction.
