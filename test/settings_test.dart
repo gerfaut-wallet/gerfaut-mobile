@@ -12,6 +12,7 @@ import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/buttons.dart';
+import 'package:gerfaut/widgets/notice.dart';
 import 'package:gerfaut/widgets/select_field.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -828,6 +829,20 @@ void main() {
         ),
         findsOneWidget,
       );
+      // One panel component carries both tones, so no caller derives
+      // its own — and this one is red, which is what a fingerprint that
+      // changed under you is for.
+      expect(
+        tester
+            .widget<GerfautNotice>(
+              find.ancestor(
+                of: find.textContaining('was accepted with one certificate'),
+                matching: find.byType(GerfautNotice),
+              ),
+            )
+            .tone,
+        NoticeTone.alert,
+      );
       // Both fingerprints, side by side, so the difference is visible.
       expect(find.text('ACCEPTED BEFORE'), findsOneWidget);
       expect(find.text('PRESENTED NOW'), findsOneWidget);
@@ -1111,6 +1126,15 @@ void main() {
       await scan(tester);
 
       expect(find.text(reason), findsOneWidget);
+      // A hint under the field, not a panel — but announced: it lands
+      // in reaction to a scan, the camera has closed by then, and
+      // nothing else on screen says the code was turned down.
+      final handle = tester.ensureSemantics();
+      expect(
+        tester.getSemantics(find.text(reason)).flagsCollection.isLiveRegion,
+        isTrue,
+      );
+      handle.dispose();
       // Not one field moved, and the choice is where it was.
       expect(find.text('HOST'), findsOneWidget);
       expect(fieldTexts(tester).take(2), ['node.local', '50002']);

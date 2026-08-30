@@ -578,10 +578,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                   if (_scanError != null) ...[
                     const SizedBox(height: GerfautSpacing.sm),
-                    Text(
-                      _scanError!,
-                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                    ),
+                    _ScanRefusal(reason: _scanError!, tokens: tokens),
                   ],
                 ],
                 if (_backendKind == 'custom_electrum') ...[
@@ -604,10 +601,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                   if (_scanError != null) ...[
                     const SizedBox(height: GerfautSpacing.sm),
-                    Text(
-                      _scanError!,
-                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                    ),
+                    _ScanRefusal(reason: _scanError!, tokens: tokens),
                   ],
                   const SizedBox(height: GerfautSpacing.sm),
                   Row(
@@ -1101,6 +1095,32 @@ class _NetworkCard extends StatelessWidget {
   }
 }
 
+/// Why the core refused the last code read, in its own words, under the
+/// field the scan was meant to fill.
+///
+/// A hint, not a panel: nothing was lost, and the text belongs to the
+/// field it explains. It is announced all the same — it lands in
+/// reaction to a scan the person just made, and the camera has closed
+/// by the time it appears, so nothing else on screen says the code was
+/// turned down.
+class _ScanRefusal extends StatelessWidget {
+  const _ScanRefusal({required this.reason, required this.tokens});
+
+  final String reason;
+  final GerfautTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      child: Text(
+        reason,
+        style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+      ),
+    );
+  }
+}
+
 /// Opens the camera on the QR code a node prints beside its Electrum or
 /// Esplora app. Nobody retypes a 56-character onion address.
 class _ScanButton extends StatelessWidget {
@@ -1572,46 +1592,33 @@ class _WalletRow extends StatelessWidget {
           ),
           if (confirmingRemove) ...[
             const SizedBox(height: GerfautSpacing.sm),
-            Container(
-              padding: const EdgeInsets.all(GerfautSpacing.sm),
-              decoration: BoxDecoration(
-                color: tokens.alertSurface,
-                borderRadius: BorderRadius.circular(GerfautRadius.md),
-                border: Border.all(color: tokens.alert.withValues(alpha: 0.25)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        LucideIcons.triangleAlert,
-                        size: 16,
-                        color: tokens.alert,
-                      ),
-                      const SizedBox(width: GerfautSpacing.sm),
-                      Expanded(
-                        child: Text(
-                          'You are removing "${wallet.name}" from Gerfaut. '
-                          'This only stops watching. Nothing moves on chain.',
-                          style: tokens.bodySmall.copyWith(color: tokens.alert),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: GerfautSpacing.sm),
-                  Row(
-                    children: [
-                      DangerButton(
-                        label: 'Remove wallet',
-                        onPressed: onRemoveConfirm,
-                      ),
-                      const SizedBox(width: GerfautSpacing.sm),
-                      GhostButton(label: 'Cancel', onPressed: onCancel),
-                    ],
-                  ),
-                ],
+            // Amber, and its own copy says why: this only stops
+            // watching, nothing moves on chain. Nothing is at stake but
+            // a row in a list, and the coins are exactly where they
+            // were — red belongs to what costs funds or privacy.
+            GerfautNotice(
+              tone: NoticeTone.info,
+              message:
+                  'You are removing "${wallet.name}" from Gerfaut. '
+                  'This only stops watching. Nothing moves on chain.',
+              // Stacked, and both as wide as the wider one: side by
+              // side they would leave the sentence a column eight
+              // characters across on a phone.
+              action: IntrinsicWidth(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // The destructive one is never alone: the panel is
+                    // the confirmation, and the way out sits under it.
+                    DangerButton(
+                      label: 'Remove wallet',
+                      onPressed: onRemoveConfirm,
+                    ),
+                    const SizedBox(height: GerfautSpacing.xs),
+                    GhostButton(label: 'Cancel', onPressed: onCancel),
+                  ],
+                ),
               ),
             ),
           ] else if (!renaming) ...[
@@ -1842,41 +1849,16 @@ class _ChangedCertificateDialogState extends State<_ChangedCertificateDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(GerfautSpacing.sm + 4),
-                decoration: BoxDecoration(
-                  color: tokens.alertSurface,
-                  borderRadius: BorderRadius.circular(GerfautRadius.md),
-                  border: Border.all(
-                    color: tokens.alert.withValues(alpha: 0.25),
-                  ),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    FirstLine(
-                      style: tokens.bodySmall,
-                      child: Icon(
-                        LucideIcons.triangleAlert,
-                        size: 16,
-                        color: tokens.alert,
-                      ),
-                    ),
-                    const SizedBox(width: GerfautSpacing.sm),
-                    Expanded(
-                      child: Text(
-                        '${widget.host} was accepted with one certificate '
-                        'and now presents another. Either whoever runs it '
-                        'replaced it, or something sits between you and it.',
-                        style: tokens.bodySmall.copyWith(
-                          color: tokens.alert,
-                          fontWeight: FontWeight.w500,
-                          fontVariations: const [FontVariation('wght', 500)],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+              // Red, and one of the few things that earns it: a
+              // fingerprint that changed is either a rotation nobody
+              // announced or somebody sitting in the middle, and the
+              // second one costs privacy at the very least.
+              GerfautNotice(
+                tone: NoticeTone.alert,
+                message:
+                    '${widget.host} was accepted with one certificate '
+                    'and now presents another. Either whoever runs it '
+                    'replaced it, or something sits between you and it.',
               ),
               const SizedBox(height: GerfautSpacing.md),
               _FingerprintBlock(
