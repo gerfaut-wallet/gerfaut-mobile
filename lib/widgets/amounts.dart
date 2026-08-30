@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../src/format.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
+import 'facts.dart';
 
 /// Fiat value of an amount, when the display is enabled and a quote is
 /// available. Degrades to null, never to an error.
@@ -133,6 +134,73 @@ class StackedAmount extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// The heading of an input or output list: how many, and what the side
+/// carries in all.
+///
+/// The totals used to live on the two-card flow summary the diagram
+/// replaced, and went with it. They answer what no row answers on its
+/// own — how much went in against how much came out, the gap between
+/// them being the fee. **One value nobody knows makes the whole sum a
+/// guess**, so the side reads `n/a` rather than a figure that is
+/// quietly short. The count keeps the label face; the total is a
+/// figure, tabular like every other.
+class IoListHeading extends ConsumerWidget {
+  const IoListHeading({
+    super.key,
+    required this.title,
+    required this.count,
+    required this.totalSats,
+  });
+
+  final String title;
+  final int count;
+
+  /// What the side carries, null as soon as one value on it is unknown.
+  final int? totalSats;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final masked = ref.watch(maskedProvider);
+    final unit = ref.watch(unitProvider);
+    final total = totalSats == null
+        ? 'n/a'
+        : masked
+        ? maskedValue
+        : formatAmount(totalSats!, unit);
+    return Row(
+      children: [
+        FieldLabel('$title ($count)', tokens: tokens),
+        Text(' · ', style: tokens.label.copyWith(color: tokens.textMuted)),
+        Flexible(
+          child: Text(
+            total,
+            style: tokens.figureOf(
+              size: 12,
+              weight: FontWeight.w500,
+              color: tokens.textMuted,
+            ),
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.fade,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The sum of a side, or null the moment one value on it is unknown: a
+/// total short by an input nobody could price is worse than no total.
+int? sideTotal(Iterable<int?> values) {
+  var total = 0;
+  for (final value in values) {
+    if (value == null) return null;
+    total += value;
+  }
+  return total;
 }
 
 /// Inline amount for detail views: primary unit plus fiat.
