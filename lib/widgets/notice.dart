@@ -101,7 +101,7 @@ class GerfautNotice extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _FirstLine(
+                FirstLine(
                   style: style,
                   child: Icon(glyph, size: 16, color: ink, semanticLabel: role),
                 ),
@@ -158,8 +158,12 @@ class GerfautNotice extends StatelessWidget {
 /// puts the two optical centres on each other, at any text scale. That
 /// is why this is a measurement and not a two-pixel nudge — a nudge is
 /// right for one font size and wrong for every other.
-class _FirstLine extends StatelessWidget {
-  const _FirstLine({required this.style, required this.child});
+///
+/// Use it for any icon that has to ride the first line of a paragraph
+/// that may wrap. An icon beside a single line needs nothing: a `Row`
+/// centres it already.
+class FirstLine extends StatelessWidget {
+  const FirstLine({super.key, required this.style, required this.child});
 
   final TextStyle style;
   final Widget child;

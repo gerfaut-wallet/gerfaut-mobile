@@ -18,6 +18,7 @@ import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/explorer_link.dart';
 import '../widgets/facts.dart';
+import '../widgets/notice.dart';
 import '../widgets/tx_diagram.dart';
 import 'scan.dart';
 
@@ -580,32 +581,14 @@ class _WarningRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final blocking = warning.kind.blocking;
-    final color = blocking ? tokens.alert : tokens.pending;
-    final surface = blocking ? tokens.alertSurface : tokens.pendingSurface;
-    return Container(
-      padding: const EdgeInsets.all(GerfautSpacing.sm + 4),
-      decoration: BoxDecoration(
-        color: surface,
-        borderRadius: BorderRadius.circular(GerfautRadius.md),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(_warningIcon(warning.kind), size: 16, color: color),
-          ),
-          const SizedBox(width: GerfautSpacing.sm),
-          Expanded(
-            child: Text(
-              warning.message,
-              style: tokens.bodySmall.copyWith(color: color),
-            ),
-          ),
-        ],
-      ),
+    // The tone says how much it matters, the glyph says what it is
+    // about; both come from the kind the core gave the caution. A
+    // blocking caution is one the person could act on believing the
+    // transaction went out — the case the red is kept for.
+    return GerfautNotice(
+      tone: warning.kind.blocking ? NoticeTone.alert : NoticeTone.info,
+      icon: _warningIcon(warning.kind),
+      message: warning.message,
     );
   }
 }
@@ -979,10 +962,15 @@ class _TechnicalCard extends StatelessWidget {
             muted: preview.feeRateSatVb == null,
           ),
         ),
+        // RBF, the word the chain gave it and the one people look for
+        // — the same name the transaction detail uses.
         FactRow(
-          label: 'Replaceable',
+          label: 'RBF',
           tokens: tokens,
-          child: FactValue(preview.rbf ? 'Yes (BIP-125)' : 'No', tokens),
+          child: FactValue(
+            preview.rbf ? 'signalled (BIP-125)' : 'not signalled',
+            tokens,
+          ),
         ),
       ],
     );
@@ -1025,8 +1013,8 @@ class _RefusalBlock extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
+          FirstLine(
+            style: tokens.bodySmall,
             child: Icon(LucideIcons.circleX, size: 16, color: tokens.alert),
           ),
           const SizedBox(width: GerfautSpacing.sm),
@@ -1270,8 +1258,8 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
+                FirstLine(
+                  style: tokens.bodySmall,
                   child: Icon(icon, size: 16, color: color),
                 ),
                 const SizedBox(width: GerfautSpacing.sm),
