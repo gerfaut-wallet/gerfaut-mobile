@@ -493,6 +493,40 @@ void main() {
       expect(find.text('No wallets yet'), findsOneWidget);
     });
 
+    testWidgets('back is offered from the second page on', (tester) async {
+      final bridge = FakeBridge();
+      await tester.pumpWidget(app(bridge));
+      await tester.pumpAndSettle();
+
+      // Nothing to go back to on the first page: Skip has the row.
+      expect(find.text('Back'), findsNothing);
+      expect(find.text('Skip'), findsOneWidget);
+
+      await tester.tap(find.text('Next'));
+      await tester.pumpAndSettle();
+      expect(find.text('Add a wallet'), findsOneWidget);
+      expect(find.text('Back'), findsOneWidget);
+      // Back takes the left of the row Skip had to itself.
+      expect(
+        tester.getRect(find.text('Back')).left,
+        lessThan(tester.getRect(find.text('Skip')).left),
+      );
+
+      // A page one can only leave or pass is re-read by starting over.
+      await tester.tap(find.text('Back'));
+      await tester.pumpAndSettle();
+      expect(find.text('Watch, never spend'), findsOneWidget);
+      expect(find.text('Back'), findsNothing);
+      // Going back is not leaving: the tour is still unseen.
+      expect(bridge.appPrefs['onboarding.seen'], isNull);
+
+      // The swipe still does the same work; the button makes it visible.
+      await tester.drag(find.byType(PageView), const Offset(-400, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('Add a wallet'), findsOneWidget);
+      expect(find.text('Back'), findsOneWidget);
+    });
+
     testWidgets('skipping counts as seen', (tester) async {
       final bridge = FakeBridge();
       await tester.pumpWidget(app(bridge));

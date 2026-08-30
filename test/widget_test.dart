@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
+import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/brand.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -102,6 +103,55 @@ void main() {
     // different icon on the card.
     expect(find.byIcon(LucideIcons.wallet), findsNWidgets(2));
     expect(find.byIcon(LucideIcons.mapPin), findsNothing);
+  });
+
+  testWidgets('a wallet card carries a name and a balance, nothing else', (
+    tester,
+  ) async {
+    const stamp = SyncStamp(
+      at: 1755000000,
+      tipHeight: 100,
+      backend: 'mempool.space',
+    );
+    final bridge = FakeBridge(
+      wallets: [makeMeta(totalSats: 123456, lastSync: stamp)],
+    );
+    await tester.pumpWidget(app(bridge));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Cold storage'), findsOneWidget);
+    expect(
+      find.textContaining('0.00123456', findRichText: true),
+      findsOneWidget,
+    );
+    // The freshness line lives on the wallet's own page: a whole row per
+    // card for an answer nobody looks for while scanning the list.
+    expect(find.textContaining('Synced'), findsNothing);
+    expect(find.textContaining('mempool.space'), findsNothing);
+    expect(find.text('Never synced'), findsNothing);
+  });
+
+  testWidgets('a failed sync still shows on the card', (tester) async {
+    final bridge = FakeBridge(wallets: [makeMeta(totalSats: 123456)]);
+    bridge.onSyncAll = (_) => const SyncAllReport(
+      reports: [],
+      failures: [
+        SyncFailure(walletId: 'w1', message: 'mempool.space: timed out'),
+      ],
+    );
+    await tester.pumpWidget(app(bridge));
+    await tester.pumpAndSettle();
+
+    // The one thing that contradicts the figure above it: a stale
+    // balance stated as fact is a lie. Amber, one line, reason on hold.
+    expect(find.text('Sync failed'), findsOneWidget);
+    expect(find.byIcon(LucideIcons.triangleAlert), findsOneWidget);
+    final warning = tester.widget<Text>(find.text('Sync failed'));
+    expect(warning.style?.color, GerfautTokens.light.pending);
+    expect(
+      find.textContaining('0.00123456', findRichText: true),
+      findsOneWidget,
+    );
   });
 
   testWidgets('the wallet list masks its balances from its own eye', (
