@@ -321,6 +321,18 @@ class RecentBroadcastsNotifier extends Notifier<List<RecentBroadcast>> {
       broadcast,
       ...state.where((b) => b.txid != broadcast.txid),
     ].take(recentBroadcastsCap).toList();
+    _persist();
+  }
+
+  /// Drops the record of a broadcast, with no way back. Only this app's
+  /// own note of it goes: the transaction is on the network, where
+  /// Gerfaut has never had any say.
+  void forget(String txid) {
+    state = state.where((b) => b.txid != txid).toList();
+    _persist();
+  }
+
+  void _persist() {
     ref
         .read(bridgeProvider)
         .setAppPref(

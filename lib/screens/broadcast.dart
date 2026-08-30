@@ -785,13 +785,7 @@ class _InputRow extends StatelessWidget {
           ],
         ],
       ),
-      amount: value != null
-          ? StackedAmount(sats: value)
-          : Text(
-              'n/a',
-              style: tokens.figureOf(color: tokens.textMuted),
-              maxLines: 1,
-            ),
+      amount: UnitAmount(sats: value, tokens: tokens),
     );
   }
 }
@@ -898,7 +892,7 @@ class _OutputRow extends StatelessWidget {
       tokens: tokens,
       chip: _RoleChip(icon: icon, tone: tone, hint: hint, tokens: tokens),
       identity: identity,
-      amount: StackedAmount(sats: output.valueSats),
+      amount: UnitAmount(sats: output.valueSats, tokens: tokens),
     );
   }
 }
@@ -1154,6 +1148,17 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
     _timer = Timer(_statusPollInterval, _check);
   }
 
+  /// Nothing is dropped without being asked: the record does not come
+  /// back, and the list is the only place it exists.
+  Future<void> _confirmForget() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => const _ForgetDialog(),
+    );
+    if (confirmed != true || !mounted) return;
+    ref.read(recentBroadcastsProvider.notifier).forget(widget.record.txid);
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
@@ -1169,6 +1174,21 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
     final unchecked = sentTo != null
         ? waiting
         : 'Sent ${formatTimestamp(record.at)}';
+    // A mined transaction states its height and its count on two lines,
+    // the same two the desktop prints. Run together after a separator
+    // the grouped height swallowed the count: "block 4 611 010 · 3
+    // confirmations" read as one figure whose last group was a 3.
+    final blockHeight = status != null && status.confirmed
+        ? status.blockHeight
+        : null;
+    final minedIn = blockHeight == null
+        ? null
+        : 'Mined in block ${groupThousands('$blockHeight')}';
+    final confirmations = status != null && status.confirmed
+        ? '${groupThousands('${status.confirmations}')} '
+              'confirmation${status.confirmations == 1 ? '' : 's'} '
+              'as of ${relativeTime(status.at)}'
+        : null;
     final (
       IconData icon,
       Color color,
@@ -1191,9 +1211,7 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
         LucideIcons.circleCheck,
         tokens.confirmed,
         tokens.confirmedSurface,
-        'Confirmed · ${groupThousands('${status.confirmations}')} '
-            'confirmation${status.confirmations == 1 ? '' : 's'}'
-            '${status.blockHeight != null ? ' · block ${groupThousands('${status.blockHeight}')}' : ''}',
+        minedIn ?? confirmations!,
       ),
       BroadcastStatus(found: false) => (
         LucideIcons.eyeOff,
@@ -1208,10 +1226,14 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
         waiting,
       ),
     };
-    final hint = status != null && !status.confirmed && !status.found
-        ? 'It may have been dropped from the mempool or replaced by another '
-              'transaction.'
-        : _error;
+    // The count reads under the headline, in the slot every other
+    // second line of this card uses.
+    final hint = minedIn == null
+        ? (status != null && !status.confirmed && !status.found
+              ? 'It may have been dropped from the mempool or replaced by '
+                    'another transaction.'
+              : _error)
+        : confirmations;
     final explorer = explorerTxUrl(record.network, record.txid);
     final checked = _checking
         ? 'Checking…'
@@ -1236,39 +1258,47 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
             ),
             const SizedBox(height: GerfautSpacing.sm),
           ],
+          // Both lines under one region: split across two paragraphs the
+          // status is still one statement, and it is announced as one.
           Semantics(
             liveRegion: true,
-            child: Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                FirstLine(
-                  style: tokens.bodySmall,
-                  child: Icon(icon, size: 16, color: color),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FirstLine(
+                      style: tokens.bodySmall,
+                      child: Icon(icon, size: 16, color: color),
+                    ),
+                    const SizedBox(width: GerfautSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: tokens.bodySmall.copyWith(
+                          color: color,
+                          fontWeight: FontWeight.w500,
+                          fontVariations: const [FontVariation('wght', 500)],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: GerfautSpacing.sm),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: tokens.bodySmall.copyWith(
-                      color: color,
-                      fontWeight: FontWeight.w500,
-                      fontVariations: const [FontVariation('wght', 500)],
+                if (hint != null) ...[
+                  const SizedBox(height: GerfautSpacing.xs),
+                  Padding(
+                    padding: const EdgeInsets.only(left: GerfautSpacing.lg),
+                    child: Text(
+                      hint,
+                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
-          if (hint != null) ...[
-            const SizedBox(height: GerfautSpacing.xs),
-            Padding(
-              padding: const EdgeInsets.only(left: GerfautSpacing.lg),
-              child: Text(
-                hint,
-                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-              ),
-            ),
-          ],
           const SizedBox(height: GerfautSpacing.xs),
           Row(
             children: [
@@ -1286,11 +1316,76 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
                 color: tokens.textMuted,
                 icon: const Icon(LucideIcons.refreshCw),
               ),
+              // Only a past broadcast can be dropped: the one just sent
+              // is what the screen is about.
+              if (sentTo == null)
+                IconButton(
+                  tooltip: 'Forget this broadcast',
+                  onPressed: _confirmForget,
+                  iconSize: 16,
+                  color: tokens.textMuted,
+                  icon: const Icon(LucideIcons.trash2),
+                ),
             ],
           ),
           if (explorer != null) ExplorerLink(url: explorer),
         ],
       ),
+    );
+  }
+}
+
+/// The last word before a past broadcast is dropped. What goes is this
+/// app's own note of it, and it goes for good; the transaction itself
+/// is on the network, where Gerfaut has never had any say. Saying both
+/// is what makes the question answerable.
+class _ForgetDialog extends StatelessWidget {
+  const _ForgetDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    return AlertDialog(
+      backgroundColor: tokens.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(GerfautRadius.lg),
+      ),
+      title: Text('Forget this broadcast?', style: tokens.h2),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Amber: no funds move and no privacy is spent, only a row
+            // in a local list goes. Red is what an unexpected outflow
+            // or a changed certificate costs, and it is never the
+            // colour of a delete. The words carry the irreversibility.
+            const GerfautNotice(
+              tone: NoticeTone.info,
+              message: 'This record cannot be brought back.',
+              hint: 'Gerfaut keeps no copy once it is forgotten.',
+            ),
+            const SizedBox(height: GerfautSpacing.sm),
+            Text(
+              "This only drops Gerfaut's local record of the broadcast. The "
+              'transaction is on the network and is untouched.',
+              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          style: TextButton.styleFrom(foregroundColor: tokens.textMuted),
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        DangerButton(
+          label: 'Forget',
+          onPressed: () => Navigator.of(context).pop(true),
+        ),
+      ],
     );
   }
 }

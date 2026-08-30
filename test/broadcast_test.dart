@@ -52,6 +52,14 @@ Future<void> preview(WidgetTester tester, [String text = 'cHNidP8B']) async {
   await tester.pumpAndSettle();
 }
 
+/// The provider container behind the running screen.
+ProviderContainer containerOf(WidgetTester tester) {
+  return ProviderScope.containerOf(
+    tester.element(find.byType(BroadcastScreen)),
+    listen: false,
+  );
+}
+
 /// Decoration of the block carrying [text].
 BoxDecoration blockOf(WidgetTester tester, String text) {
   return tester
@@ -185,6 +193,34 @@ void main() {
     // No warning block when the core raised none.
     expect(find.text('BEFORE YOU SEND'), findsNothing);
     expect(primaryButton(tester, 'Broadcast').onPressed, isNotNull);
+  });
+
+  testWidgets('a preview line is priced in the unit, never in fiat', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge()..onPreview = (_, _) => makePreview();
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+    await preview(tester);
+
+    final container = containerOf(tester);
+    container.read(fiatEnabledProvider.notifier).set(true);
+    await tester.pumpAndSettle();
+
+    // Nothing on this page asks for a price any more, so ask here: the
+    // point is that the rows stay in bitcoin even when a quote is on
+    // hand, not that the source failed to answer.
+    expect(await container.read(priceProvider.future), isNotNull);
+    await tester.pumpAndSettle();
+    expect(container.read(priceProvider).valueOrNull?.rate, 50000);
+    expect(container.read(fiatCurrencyProvider), FiatCurrency.eur);
+
+    // The preview and the transaction detail are one page with two
+    // entries: a row that carries euros here and only bitcoin there
+    // would be the same list drawn by two rules.
+    expect(find.textContaining('€'), findsNothing);
+    expect(find.text(formatAmount(90000, AmountUnit.btc)), findsWidgets);
   });
 
   testWidgets('an unsigned transaction cannot be sent', (tester) async {
@@ -323,16 +359,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(bridge.statusCalls, 2);
     expect(
-      find.text(
-        'Confirmed · 3 confirmations · block ${groupThousands('850000')}',
-      ),
+      find.text('Mined in block ${groupThousands('850000')}'),
       findsOneWidget,
     );
     expect(
-      tester
-          .widget<Text>(find.textContaining('Confirmed · 3 confirmations'))
-          .style!
-          .color,
+      tester.widget<Text>(find.textContaining('Mined in block')).style!.color,
       GerfautTokens.light.confirmed,
     );
 
@@ -475,6 +506,98 @@ void main() {
       tester.widget<Text>(find.text('Not seen by mempool.space')).style!.color,
       GerfautTokens.light.pending,
     );
+  });
+
+  testWidgets('a mined transaction states its block apart from its count', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final bridge = FakeBridge();
+    bridge.onPreview = (_, _) => makePreview();
+    bridge.onStatus = (_, _) => BroadcastStatus(
+      txid: fakeTxid,
+      found: true,
+      confirmed: true,
+      blockHeight: 4611010,
+      confirmations: 3,
+      backend: 'mempool.space',
+      at: now,
+    );
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+    await preview(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Broadcast'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Broadcast').last);
+    await tester.pumpAndSettle();
+
+    // Two lines, the same two the desktop prints. On one line the
+    // grouped height swallowed the count: "block 4 611 010 · 3
+    // confirmations" read as one figure whose last group was a 3.
+    expect(
+      find.text('Mined in block ${groupThousands('4611010')}'),
+      findsOneWidget,
+    );
+    expect(find.text('3 confirmations as of just now'), findsOneWidget);
+    expect(find.textContaining('Confirmed ·'), findsNothing);
+
+    // And the count keeps its singular.
+    bridge.onStatus = (_, _) => BroadcastStatus(
+      txid: fakeTxid,
+      found: true,
+      confirmed: true,
+      blockHeight: 4611010,
+      confirmations: 1,
+      backend: 'mempool.space',
+      at: now,
+    );
+    await tester.tap(find.byTooltip('Check again'));
+    await tester.pumpAndSettle();
+    expect(find.text('1 confirmation as of just now'), findsOneWidget);
+  });
+
+  testWidgets('forgetting a past broadcast asks first', (tester) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge()..onPreview = (_, _) => makePreview();
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+    await preview(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Broadcast'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Broadcast').last);
+    await tester.pumpAndSettle();
+
+    // Once the screen is left, what was sent is a past broadcast.
+    await tester.tap(find.text('Broadcast another'));
+    await tester.pumpAndSettle();
+    expect(find.text('RECENT BROADCASTS'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Forget this broadcast'));
+    await tester.pumpAndSettle();
+    // What is lost and what is not, in words rather than in a colour.
+    expect(find.text('Forget this broadcast?'), findsOneWidget);
+    expect(find.text('This record cannot be brought back.'), findsOneWidget);
+    expect(
+      find.textContaining('on the network and is untouched'),
+      findsOneWidget,
+    );
+
+    // Backing out keeps it, and keeps it in the vault.
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('RECENT BROADCASTS'), findsOneWidget);
+    expect(
+      jsonDecode(bridge.appPrefs['broadcast.recent']!) as List,
+      hasLength(1),
+    );
+
+    await tester.tap(find.byTooltip('Forget this broadcast'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Forget'));
+    await tester.pumpAndSettle();
+    expect(find.text('RECENT BROADCASTS'), findsNothing);
+    expect(jsonDecode(bridge.appPrefs['broadcast.recent']!) as List, isEmpty);
   });
 
   testWidgets('recent broadcasts come back after a restart', (tester) async {
