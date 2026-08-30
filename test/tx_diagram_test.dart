@@ -52,6 +52,29 @@ Widget diagramApp({
   );
 }
 
+/// Every truncated label must be drawn inside the room it was given.
+///
+/// A label wider than its box is faded by Flutter, and the fade eats
+/// the tail — which, for an outpoint, is the `:0` that names the input.
+/// Seen on a real phone: the cut was computed from an assumed character
+/// width and came out one character too long.
+void _labelsFitTheirColumn(WidgetTester tester) {
+  var checked = 0;
+  for (final element in find.byType(Text).evaluate()) {
+    final data = (element.widget as Text).data;
+    if (data == null || !data.contains('...')) continue;
+    final box = element.renderObject! as RenderBox;
+    final room = (box.parent! as RenderBox).size.width;
+    expect(
+      box.size.width,
+      lessThanOrEqualTo(room + 0.5),
+      reason: '"$data" is ${box.size.width - room} wider than its column',
+    );
+    checked++;
+  }
+  expect(checked, greaterThan(0), reason: 'no truncated label to check');
+}
+
 /// The hairline box a node label sits in.
 Finder nodeAround(String label) => find
     .ancestor(of: find.text(label), matching: find.byType(Container))
@@ -348,6 +371,7 @@ void main() {
         tester.getSize(find.byType(TxDiagram)).width,
         lessThanOrEqualTo(width - 2 * GerfautSpacing.md),
       );
+      _labelsFitTheirColumn(tester);
     });
   }
 

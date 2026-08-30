@@ -117,7 +117,7 @@ void main() {
     expect(find.text('tb1q0segwit0preview'), findsOneWidget);
     expect(
       find.text(
-        'This key carries no script type: check the one selected below.',
+        'This key carries no script type. Check the one selected below.',
       ),
       findsOneWidget,
     );
@@ -218,7 +218,7 @@ void main() {
     expect(find.textContaining('Taproot (P2TR)'), findsWidgets);
     expect(
       find.text(
-        'This key carries no script type: check the one selected below.',
+        'This key carries no script type. Check the one selected below.',
       ),
       findsNothing,
     );

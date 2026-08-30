@@ -374,25 +374,32 @@ class _BranchRow extends StatelessWidget {
         : formatAmount(sats, unit);
     final folded = branch.role == TxBranchRole.folded;
 
-    // Mono advances by a fixed fraction of its size, so the width says
-    // exactly how many characters fit: an identifier is cut to that
-    // instead of faded, and keeps both of its ends.
+    final labelStyle = tokens.data.copyWith(
+      fontSize: _rowText,
+      height: _rowLine,
+      color: tokens.textMuted,
+    );
+    // The cut is *measured*, never guessed from a character count: a
+    // count has to assume an advance, a fallback glyph for the ellipsis
+    // and a text scale, and being one character out costs the `:0` of
+    // the outpoint — exactly the half that names the input.
     final label = LayoutBuilder(
       builder: (context, constraints) => Text(
         folded
             ? branch.label
-            : _shorten(branch.label, constraints.maxWidth ~/ (_rowText * 0.6)),
+            : _shortenToFit(
+                branch.label,
+                constraints.maxWidth,
+                labelStyle,
+                MediaQuery.textScalerOf(context),
+              ),
         style: folded
             ? tokens.bodySmall.copyWith(
                 fontSize: _rowText,
                 height: _rowLine,
                 color: tokens.textMuted,
               )
-            : tokens.data.copyWith(
-                fontSize: _rowText,
-                height: _rowLine,
-                color: tokens.textMuted,
-              ),
+            : labelStyle,
         maxLines: 1,
         softWrap: false,
         overflow: TextOverflow.fade,
@@ -511,11 +518,47 @@ class _BranchRow extends StatelessWidget {
 /// An identifier cut to the room there is, both ends kept: the head and
 /// the tail are what a person compares, and the tail of an outpoint is
 /// its index.
-String _shorten(String value, int chars) {
-  if (chars <= 0 || value.length <= chars) return value;
-  final tail = math.min(6, math.max(2, (chars - 4) ~/ 2));
-  final head = math.max(2, chars - 3 - tail);
-  return truncateMiddle(value, head: head, tail: tail);
+///
+/// The candidate is painted and measured at each length, shortest work
+/// first, so what comes back is the longest form that actually fits the
+/// style it will be drawn in — no assumption about the font's advance,
+/// the glyph the ellipsis falls back to, or the device's text scale.
+String _shortenToFit(
+  String value,
+  double width,
+  TextStyle style,
+  TextScaler scaler,
+) {
+  if (!width.isFinite || width <= 0) return value;
+  double widthOf(String text) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: TextDirection.ltr,
+      textScaler: scaler,
+      maxLines: 1,
+    )..layout();
+    final measured = painter.width;
+    painter.dispose();
+    return measured;
+  }
+
+  if (widthOf(value) <= width) return value;
+  // A ceiling no monospaced face can breach: the widest of them advances
+  // well under 0.68 em, and JetBrains Mono is 0.6. Painting a candidate
+  // measures narrower than the device draws it — seen on a phone, where
+  // an eighteen-character outpoint fitted on paper and lost its `:0` to
+  // the fade on screen — so the count starts under a bound that cannot
+  // be wrong, and the measurement below only ever shortens it further.
+  final ceiling = (width / (_rowText * scaler.scale(1) * 0.68)).floor();
+  // Longest first: the first form that fits is the one to keep.
+  for (var chars = math.min(value.length - 1, ceiling); chars >= 5; chars--) {
+    final tail = math.min(6, math.max(2, (chars - 4) ~/ 2));
+    final head = math.max(2, chars - 3 - tail);
+    if (head + tail + 3 >= value.length) continue;
+    final candidate = truncateMiddle(value, head: head, tail: tail);
+    if (widthOf(candidate) <= width) return candidate;
+  }
+  return truncateMiddle(value, head: 2, tail: 2);
 }
 
 /// The crossroads, and the stop the fee makes: a hairline box on the

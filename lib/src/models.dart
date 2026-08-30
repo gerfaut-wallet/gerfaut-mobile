@@ -63,7 +63,7 @@ enum RecognizedKind {
 enum InputWarning {
   assumedSegwit(
     'assumed_segwit',
-    'This key carries no script type: check the one selected below.',
+    'This key carries no script type. Check the one selected below.',
   ),
   slip132Converted(
     'slip132_converted',
