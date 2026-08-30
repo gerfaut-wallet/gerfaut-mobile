@@ -656,10 +656,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ],
                 if (_backendKind != 'public_esplora') ...[
                   const SizedBox(height: GerfautSpacing.sm),
+                  // The card below is the one that knows which Tor is
+                  // used and can test it; this line only says a .onion
+                  // will take that route. Naming a port and asking for
+                  // Orbot outlived the built-in client (D-19).
                   Text(
-                    'Onion addresses go through the Tor proxy at '
-                    '127.0.0.1:9050. Install and start Orbot first; a '
-                    'built-in Tor client is planned.',
+                    'An address ending in .onion goes through Tor; the Tor '
+                    'card below says which one and lets you test it.',
                     style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                   ),
                 ],
