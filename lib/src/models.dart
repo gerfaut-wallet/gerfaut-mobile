@@ -488,6 +488,8 @@ class TxIo {
     required this.isMine,
     this.change = false,
     this.opReturn,
+    this.prevTxid,
+    this.prevVout,
   });
 
   factory TxIo.fromJson(Map<String, dynamic> json) {
@@ -499,6 +501,8 @@ class TxIo {
       opReturn: json['op_return'] == null
           ? null
           : OpReturnData.fromJson(json['op_return'] as Map<String, dynamic>),
+      prevTxid: json['prev_txid'] as String?,
+      prevVout: json['prev_vout'] as int?,
     );
   }
 
@@ -511,6 +515,47 @@ class TxIo {
 
   /// Decoded OP_RETURN payload, for data-carrying outputs.
   final OpReturnData? opReturn;
+
+  /// For an input, the transaction of the output it spends. Two inputs
+  /// can share an address; only the outpoint names one of them.
+  final String? prevTxid;
+
+  /// For an input, the index of the output it spends.
+  final int? prevVout;
+}
+
+/// A server address read out of a scan or a paste. Fills the backend
+/// form; nothing is saved until the person presses Save.
+class ScannedBackend {
+  const ScannedBackend({
+    required this.kind,
+    required this.url,
+    required this.host,
+    required this.port,
+    required this.tls,
+    required this.onion,
+  });
+
+  factory ScannedBackend.fromJson(Map<String, dynamic> json) {
+    return ScannedBackend(
+      kind: json['kind'] as String,
+      url: json['url'] as String,
+      host: json['host'] as String,
+      port: json['port'] as int?,
+      tls: json['tls'] as bool,
+      onion: json['onion'] as bool,
+    );
+  }
+
+  /// `electrum` or `esplora`.
+  final String kind;
+
+  /// The address in the form the backend configuration stores.
+  final String url;
+  final String host;
+  final int? port;
+  final bool tls;
+  final bool onion;
 }
 
 /// Deep transaction facts; absent only for watched-address entries
