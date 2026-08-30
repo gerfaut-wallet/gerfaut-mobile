@@ -46,6 +46,28 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
     }
   }
 
+  /// The shortcut the phone gets and the desktop does not: settings are
+  /// a swipe and three taps away here, and the title is already a target.
+  /// The full path stays Settings -> the wallet -> Rename, and both go
+  /// through the one call that writes a name.
+  Future<void> _rename(String current) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (_) => _RenameDialog(current: current),
+    );
+    // Empty or unchanged: the dialog closes and nothing is written.
+    if (name == null || name.isEmpty || name == current) return;
+    try {
+      await ref.read(bridgeProvider).renameWallet(widget.walletId, name);
+      ref.invalidate(walletsProvider);
+      ref.invalidate(snapshotProvider(widget.walletId));
+      messenger.showSnackBar(const SnackBar(content: Text('Wallet renamed')));
+    } on BridgeException catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text('$error')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
@@ -54,13 +76,38 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
     ref.watch(syncProvider);
     final snapshot = ref.watch(snapshotProvider(widget.walletId));
     final loaded = snapshot.valueOrNull;
+    final name = loaded?.meta.name;
 
     return Scaffold(
       appBar: GerfautAppBar(
-        title: Text(
-          snapshot.valueOrNull?.meta.name ?? '',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+        // No pencil: a permanent target next to the title for a rare
+        // gesture, when the title is a 44px target already. What says so
+        // is the ink under the finger and the label read out loud.
+        title: Align(
+          alignment: Alignment.centerLeft,
+          child: Semantics(
+            button: true,
+            child: Tooltip(
+              // The tooltip is the label a screen reader reads out after
+              // the name: a second Semantics label would say it twice.
+              message: 'Rename this wallet',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(GerfautRadius.md),
+                onTap: name == null ? null : () => _rename(name),
+                // No padding of its own: the title stays against the
+                // back arrow, where every other page starts.
+                child: Container(
+                  constraints: const BoxConstraints(minHeight: 44),
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    name ?? '',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
         actions: [
           IconButton(
@@ -226,6 +273,74 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Rename in place, over the page instead of away from it. The dialog
+/// rides above the soft keyboard on its own: [Dialog] adds the view
+/// insets to its inset padding.
+class _RenameDialog extends StatefulWidget {
+  const _RenameDialog({required this.current});
+
+  final String current;
+
+  @override
+  State<_RenameDialog> createState() => _RenameDialogState();
+}
+
+class _RenameDialogState extends State<_RenameDialog> {
+  late final _controller = TextEditingController(text: widget.current);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _save() => Navigator.of(context).pop(_controller.text.trim());
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    return AlertDialog(
+      backgroundColor: tokens.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(GerfautRadius.lg),
+      ),
+      title: Text('Rename wallet', style: tokens.h2),
+      // The title is the field's label: a second one over a single
+      // prefilled field would say the same word twice.
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        textInputAction: TextInputAction.done,
+        style: tokens.body,
+        onSubmitted: (_) => _save(),
+        decoration: InputDecoration(
+          filled: true,
+          fillColor: tokens.surfaceSunken,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: GerfautSpacing.md,
+            vertical: GerfautSpacing.sm,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(GerfautRadius.sm),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(GerfautRadius.sm),
+            borderSide: BorderSide(color: tokens.primary, width: 2),
+          ),
+        ),
+      ),
+      actions: [
+        GhostButton(
+          label: 'Cancel',
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        PrimaryButton(label: 'Save', onPressed: _save),
+      ],
     );
   }
 }

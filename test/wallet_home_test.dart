@@ -203,6 +203,107 @@ void main() {
     );
   });
 
+  testWidgets('tapping the title renames the wallet, over the page', (
+    tester,
+  ) async {
+    final meta = makeMeta();
+    final bridge = FakeBridge(
+      wallets: [meta],
+      snapshots: {'w1': makeSnapshot(meta: meta)},
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [bridgeProvider.overrideWithValue(bridge)],
+        child: MaterialApp(
+          theme: themeFrom(GerfautTokens.light, Brightness.light),
+          home: const WalletHomeScreen(walletId: 'w1'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // No pencil next to the title: the ink under the finger and the
+    // spoken label are the whole affordance.
+    expect(find.byIcon(LucideIcons.pencil), findsNothing);
+    expect(find.byTooltip('Rename this wallet'), findsOneWidget);
+    // And the title still starts where every other page's does.
+    expect(tester.getRect(find.text('Cold storage')).height, greaterThan(0));
+
+    await tester.tap(find.text('Cold storage'));
+    await tester.pumpAndSettle();
+
+    // The page is still behind it: renaming never navigates away.
+    expect(find.text('Rename wallet'), findsOneWidget);
+    expect(find.text('Receive'), findsOneWidget);
+    final field = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(TextField),
+    );
+    expect(tester.widget<TextField>(field).controller?.text, 'Cold storage');
+
+    await tester.enterText(field, 'Vault');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(bridge.wallets.single.name, 'Vault');
+    expect(find.text('Wallet renamed'), findsOneWidget);
+    // The header carries the new name without a reopen.
+    expect(find.text('Vault'), findsOneWidget);
+    expect(find.text('Cold storage'), findsNothing);
+
+    // Flush the snackbar timer.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('an empty or unchanged name writes nothing', (tester) async {
+    final meta = makeMeta();
+    final bridge = FakeBridge(
+      wallets: [meta],
+      snapshots: {'w1': makeSnapshot(meta: meta)},
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [bridgeProvider.overrideWithValue(bridge)],
+        child: MaterialApp(
+          theme: themeFrom(GerfautTokens.light, Brightness.light),
+          home: const WalletHomeScreen(walletId: 'w1'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    Finder field() => find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(TextField),
+    );
+
+    // Cancelling closes on the name it opened with.
+    await tester.tap(find.text('Cold storage'));
+    await tester.pumpAndSettle();
+    await tester.enterText(field(), 'Vault');
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(bridge.wallets.single.name, 'Cold storage');
+
+    // An empty field, and the same name again: both close in silence.
+    await tester.tap(find.text('Cold storage'));
+    await tester.pumpAndSettle();
+    await tester.enterText(field(), '   ');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('Wallet renamed'), findsNothing);
+
+    await tester.tap(find.text('Cold storage'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Wallet renamed'), findsNothing);
+    expect(bridge.wallets.single.name, 'Cold storage');
+  });
+
   testWidgets('the sync icon turns while the sync runs', (tester) async {
     final meta = makeMeta(totalSats: 5000);
     final bridge = FakeBridge(
