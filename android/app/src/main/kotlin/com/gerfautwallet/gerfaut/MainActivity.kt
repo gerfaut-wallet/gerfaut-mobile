@@ -10,8 +10,10 @@ import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.DocumentsContract
 import android.view.WindowManager
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -31,10 +33,18 @@ class MainActivity : FlutterFragmentActivity() {
     // result API requires.
     private val saveDialog: ActivityResultLauncher<Intent> =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { outcome ->
-            val save = pendingSave ?: return@registerForActivityResult
+            val uri = if (outcome.resultCode == Activity.RESULT_OK) outcome.data?.data else null
+            val save = pendingSave
             pendingSave = null
-            val uri = outcome.data?.data
-            if (outcome.resultCode != Activity.RESULT_OK || uri == null) {
+            if (save == null) {
+                // The activity was recreated while the dialog was up and
+                // the bytes went with it: nobody is waiting for an answer,
+                // and the empty document the picker created must not stay
+                // under the name the user chose.
+                if (uri != null) discardDocument(uri)
+                return@registerForActivityResult
+            }
+            if (uri == null) {
                 // Waved away: nothing was written anywhere.
                 save.result.success(false)
                 return@registerForActivityResult
@@ -45,6 +55,9 @@ class MainActivity : FlutterFragmentActivity() {
                 stream.use { it.write(save.bytes) }
                 save.result.success(true)
             } catch (error: Exception) {
+                // An empty or half-written file under the chosen name would
+                // pass for the export: it goes before the failure is told.
+                discardDocument(uri)
                 save.result.error("write_failed", error.message, null)
             }
         }
@@ -160,6 +173,18 @@ class MainActivity : FlutterFragmentActivity() {
         } catch (error: ActivityNotFoundException) {
             pendingSave = null
             result.error("unavailable", "no app on this device can save a file", null)
+        }
+    }
+
+    // Removes a document the picker created for a save that did not
+    // happen. Best effort: a provider that will not delete leaves an
+    // empty file behind, and the error already reported says the save
+    // failed.
+    private fun discardDocument(uri: Uri) {
+        try {
+            DocumentsContract.deleteDocument(contentResolver, uri)
+        } catch (_: Exception) {
+            // Nothing more can be done about it from here.
         }
     }
 
