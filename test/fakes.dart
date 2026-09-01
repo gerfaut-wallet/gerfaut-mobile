@@ -3,8 +3,10 @@
 // BridgeException errors.
 
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:gerfaut/src/bridge.dart';
+import 'package:gerfaut/src/documents.dart';
 import 'package:gerfaut/src/electrum.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/screen.dart';
@@ -61,6 +63,34 @@ class FakeScreenKeeper implements ScreenKeeper {
 
   @override
   Future<void> release() async => releases++;
+}
+
+/// Records what would have been written instead of opening the
+/// system's save dialog.
+class FakeDocumentSaver implements DocumentSaver {
+  FakeDocumentSaver({this.answer = true});
+
+  /// What the dialog answers: true for a place picked, false for a
+  /// dialog waved away.
+  bool answer;
+
+  /// A failure to raise instead of answering.
+  DocumentSaveException? failure;
+
+  final List<({Uint8List bytes, String filename, String mimeType})> saved = [];
+
+  @override
+  Future<bool> save({
+    required Uint8List bytes,
+    required String filename,
+    required String mimeType,
+  }) async {
+    if (failure != null) throw failure!;
+    if (answer) {
+      saved.add((bytes: bytes, filename: filename, mimeType: mimeType));
+    }
+    return answer;
+  }
 }
 
 WalletMeta makeMeta({

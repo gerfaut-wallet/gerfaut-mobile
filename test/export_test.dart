@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/export.dart';
+import 'package:gerfaut/src/documents.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/share.dart';
 import 'package:gerfaut/src/state.dart';
@@ -33,11 +36,16 @@ TxSummary tx(String txid, int netSats, {int? timestamp}) {
   );
 }
 
-Widget exportApp(FakeBridge bridge, FakeCsvSharer sharer) {
+Widget exportApp(
+  FakeBridge bridge,
+  FakeCsvSharer sharer, {
+  FakeDocumentSaver? saver,
+}) {
   return ProviderScope(
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
       csvSharerProvider.overrideWithValue(sharer),
+      documentSaverProvider.overrideWithValue(saver ?? FakeDocumentSaver()),
     ],
     child: MaterialApp(
       theme: themeFrom(GerfautTokens.light, Brightness.light),
@@ -152,10 +160,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('0 of 3 transactions selected'), findsOneWidget);
-    final button = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Export CSV'),
-    );
-    expect(button.onPressed, isNull);
+    for (final label in ['Save file', 'Share']) {
+      final button = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, label),
+      );
+      expect(button.onPressed, isNull, reason: label);
+    }
 
     // Clearing the bound restores the full selection.
     await tester.tap(find.bySemanticsLabel('Clear From date'));
@@ -190,21 +200,62 @@ void main() {
     expect(switches.first.onChanged, isNotNull);
   });
 
-  testWidgets('exporting shares the file and states the row count', (
+  testWidgets('saving writes the file where the user points', (tester) async {
+    final sharer = FakeCsvSharer();
+    final saver = FakeDocumentSaver();
+    final bridge = makeBridge();
+    await tester.pumpWidget(exportApp(bridge, sharer, saver: saver));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Save file'));
+    await tester.pumpAndSettle();
+
+    // A file, literally: the system's save dialog, not the share sheet.
+    expect(bridge.exportCalls, hasLength(1));
+    expect(saver.saved, hasLength(1));
+    expect(saver.saved.single.filename, 'cold-storage-transactions.csv');
+    expect(saver.saved.single.mimeType, 'text/csv');
+    expect(utf8.decode(saver.saved.single.bytes), contains('txid,date_utc'));
+    expect(sharer.shared, isEmpty);
+    expect(find.text('3 transactions saved'), findsOneWidget);
+
+    // Flush the snackbar timer.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a save dialog waved away says nothing', (tester) async {
+    final saver = FakeDocumentSaver(answer: false);
+    final bridge = makeBridge();
+    await tester.pumpWidget(exportApp(bridge, FakeCsvSharer(), saver: saver));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Save file'));
+    await tester.pumpAndSettle();
+
+    expect(saver.saved, isEmpty);
+    expect(find.textContaining('saved'), findsNothing);
+    // The filters are still there for another try.
+    expect(find.text('3 of 3 transactions selected'), findsOneWidget);
+  });
+
+  testWidgets('sharing hands the file to the sheet and states the count', (
     tester,
   ) async {
     final sharer = FakeCsvSharer();
+    final saver = FakeDocumentSaver();
     final bridge = makeBridge();
-    await tester.pumpWidget(exportApp(bridge, sharer));
+    await tester.pumpWidget(exportApp(bridge, sharer, saver: saver));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Export CSV'));
+    await tester.tap(find.text('Share'));
     await tester.pumpAndSettle();
 
     expect(bridge.exportCalls, hasLength(1));
     expect(sharer.shared, hasLength(1));
     expect(sharer.shared.single.filename, 'cold-storage-transactions.csv');
     expect(sharer.shared.single.csv, contains('txid,date_utc'));
+    expect(saver.saved, isEmpty);
     expect(find.text('3 transactions exported'), findsOneWidget);
 
     // Flush the snackbar timer.

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/bridge.dart';
+import '../src/documents.dart';
 import '../src/format.dart' show formatBytes;
 import '../src/lock.dart';
 import '../src/models.dart';
@@ -26,9 +27,10 @@ const int minPasswordChars = 8;
 /// Which wallets a backup takes.
 enum _Scope { all, network }
 
-/// Sealing the wallet list: what goes in and the password, then the two
-/// ways out, a file to keep and an animated QR code for the other
-/// device. Nothing leaves this device until one of them is used.
+/// Sealing the wallet list: what goes in and the password, then the
+/// ways out: a file saved where the user points, the share sheet, and an
+/// animated QR code for the other device. Nothing leaves this device
+/// until one of them is used.
 class BackupExportScreen extends ConsumerStatefulWidget {
   const BackupExportScreen({super.key});
 
@@ -109,20 +111,46 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
     }
   }
 
-  Future<void> _saveFile(BackupBundle bundle) async {
+  /// The name a backup file gets: the day it was made, so two of them
+  /// sort in order.
+  String _filename() {
     final now = DateTime.now();
     final month = now.month.toString().padLeft(2, '0');
     final day = now.day.toString().padLeft(2, '0');
-    // The sheet that picks where the file goes is a screen of the
+    return 'gerfaut-backup-${now.year}-$month-$day.gerfaut';
+  }
+
+  /// The system's save dialog, then the bytes written where it points.
+  Future<void> _saveFile(BackupBundle bundle) async {
+    final messenger = ScaffoldMessenger.of(context);
+    // The dialog that picks where the file goes is a screen of the
     // system's: Android pauses Gerfaut behind it, and coming back from
     // it is not coming back from the background.
     ref.read(lockProvider.notifier).expectExcursion();
+    try {
+      final saved = await ref
+          .read(documentSaverProvider)
+          .save(
+            bytes: base64Decode(bundle.data),
+            filename: _filename(),
+            mimeType: 'application/octet-stream',
+          );
+      // A dialog waved away says nothing: the backup is still here.
+      if (saved) {
+        messenger.showSnackBar(const SnackBar(content: Text('Saved')));
+      }
+    } on DocumentSaveException catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text(error.message)));
+    }
+  }
+
+  /// The share sheet, for a backup bound straight for another app or
+  /// device. A screen of the system's, like the save dialog.
+  Future<void> _share(BackupBundle bundle) async {
+    ref.read(lockProvider.notifier).expectExcursion();
     await ref
         .read(backupSharerProvider)
-        .shareBackup(
-          bytes: base64Decode(bundle.data),
-          filename: 'gerfaut-backup-${now.year}-$month-$day.gerfaut',
-        );
+        .shareBackup(bytes: base64Decode(bundle.data), filename: _filename());
   }
 
   void _showQr(BackupBundle bundle) {
@@ -307,12 +335,18 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
             const SizedBox(width: GerfautSpacing.sm),
             Expanded(
               child: SecondaryButton(
-                label: 'Show QR code',
-                icon: LucideIcons.qrCode,
-                onPressed: () => _showQr(bundle),
+                label: 'Share',
+                icon: LucideIcons.share2,
+                onPressed: () => _share(bundle),
               ),
             ),
           ],
+        ),
+        const SizedBox(height: GerfautSpacing.sm),
+        SecondaryButton(
+          label: 'Show QR code',
+          icon: LucideIcons.qrCode,
+          onPressed: () => _showQr(bundle),
         ),
         const SizedBox(height: GerfautSpacing.sm),
         Text(

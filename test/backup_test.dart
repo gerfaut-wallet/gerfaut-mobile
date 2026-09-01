@@ -10,6 +10,7 @@ import 'package:gerfaut/screens/backup_qr.dart';
 import 'package:gerfaut/screens/backup_restore.dart';
 import 'package:gerfaut/screens/scan.dart';
 import 'package:gerfaut/src/bridge.dart';
+import 'package:gerfaut/src/documents.dart';
 import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/screen.dart';
@@ -38,12 +39,14 @@ Widget screen(
   FakeBridge bridge,
   Widget home, {
   BackupSharer? sharer,
+  DocumentSaver? saver,
   ScreenKeeper? keeper,
 }) {
   return ProviderScope(
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
       if (sharer != null) backupSharerProvider.overrideWithValue(sharer),
+      if (saver != null) documentSaverProvider.overrideWithValue(saver),
       if (keeper != null) screenKeeperProvider.overrideWithValue(keeper),
     ],
     child: MaterialApp(
@@ -123,6 +126,7 @@ void main() {
       expect(bridge.backupExportCalls.single.includeSettings, isTrue);
       expect(find.textContaining('1 wallet'), findsWidgets);
       expect(find.text('Save file'), findsOneWidget);
+      expect(find.text('Share'), findsOneWidget);
       expect(find.text('Show QR code'), findsOneWidget);
     });
 
@@ -153,14 +157,20 @@ void main() {
       expect(bridge.backupExportCalls.single.walletIds, ['w1']);
     });
 
-    testWidgets('saving hands the decoded bytes to the system sheet', (
+    testWidgets('saving writes the decoded bytes where the user points', (
       tester,
     ) async {
       useTallSurface(tester);
+      final saver = FakeDocumentSaver();
       final sharer = FakeBackupSharer();
       final bridge = FakeBridge(wallets: [makeMeta()]);
       await tester.pumpWidget(
-        screen(bridge, const BackupExportScreen(), sharer: sharer),
+        screen(
+          bridge,
+          const BackupExportScreen(),
+          sharer: sharer,
+          saver: saver,
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -170,18 +180,108 @@ void main() {
       await tester.tap(find.text('Save file'));
       await tester.pumpAndSettle();
 
+      // A file, literally: the system's save dialog, not a share sheet
+      // that happens to offer a drive among mail apps.
+      expect(saver.saved, hasLength(1));
+      expect(saver.saved.single.bytes, base64Decode('R0ZCQUNLVVA='));
+      expect(saver.saved.single.filename, endsWith('.gerfaut'));
+      expect(saver.saved.single.mimeType, 'application/octet-stream');
+      expect(sharer.shared, isEmpty);
+      expect(find.text('Saved'), findsOneWidget);
+
+      // Flush the snackbar timer.
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a save dialog waved away says nothing', (tester) async {
+      useTallSurface(tester);
+      final saver = FakeDocumentSaver(answer: false);
+      final bridge = FakeBridge(wallets: [makeMeta()]);
+      await tester.pumpWidget(
+        screen(bridge, const BackupExportScreen(), saver: saver),
+      );
+      await tester.pumpAndSettle();
+
+      await typePasswords(tester, 'correct horse', 'correct horse');
+      await tester.tap(find.text('Create backup'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save file'));
+      await tester.pumpAndSettle();
+
+      expect(saver.saved, isEmpty);
+      expect(find.text('Saved'), findsNothing);
+      // The backup is still on screen, ready for another try.
+      expect(find.text('Save file'), findsOneWidget);
+    });
+
+    testWidgets('a write that fails is said in the words of the platform', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final saver = FakeDocumentSaver()
+        ..failure = const DocumentSaveException('The drive is full.');
+      final bridge = FakeBridge(wallets: [makeMeta()]);
+      await tester.pumpWidget(
+        screen(bridge, const BackupExportScreen(), saver: saver),
+      );
+      await tester.pumpAndSettle();
+
+      await typePasswords(tester, 'correct horse', 'correct horse');
+      await tester.tap(find.text('Create backup'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save file'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('The drive is full.'), findsOneWidget);
+      expect(find.text('Saved'), findsNothing);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('sharing hands the decoded bytes to the system sheet', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final saver = FakeDocumentSaver();
+      final sharer = FakeBackupSharer();
+      final bridge = FakeBridge(wallets: [makeMeta()]);
+      await tester.pumpWidget(
+        screen(
+          bridge,
+          const BackupExportScreen(),
+          sharer: sharer,
+          saver: saver,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await typePasswords(tester, 'correct horse', 'correct horse');
+      await tester.tap(find.text('Create backup'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Share'));
+      await tester.pumpAndSettle();
+
+      // The share sheet stays, under its own name, for a backup bound
+      // straight for another app or device.
       expect(sharer.shared, hasLength(1));
       expect(sharer.shared.single.bytes, base64Decode('R0ZCQUNLVVA='));
       expect(sharer.shared.single.filename, endsWith('.gerfaut'));
+      expect(saver.saved, isEmpty);
     });
 
-    testWidgets('coming back from the save sheet does not lock the app', (
+    testWidgets('coming back from the save dialog or the sheet does not lock', (
       tester,
     ) async {
       useTallSurface(tester);
       final bridge = FakeBridge(wallets: [makeMeta()]);
       await tester.pumpWidget(
-        screen(bridge, const BackupExportScreen(), sharer: FakeBackupSharer()),
+        screen(
+          bridge,
+          const BackupExportScreen(),
+          sharer: FakeBackupSharer(),
+          saver: FakeDocumentSaver(answer: false),
+        ),
       );
       await tester.pumpAndSettle();
       final lock = ProviderScope.containerOf(
@@ -196,12 +296,21 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Save file'));
       await tester.pumpAndSettle();
-      // Android pauses Gerfaut behind the sheet and resumes it after.
+      // Android pauses Gerfaut behind the dialog and resumes it after.
       lock
         ..noteHidden()
         ..noteResumed();
 
       // The backup is still on screen, with its QR code still to show.
+      expect(lock.state.locked, isFalse);
+      expect(find.text('Show QR code'), findsOneWidget);
+
+      // The share sheet is a screen of the system's just the same.
+      await tester.tap(find.text('Share'));
+      await tester.pumpAndSettle();
+      lock
+        ..noteHidden()
+        ..noteResumed();
       expect(lock.state.locked, isFalse);
       expect(find.text('Show QR code'), findsOneWidget);
     });

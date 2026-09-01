@@ -1,10 +1,14 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/bridge.dart';
+import '../src/documents.dart';
 import '../src/format.dart';
+import '../src/lock.dart';
 import '../src/models.dart';
 import '../src/share.dart';
 import '../src/state.dart';
@@ -13,9 +17,14 @@ import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/choice_group.dart';
 
+/// Where an exported file goes: written where the user points, or
+/// handed to the system share sheet.
+enum _Destination { file, share }
+
 /// CSV export of one wallet's history: date and direction filters, a
-/// live count of what they keep, and the system share sheet at the end.
-/// Everything happens on this device.
+/// live count of what they keep, and at the end a file saved where the
+/// user points or handed to the share sheet. Everything happens on this
+/// device.
 class ExportScreen extends ConsumerStatefulWidget {
   const ExportScreen({super.key, required this.walletId});
 
@@ -94,30 +103,47 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
     });
   }
 
-  Future<void> _export(WalletSnapshot snapshot) async {
+  Future<void> _export(
+    WalletSnapshot snapshot,
+    _Destination destination,
+  ) async {
     setState(() => _exporting = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
       final result = await ref
           .read(bridgeProvider)
           .exportTransactions(widget.walletId, _options);
-      await ref
-          .read(csvSharerProvider)
-          .shareCsv(
-            csv: result.csv,
-            filename: '${slugify(snapshot.meta.name)}-transactions.csv',
-          );
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            result.rows == 1
-                ? '1 transaction exported'
-                : '${result.rows} transactions exported',
-          ),
-        ),
-      );
+      final filename = '${slugify(snapshot.meta.name)}-transactions.csv';
+      final rows = result.rows == 1
+          ? '1 transaction'
+          : '${result.rows} transactions';
+      // The save dialog and the share sheet are screens of the
+      // system's: Android pauses Gerfaut behind them, and coming back
+      // from one is not coming back from the background.
+      ref.read(lockProvider.notifier).expectExcursion();
+      switch (destination) {
+        case _Destination.file:
+          final saved = await ref
+              .read(documentSaverProvider)
+              .save(
+                bytes: utf8.encode(result.csv),
+                filename: filename,
+                mimeType: 'text/csv',
+              );
+          // A dialog waved away says nothing: the filters are still here.
+          if (saved) {
+            messenger.showSnackBar(SnackBar(content: Text('$rows saved')));
+          }
+        case _Destination.share:
+          await ref
+              .read(csvSharerProvider)
+              .shareCsv(csv: result.csv, filename: filename);
+          messenger.showSnackBar(SnackBar(content: Text('$rows exported')));
+      }
     } on BridgeException catch (error) {
       messenger.showSnackBar(SnackBar(content: Text('$error')));
+    } on DocumentSaveException catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text(error.message)));
     } finally {
       if (mounted) setState(() => _exporting = false);
     }
@@ -129,6 +155,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
     final snapshot = ref.watch(snapshotProvider(widget.walletId)).valueOrNull;
     final total = snapshot?.txs.length ?? 0;
     final selected = snapshot?.txs.where(_passes).length ?? 0;
+    final ready = snapshot != null && selected > 0 && !_exporting;
 
     return Scaffold(
       appBar: GerfautAppBar.text('Export'),
@@ -183,10 +210,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                       // Null keeps both, and reads as its own option.
                       const ChoiceOption(value: null, label: 'All'),
                       for (final direction in ExportDirection.values)
-                        ChoiceOption(
-                          value: direction,
-                          label: direction.label,
-                        ),
+                        ChoiceOption(value: direction, label: direction.label),
                     ],
                     onChanged: (direction) =>
                         setState(() => _direction = direction),
@@ -298,13 +322,29 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                     ),
                   ],
                   const SizedBox(height: GerfautSpacing.sm),
-                  PrimaryButton(
-                    label: _exporting ? 'Exporting…' : 'Export CSV',
-                    icon: LucideIcons.share2,
-                    expand: true,
-                    onPressed: snapshot == null || selected == 0 || _exporting
-                        ? null
-                        : () => _export(snapshot),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: PrimaryButton(
+                          label: _exporting ? 'Exporting…' : 'Save file',
+                          icon: LucideIcons.save,
+                          expand: true,
+                          onPressed: ready
+                              ? () => _export(snapshot, _Destination.file)
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(width: GerfautSpacing.sm),
+                      Expanded(
+                        child: SecondaryButton(
+                          label: 'Share',
+                          icon: LucideIcons.share2,
+                          onPressed: ready
+                              ? () => _export(snapshot, _Destination.share)
+                              : null,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
