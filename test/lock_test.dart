@@ -493,6 +493,40 @@ void main() {
       lock.syncFromSettings(pinLock);
       expect(guard.calls, [true, false, true]);
     });
+
+    test('disguised, the window is plain while the calculator shows', () async {
+      final guard = FakeWindowGuard();
+      final container = ProviderContainer(
+        overrides: [
+          bridgeProvider.overrideWithValue(locked()),
+          biometricGateProvider.overrideWithValue(
+            FakeBiometrics(available: false),
+          ),
+          windowGuardProvider.overrideWithValue(guard),
+          disguiseServiceProvider.overrideWithValue(
+            FakeDisguise(disguised: true),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final lock = container.read(lockProvider.notifier);
+
+      // The lock lands before the platform has said which face the app
+      // wears: secure first, then plain once the calculator is known
+      // to be what shows.
+      lock.syncFromSettings(pinLock);
+      expect(guard.calls, [true]);
+      await Future<void>.delayed(Duration.zero);
+      expect(guard.calls, [true, false]);
+
+      // Unlocked, the wallet is on screen and photographed blank.
+      await lock.unlock('1234');
+      expect(guard.secure, isTrue);
+
+      // Locked again, the calculator is back and the card shows it.
+      lock.lockNow();
+      expect(guard.calls, [true, false, true, false]);
+    });
   });
 
   group('the welcome tour', () {

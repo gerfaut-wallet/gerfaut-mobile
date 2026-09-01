@@ -117,8 +117,16 @@ class LockController extends Notifier<LockState> {
   /// The next return comes from a system screen Gerfaut opened itself.
   bool _excursion = false;
 
+  /// What the window was last asked to be; null before the first ask.
+  bool? _secure;
+
   @override
-  LockState build() => const LockState();
+  LockState build() {
+    // The disguise decides what a locked app shows, so the window
+    // follows it as it follows the lock.
+    ref.listen(disguiseProvider, (_, _) => _guardWindow());
+    return const LockState();
+  }
 
   /// Takes the lock from the settings the vault just handed over.
   ///
@@ -132,27 +140,42 @@ class LockController extends Notifier<LockState> {
   /// screen they are standing on.
   void syncFromSettings(AppLock? lock) {
     final first = !state.loaded;
-    // The window follows the lock: secure while one exists, plain
-    // otherwise. The task switcher photographs the app on its way out,
-    // before the lock screen draws, so the lock alone would leave a
-    // balance readable there. Without a lock nothing is hidden, and
-    // screenshots stay possible.
-    final secure = lock != null;
-    if (first || (state.lock != null) != secure) {
-      unawaited(ref.read(windowGuardProvider).setSecure(secure));
-    }
     state = LockState(
       lock: lock,
       loaded: true,
       locked: first ? lock != null : state.locked,
     );
+    _guardWindow();
+  }
+
+  /// Keeps the window in step with what is on screen.
+  ///
+  /// Secure while a lock exists and the app wears its own face: the
+  /// task switcher photographs the app on its way out, before the lock
+  /// screen draws, so the lock alone would leave a balance readable
+  /// there. Disguised and locked, what shows is the calculator, and a
+  /// blank card titled "Calculator" in the switcher would say the app
+  /// has something to hide: that face is left plain. The wallet is
+  /// still never photographed, since it only ever shows unlocked, and
+  /// the flag is back before it draws. Without a lock nothing is
+  /// hidden, and screenshots stay possible.
+  void _guardWindow() {
+    if (!state.loaded) return;
+    final disguised = ref.read(disguiseProvider).disguised;
+    final secure = state.lock != null && !(disguised && state.locked);
+    if (secure == _secure) return;
+    _secure = secure;
+    unawaited(ref.read(windowGuardProvider).setSecure(secure));
   }
 
   /// Tries the secret. The verdict carries the delay the core imposes
   /// after repeated failures; the screen shows it counting down.
   Future<LockVerdict> unlock(String secret) async {
     final verdict = await ref.read(bridgeProvider).verifyAppLock(secret);
-    if (verdict.unlocked) state = state.copyWith(locked: false);
+    if (verdict.unlocked) {
+      state = state.copyWith(locked: false);
+      _guardWindow();
+    }
     return verdict;
   }
 
@@ -166,12 +189,17 @@ class LockController extends Notifier<LockState> {
     final passed = await ref
         .read(biometricGateProvider)
         .authenticate('Unlock Gerfaut');
-    if (passed) state = state.copyWith(locked: false);
+    if (passed) {
+      state = state.copyWith(locked: false);
+      _guardWindow();
+    }
     return passed;
   }
 
   void lockNow() {
-    if (state.lock != null) state = state.copyWith(locked: true);
+    if (state.lock == null) return;
+    state = state.copyWith(locked: true);
+    _guardWindow();
   }
 
   /// Gerfaut left the screen. A flag and not a clock, because the

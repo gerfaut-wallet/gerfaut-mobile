@@ -95,6 +95,7 @@ Widget disguisedApp(
   FakeBridge bridge, {
   FakeDisguise? disguise,
   FakeBiometrics? biometrics,
+  FakeWindowGuard? guard,
 }) {
   return ProviderScope(
     overrides: [
@@ -105,7 +106,7 @@ Widget disguisedApp(
       biometricGateProvider.overrideWithValue(
         biometrics ?? FakeBiometrics(available: false),
       ),
-      windowGuardProvider.overrideWithValue(FakeWindowGuard()),
+      windowGuardProvider.overrideWithValue(guard ?? FakeWindowGuard()),
     ],
     child: const GerfautApp(),
   );
@@ -325,6 +326,33 @@ void main() {
       expect(bridge.lockCalls, isEmpty);
       expect(find.byType(CalculatorScreen), findsOneWidget);
     });
+
+    testWidgets(
+      'the calculator leaves the window plain, the wallet secures it',
+      (tester) async {
+        final guard = FakeWindowGuard();
+        await tester.pumpWidget(
+          disguisedApp(locked(wallets: [makeMeta()]), guard: guard),
+        );
+        await tester.pumpAndSettle();
+
+        // A blank thumbnail titled "Calculator" would give the app away:
+        // the calculator is photographed as any calculator is.
+        expect(find.byType(CalculatorScreen), findsOneWidget);
+        expect(guard.secure, isFalse);
+
+        for (final d in ['1', '2', '3', '4']) {
+          await tester.tap(find.widgetWithText(InkWell, d));
+          await tester.pump();
+        }
+        await tester.tap(find.bySemanticsLabel('Equals'));
+        await tester.pumpAndSettle();
+
+        // The wallet is what the switcher must never show.
+        expect(find.text('Cold storage'), findsOneWidget);
+        expect(guard.secure, isTrue);
+      },
+    );
 
     testWidgets('no biometric prompt is ever raised while disguised', (
       tester,

@@ -8,10 +8,13 @@
 // Marking the window secure blanks it there, along with screenshots
 // and recordings.
 //
-// It is done only while a lock exists. Without one, the wallets are
-// open to anyone holding the phone anyway, and the user keeps the
-// right to capture their own screen: to show it to someone, or for the
-// emulator tests, which read the screen the same way.
+// It is done only while a lock exists, and not while the disguise has
+// the calculator on screen: a blank "Calculator" card in the switcher
+// would give the game away, and a calculator has nothing to hide.
+// Without a lock, the wallets are open to anyone holding the phone
+// anyway, and the user keeps the right to capture their own screen: to
+// show it to someone, or for the emulator tests, which read the screen
+// the same way.
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
