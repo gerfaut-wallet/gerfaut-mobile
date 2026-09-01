@@ -164,6 +164,16 @@ String formatTimestamp(int unixSeconds) {
   return '${_months[local.month - 1]} $day, ${local.year}, $hour:$minute';
 }
 
+/// A day alone, in the language and order of [formatTimestamp]:
+/// `Mar 17, 2030`. For a deadline the hour would only pretend to a
+/// precision an estimate does not have.
+String formatDate(int unixSeconds) {
+  final local = DateTime.fromMillisecondsSinceEpoch(unixSeconds * 1000)
+      .toLocal();
+  final day = local.day.toString().padLeft(2, '0');
+  return '${_months[local.month - 1]} $day, ${local.year}';
+}
+
 /// A byte count the way a file manager states it: whole bytes under a
 /// kilobyte, then one decimal in binary units. `1229` -> `"1.2 KB"`.
 String formatBytes(int bytes) {
@@ -171,6 +181,41 @@ String formatBytes(int bytes) {
   final kb = bytes / 1024;
   if (kb < 1024) return '${kb.toStringAsFixed(1)} KB';
   return '${(kb / 1024).toStringAsFixed(1)} MB';
+}
+
+/// A block count with its unit: `1 432 blocks`, `1 block`.
+String formatBlocks(int blocks) =>
+    '${groupThousands('$blocks')} ${blocks == 1 ? 'block' : 'blocks'}';
+
+const int _minute = 60;
+const int _hour = 60 * _minute;
+const int _day = 24 * _hour;
+const int _month = 30 * _day;
+const int _year = 365 * _day;
+
+/// A duration as an estimate, always said as one: `about 10 days`,
+/// `about 3 hours`, `about 1 year 2 months`.
+///
+/// Two units while the leading count is one or two — "about 1 day 12
+/// hours" is where rounding to a day would be a third off — and one
+/// rounded unit from three on, where the smaller unit is noise. Years
+/// carry months, days carry hours, hours carry minutes; the minute is
+/// the floor, and under it there is nothing worth a figure.
+String formatDuration(int seconds) {
+  if (seconds < _minute) return 'under a minute';
+  String unit(int count, String name) => '$count $name${count == 1 ? '' : 's'}';
+  String twoOrOne(int big, String bigName, int small, String smallName) {
+    final lead = seconds ~/ big;
+    if (lead >= 3) return 'about ${unit((seconds / big).round(), bigName)}';
+    final rest = (seconds - lead * big) ~/ small;
+    final head = unit(lead, bigName);
+    return rest == 0 ? 'about $head' : 'about $head ${unit(rest, smallName)}';
+  }
+
+  if (seconds >= _year) return twoOrOne(_year, 'year', _month, 'month');
+  if (seconds >= _day) return twoOrOne(_day, 'day', _hour, 'hour');
+  if (seconds >= _hour) return twoOrOne(_hour, 'hour', _minute, 'minute');
+  return 'about ${unit(seconds ~/ _minute, 'minute')}';
 }
 
 /// File-name slug of a wallet name: lowercase, runs of anything but

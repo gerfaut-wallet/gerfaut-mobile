@@ -176,4 +176,46 @@ void main() {
       expect(formatFiat(1, 15000000, FiatCurrency.jpy), '¥0.1500');
     });
   });
+
+  group('formatDuration', () {
+    test('rounds one unit once the lead count reaches three', () {
+      expect(formatDuration(10 * 86400), 'about 10 days');
+      expect(formatDuration(3 * 3600), 'about 3 hours');
+      expect(formatDuration(365 * 86400), 'about 1 year');
+      // 1,432 blocks and 20,440 blocks at ten minutes each.
+      expect(formatDuration(1432 * 600), 'about 10 days');
+      expect(formatDuration(20440 * 600), 'about 142 days');
+      // 100 units of 512 seconds, the shortest time-based lock shape.
+      expect(formatDuration(51200), 'about 14 hours');
+      expect(formatDuration(5 * 60), 'about 5 minutes');
+    });
+
+    test('keeps two units while the lead count is one or two', () {
+      expect(formatDuration(425 * 86400), 'about 1 year 2 months');
+      expect(formatDuration(36 * 3600), 'about 1 day 12 hours');
+      expect(formatDuration(80 * 60), 'about 1 hour 20 minutes');
+      expect(formatDuration(2 * 86400), 'about 2 days');
+    });
+
+    test('has the minute for a floor', () {
+      expect(formatDuration(59), 'under a minute');
+      expect(formatDuration(0), 'under a minute');
+      expect(formatDuration(60), 'about 1 minute');
+    });
+  });
+
+  group('formatBlocks', () {
+    test('groups thousands and agrees in number', () {
+      expect(formatBlocks(1432), '1 432 blocks');
+      expect(formatBlocks(52560), '52 560 blocks');
+      expect(formatBlocks(1), '1 block');
+    });
+  });
+
+  group('formatDate', () {
+    test('reads like the timestamp without its hour', () {
+      // Noon UTC, so the day holds in any zone the tests run in.
+      expect(formatDate(1899979200), 'Mar 17, 2030');
+    });
+  });
 }

@@ -2,8 +2,16 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/src/models.dart';
+import 'package:gerfaut/src/policy_text.dart';
 
 import 'policy_fixtures.dart';
+
+PolicySnapshot _snapshot(Map<String, dynamic> json) =>
+    PolicySnapshot.fromJson(json);
+
+/// A time lock at noon UTC on 17 March 2030, still far ahead of the
+/// fixture clock.
+const int _noonMarch2030 = 1899979200;
 
 void main() {
   group('PolicySnapshot.fromJson', () {
@@ -137,6 +145,259 @@ void main() {
       );
       expect(() => BranchRole.fromId('backup'), throwsStateError);
       expect(() => PolicyKind.fromId('taproot_tree'), throwsStateError);
+    });
+  });
+
+  group('describePolicy', () {
+    test('says the policy in a sentence or two', () {
+      expect(
+        describePolicy(_snapshot(multisigPolicyJson())),
+        '2 of 3 keys sign.',
+      );
+      expect(
+        describePolicy(_snapshot(lianaPolicyJson())),
+        'Key A signs. '
+        'A recovery key can spend once a coin has waited about 1 year.',
+      );
+      expect(
+        describePolicy(_snapshot(singleKeyPolicyJson())),
+        'One key signs. Any coin is spendable now.',
+      );
+      expect(
+        describePolicy(_snapshot(addressPolicyJson())),
+        'An address has no policy Gerfaut can read.',
+      );
+      // The only path waits: its lock is part of the sentence.
+      expect(
+        describePolicy(_snapshot(heightLockedPolicyJson())),
+        'Key A signs after block 801 432.',
+      );
+    });
+  });
+
+  group('policyDigest', () {
+    test('fits the balance card', () {
+      expect(policyDigest(_snapshot(multisigPolicyJson())), '2 of 3 keys');
+      expect(policyDigest(_snapshot(singleKeyPolicyJson())), 'Single key');
+      expect(policyDigest(_snapshot(addressPolicyJson())), 'Watched address');
+      expect(
+        policyDigest(_snapshot(lianaPolicyJson())),
+        'Recovery in about 142 days',
+      );
+      expect(
+        policyDigest(_snapshot(lianaPolicyJson(locked: 0, unlocked: 1))),
+        'Recovery open',
+      );
+      expect(
+        policyDigest(_snapshot(lianaPolicyJson(locked: 0, waiting: 1))),
+        'Recovery waiting for a block',
+      );
+      expect(
+        policyDigest(_snapshot(heightLockedPolicyJson())),
+        'Spendable in about 10 days',
+      );
+    });
+  });
+
+  group('describeCondition', () {
+    test('a flat threshold reads as one line', () {
+      final multisig = _snapshot(multisigPolicyJson());
+      final line = describeCondition(
+        multisig.branches.single.condition,
+        multisig,
+      );
+      expect(line.text, 'Any 2 of Key A, Key B, Key C');
+      expect(line.children, isEmpty);
+
+      final liana = _snapshot(lianaPolicyJson());
+      expect(
+        describeCondition(liana.branches[1].condition, liana).text,
+        'Key B and a coin having waited 52 560 blocks',
+      );
+    });
+
+    test('a nested threshold is a heading over one line per part', () {
+      final liana = _snapshot(lianaPolicyJson());
+      const condition = ThreshCondition(
+        k: 1,
+        n: 2,
+        items: [
+          KeyCondition(keyId: 'k0'),
+          ThreshCondition(
+            k: 2,
+            n: 2,
+            items: [
+              KeyCondition(keyId: 'k1'),
+              OlderCondition(lock: BlocksLock(blocks: 144)),
+            ],
+          ),
+        ],
+      );
+      final line = describeCondition(condition, liana);
+      expect(line.text, 'Any of:');
+      expect(line.children.map((c) => c.text), [
+        'Key A',
+        'Key B and a coin having waited 144 blocks',
+      ]);
+    });
+  });
+
+  group('describeTimelock', () {
+    test('words each kind of lock with its estimate', () {
+      final liana = _snapshot(lianaPolicyJson());
+      expect(
+        describeTimelock(liana.branches[1].timelocks.single),
+        '52 560 blocks after the coin arrives ≈ about 1 year',
+      );
+      final height = _snapshot(heightLockedPolicyJson());
+      expect(
+        describeTimelock(height.branches.single.timelocks.single),
+        'block 801 432 ≈ in about 10 days',
+      );
+      expect(
+        describeTimelock(
+          const PolicyTimelock(
+            lock: AbsoluteTimelock(lock: HeightLock(height: 800000)),
+            required: true,
+            state: UnlockedLock(),
+          ),
+        ),
+        'block 800 000 · passed',
+      );
+      expect(
+        describeTimelock(
+          PolicyTimelock(
+            lock: const AbsoluteTimelock(lock: TimeLock(unix: _noonMarch2030)),
+            required: true,
+            state: LockedLock(
+              remaining: Remaining(
+                remainingBlocks: null,
+                remainingSeconds: _noonMarch2030 - fixtureNow,
+                unlocksAtUnix: _noonMarch2030,
+              ),
+            ),
+          ),
+        ),
+        'after Mar 17, 2030 ≈ in about 5 years',
+      );
+      expect(
+        describeTimelock(
+          const PolicyTimelock(
+            lock: RelativeTimelock(lock: BlocksLock(blocks: 100)),
+            required: false,
+            state: NoCoinsLock(blocks: 100, seconds: null),
+          ),
+        ),
+        '100 blocks after the coin arrives ≈ about 17 hours (optional)',
+      );
+      expect(
+        describeTimelock(
+          const PolicyTimelock(
+            lock: RelativeTimelock(lock: SecondsLock(seconds: 51200)),
+            required: true,
+            state: NoCoinsLock(blocks: null, seconds: 51200),
+          ),
+        ),
+        'about 14 hours after the coin arrives',
+      );
+    });
+  });
+
+  group('describeBranchState', () {
+    PolicyBranch recovery(Map<String, dynamic> json) =>
+        _snapshot(json).branches[1];
+
+    test('a lone coin gets its own countdown and progress', () {
+      final far = describeBranchState(recovery(lianaPolicyJson()));
+      expect(far.tone, StateTone.far);
+      expect(far.label, 'In 20 440 blocks ≈ about 142 days');
+      expect(far.date, isNotNull);
+      expect(far.progress, closeTo((52560 - 20440) / 52560, 0.001));
+
+      final soon = describeBranchState(
+        recovery(lianaPolicyJson(remainingBlocks: 1432)),
+      );
+      expect(soon.tone, StateTone.soon);
+      expect(soon.label, 'In 1 432 blocks ≈ about 10 days');
+
+      expect(
+        describeBranchState(recovery(lianaPolicyJson(locked: 0, unlocked: 1))),
+        isA<BranchStatus>()
+            .having((s) => s.tone, 'tone', StateTone.open)
+            .having((s) => s.label, 'label', 'Spendable now'),
+      );
+      expect(
+        describeBranchState(recovery(lianaPolicyJson(locked: 0, waiting: 1))),
+        isA<BranchStatus>()
+            .having((s) => s.tone, 'tone', StateTone.idle)
+            .having((s) => s.label, 'label', 'Waiting for a block'),
+      );
+    });
+
+    test('several coins are counted, the nearest one timed', () {
+      final status = describeBranchState(
+        recovery(
+          lianaPolicyJson(
+            unlocked: 3,
+            locked: 1,
+            waiting: 2,
+            remainingBlocks: 1728,
+          ),
+        ),
+      );
+      expect(status.tone, StateTone.soon);
+      expect(
+        status.label,
+        '3 of 6 coins unlocked · next in about 12 days · 2 waiting for a block',
+      );
+      expect(status.progress, closeTo((52560 - 1728) / 52560, 0.001));
+
+      final open = describeBranchState(
+        recovery(lianaPolicyJson(unlocked: 2, locked: 0)),
+      );
+      expect(open.tone, StateTone.open);
+      expect(open.label, '2 of 2 coins unlocked');
+      expect(open.progress, isNull);
+    });
+
+    test('an absolute lock colours only within thirty days', () {
+      final soon = describeBranchState(
+        _snapshot(heightLockedPolicyJson()).branches.single,
+      );
+      expect(soon.tone, StateTone.soon);
+      expect(soon.label, 'In 1 432 blocks ≈ about 10 days');
+      expect(soon.progress, isNull, reason: 'no coin to count from');
+
+      final far = describeBranchState(
+        _snapshot(heightLockedPolicyJson(remaining: 20000)).branches.single,
+      );
+      expect(far.tone, StateTone.far);
+      expect(far.label, 'In 20 000 blocks ≈ about 139 days');
+    });
+
+    test('states without a countdown have their own words', () {
+      PolicyBranch withState(BranchState state) => PolicyBranch(
+        id: 'b1',
+        role: BranchRole.recovery,
+        label: 'Recovery',
+        summary: '',
+        condition: const KeyCondition(keyId: 'k1'),
+        timelocks: const [],
+        state: state,
+        spendableNow: state is SpendableNow,
+      );
+      expect(
+        describeBranchState(withState(const SpendableNow())).label,
+        'Spendable now',
+      );
+      expect(
+        describeBranchState(withState(const NoCoinsBranch())).label,
+        'No coins yet',
+      );
+      expect(
+        describeBranchState(withState(const NeedsPreimage())).tone,
+        StateTone.secret,
+      );
     });
   });
 }
