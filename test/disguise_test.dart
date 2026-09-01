@@ -9,6 +9,7 @@ import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/notifications.dart';
 import 'package:gerfaut/src/state.dart';
+import 'package:gerfaut/src/window.dart';
 import 'package:gerfaut/theme/tokens.dart';
 
 import 'fakes.dart';
@@ -191,6 +192,62 @@ void main() {
       expect(bridge.lock, isNull);
       expect(disguise.disguised, isFalse);
       expect(disguise.calls, contains('disguise:false'));
+    });
+  });
+
+  group('a disguise that outlived its lock', () {
+    testWidgets('is taken off as soon as the vault says there is none', (
+      tester,
+    ) async {
+      // The lock went without the settings card: storage the system
+      // cleared, a backup restored elsewhere. The launcher still shows
+      // the calculator, and nothing would ask for a PIN behind it.
+      final disguise = FakeDisguise(disguised: true);
+      final bridge = FakeBridge(
+        wallets: [makeMeta()],
+        settings: const Settings(
+          activeNetwork: Network.mainnet,
+          backends: {},
+          appPrefs: {'onboarding.seen': '1'},
+        ),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            bridgeProvider.overrideWithValue(bridge),
+            disguiseServiceProvider.overrideWithValue(disguise),
+            biometricGateProvider.overrideWithValue(_NoBiometrics()),
+            windowGuardProvider.overrideWithValue(FakeWindowGuard()),
+          ],
+          child: const GerfautApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The app opens on its wallets, as any vault without a lock does,
+      // and the launcher gets its own face and its widgets back.
+      expect(find.text('Cold storage'), findsOneWidget);
+      expect(disguise.disguised, isFalse);
+      expect(disguise.calls, ['disguise:false', 'widgets:true']);
+    });
+
+    testWidgets('stays while a lock stands', (tester) async {
+      final disguise = FakeDisguise(disguised: true);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            bridgeProvider.overrideWithValue(_locked()),
+            disguiseServiceProvider.overrideWithValue(disguise),
+            biometricGateProvider.overrideWithValue(_NoBiometrics()),
+            windowGuardProvider.overrideWithValue(FakeWindowGuard()),
+          ],
+          child: const GerfautApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(disguise.disguised, isTrue);
+      expect(disguise.calls, isEmpty);
     });
   });
 

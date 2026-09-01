@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,6 +10,7 @@ import 'screens/welcome.dart';
 import 'src/disguise.dart';
 import 'src/home_widgets.dart';
 import 'src/lock.dart';
+import 'src/models.dart';
 import 'src/notifications.dart';
 import 'src/onboarding.dart';
 import 'src/state.dart';
@@ -102,9 +105,32 @@ class _Hydrated extends ConsumerWidget {
       // the first reading with one in it is what puts the screen up.
       if (settings != null) {
         ref.read(lockProvider.notifier).syncFromSettings(settings.appLock);
+        _dropOrphanDisguise(ref, settings);
       }
     });
+    // The platform may answer about the disguise after the vault has
+    // answered about the lock: the same check, from the other side.
+    ref.listen(disguiseProvider, (_, _) {
+      final settings = ref.read(settingsProvider).valueOrNull;
+      if (settings != null) _dropOrphanDisguise(ref, settings);
+    });
     return child;
+  }
+
+  /// Takes the disguise off a vault that carries no lock.
+  ///
+  /// A disguise has no meaning without the PIN that opens it, and the
+  /// settings card turns the two off together. But the lock can go on
+  /// its own — a vault restored from a backup, app storage the system
+  /// cleared — and the calculator would then stand in the launcher in
+  /// front of an app that opens on a tap. The launcher face follows
+  /// the lock: none, none.
+  void _dropOrphanDisguise(WidgetRef ref, Settings settings) {
+    final disguise = ref.read(disguiseProvider);
+    if (settings.appLock != null || !disguise.loaded || !disguise.disguised) {
+      return;
+    }
+    unawaited(ref.read(disguiseProvider.notifier).set(false));
   }
 }
 
