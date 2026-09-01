@@ -9,6 +9,7 @@ import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/scan.dart';
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/models.dart';
+import 'package:gerfaut/src/screen.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/qr_camera.dart';
@@ -30,9 +31,12 @@ class _Outcome {
 /// A launcher page in front of the scanner, so the popped value can be
 /// captured. The camera is replaced by an empty box; tests push frames
 /// through [ScanScreenState.onFrame].
-Widget _app(FakeBridge bridge, _Outcome outcome) {
+Widget _app(FakeBridge bridge, _Outcome outcome, {ScreenKeeper? keeper}) {
   return ProviderScope(
-    overrides: [bridgeProvider.overrideWithValue(bridge)],
+    overrides: [
+      bridgeProvider.overrideWithValue(bridge),
+      if (keeper != null) screenKeeperProvider.overrideWithValue(keeper),
+    ],
     child: MaterialApp(
       theme: themeFrom(GerfautTokens.light, Brightness.light),
       home: Builder(
@@ -57,9 +61,10 @@ Widget _app(FakeBridge bridge, _Outcome outcome) {
 Future<ScanScreenState> _open(
   WidgetTester tester,
   FakeBridge bridge,
-  _Outcome outcome,
-) async {
-  await tester.pumpWidget(_app(bridge, outcome));
+  _Outcome outcome, {
+  ScreenKeeper? keeper,
+}) async {
+  await tester.pumpWidget(_app(bridge, outcome, keeper: keeper));
   await tester.tap(find.text('Open scanner'));
   await tester.pumpAndSettle();
   return tester.state<ScanScreenState>(find.byType(ScanScreen));
@@ -238,7 +243,8 @@ void main() {
 
   testWidgets('the same refused code is not handed back again', (tester) async {
     final bridge = FakeBridge()
-      ..onAssembleQr = (_) => throw const BridgeException('invalid_input', _psbt);
+      ..onAssembleQr = (_) =>
+          throw const BridgeException('invalid_input', _psbt);
     final outcome = _Outcome();
     final state = await _open(tester, bridge, outcome);
 
@@ -307,6 +313,21 @@ void main() {
     expect(outcome.text, isNull);
   });
 
+  testWidgets('the screen stays on while the camera is up', (tester) async {
+    final keeper = FakeScreenKeeper();
+    final outcome = _Outcome();
+    await _open(tester, FakeBridge(), outcome, keeper: keeper);
+    expect(keeper.on, isTrue);
+
+    // Lining an animated code up takes a while; the phone must not dim
+    // and drop the frames collected so far. Leaving lets it go.
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(keeper.on, isFalse);
+    expect(keeper.holds, 1);
+    expect(keeper.releases, 1);
+  });
+
   testWidgets('the progress bar says how many frames landed', (tester) async {
     final bridge = FakeBridge()..onAssembleQr = threeParts;
     final outcome = _Outcome();
@@ -320,7 +341,10 @@ void main() {
     final bar = tester.widget<LinearProgressIndicator>(
       find.byType(LinearProgressIndicator),
     );
-    expect(bar.semanticsLabel, 'Animated code progress, 1 of 3 frames received');
+    expect(
+      bar.semanticsLabel,
+      'Animated code progress, 1 of 3 frames received',
+    );
   });
 
   group('QrProgress.fromJson', () {

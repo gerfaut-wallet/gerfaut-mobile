@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../src/bridge.dart';
 import '../src/models.dart';
+import '../src/screen.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_bar.dart';
@@ -61,6 +62,23 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
 
   QrProgress? _progress;
   String? _error;
+
+  /// Holds the screen on while the camera is up: an animated code can
+  /// take a while to line up, and a phone that dims meanwhile drops
+  /// the frames collected so far along with the picture.
+  late final ScreenKeeper _keeper = ref.read(screenKeeperProvider);
+
+  @override
+  void initState() {
+    super.initState();
+    _keeper.keepOn();
+  }
+
+  @override
+  void dispose() {
+    _keeper.release();
+    super.dispose();
+  }
 
   /// Feeds one decoded frame. A repeat and a frame already turned down
   /// are dropped; a new frame sends the whole collection to the core.

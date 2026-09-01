@@ -12,6 +12,7 @@ import 'package:gerfaut/screens/scan.dart';
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
+import 'package:gerfaut/src/screen.dart';
 import 'package:gerfaut/src/share.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
@@ -33,11 +34,17 @@ class FakeBackupSharer implements BackupSharer {
   }
 }
 
-Widget screen(FakeBridge bridge, Widget home, {BackupSharer? sharer}) {
+Widget screen(
+  FakeBridge bridge,
+  Widget home, {
+  BackupSharer? sharer,
+  ScreenKeeper? keeper,
+}) {
   return ProviderScope(
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
       if (sharer != null) backupSharerProvider.overrideWithValue(sharer),
+      if (keeper != null) screenKeeperProvider.overrideWithValue(keeper),
     ],
     child: MaterialApp(
       theme: themeFrom(GerfautTokens.light, Brightness.light),
@@ -182,9 +189,7 @@ void main() {
       ).read(lockProvider.notifier);
       lock
         ..syncFromSettings(null)
-        ..syncFromSettings(
-          const AppLock(kind: LockKind.pin, biometric: false),
-        );
+        ..syncFromSettings(const AppLock(kind: LockKind.pin, biometric: false));
 
       await typePasswords(tester, 'correct horse', 'correct horse');
       await tester.tap(find.text('Create backup'));
@@ -231,6 +236,32 @@ void main() {
       // And back to the first: a receiver may join at any frame.
       await tester.pump(frameInterval);
       expect(shownLabel(tester), 'Backup QR code, frame 1 of 2');
+    });
+
+    testWidgets('the screen is kept on for the loop, then let go', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final keeper = FakeScreenKeeper();
+      await tester.pumpWidget(
+        screen(
+          FakeBridge(),
+          const BackupQrScreen(
+            frames: ['ur:bytes/1-2/aaa', 'ur:bytes/2-2/bbb'],
+          ),
+          keeper: keeper,
+        ),
+      );
+      await tester.pump();
+      expect(keeper.on, isTrue);
+      expect(keeper.holds, 1);
+
+      // Leaving the screen hands the phone its timeout back.
+      await tester.pumpWidget(
+        screen(FakeBridge(), const SizedBox.shrink(), keeper: keeper),
+      );
+      expect(keeper.on, isFalse);
+      expect(keeper.releases, 1);
     });
 
     testWidgets('a single frame stands still, with no counter', (tester) async {
@@ -395,9 +426,7 @@ void main() {
       // learning about it does not shut the screen on the spot.
       lock
         ..syncFromSettings(null)
-        ..syncFromSettings(
-          const AppLock(kind: LockKind.pin, biometric: false),
-        );
+        ..syncFromSettings(const AppLock(kind: LockKind.pin, biometric: false));
 
       await tester.tap(find.text('Open a file'));
       await tester.pumpAndSettle();
@@ -423,9 +452,8 @@ void main() {
           FakeBridge(),
           Builder(
             builder: (context) => MediaQuery(
-              data: MediaQuery.of(
-                context,
-              ).copyWith(textScaler: const TextScaler.linear(2)),
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: const TextScaler.linear(2)),
               child: BackupRestoreScreen(
                 filePicker: () async => XFile.fromData(
                   base64Decode('R0ZCQUNLVVA='),

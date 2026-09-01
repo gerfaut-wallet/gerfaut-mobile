@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../src/screen.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_bar.dart';
 
@@ -12,19 +14,23 @@ const Duration frameInterval = Duration(milliseconds: 200);
 /// The sealed backup as an animated QR code: the frames loop until the
 /// screen is left, and the other device may join at any of them. A
 /// backup small enough for one frame shows a static code.
-class BackupQrScreen extends StatefulWidget {
+class BackupQrScreen extends ConsumerStatefulWidget {
   const BackupQrScreen({super.key, required this.frames});
 
   /// UR frames, as the core hands them out.
   final List<String> frames;
 
   @override
-  State<BackupQrScreen> createState() => _BackupQrScreenState();
+  ConsumerState<BackupQrScreen> createState() => _BackupQrScreenState();
 }
 
-class _BackupQrScreenState extends State<BackupQrScreen> {
+class _BackupQrScreenState extends ConsumerState<BackupQrScreen> {
   Timer? _timer;
   int _index = 0;
+
+  /// Holds the screen on for as long as the code loops. Read once here:
+  /// the same keeper has to be the one that lets go on dispose.
+  ScreenKeeper? _keeper;
 
   bool get _animated => widget.frames.length > 1;
 
@@ -32,6 +38,12 @@ class _BackupQrScreenState extends State<BackupQrScreen> {
   void initState() {
     super.initState();
     if (_animated) {
+      // The other device reads the loop over several seconds, and a
+      // screen that dims halfway through breaks it off; with a lock
+      // set, sleeping would take the whole export down with it.
+      final keeper = ref.read(screenKeeperProvider);
+      _keeper = keeper;
+      keeper.keepOn();
       _timer = Timer.periodic(frameInterval, (_) {
         setState(() => _index = (_index + 1) % widget.frames.length);
       });
@@ -41,6 +53,7 @@ class _BackupQrScreenState extends State<BackupQrScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _keeper?.release();
     super.dispose();
   }
 

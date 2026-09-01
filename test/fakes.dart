@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/electrum.dart';
 import 'package:gerfaut/src/models.dart';
+import 'package:gerfaut/src/screen.dart';
 import 'package:gerfaut/src/window.dart';
 import 'package:url_launcher_platform_interface/link.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
@@ -45,6 +46,21 @@ class FakeWindowGuard implements WindowGuard {
 
   @override
   Future<void> setSecure(bool secure) async => calls.add(secure);
+}
+
+/// Counts what the screen was asked instead of touching the platform.
+class FakeScreenKeeper implements ScreenKeeper {
+  int holds = 0;
+  int releases = 0;
+
+  /// Whether the screen is being kept on right now.
+  bool get on => holds > releases;
+
+  @override
+  Future<void> keepOn() async => holds++;
+
+  @override
+  Future<void> release() async => releases++;
 }
 
 WalletMeta makeMeta({
