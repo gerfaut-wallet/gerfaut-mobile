@@ -220,13 +220,20 @@ const int _year = 365 * _day;
 /// rounded unit from three on, where the smaller unit is noise. Years
 /// carry months, days carry hours, hours carry minutes; the minute is
 /// the floor, and under it there is nothing worth a figure.
+///
+/// A 365-day year leaves room for a twelfth 30-day month, which is
+/// carried rather than said: "1 year 12 months" is two years.
 String formatDuration(int seconds) {
   if (seconds < _minute) return 'under a minute';
   String unit(int count, String name) => '$count $name${count == 1 ? '' : 's'}';
   String twoOrOne(int big, String bigName, int small, String smallName) {
-    final lead = seconds ~/ big;
+    var lead = seconds ~/ big;
+    var rest = (seconds - lead * big) ~/ small;
+    if (rest >= big ~/ small) {
+      lead += 1;
+      rest = 0;
+    }
     if (lead >= 3) return 'about ${unit((seconds / big).round(), bigName)}';
-    final rest = (seconds - lead * big) ~/ small;
     final head = unit(lead, bigName);
     return rest == 0 ? 'about $head' : 'about $head ${unit(rest, smallName)}';
   }

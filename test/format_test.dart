@@ -202,6 +202,14 @@ void main() {
       expect(formatDuration(0), 'under a minute');
       expect(formatDuration(60), 'about 1 minute');
     });
+
+    test('carries a twelfth month into the year', () {
+      // 365-day years and 30-day months leave room for a twelfth month
+      // past the eleventh: it is a year, never "1 year 12 months".
+      expect(formatDuration((365 + 362) * 86400), 'about 2 years');
+      expect(formatDuration((365 + 335) * 86400), 'about 1 year 11 months');
+      expect(formatDuration((2 * 365 + 362) * 86400), 'about 3 years');
+    });
   });
 
   group('formatBlocks', () {
