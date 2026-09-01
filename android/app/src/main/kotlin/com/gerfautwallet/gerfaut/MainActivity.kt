@@ -8,6 +8,7 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.net.Uri
@@ -322,14 +323,18 @@ class MainActivity : FlutterFragmentActivity() {
             return null
         }
         val label = info.loadLabel(packageManager).toString()
-        // The three-argument forms reject a colour that is not opaque,
-        // and Flutter often has none to give: keep the colour only when
+        // The colour Flutter gives is the wallet's accent, and a card
+        // named "Calculator" must not wear it: disguised, the switcher
+        // gets the calculator's own background instead. The
+        // three-argument forms reject a colour that is not opaque, and
+        // Flutter often has none to give: the colour is kept only when
         // it is one the switcher would accept.
-        val opaque = android.graphics.Color.alpha(taskColor) == 0xFF
+        val color = if (disguised) calculatorBackground() else taskColor
+        val opaque = android.graphics.Color.alpha(color) == 0xFF
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             @Suppress("DEPRECATION")
             if (opaque) {
-                ActivityManager.TaskDescription(label, info.iconResource, taskColor)
+                ActivityManager.TaskDescription(label, info.iconResource, color)
             } else {
                 ActivityManager.TaskDescription(label, info.iconResource)
             }
@@ -341,11 +346,19 @@ class MainActivity : FlutterFragmentActivity() {
             icon.draw(Canvas(bitmap))
             @Suppress("DEPRECATION")
             if (opaque) {
-                ActivityManager.TaskDescription(label, bitmap, taskColor)
+                ActivityManager.TaskDescription(label, bitmap, color)
             } else {
                 ActivityManager.TaskDescription(label, bitmap)
             }
         }
+    }
+
+    // The background of the calculator screen in the theme in force:
+    // the grey any stock calculator has. Mirrors the palette in
+    // lib/screens/calculator.dart, which is the one place it is chosen.
+    private fun calculatorBackground(): Int {
+        val night = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        return if (night == Configuration.UI_MODE_NIGHT_YES) CALCULATOR_DARK else CALCULATOR_LIGHT
     }
 
     private class PendingSave(val bytes: ByteArray, val result: MethodChannel.Result)
@@ -355,5 +368,7 @@ class MainActivity : FlutterFragmentActivity() {
         const val FILES_CHANNEL = "gerfaut/files"
         const val DISGUISE_CHANNEL = "gerfaut/disguise"
         const val DISGUISE_MARKER = "disguised"
+        const val CALCULATOR_LIGHT = 0xFFF5F5F5.toInt()
+        const val CALCULATOR_DARK = 0xFF121212.toInt()
     }
 }
