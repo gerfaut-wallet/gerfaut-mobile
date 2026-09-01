@@ -971,6 +971,55 @@ void main() {
     });
   });
 
+  group('the Tor card', () {
+    FakeBridge withTor(TorMode mode) {
+      return FakeBridge(
+        settings: Settings(
+          activeNetwork: Network.mainnet,
+          backends: const {},
+          appPrefs: const {},
+          tor: TorSettings(mode: mode),
+        ),
+      );
+    }
+
+    testWidgets('the system proxy is named for what it is on a phone', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      await tester.pumpWidget(settingsApp(withTor(TorMode.system)));
+      await tester.pumpAndSettle();
+
+      // Any app may hold the local port first and answer for the
+      // server: the card says so, and says what Automatic does about it.
+      expect(
+        find.text(
+          'Only the Tor on this device, at 127.0.0.1:9050. On a phone any '
+          'app can answer on that port and pose as Tor, which is why '
+          'Automatic prefers the built-in client on Android.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('automatic says the built-in client comes first', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      await tester.pumpWidget(settingsApp(withTor(TorMode.auto)));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'The built-in Tor first; the Tor on this device only when this '
+          'build has none of its own.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('if it answers'), findsNothing);
+    });
+  });
+
   group('scanning a server address', () {
     /// What the form says of a scanned onion address, under the default
     /// Tor mode.
