@@ -10,6 +10,7 @@ import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
+import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/src/tx_file.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/amounts.dart';
@@ -29,7 +30,10 @@ Widget broadcastApp(
   Brightness brightness = Brightness.light,
 }) {
   return ProviderScope(
-    overrides: [bridgeProvider.overrideWithValue(bridge)],
+    overrides: [
+      bridgeProvider.overrideWithValue(bridge),
+      disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+    ],
     child: MaterialApp(
       theme: themeFrom(tokensOf(brightness), brightness),
       home: const BroadcastScreen(),
@@ -662,7 +666,10 @@ void main() {
     );
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [bridgeProvider.overrideWithValue(bridge)],
+        overrides: [
+          bridgeProvider.overrideWithValue(bridge),
+          disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+        ],
         child: const GerfautApp(),
       ),
     );

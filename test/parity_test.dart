@@ -8,6 +8,7 @@ import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
+import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/facts.dart';
 import 'package:gerfaut/widgets/notice.dart';
@@ -19,7 +20,10 @@ import 'fakes.dart';
 
 Widget app(FakeBridge bridge, {Widget? home}) {
   return ProviderScope(
-    overrides: [bridgeProvider.overrideWithValue(bridge)],
+    overrides: [
+      bridgeProvider.overrideWithValue(bridge),
+      disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+    ],
     child: home == null
         ? const GerfautApp()
         : MaterialApp(

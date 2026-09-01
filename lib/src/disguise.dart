@@ -9,12 +9,10 @@
 // phone's launcher does not show.
 
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path_provider/path_provider.dart';
 
 /// What the platform does for the disguise. Behind an interface so no
 /// test ever reaches the activity.
@@ -35,9 +33,10 @@ class SystemDisguise implements Disguise {
 
   static const MethodChannel _channel = MethodChannel('gerfaut/disguise');
 
-  /// The file the activity keeps beside the app's data while disguised,
-  /// for the one reader that has no activity to ask: the background
-  /// isolate, whose engine carries no channel of ours.
+  /// The name of the file the activity keeps beside the app's data
+  /// while disguised. The main app never needs it — the channel above
+  /// answers on a real device — but the background isolate has no
+  /// channel of ours and reads this file directly (see background.dart).
   static const String markerName = 'disguised';
 
   @override
@@ -45,20 +44,12 @@ class SystemDisguise implements Disguise {
     try {
       return await _channel.invokeMethod<bool>('isDisguised') ?? false;
     } on MissingPluginException {
-      return _markerExists();
+      // No channel at all, which is only ever a widget test: not
+      // disguised. A real device always carries the activity's channel.
+      return false;
     } on PlatformException {
       // A package manager that will not answer leaves the app as it
       // looks: not disguised.
-      return false;
-    }
-  }
-
-  Future<bool> _markerExists() async {
-    try {
-      final dir = await getApplicationSupportDirectory();
-      return await File('${dir.path}/$markerName').exists();
-    } catch (_) {
-      // No platform at all, as under a test binding.
       return false;
     }
   }

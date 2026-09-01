@@ -5,12 +5,16 @@ import 'package:gerfaut/app.dart';
 import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
+import 'package:gerfaut/src/disguise.dart';
 
 import 'fakes.dart';
 
 Widget app(FakeBridge bridge) {
   return ProviderScope(
-    overrides: [bridgeProvider.overrideWithValue(bridge)],
+    overrides: [
+      bridgeProvider.overrideWithValue(bridge),
+      disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+    ],
     child: const GerfautApp(),
   );
 }

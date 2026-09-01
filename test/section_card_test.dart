@@ -12,11 +12,13 @@ Widget cramped(Widget card, {double width = 340, double scale = 2}) {
     theme: themeFrom(GerfautTokens.light, Brightness.light),
     home: Builder(
       builder: (context) => MediaQuery(
-        data: MediaQuery.of(
-          context,
-        ).copyWith(textScaler: TextScaler.linear(scale)),
+        data: MediaQuery.of(context)
+            .copyWith(textScaler: TextScaler.linear(scale)),
         child: Scaffold(
-          body: SizedBox(width: width, child: SingleChildScrollView(child: card)),
+          body: SizedBox(
+            width: width,
+            child: SingleChildScrollView(child: card),
+          ),
         ),
       ),
     ),

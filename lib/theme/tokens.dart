@@ -254,7 +254,6 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
   /// Set on every style of the theme so no screen has to correct for it.
   static const TextLeadingDistribution _even = TextLeadingDistribution.even;
 
-
   static TextStyle _bricolage({
     required double size,
     required double height,

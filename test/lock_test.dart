@@ -7,6 +7,7 @@ import 'package:gerfaut/screens/lock_screen.dart';
 import 'package:gerfaut/screens/settings.dart';
 import 'package:gerfaut/screens/settings/security_section.dart';
 import 'package:gerfaut/screens/welcome.dart';
+import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
@@ -64,6 +65,8 @@ List<Override> _overrides(
     biometrics ?? FakeBiometrics(available: false),
   ),
   windowGuardProvider.overrideWithValue(guard ?? FakeWindowGuard()),
+  // Not disguised: these tests are about the plain lock screen.
+  disguiseServiceProvider.overrideWithValue(FakeDisguise()),
 ];
 
 Widget app(

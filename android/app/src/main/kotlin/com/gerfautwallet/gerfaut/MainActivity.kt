@@ -189,12 +189,18 @@ class MainActivity : FlutterFragmentActivity() {
     private val disguiseMarker: File
         get() = File(filesDir, DISGUISE_MARKER)
 
+    // The channel-facing read: it also brings the marker in line, so
+    // the background isolate reads the same answer. Kept off the hot
+    // path — the task-description override reads without writing.
     private fun isDisguised(): Boolean {
-        val disguised = packageManager.getComponentEnabledSetting(calculatorAlias) ==
-            PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+        val disguised = readDisguised()
         writeMarker(disguised)
         return disguised
     }
+
+    private fun readDisguised(): Boolean =
+        packageManager.getComponentEnabledSetting(calculatorAlias) ==
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED
 
     private fun setDisguised(disguised: Boolean) {
         val shown = if (disguised) calculatorAlias else launcherAlias
@@ -264,20 +270,44 @@ class MainActivity : FlutterFragmentActivity() {
         }
     }
 
+    // The primary colour Flutter last asked the task switcher to use.
+    private var taskColor: Int = 0
+
+    // Flutter sets the task description itself, from the app's title,
+    // every time it builds its Title widget, and clears the icon while
+    // at it. Whatever it asks for, the task wears the face in force:
+    // only the colour it chose is kept.
+    override fun setTaskDescription(taskDescription: ActivityManager.TaskDescription?) {
+        taskColor = taskDescription?.primaryColor ?: taskColor
+        super.setTaskDescription(describeTask(readDisguised()))
+    }
+
+    private fun applyTaskDescription(disguised: Boolean) {
+        super.setTaskDescription(describeTask(disguised))
+    }
+
     // What the task switcher calls this task, and the icon it gives it.
     // Both are read from the alias in force, so the manifest stays the
     // one place that names either face.
-    private fun applyTaskDescription(disguised: Boolean) {
+    private fun describeTask(disguised: Boolean): ActivityManager.TaskDescription? {
         val alias = if (disguised) calculatorAlias else launcherAlias
         val info: ActivityInfo = try {
             packageManager.getActivityInfo(alias, PackageManager.MATCH_DISABLED_COMPONENTS)
         } catch (_: PackageManager.NameNotFoundException) {
-            return
+            return null
         }
         val label = info.loadLabel(packageManager).toString()
-        val description = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        // The three-argument forms reject a colour that is not opaque,
+        // and Flutter often has none to give: keep the colour only when
+        // it is one the switcher would accept.
+        val opaque = android.graphics.Color.alpha(taskColor) == 0xFF
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             @Suppress("DEPRECATION")
-            ActivityManager.TaskDescription(label, info.iconResource)
+            if (opaque) {
+                ActivityManager.TaskDescription(label, info.iconResource, taskColor)
+            } else {
+                ActivityManager.TaskDescription(label, info.iconResource)
+            }
         } else {
             val icon = info.loadIcon(packageManager)
             val size = resources.getDimensionPixelSize(android.R.dimen.app_icon_size)
@@ -285,9 +315,12 @@ class MainActivity : FlutterFragmentActivity() {
             icon.setBounds(0, 0, size, size)
             icon.draw(Canvas(bitmap))
             @Suppress("DEPRECATION")
-            ActivityManager.TaskDescription(label, bitmap)
+            if (opaque) {
+                ActivityManager.TaskDescription(label, bitmap, taskColor)
+            } else {
+                ActivityManager.TaskDescription(label, bitmap)
+            }
         }
-        setTaskDescription(description)
     }
 
     private class PendingSave(val bytes: ByteArray, val result: MethodChannel.Result)

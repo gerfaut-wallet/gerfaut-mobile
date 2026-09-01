@@ -10,6 +10,7 @@ import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
+import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/buttons.dart';
 import 'package:gerfaut/widgets/notice.dart';
@@ -20,7 +21,10 @@ import 'fakes.dart';
 
 Widget settingsApp(FakeBridge bridge) {
   return ProviderScope(
-    overrides: [bridgeProvider.overrideWithValue(bridge)],
+    overrides: [
+      bridgeProvider.overrideWithValue(bridge),
+      disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+    ],
     child: MaterialApp(
       theme: themeFrom(GerfautTokens.light, Brightness.light),
       home: const SettingsScreen(),
@@ -65,7 +69,10 @@ void main() {
     );
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [bridgeProvider.overrideWithValue(bridge)],
+        overrides: [
+          bridgeProvider.overrideWithValue(bridge),
+          disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+        ],
         child: const GerfautApp(),
       ),
     );
@@ -166,7 +173,10 @@ void main() {
     );
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [bridgeProvider.overrideWithValue(bridge)],
+        overrides: [
+          bridgeProvider.overrideWithValue(bridge),
+          disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+        ],
         child: const GerfautApp(),
       ),
     );
@@ -1031,7 +1041,10 @@ void main() {
     /// lens does.
     Widget settingsWithCamera(FakeBridge bridge, String frame) {
       return ProviderScope(
-        overrides: [bridgeProvider.overrideWithValue(bridge)],
+        overrides: [
+          bridgeProvider.overrideWithValue(bridge),
+          disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+        ],
         child: MaterialApp(
           theme: themeFrom(GerfautTokens.light, Brightness.light),
           home: SettingsScreen(

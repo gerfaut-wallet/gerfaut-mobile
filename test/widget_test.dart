@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
+import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/brand.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -12,7 +13,10 @@ import 'fakes.dart';
 
 Widget app(FakeBridge bridge, {Future<void> Function()? bootstrap}) {
   return ProviderScope(
-    overrides: [bridgeProvider.overrideWithValue(bridge)],
+    overrides: [
+      bridgeProvider.overrideWithValue(bridge),
+      disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+    ],
     child: GerfautApp(bootstrap: bootstrap),
   );
 }

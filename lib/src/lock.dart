@@ -16,6 +16,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_auth/local_auth.dart';
 
+import 'disguise.dart';
 import 'models.dart';
 import 'state.dart';
 import 'window.dart';
@@ -156,8 +157,12 @@ class LockController extends Notifier<LockState> {
   }
 
   /// Asks the phone instead of the secret. False leaves the screen up.
+  ///
+  /// Never while disguised: the phone's prompt names the app, and the
+  /// calculator has nothing to say about a fingerprint.
   Future<bool> unlockWithBiometrics() async {
     if (!(state.lock?.biometric ?? false)) return false;
+    if (ref.read(disguiseProvider).disguised) return false;
     final passed = await ref
         .read(biometricGateProvider)
         .authenticate('Unlock Gerfaut');

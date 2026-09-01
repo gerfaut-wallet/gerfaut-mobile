@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'screens/calculator.dart';
 import 'screens/home.dart';
 import 'screens/lock_screen.dart';
 import 'screens/welcome.dart';
+import 'src/disguise.dart';
 import 'src/home_widgets.dart';
 import 'src/lock.dart';
 import 'src/notifications.dart';
@@ -113,6 +115,11 @@ class _Hydrated extends ConsumerWidget {
 /// The lock replaces the app rather than covering it: nothing of a
 /// wallet is in the tree behind it, so no screenshot, no accessibility
 /// walk and no back gesture reaches one.
+///
+/// Disguised, the lock is the calculator: the same rule, another face.
+/// The disguise is read from the platform, not the vault, and the gate
+/// waits for that answer as it waits for the lock's, so no frame of the
+/// wrong face is ever drawn.
 class _Gate extends ConsumerStatefulWidget {
   const _Gate();
 
@@ -175,11 +182,16 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
     // arrival is what tells the lock whether to show.
     final settings = ref.watch(settingsProvider);
     final lock = ref.watch(lockProvider);
+    final disguise = ref.watch(disguiseProvider);
     if (settings.hasError) {
       return _StartupErrorScreen(message: '${settings.error}');
     }
-    if (!lock.loaded) return const _StartupScreen();
-    if (lock.locked) return const LockScreen();
+    if (!lock.loaded || !disguise.loaded) return const _StartupScreen();
+    if (lock.locked) {
+      // The calculator never asks for a biometric: a system prompt
+      // over a calculator would give the app away.
+      return disguise.disguised ? const CalculatorScreen() : const LockScreen();
+    }
 
     // The tour only ever stands in front of an empty vault: someone
     // with wallets already knows what this is.
@@ -276,12 +288,17 @@ ThemeData themeFrom(GerfautTokens tokens, Brightness brightness) {
   );
 }
 
-class _StartupScreen extends StatelessWidget {
+/// The quiet screen of a starting app. It names the vault only once the
+/// platform has said the app is not disguised: a calculator that opened
+/// on "Opening the vault…" would have told everything in one frame.
+class _StartupScreen extends ConsumerWidget {
   const _StartupScreen();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final disguise = ref.watch(disguiseProvider);
+    if (!disguise.loaded || disguise.disguised) return const Scaffold();
     return Scaffold(
       body: Center(
         child: Text(
