@@ -1412,6 +1412,47 @@ class PriceQuote {
   final int at;
 }
 
+/// Recommended fee rates in sat/vB, as the core publishes them.
+class FeeEstimates {
+  const FeeEstimates({
+    required this.fastest,
+    required this.halfHour,
+    required this.hour,
+    required this.economy,
+    required this.minimum,
+    required this.at,
+  });
+
+  factory FeeEstimates.fromJson(Map<String, dynamic> json) {
+    return FeeEstimates(
+      fastest: (json['fastest'] as num).toDouble(),
+      halfHour: (json['half_hour'] as num).toDouble(),
+      hour: (json['hour'] as num).toDouble(),
+      economy: (json['economy'] as num).toDouble(),
+      minimum: (json['minimum'] as num).toDouble(),
+      at: json['at'] as int,
+    );
+  }
+
+  /// Likely next block.
+  final double fastest;
+
+  /// Within roughly 30 minutes.
+  final double halfHour;
+
+  /// Within roughly an hour.
+  final double hour;
+
+  /// No hurry.
+  final double economy;
+
+  /// Relay floor.
+  final double minimum;
+
+  /// Unix timestamp, seconds, when the estimates were fetched.
+  final int at;
+}
+
 /// Outcome of a release check.
 class UpdateCheck {
   const UpdateCheck({

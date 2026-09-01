@@ -293,6 +293,13 @@ Future<String> importBackup({
 Future<String> fetchPrice({required String source, required String currency}) =>
     RustLib.instance.api.crateApiFetchPrice(source: source, currency: currency);
 
+/// Fetches the recommended fee rates for a network through the backend
+/// configured for it, on the same route the chain takes. Returns a
+/// serialized `FeeEstimates`, or `null` on a network with no fee market
+/// (regtest), so the caller has nothing to hide but a line.
+Future<String> fetchFees({required String network}) =>
+    RustLib.instance.api.crateApiFetchFees(network: network);
+
 /// Checks the latest published release against the running version.
 /// Returns a serialized `UpdateCheck`.
 Future<String> checkUpdate({required String currentVersion}) =>

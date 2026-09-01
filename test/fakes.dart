@@ -812,6 +812,30 @@ class FakeBridge implements GerfautBridge {
   /// Update hook; the default reports the running version as current.
   UpdateCheck Function(String currentVersion)? onCheckUpdate;
 
+  /// Fee hook; the default answers a plausible market on every network
+  /// but regtest. Return null for a network with no fee market, throw a
+  /// [BridgeException] for a source that did not answer.
+  FutureOr<FeeEstimates?> Function(Network network)? onFetchFees;
+
+  /// Every network handed to fetchFees, for assertions.
+  final List<Network> feeCalls = [];
+
+  @override
+  Future<FeeEstimates?> fetchFees(Network network) async {
+    feeCalls.add(network);
+    final fetch = onFetchFees;
+    if (fetch != null) return fetch(network);
+    if (network == Network.regtest) return null;
+    return const FeeEstimates(
+      fastest: 12,
+      halfHour: 8.5,
+      hour: 4,
+      economy: 2,
+      minimum: 1,
+      at: 1755000000,
+    );
+  }
+
   @override
   Future<UpdateCheck> checkUpdate(String currentVersion) async {
     final check = onCheckUpdate;

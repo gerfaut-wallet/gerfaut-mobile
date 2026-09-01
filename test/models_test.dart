@@ -279,6 +279,25 @@ void main() {
     });
   });
 
+  group('FeeEstimates.fromJson', () {
+    test('reads the named targets the core publishes', () {
+      final fees = FeeEstimates.fromJson(const {
+        'fastest': 12,
+        'half_hour': 8.5,
+        'hour': 4,
+        'economy': 2,
+        'minimum': 1.02,
+        'at': 1755000000,
+      });
+      expect(fees.fastest, 12.0);
+      expect(fees.halfHour, 8.5);
+      expect(fees.hour, 4.0);
+      expect(fees.economy, 2.0);
+      expect(fees.minimum, 1.02);
+      expect(fees.at, 1755000000);
+    });
+  });
+
   group('certificates', () {
     test('every status the core can report is read back', () {
       const fingerprint =

@@ -96,6 +96,10 @@ abstract class GerfautBridge {
   Future<void> forgetCertificate(String host);
   Future<void> setAppPref(String key, String value);
   Future<PriceQuote> fetchPrice(PriceSource source, FiatCurrency currency);
+
+  /// Recommended fee rates for [network], through the backend configured
+  /// for it. Null on a network with no fee market (regtest).
+  Future<FeeEstimates?> fetchFees(Network network);
   Future<UpdateCheck> checkUpdate(String currentVersion);
 
   /// Decodes a transaction somebody else signed (PSBT as base64, hex or
@@ -350,6 +354,13 @@ class RustBridge implements GerfautBridge {
   ) async {
     final raw = await rust.fetchPrice(source: source.id, currency: currency.id);
     return PriceQuote.fromJson(_object(raw));
+  }
+
+  @override
+  Future<FeeEstimates?> fetchFees(Network network) async {
+    final decoded = _decode(await rust.fetchFees(network: network.id));
+    if (decoded == null) return null;
+    return FeeEstimates.fromJson(decoded as Map<String, dynamic>);
   }
 
   @override

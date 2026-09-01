@@ -607,6 +607,22 @@ pub async fn fetch_price(source: String, currency: String) -> String {
     }
 }
 
+/// Fetches the recommended fee rates for a network through the backend
+/// configured for it, on the same route the chain takes. Returns a
+/// serialized `FeeEstimates`, or `null` on a network with no fee market
+/// (regtest), so the caller has nothing to hide but a line.
+pub async fn fetch_fees(network: String) -> String {
+    let manager = try_json!(manager());
+    let network = try_json!(parse_network(&network));
+    if !gerfaut_core::fees::supports(network) {
+        return "null".to_owned();
+    }
+    match manager.fetch_fees(network).await {
+        Ok(fees) => to_json(&fees),
+        Err(e) => core_error_json(&e),
+    }
+}
+
 /// GitHub repository whose releases this build follows.
 const UPDATE_REPO: &str = "gerfaut-wallet/gerfaut-mobile";
 
