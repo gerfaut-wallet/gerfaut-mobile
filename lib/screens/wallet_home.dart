@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../src/bridge.dart';
 import '../src/format.dart';
 import '../src/models.dart';
+import '../src/policy_text.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/address_chip.dart';
@@ -18,6 +19,7 @@ import '../widgets/sync_button.dart';
 import '../widgets/sync_indicator.dart';
 import 'broadcast.dart';
 import 'export.dart';
+import 'policy.dart';
 import 'receive.dart';
 import 'tx_detail.dart';
 
@@ -225,6 +227,20 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                         const SizedBox(height: GerfautSpacing.sm),
                         PendingAmount(sats: pending),
                       ],
+                      const SizedBox(
+                        height: GerfautSpacing.sm + GerfautSpacing.xs,
+                      ),
+                      Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: tokens.border.withValues(alpha: 0.6),
+                      ),
+                      // The differentiator, one tap from the balance:
+                      // what the descriptor says and who can spend when.
+                      _PolicyRow(
+                        walletId: widget.walletId,
+                        onOpen: () => _open((id) => PolicyScreen(walletId: id)),
+                      ),
                     ],
                   ),
                 ),
@@ -619,5 +635,67 @@ class _UtxoList extends ConsumerWidget {
         ),
       ),
     };
+  }
+}
+
+/// The policy link at the foot of the balance card. Never masked — a
+/// policy is structure, not an amount — and it opens even while the
+/// digest is loading or failed: the page itself has the room to say
+/// what went wrong.
+class _PolicyRow extends ConsumerWidget {
+  const _PolicyRow({required this.walletId, required this.onOpen});
+
+  final String walletId;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final policy = ref.watch(policyProvider(walletId)).valueOrNull;
+    final digest = policy == null ? null : policyDigest(policy);
+    return Semantics(
+      button: true,
+      label: digest == null ? 'Policy' : 'Policy: $digest',
+      excludeSemantics: true,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(GerfautRadius.md),
+          onTap: onOpen,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 44),
+            child: Row(
+              children: [
+                Icon(LucideIcons.route, size: 16, color: tokens.textMuted),
+                const SizedBox(width: GerfautSpacing.sm),
+                Text(
+                  'Policy',
+                  style: tokens.bodySmall.copyWith(
+                    fontWeight: FontWeight.w500,
+                    fontVariations: const [FontVariation('wght', 500)],
+                  ),
+                ),
+                const SizedBox(width: GerfautSpacing.sm),
+                Expanded(
+                  child: Text(
+                    digest ?? '',
+                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                    textAlign: TextAlign.right,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: GerfautSpacing.xs),
+                Icon(
+                  LucideIcons.chevronRight,
+                  size: 16,
+                  color: tokens.textMuted,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

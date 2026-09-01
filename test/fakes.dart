@@ -490,13 +490,15 @@ class FakeBridge implements GerfautBridge {
   final Map<String, PolicySnapshot> policies = {};
 
   /// Policy hook; throw a [BridgeException] to simulate a descriptor
-  /// the core cannot read. Takes precedence over [policies] when set.
-  PolicySnapshot Function(String id)? onWalletPolicy;
+  /// the core cannot read, or return a future that never completes to
+  /// hold the screen in its loading state. Takes precedence over
+  /// [policies] when set.
+  FutureOr<PolicySnapshot> Function(String id)? onWalletPolicy;
 
   @override
   Future<PolicySnapshot> walletPolicy(String id) async {
     final policy = onWalletPolicy;
-    if (policy != null) return policy(id);
+    if (policy != null) return await policy(id);
     return policies[id] ?? makePolicy();
   }
 
