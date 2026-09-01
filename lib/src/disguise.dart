@@ -9,10 +9,12 @@
 // phone's launcher does not show.
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// What the platform does for the disguise. Behind an interface so no
 /// test ever reaches the activity.
@@ -67,6 +69,20 @@ class SystemDisguise implements Disguise {
 final disguiseServiceProvider = Provider<Disguise>(
   (ref) => const SystemDisguise(),
 );
+
+/// Whether the app is disguised, read from the marker file the activity
+/// keeps up to date. This is the background isolate's answer: its Flutter
+/// engine carries none of the app's method channels, so it cannot ask
+/// the activity — but path_provider still points at the same `filesDir`,
+/// where the marker lives. A read that fails is taken as not disguised.
+Future<bool> isDisguisedFromDisk() async {
+  try {
+    final dir = await getApplicationSupportDirectory();
+    return await File('${dir.path}/${SystemDisguise.markerName}').exists();
+  } catch (_) {
+    return false;
+  }
+}
 
 /// Where the disguise stands.
 @immutable

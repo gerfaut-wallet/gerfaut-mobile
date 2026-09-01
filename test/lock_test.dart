@@ -249,10 +249,14 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.tap(
-        find.descendant(
-          of: find.byType(SecuritySection),
-          matching: find.byType(Switch),
-        ),
+        find
+            .descendant(
+              of: find.byType(SecuritySection),
+              matching: find.byType(Switch),
+            )
+            // The app lock is the first switch of the card; the disguise
+            // switch sits below it once a lock stands.
+            .first,
       );
       await tester.pumpAndSettle();
 
@@ -274,10 +278,14 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.tap(
-        find.descendant(
-          of: find.byType(SecuritySection),
-          matching: find.byType(Switch),
-        ),
+        find
+            .descendant(
+              of: find.byType(SecuritySection),
+              matching: find.byType(Switch),
+            )
+            // The app lock is the first switch of the card; the disguise
+            // switch sits below it once a lock stands.
+            .first,
       );
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const Key('lock.secret')), '1234');
@@ -299,10 +307,14 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.tap(
-        find.descendant(
-          of: find.byType(SecuritySection),
-          matching: find.byType(Switch),
-        ),
+        find
+            .descendant(
+              of: find.byType(SecuritySection),
+              matching: find.byType(Switch),
+            )
+            // The app lock is the first switch of the card; the disguise
+            // switch sits below it once a lock stands.
+            .first,
       );
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const Key('lock.secret')), '12');
@@ -322,10 +334,14 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.tap(
-        find.descendant(
-          of: find.byType(SecuritySection),
-          matching: find.byType(Switch),
-        ),
+        find
+            .descendant(
+              of: find.byType(SecuritySection),
+              matching: find.byType(Switch),
+            )
+            // The app lock is the first switch of the card; the disguise
+            // switch sits below it once a lock stands.
+            .first,
       );
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const Key('lock.current')), '1234');
@@ -346,10 +362,14 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.tap(
-        find.descendant(
-          of: find.byType(SecuritySection),
-          matching: find.byType(Switch),
-        ),
+        find
+            .descendant(
+              of: find.byType(SecuritySection),
+              matching: find.byType(Switch),
+            )
+            // The app lock is the first switch of the card; the disguise
+            // switch sits below it once a lock stands.
+            .first,
       );
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const Key('lock.current')), '0000');

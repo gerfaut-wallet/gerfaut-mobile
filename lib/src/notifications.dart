@@ -6,6 +6,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'background.dart';
+import 'disguise.dart';
 import 'format.dart';
 import 'models.dart';
 import 'state.dart';
@@ -227,6 +228,10 @@ class SyncAnnouncer {
 
   Future<void> announce(List<SyncReport> reports) async {
     if (!_ref.read(notifyNewTxProvider)) return;
+    // Nothing is posted while disguised: a notification's header carries
+    // the app's name, and a "Gerfaut" line over a calculator would tell
+    // everything the disguise hides.
+    if (_ref.read(disguiseProvider).disguised) return;
     if (reports.every((r) => r.newTxs.isEmpty && r.newTxCount == 0)) return;
     // A wallet seen for the first time hands over its whole history as
     // "new". Telling someone about a payment from three years ago is

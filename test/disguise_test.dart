@@ -1,0 +1,294 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:gerfaut/app.dart';
+import 'package:gerfaut/screens/settings/security_section.dart';
+import 'package:gerfaut/src/background.dart';
+import 'package:gerfaut/src/disguise.dart';
+import 'package:gerfaut/src/lock.dart';
+import 'package:gerfaut/src/models.dart';
+import 'package:gerfaut/src/notifications.dart';
+import 'package:gerfaut/src/state.dart';
+import 'package:gerfaut/theme/tokens.dart';
+
+import 'fakes.dart';
+
+/// Says the phone has no biometric, so the security card never waits on
+/// a sensor that a test binding does not answer.
+class _NoBiometrics implements BiometricGate {
+  @override
+  Future<bool> canCheck() async => false;
+  @override
+  Future<bool> authenticate(String reason) async => false;
+}
+
+/// Records what would have been posted instead of touching the platform.
+class _RecordingNotifications implements NotificationService {
+  final List<String> posted = [];
+  @override
+  Future<void> init() async {}
+  @override
+  Future<bool> requestPermission() async => true;
+  @override
+  Future<void> show(int id, String title, String body) async =>
+      posted.add(body);
+}
+
+const AppLock _pinLock = AppLock(kind: LockKind.pin, biometric: false);
+const AppLock _passwordLock = AppLock(
+  kind: LockKind.password,
+  biometric: false,
+);
+
+FakeBridge _locked({AppLock lock = _pinLock, String secret = '1234'}) {
+  return FakeBridge(
+      settings: const Settings(
+        activeNetwork: Network.mainnet,
+        backends: {},
+        appPrefs: {'onboarding.seen': '1'},
+      ),
+    )
+    ..lock = lock
+    ..lockSecret = secret;
+}
+
+Widget _securityApp(FakeBridge bridge, FakeDisguise disguise) {
+  return ProviderScope(
+    overrides: [
+      bridgeProvider.overrideWithValue(bridge),
+      disguiseServiceProvider.overrideWithValue(disguise),
+      biometricGateProvider.overrideWithValue(_NoBiometrics()),
+    ],
+    child: MaterialApp(
+      theme: themeFrom(GerfautTokens.light, Brightness.light),
+      home: const Scaffold(
+        body: SingleChildScrollView(child: SecuritySection()),
+      ),
+    ),
+  );
+}
+
+Finder _disguiseSwitch() => find.descendant(
+  of: find.ancestor(
+    of: find.text('Disguise the app'),
+    matching: find.byType(Row),
+  ),
+  matching: find.byType(Switch),
+);
+
+void main() {
+  group('the disguise switch', () {
+    testWidgets('is offered with a PIN lock', (tester) async {
+      await tester.pumpWidget(_securityApp(_locked(), FakeDisguise()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Disguise the app'), findsOneWidget);
+      expect(tester.widget<Switch>(_disguiseSwitch()).onChanged, isNotNull);
+    });
+
+    testWidgets('is disabled and explained without a PIN lock', (tester) async {
+      await tester.pumpWidget(
+        _securityApp(_locked(lock: _passwordLock), FakeDisguise()),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<Switch>(_disguiseSwitch()).onChanged, isNull);
+      expect(find.textContaining('Needs a PIN lock'), findsOneWidget);
+    });
+
+    testWidgets('turning it on opens a sheet that says what changes', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_securityApp(_locked(), FakeDisguise()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(_disguiseSwitch());
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('launcher will show a calculator'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('typing your PIN into it'), findsOneWidget);
+      expect(find.textContaining('still list "Gerfaut"'), findsOneWidget);
+      expect(find.textContaining('widgets are turned off'), findsOneWidget);
+      expect(find.textContaining('cannot be opened'), findsOneWidget);
+    });
+
+    testWidgets('confirming enables the disguise and turns widgets off', (
+      tester,
+    ) async {
+      final disguise = FakeDisguise();
+      await tester.pumpWidget(_securityApp(_locked(), disguise));
+      await tester.pumpAndSettle();
+
+      await tester.tap(_disguiseSwitch());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Turn on the disguise'));
+      await tester.pumpAndSettle();
+
+      // Widgets off before the launcher swap, so nothing "Gerfaut" is
+      // left on the home screen next to the calculator.
+      expect(disguise.calls, ['widgets:false', 'disguise:true']);
+      expect(disguise.disguised, isTrue);
+      expect(tester.widget<Switch>(_disguiseSwitch()).value, isTrue);
+    });
+
+    testWidgets('cancelling the sheet changes nothing', (tester) async {
+      final disguise = FakeDisguise();
+      await tester.pumpWidget(_securityApp(_locked(), disguise));
+      await tester.pumpAndSettle();
+
+      await tester.tap(_disguiseSwitch());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(disguise.calls, isEmpty);
+      expect(disguise.disguised, isFalse);
+    });
+
+    testWidgets('turning it off reverses all of it', (tester) async {
+      final disguise = FakeDisguise(disguised: true);
+      await tester.pumpWidget(_securityApp(_locked(), disguise));
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<Switch>(_disguiseSwitch()).value, isTrue);
+      await tester.tap(_disguiseSwitch());
+      await tester.pumpAndSettle();
+
+      // The app's own face back first, then its widgets.
+      expect(disguise.calls, ['disguise:false', 'widgets:true']);
+      expect(disguise.disguised, isFalse);
+    });
+
+    testWidgets('removing the PIN while disguised drops the disguise first', (
+      tester,
+    ) async {
+      final bridge = _locked();
+      final disguise = FakeDisguise(disguised: true);
+      await tester.pumpWidget(_securityApp(bridge, disguise));
+      await tester.pumpAndSettle();
+
+      // The top switch turns the lock off.
+      await tester.tap(
+        find.descendant(
+          of: find.ancestor(
+            of: find.text('App lock'),
+            matching: find.byType(Row),
+          ),
+          matching: find.byType(Switch),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The sheet says the disguise goes too.
+      expect(find.textContaining('turns the disguise off'), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('lock.current')), '1234');
+      await tester.tap(find.text('Turn off'));
+      await tester.pumpAndSettle();
+
+      expect(bridge.lock, isNull);
+      expect(disguise.disguised, isFalse);
+      expect(disguise.calls, contains('disguise:false'));
+    });
+  });
+
+  group('notifications while disguised', () {
+    test('the open app posts nothing when disguised', () async {
+      final service = _RecordingNotifications();
+      final container = ProviderContainer(
+        overrides: [
+          bridgeProvider.overrideWithValue(FakeBridge(wallets: [makeMeta()])),
+          disguiseServiceProvider.overrideWithValue(
+            FakeDisguise(disguised: true),
+          ),
+          notificationServiceProvider.overrideWithValue(service),
+        ],
+      );
+      addTearDown(container.dispose);
+      // Notifications turned on, and the disguise hydrated to true.
+      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      container.read(disguiseProvider);
+      await Future<void>.delayed(Duration.zero);
+      expect(container.read(disguiseProvider).disguised, isTrue);
+
+      await container.read(syncAnnouncerProvider).announce([
+        SyncReport(
+          walletId: 'w1',
+          newTxCount: 1,
+          newTxs: [NewTx(txid: 'a', netSats: 1000, confirmed: true)],
+          balance: makeBalance(0),
+          tipHeight: 1,
+          tookMs: 1,
+          backend: 'x',
+        ),
+      ]);
+
+      expect(service.posted, isEmpty);
+    });
+
+    test('the open app posts when not disguised', () async {
+      final service = _RecordingNotifications();
+      final container = ProviderContainer(
+        overrides: [
+          bridgeProvider.overrideWithValue(FakeBridge(wallets: [makeMeta()])),
+          disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+          notificationServiceProvider.overrideWithValue(service),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      container.read(disguiseProvider);
+      await Future<void>.delayed(Duration.zero);
+
+      await container.read(syncAnnouncerProvider).announce([
+        SyncReport(
+          walletId: 'w1',
+          newTxCount: 1,
+          newTxs: [NewTx(txid: 'a', netSats: 1000, confirmed: true)],
+          balance: makeBalance(0),
+          tipHeight: 1,
+          tookMs: 1,
+          backend: 'x',
+        ),
+      ]);
+
+      // A wallet seen for the first time this run hands over its whole
+      // history, which the announcer holds back; a second sync speaks.
+      await container.read(syncAnnouncerProvider).announce([
+        SyncReport(
+          walletId: 'w1',
+          newTxCount: 1,
+          newTxs: [NewTx(txid: 'b', netSats: 2000, confirmed: true)],
+          balance: makeBalance(0),
+          tipHeight: 1,
+          tookMs: 1,
+          backend: 'x',
+        ),
+      ]);
+
+      expect(service.posted, isNotEmpty);
+    });
+
+    test('the background check posts nothing when disguised', () async {
+      final service = _RecordingNotifications();
+      final bridge = FakeBridge(
+        wallets: [makeMeta()],
+        settings: const Settings(
+          activeNetwork: Network.mainnet,
+          backends: {},
+          appPrefs: {'notify.new_tx': '1'},
+        ),
+      );
+      final ran = await runBackgroundCheck(
+        bridge: bridge,
+        service: service,
+        bootstrap: () async {},
+        isDisguised: () async => true,
+      );
+      expect(ran, isTrue);
+      expect(service.posted, isEmpty);
+    });
+  });
+}

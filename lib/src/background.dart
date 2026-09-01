@@ -8,6 +8,7 @@
 import 'package:workmanager/workmanager.dart';
 
 import 'bridge.dart';
+import 'disguise.dart';
 import 'format.dart';
 import 'home_widgets.dart';
 import 'notifications.dart';
@@ -85,6 +86,7 @@ Future<bool> runBackgroundCheck({
   GerfautBridge bridge = const RustBridge(),
   NotificationService? service,
   Future<void> Function() bootstrap = bootstrapGerfaut,
+  Future<bool> Function() isDisguised = isDisguisedFromDisk,
 }) async {
   try {
     await bootstrap();
@@ -93,6 +95,9 @@ Future<bool> runBackgroundCheck({
     // The isolate reads the same preferences the screens write: a check
     // that the user turned off must not notify, and must not sync.
     if (prefs['notify.new_tx'] != '1') return true;
+    // Nothing is posted while disguised. The isolate has no channel to
+    // the activity, so it reads the marker the activity keeps on disk.
+    if (await isDisguised()) return true;
 
     final report = await bridge.syncAll(settings.activeNetwork);
     final reports = report.reports;
