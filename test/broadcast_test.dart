@@ -72,6 +72,19 @@ BoxDecoration blockOf(WidgetTester tester, String text) {
       as BoxDecoration;
 }
 
+/// The card a status pill sits on: the second Container up, the pill
+/// itself being the first.
+BoxDecoration cardAround(WidgetTester tester, String pill) {
+  return tester
+          .widget<Container>(
+            find
+                .ancestor(of: find.text(pill), matching: find.byType(Container))
+                .at(1),
+          )
+          .decoration!
+      as BoxDecoration;
+}
+
 FilledButton primaryButton(WidgetTester tester, String label) {
   return tester.widget<FilledButton>(
     find.ancestor(of: find.text(label), matching: find.byType(FilledButton)),
@@ -329,10 +342,22 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(bridge.broadcastHexes, ['0200000001deadbeef']);
-    // One sentence, and only what the user is waiting for.
-    expect(find.text('Waiting to be mined.'), findsOneWidget);
+    // A pill, and only what the user is waiting for.
+    expect(find.text('Waiting to be mined'), findsOneWidget);
+    expect(find.byIcon(LucideIcons.hourglass), findsOneWidget);
     expect(find.textContaining('waiting in the mempool'), findsNothing);
     expect(find.textContaining('Sent to mempool.space'), findsNothing);
+    // The state is the pill's; the card around it is a card like the
+    // others, not an amber slab.
+    final light = GerfautTokens.light;
+    expect(blockOf(tester, 'Waiting to be mined').color, light.pendingSurface);
+    expect(
+      tester.widget<Text>(find.text('Waiting to be mined')).style!.color,
+      light.pending,
+    );
+    final card = cardAround(tester, 'Waiting to be mined');
+    expect(card.color, light.surface);
+    expect((card.border! as Border).top.color, light.border);
     expect(bridge.statusCalls, 1);
     expect(find.text('Done'), findsOneWidget);
     expect(find.text('Broadcast another'), findsOneWidget);
@@ -362,9 +387,16 @@ void main() {
       find.text('Mined in block ${groupThousands('850000')}'),
       findsOneWidget,
     );
+    // The colour moves to the pill; the facts under it read in prose.
+    expect(find.text('Confirmed'), findsOneWidget);
+    expect(
+      blockOf(tester, 'Confirmed').color,
+      GerfautTokens.light.confirmedSurface,
+    );
+    expect(find.text('Waiting to be mined'), findsNothing);
     expect(
       tester.widget<Text>(find.textContaining('Mined in block')).style!.color,
-      GerfautTokens.light.confirmed,
+      GerfautTokens.light.textMuted,
     );
 
     // A manual check.
@@ -494,16 +526,20 @@ void main() {
     await tester.tap(find.text('Broadcast').last);
     await tester.pumpAndSettle();
 
-    expect(find.text('Not seen by mempool.space'), findsOneWidget);
+    // The same words as the desktop: what it means, and that sending
+    // it again costs nothing.
+    expect(find.text('Not seen'), findsOneWidget);
+    expect(find.byIcon(LucideIcons.eyeOff), findsOneWidget);
     expect(
       find.text(
-        'It may have been dropped from the mempool or replaced by another '
-        'transaction.',
+        'mempool.space does not have this transaction. It may not have '
+        'been relayed, or it was dropped or replaced. Broadcasting it '
+        'again does no harm.',
       ),
       findsOneWidget,
     );
     expect(
-      tester.widget<Text>(find.text('Not seen by mempool.space')).style!.color,
+      tester.widget<Text>(find.text('Not seen')).style!.color,
       GerfautTokens.light.pending,
     );
   });
@@ -647,7 +683,9 @@ void main() {
       findsNothing,
     );
     expect(bridge.statusCalls, 1);
-    expect(find.text('Waiting to be mined.'), findsOneWidget);
+    expect(find.text('Waiting to be mined'), findsOneWidget);
+    // A past broadcast says when it left, under its identifier.
+    expect(find.textContaining(RegExp(r'^Sent ')), findsOneWidget);
   });
 
   for (final brightness in Brightness.values) {

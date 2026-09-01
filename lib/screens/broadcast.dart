@@ -1164,76 +1164,69 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final record = widget.record;
     final status = _status;
-    final sentTo = widget.sentTo;
-    // One sentence, whoever answered: which host holds it, that the
-    // mempool is where it sits and how often Gerfaut asks are facts the
-    // user can do nothing with. What is waited for is a block.
-    const waiting = 'Waiting to be mined.';
-    // A past broadcast nobody has asked about yet says when it left,
-    // not where it stands.
-    final unchecked = sentTo != null
-        ? waiting
-        : 'Sent ${formatTimestamp(record.at)}';
-    // A mined transaction states its height and its count on two lines,
-    // the same two the desktop prints. Run together after a separator
-    // the grouped height swallowed the count: "block 4 611 010 · 3
-    // confirmations" read as one figure whose last group was a 3.
-    final blockHeight = status != null && status.confirmed
-        ? status.blockHeight
-        : null;
-    final minedIn = blockHeight == null
-        ? null
-        : 'Mined in block ${groupThousands('$blockHeight')}';
-    final confirmations = status != null && status.confirmed
-        ? '${groupThousands('${status.confirmations}')} '
-              'confirmation${status.confirmations == 1 ? '' : 's'} '
-              'as of ${relativeTime(status.at)}'
-        : null;
+    final error = _error;
+    // The pill says where the transaction stands, in a word or three;
+    // the lines under it say what that means, when a word is not
+    // enough. Which host holds it, that the mempool is where it sits
+    // and how often Gerfaut asks are facts the user can do nothing
+    // with: what is waited for is a block. A mined transaction states
+    // its height and its count on two lines, the same two the desktop
+    // prints — run together after a separator, the grouped height
+    // swallowed the count: "block 4 611 010 · 3 confirmations" read as
+    // one figure whose last group was a 3.
     final (
+      _Tone tone,
       IconData icon,
-      Color color,
-      Color surface,
-      String title,
+      String label,
+      List<String> lines,
     ) = switch (status) {
-      null when _error != null => (
+      null when error != null => (
+        _Tone.pending,
         LucideIcons.triangleAlert,
-        tokens.pending,
-        tokens.pendingSurface,
-        'Could not check with the backend',
+        'Could not check',
+        [error],
       ),
       null => (
+        _Tone.neutral,
         LucideIcons.hourglass,
-        tokens.pending,
-        tokens.pendingSurface,
-        unchecked,
+        'Checking…',
+        const <String>[],
       ),
-      BroadcastStatus(confirmed: true) => (
-        LucideIcons.circleCheck,
-        tokens.confirmed,
-        tokens.confirmedSurface,
-        minedIn ?? confirmations!,
-      ),
-      BroadcastStatus(found: false) => (
+      BroadcastStatus(
+        confirmed: true,
+        :final blockHeight,
+        :final confirmations,
+        :final at,
+      ) =>
+        (
+          _Tone.confirmed,
+          LucideIcons.check,
+          'Confirmed',
+          [
+            if (blockHeight != null)
+              'Mined in block ${groupThousands('$blockHeight')}',
+            '${groupThousands('$confirmations')} '
+                'confirmation${confirmations == 1 ? '' : 's'} '
+                'as of ${relativeTime(at)}',
+          ],
+        ),
+      BroadcastStatus(found: false, :final backend) => (
+        _Tone.pending,
         LucideIcons.eyeOff,
-        tokens.pending,
-        tokens.pendingSurface,
-        'Not seen by ${status.backend}',
+        'Not seen',
+        [
+          '$backend does not have this transaction. It may not have '
+              'been relayed, or it was dropped or replaced. Broadcasting '
+              'it again does no harm.',
+        ],
       ),
       _ => (
+        _Tone.pending,
         LucideIcons.hourglass,
-        tokens.pending,
-        tokens.pendingSurface,
-        waiting,
+        'Waiting to be mined',
+        const <String>[],
       ),
     };
-    // The count reads under the headline, in the slot every other
-    // second line of this card uses.
-    final hint = minedIn == null
-        ? (status != null && !status.confirmed && !status.found
-              ? 'It may have been dropped from the mempool or replaced by '
-                    'another transaction.'
-              : _error)
-        : confirmations;
     final explorer = explorerTxUrl(record.network, record.txid);
     final checked = _checking
         ? 'Checking…'
@@ -1241,12 +1234,16 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
         ? 'Checked ${relativeTime(status.at)}'
         : 'Not checked yet';
 
+    // A card like every other card. The state lives in the pill, not in
+    // a tinted slab behind everything: on the amber field the grey txid
+    // chip had nowhere to sit, and a card that was all colour said the
+    // same thing as the pill, louder.
     return Container(
       padding: const EdgeInsets.all(GerfautSpacing.md),
       decoration: BoxDecoration(
-        color: surface,
+        color: tokens.surface,
         borderRadius: BorderRadius.circular(GerfautRadius.lg),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
+        border: Border.all(color: tokens.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1256,44 +1253,27 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
               alignment: Alignment.centerLeft,
               child: AddressChip(value: record.txid, head: 12, tail: 10),
             ),
-            const SizedBox(height: GerfautSpacing.sm),
+            const SizedBox(height: GerfautSpacing.xs),
+            Text(
+              'Sent ${relativeTime(record.at)}',
+              style: tokens.label.copyWith(color: tokens.textMuted),
+            ),
+            const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
           ],
-          // Both lines under one region: split across two paragraphs the
-          // status is still one statement, and it is announced as one.
+          // The pill and its lines under one region: split across
+          // widgets the status is still one statement, announced once.
           Semantics(
             liveRegion: true,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    FirstLine(
-                      style: tokens.bodySmall,
-                      child: Icon(icon, size: 16, color: color),
-                    ),
-                    const SizedBox(width: GerfautSpacing.sm),
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: tokens.bodySmall.copyWith(
-                          color: color,
-                          fontWeight: FontWeight.w500,
-                          fontVariations: const [FontVariation('wght', 500)],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                if (hint != null) ...[
-                  const SizedBox(height: GerfautSpacing.xs),
-                  Padding(
-                    padding: const EdgeInsets.only(left: GerfautSpacing.lg),
-                    child: Text(
-                      hint,
-                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                    ),
+                _Pill(tone: tone, icon: icon, label: label, tokens: tokens),
+                for (final line in lines) ...[
+                  const SizedBox(height: GerfautSpacing.sm),
+                  Text(
+                    line,
+                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                   ),
                 ],
               ],
@@ -1318,7 +1298,7 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
               ),
               // Only a past broadcast can be dropped: the one just sent
               // is what the screen is about.
-              if (sentTo == null)
+              if (widget.sentTo == null)
                 IconButton(
                   tooltip: 'Forget this broadcast',
                   onPressed: _confirmForget,
