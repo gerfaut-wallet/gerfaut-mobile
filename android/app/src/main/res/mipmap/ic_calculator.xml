@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The calculator's launcher icon before Android 8, and the icon the
-     task switcher shows while the app is disguised. A generic Material
+<!-- The calculator alias's icon before Android 8, where there is no
+     adaptive icon: the default configuration of the same name, which
+     mipmap-anydpi-v26 overrides on later versions. A generic Material
      calculator on purpose: blue-grey tile, a display, six keys. Nothing
      of Gerfaut's palette or mark may appear here. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"

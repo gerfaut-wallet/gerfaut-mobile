@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Adaptive icon of the calculator alias, Android 8 and up. Before that
-     the same name resolves to the plain vector (see values/ic_calculator).
+     the same name resolves to the plain vector in mipmap/ic_calculator.
      Same monochrome layer as the launcher icon: a themed launcher would
      otherwise show a blank tile next to every other themed icon. -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
