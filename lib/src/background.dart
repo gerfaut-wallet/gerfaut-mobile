@@ -9,6 +9,7 @@ import 'package:workmanager/workmanager.dart';
 
 import 'bridge.dart';
 import 'format.dart';
+import 'home_widgets.dart';
 import 'notifications.dart';
 import 'vault_key.dart';
 
@@ -40,11 +41,41 @@ Future<void> registerBackgroundCheck(int seconds) async {
   );
 }
 
+/// The companion task that repaints the home-screen widgets while the
+/// app is closed. Registered only while at least one widget is placed.
+const String widgetsTaskName = 'gerfaut.widgets';
+
+/// Registers the periodic widget refresh, or cancels it when nothing is
+/// left to refresh. Fifteen minutes is the floor Android grants a
+/// periodic task, and it delays further to save battery.
+Future<void> registerWidgetRefresh(bool wanted) async {
+  final manager = Workmanager();
+  if (!wanted) {
+    await manager.cancelByUniqueName(widgetsTaskName);
+    return;
+  }
+  await manager.registerPeriodicTask(
+    widgetsTaskName,
+    widgetsTaskName,
+    frequency: const Duration(minutes: 15),
+    constraints: Constraints(
+      networkType: NetworkType.connected,
+      requiresBatteryNotLow: true,
+    ),
+    // Update, not replace: registering again at every app start must
+    // not push the next run another period away.
+    existingWorkPolicy: ExistingPeriodicWorkPolicy.update,
+  );
+}
+
 /// The entry point Android calls in a fresh isolate. Top level and
 /// annotated, or the tree shaker drops it from a release build.
 @pragma('vm:entry-point')
 void callbackDispatcher() {
-  Workmanager().executeTask((_, _) => runBackgroundCheck());
+  Workmanager().executeTask(
+    (task, _) =>
+        task == widgetsTaskName ? refreshWidgets() : runBackgroundCheck(),
+  );
 }
 
 /// Opens the vault, syncs every wallet of the workspace network, and

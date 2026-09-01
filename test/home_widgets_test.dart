@@ -56,12 +56,16 @@ FakeBridge _bridge({List<WalletMeta>? wallets}) {
 /// settled, so a test reads the board rather than a race.
 Future<({ProviderContainer container, WidgetFeed feed})> _running(
   FakeBridge bridge,
-  FakeWidgetBoard board,
-) async {
+  FakeWidgetBoard board, {
+  List<bool>? scheduled,
+}) async {
   final container = ProviderContainer(
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
       widgetBoardProvider.overrideWithValue(board),
+      widgetSchedulerProvider.overrideWithValue(
+        (wanted) async => scheduled?.add(wanted),
+      ),
     ],
   );
   addTearDown(container.dispose);
@@ -365,6 +369,30 @@ void main() {
       expect(board.updates, contains(HomeWidgets.network));
     });
 
+    test('the background refresh is scheduled only while a widget is '
+        'placed', () async {
+      final scheduled = <bool>[];
+      final board = FakeWidgetBoard();
+      final (:container, :feed) = await _running(
+        _bridge(),
+        board,
+        scheduled: scheduled,
+      );
+      expect(scheduled, [false]);
+
+      board.installed.add(HomeWidgets.price);
+      feed.resume();
+      await container.read(installedWidgetsProvider.future);
+      await feed.publish();
+      expect(scheduled, [false, true]);
+
+      board.installed.clear();
+      feed.resume();
+      await container.read(installedWidgetsProvider.future);
+      await feed.publish();
+      expect(scheduled, [false, true, false]);
+    });
+
     test('fees are left off a network with no fee market', () async {
       final bridge = FakeBridge(
         wallets: [
@@ -388,6 +416,146 @@ void main() {
       expect(board.data[WidgetKeys.networkHeight], '120');
       expect(board.data.containsKey(WidgetKeys.networkNextBlock), isFalse);
       expect(board.data[WidgetKeys.networkFooter], startsWith('Regtest · '));
+    });
+  });
+
+  group('the background refresh', () {
+    /// Preferences as the vault would hand them to the isolate.
+    FakeBridge prefBridge(Map<String, String> prefs) {
+      final bridge = _bridge();
+      bridge.settings = Settings(
+        activeNetwork: Network.mainnet,
+        backends: const {},
+        appPrefs: prefs,
+      );
+      return bridge;
+    }
+
+    test('publishes the placed widgets from the vault, without ever '
+        'syncing', () async {
+      final bridge = prefBridge(const {
+        'display.unit': 'sats',
+        'widgets.balances': '1',
+      });
+      final board = FakeWidgetBoard(
+        installed: {
+          HomeWidgets.price,
+          HomeWidgets.balance,
+          HomeWidgets.network,
+        },
+      );
+      var booted = 0;
+      final ok = await refreshWidgets(
+        bridge: bridge,
+        board: board,
+        bootstrap: () async => booted++,
+        now: _now,
+      );
+
+      expect(ok, isTrue);
+      expect(booted, 1);
+      // The balances are as of the last sync: nothing was synced here.
+      expect(bridge.syncAllCalls, 0);
+      expect(bridge.syncWalletCalls, 0);
+      // Fiat display is off in the app; the quote comes anyway, in the
+      // preferred currency, because the placed widget is the opt-in.
+      expect(
+        board.data[WidgetKeys.priceFigure],
+        formatFiat(satsPerBtc, 50000, FiatCurrency.eur),
+      );
+      expect(board.data[WidgetKeys.balanceTotal], formatSats(100050000));
+      expect(board.data[WidgetKeys.balanceSynced], 'Synced 2 h ago');
+      expect(board.data[WidgetKeys.networkNextBlock], '12 sat/vB');
+      expect(board.updates.toSet(), {
+        HomeWidgets.price,
+        HomeWidgets.balance,
+        HomeWidgets.network,
+      });
+    });
+
+    test('does not even open the vault while nothing is placed', () async {
+      final board = FakeWidgetBoard();
+      var booted = 0;
+      final ok = await refreshWidgets(
+        bridge: _bridge(),
+        board: board,
+        bootstrap: () async => booted++,
+      );
+      expect(ok, isTrue);
+      expect(booted, 0);
+      expect(board.data, isEmpty);
+      expect(board.updates, isEmpty);
+    });
+
+    test('masks the balances until the preference allows them', () async {
+      final board = FakeWidgetBoard(installed: {HomeWidgets.balance});
+      await refreshWidgets(
+        bridge: prefBridge(const {}),
+        board: board,
+        bootstrap: () async {},
+        now: _now,
+      );
+      expect(board.data[WidgetKeys.balanceTotal], maskedValue);
+      expect(board.data[WidgetKeys.balanceRowName(1)], 'Cold storage');
+      expect(board.data[WidgetKeys.balanceRowFigure(1)], maskedValue);
+    });
+
+    test('the app-wide mask covers the widgets too', () async {
+      final board = FakeWidgetBoard(installed: {HomeWidgets.balance});
+      await refreshWidgets(
+        bridge: prefBridge(const {
+          'widgets.balances': '1',
+          'mobile.masked': '1',
+        }),
+        board: board,
+        bootstrap: () async {},
+        now: _now,
+      );
+      expect(board.data[WidgetKeys.balanceTotal], maskedValue);
+    });
+
+    test('fetches only what the placed widgets need', () async {
+      final bridge = _bridge();
+      var priceAsks = 0;
+      bridge.onFetchPrice = (source, currency) {
+        priceAsks++;
+        return _quote;
+      };
+      final board = FakeWidgetBoard(installed: {HomeWidgets.balance});
+      await refreshWidgets(
+        bridge: bridge,
+        board: board,
+        bootstrap: () async {},
+      );
+      expect(priceAsks, 0);
+      expect(bridge.feeCalls, isEmpty);
+    });
+
+    test('a source that does not answer costs a line, never the run', () async {
+      final bridge = _bridge();
+      bridge.onFetchPrice = (_, _) =>
+          throw const BridgeException('sync', 'no answer');
+      bridge.onFetchFees = (_) =>
+          throw const BridgeException('sync', 'no answer');
+      final board = FakeWidgetBoard(
+        installed: {
+          HomeWidgets.price,
+          HomeWidgets.balance,
+          HomeWidgets.network,
+        },
+      );
+      // What an earlier run had put up stays: the quote carries its time.
+      board.data[WidgetKeys.priceFigure] = 'kept';
+      final ok = await refreshWidgets(
+        bridge: bridge,
+        board: board,
+        bootstrap: () async {},
+        now: _now,
+      );
+      expect(ok, isTrue);
+      expect(board.data[WidgetKeys.priceFigure], 'kept');
+      expect(board.data.containsKey(WidgetKeys.networkNextBlock), isFalse);
+      expect(board.data[WidgetKeys.balanceSynced], 'Synced 2 h ago');
     });
   });
 }

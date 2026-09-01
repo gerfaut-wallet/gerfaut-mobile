@@ -10,9 +10,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:home_widget/home_widget.dart';
 
+import 'background.dart';
+import 'bridge.dart';
 import 'format.dart';
 import 'models.dart';
 import 'state.dart';
+import 'vault_key.dart';
 
 /// The three providers, by the class name Android knows them under.
 abstract final class HomeWidgets {
@@ -329,6 +332,14 @@ final widgetBalancesProvider = NotifierProvider<WidgetBalancesNotifier, bool>(
   WidgetBalancesNotifier.new,
 );
 
+/// Registers the periodic widget refresh, or cancels it.
+typedef WidgetScheduler = Future<void> Function(bool wanted);
+
+/// The real app schedules with the system; tests record the calls.
+final widgetSchedulerProvider = Provider<WidgetScheduler>(
+  (ref) => registerWidgetRefresh,
+);
+
 // --- what the open app feeds -------------------------------------------
 
 /// The price the widget shows: the app's own quote while fiat display
@@ -400,11 +411,13 @@ final widgetFeesProvider =
 class WidgetFeed {
   WidgetFeed(this._ref) {
     void republish(Object? _, Object? _) => publish();
+    // A provider refreshing still shows what it had: only a settled
+    // state is worth a write.
     _ref.listen(walletsProvider, (_, next) {
-      if (next.hasValue) publish();
+      if (next.hasValue && !next.isLoading) publish();
     });
     _ref.listen(widgetPriceProvider, (_, next) {
-      if (next.hasValue) publish();
+      if (next.hasValue && !next.isLoading) publish();
     });
     _ref.listen(widgetFeesProvider, (_, next) {
       // An error hides the fee lines: a rate that could not be fetched
@@ -415,7 +428,15 @@ class WidgetFeed {
     _ref.listen(maskedProvider, republish);
     _ref.listen(widgetBalancesProvider, republish);
     _ref.listen(installedWidgetsProvider, (_, next) {
-      if (next.hasValue) publish();
+      if (next.isLoading) return;
+      final installed = next.valueOrNull;
+      if (installed == null) return;
+      // The background refresh runs only while something is there to
+      // refresh; an empty home screen costs nothing.
+      _ref
+          .read(widgetSchedulerProvider)(installed.isNotEmpty)
+          .catchError((_) {});
+      publish();
     });
     publish();
   }
@@ -527,3 +548,68 @@ class WidgetFeed {
 /// The feed of the app. Reading it is what starts it, once the
 /// preferences a widget depends on are hydrated.
 final widgetFeedProvider = Provider<WidgetFeed>((ref) => WidgetFeed(ref));
+
+// --- the background refresh --------------------------------------------
+
+/// What Android runs every quarter hour while widgets are placed and
+/// Gerfaut is closed: open the vault, read what the placed widgets
+/// show, fetch the price and the fees they need, publish. It never
+/// syncs the chain — balances and heights stay as of the last sync, and
+/// the line under them says so. Always answers true: the next run is
+/// soon enough for whatever did not work this time.
+Future<bool> refreshWidgets({
+  GerfautBridge bridge = const RustBridge(),
+  WidgetBoard board = const HomeWidgetBoard(),
+  Future<void> Function() bootstrap = bootstrapGerfaut,
+  DateTime? now,
+}) async {
+  try {
+    final installed = await board.installedWidgets();
+    if (installed.isEmpty) return true;
+    await bootstrap();
+    final settings = await bridge.getSettings();
+    final prefs = settings.appPrefs;
+    final network = settings.activeNetwork;
+    final wallets = await bridge.listWallets(network);
+    PriceQuote? quote;
+    if (installed.contains(HomeWidgets.price)) {
+      final choice = priceChoice(prefs);
+      try {
+        quote = await bridge.fetchPrice(choice.source, choice.currency);
+      } catch (_) {
+        // The last quote stays up, with the time it carries.
+      }
+    }
+    FeeEstimates? fees;
+    if (installed.contains(HomeWidgets.network)) {
+      try {
+        fees = await bridge.fetchFees(network);
+      } catch (_) {
+        // No rate beats a stale one presented as current.
+      }
+    }
+    await WidgetFeed.write(
+      board,
+      installed: installed,
+      price: quote == null ? null : PricePayload.of(quote),
+      balance: BalancePayload.of(
+        wallets,
+        unit: AmountUnit.fromId(prefs['display.unit']) ?? AmountUnit.btc,
+        masked:
+            prefs['mobile.masked'] == '1' || prefs['widgets.balances'] != '1',
+        now: now,
+      ),
+      network: NetworkPayload.of(
+        wallets,
+        fees: fees,
+        network: network,
+        now: now,
+      ),
+    );
+    return true;
+  } catch (_) {
+    // A vault that would not open is not a reason to retry in a tight
+    // loop: the next scheduled run is soon enough.
+    return true;
+  }
+}
