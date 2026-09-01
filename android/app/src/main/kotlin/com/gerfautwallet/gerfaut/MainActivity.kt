@@ -1,14 +1,24 @@
 package com.gerfautwallet.gerfaut
 
 import android.app.Activity
+import android.app.ActivityManager
+import android.appwidget.AppWidgetManager
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.os.Build
+import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
 import java.io.IOException
 
 // A fragment activity, which is what the biometric prompt attaches to.
@@ -38,6 +48,13 @@ class MainActivity : FlutterFragmentActivity() {
                 save.result.error("write_failed", error.message, null)
             }
         }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // The task switcher must show the calculator from the first frame
+        // of a disguised app, before the Dart side has asked anything.
+        applyTaskDescription(isDisguised())
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -73,6 +90,34 @@ class MainActivity : FlutterFragmentActivity() {
                     }
                 }
                 else -> result.notImplemented()
+            }
+        }
+        MethodChannel(messenger, DISGUISE_CHANNEL).setMethodCallHandler { call, result ->
+            try {
+                when (call.method) {
+                    "isDisguised" -> result.success(isDisguised())
+                    "setDisguised" -> {
+                        val disguised = call.arguments as? Boolean
+                        if (disguised == null) {
+                            result.error("bad_argument", "setDisguised takes a boolean", null)
+                        } else {
+                            setDisguised(disguised)
+                            result.success(null)
+                        }
+                    }
+                    "setWidgetsEnabled" -> {
+                        val enabled = call.arguments as? Boolean
+                        if (enabled == null) {
+                            result.error("bad_argument", "setWidgetsEnabled takes a boolean", null)
+                        } else {
+                            setWidgetsEnabled(enabled)
+                            result.success(null)
+                        }
+                    }
+                    else -> result.notImplemented()
+                }
+            } catch (error: Exception) {
+                result.error("failed", error.message, null)
             }
         }
     }
@@ -118,10 +163,139 @@ class MainActivity : FlutterFragmentActivity() {
         }
     }
 
+    // --- the disguise ---------------------------------------------------
+    //
+    // Disguised, Gerfaut is a calculator in the launcher and in the task
+    // switcher. On Android 10 and later an app that disables its only
+    // launcher entry does not disappear from the launcher: the system
+    // shows a synthesized entry in its place, named after the app and
+    // opening its settings page. Hiding the icon would therefore still
+    // say "Gerfaut". So the disguise is a swap between two aliases of
+    // this activity, one wearing the app's own name and icon, the other
+    // a calculator's, exactly one enabled at a time. The package manager
+    // remembers which, across restarts and updates, which makes it the
+    // one source of truth: nothing in the vault says whether the app is
+    // disguised, so a backup restored elsewhere cannot claim it is.
+
+    private val launcherAlias: ComponentName
+        get() = ComponentName(this, "$packageName.Launcher")
+
+    private val calculatorAlias: ComponentName
+        get() = ComponentName(this, "$packageName.Calculator")
+
+    // The background isolate has no activity to ask, so the answer is
+    // also kept as a marker file beside the app's data, written whenever
+    // the aliases flip and brought back in line each time it is read.
+    private val disguiseMarker: File
+        get() = File(filesDir, DISGUISE_MARKER)
+
+    private fun isDisguised(): Boolean {
+        val disguised = packageManager.getComponentEnabledSetting(calculatorAlias) ==
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+        writeMarker(disguised)
+        return disguised
+    }
+
+    private fun setDisguised(disguised: Boolean) {
+        val shown = if (disguised) calculatorAlias else launcherAlias
+        val hidden = if (disguised) launcherAlias else calculatorAlias
+        // The new entry first: the launcher never sees a moment with
+        // neither. DONT_KILL_APP, or the swap would end the very screen
+        // asking for it.
+        packageManager.setComponentEnabledSetting(
+            shown,
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+            PackageManager.DONT_KILL_APP,
+        )
+        packageManager.setComponentEnabledSetting(
+            hidden,
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            PackageManager.DONT_KILL_APP,
+        )
+        writeMarker(disguised)
+        applyTaskDescription(disguised)
+    }
+
+    private fun writeMarker(disguised: Boolean) {
+        try {
+            if (disguised) {
+                disguiseMarker.createNewFile()
+            } else {
+                disguiseMarker.delete()
+            }
+        } catch (_: IOException) {
+            // A marker that cannot be written costs one notification in
+            // the background at worst; the activity still knows.
+        }
+    }
+
+    // Every widget provider of the app, found by the meta-data that
+    // makes a receiver one and never by name, so a widget added later is
+    // covered without touching this file. Disabled, its widgets leave
+    // the home screen; enabled again means back to what the manifest
+    // says, which is the only state a widget can be added from.
+    private fun setWidgetsEnabled(enabled: Boolean) {
+        val flags = PackageManager.GET_RECEIVERS or
+            PackageManager.GET_META_DATA or
+            PackageManager.MATCH_DISABLED_COMPONENTS
+        val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.getPackageInfo(
+                packageName,
+                PackageManager.PackageInfoFlags.of(flags.toLong()),
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.getPackageInfo(packageName, flags)
+        }
+        val state = if (enabled) {
+            PackageManager.COMPONENT_ENABLED_STATE_DEFAULT
+        } else {
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+        }
+        for (receiver in info.receivers ?: return) {
+            val provides = receiver.metaData
+                ?.containsKey(AppWidgetManager.META_DATA_APPWIDGET_PROVIDER)
+            if (provides != true) continue
+            packageManager.setComponentEnabledSetting(
+                ComponentName(packageName, receiver.name),
+                state,
+                PackageManager.DONT_KILL_APP,
+            )
+        }
+    }
+
+    // What the task switcher calls this task, and the icon it gives it.
+    // Both are read from the alias in force, so the manifest stays the
+    // one place that names either face.
+    private fun applyTaskDescription(disguised: Boolean) {
+        val alias = if (disguised) calculatorAlias else launcherAlias
+        val info: ActivityInfo = try {
+            packageManager.getActivityInfo(alias, PackageManager.MATCH_DISABLED_COMPONENTS)
+        } catch (_: PackageManager.NameNotFoundException) {
+            return
+        }
+        val label = info.loadLabel(packageManager).toString()
+        val description = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            @Suppress("DEPRECATION")
+            ActivityManager.TaskDescription(label, info.iconResource)
+        } else {
+            val icon = info.loadIcon(packageManager)
+            val size = resources.getDimensionPixelSize(android.R.dimen.app_icon_size)
+            val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            icon.setBounds(0, 0, size, size)
+            icon.draw(Canvas(bitmap))
+            @Suppress("DEPRECATION")
+            ActivityManager.TaskDescription(label, bitmap)
+        }
+        setTaskDescription(description)
+    }
+
     private class PendingSave(val bytes: ByteArray, val result: MethodChannel.Result)
 
     private companion object {
         const val WINDOW_CHANNEL = "gerfaut/window"
         const val FILES_CHANNEL = "gerfaut/files"
+        const val DISGUISE_CHANNEL = "gerfaut/disguise"
+        const val DISGUISE_MARKER = "disguised"
     }
 }

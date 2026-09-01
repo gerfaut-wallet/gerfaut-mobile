@@ -43,11 +43,51 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+            <!-- For the Flutter tool only. It finds the activity to start
+                 by this filter and reads <activity> elements, never the
+                 aliases below. Every build type removes the filter again
+                 (src/debug, src/profile, src/release), so the installed
+                 app shows one launcher entry and `flutter run` still
+                 knows where to start. -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- The two faces of the app in the launcher, exactly one enabled
+             at a time; the activity flips them from the disguise channel.
+             On Android 10 and later an app that disables its only launcher
+             entry is not gone from the launcher: the system shows a
+             synthesized entry, named after the app, that opens its
+             settings page. Hiding the icon would still say "Gerfaut", so
+             the disguise is another launcher entry, never an absence.
+             Launch mode, task affinity and theme come from the target. -->
+        <activity-alias
+            android:name=".Launcher"
+            android:targetActivity=".MainActivity"
+            android:label="Gerfaut"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".Calculator"
+            android:targetActivity=".MainActivity"
+            android:label="Calculator"
+            android:icon="@mipmap/ic_calculator"
+            android:roundIcon="@mipmap/ic_calculator"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>
         <!-- The three home-screen widgets. Exported, as the launcher
              delivers APPWIDGET_UPDATE from outside the app; the data
              they draw is only what the app chose to publish for them. -->

@@ -6,6 +6,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:gerfaut/src/bridge.dart';
+import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/src/documents.dart';
 import 'package:gerfaut/src/electrum.dart';
 import 'package:gerfaut/src/home_widgets.dart';
@@ -49,6 +50,33 @@ class FakeWindowGuard implements WindowGuard {
 
   @override
   Future<void> setSecure(bool secure) async => calls.add(secure);
+}
+
+/// Remembers which face the launcher shows instead of touching the
+/// package manager.
+class FakeDisguise implements Disguise {
+  FakeDisguise({this.disguised = false});
+
+  bool disguised;
+  bool widgetsEnabled = true;
+
+  /// Every call, in order, for assertions.
+  final List<String> calls = [];
+
+  @override
+  Future<bool> isDisguised() async => disguised;
+
+  @override
+  Future<void> setDisguised(bool disguised) async {
+    calls.add('disguise:$disguised');
+    this.disguised = disguised;
+  }
+
+  @override
+  Future<void> setWidgetsEnabled(bool enabled) async {
+    calls.add('widgets:$enabled');
+    widgetsEnabled = enabled;
+  }
 }
 
 /// Counts what the screen was asked instead of touching the platform.

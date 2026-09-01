@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Material blue-grey, deliberately generic: the calculator alias
+         must not wear Gerfaut's Glacier. -->
+    <color name="ic_calculator_background">#37474F</color>
+    <!-- Before Android 8 there is no adaptive icon: the alias's mipmap
+         name falls back to the plain vector. -->
+    <item name="ic_calculator" type="mipmap">@drawable/ic_calculator</item>
+</resources>
