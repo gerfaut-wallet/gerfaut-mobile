@@ -10,6 +10,7 @@ import 'package:gerfaut/screens/welcome.dart';
 import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
+import 'package:gerfaut/src/window.dart';
 import 'package:gerfaut/theme/tokens.dart';
 
 import 'fakes.dart';
@@ -53,16 +54,25 @@ FakeBridge locked({
 
 /// Every test substitutes the sensor: a widget test must never reach
 /// the platform, which under a test binding simply never answers.
-List<Override> _overrides(FakeBridge bridge, FakeBiometrics? biometrics) => [
+List<Override> _overrides(
+  FakeBridge bridge,
+  FakeBiometrics? biometrics, {
+  FakeWindowGuard? guard,
+}) => [
   bridgeProvider.overrideWithValue(bridge),
   biometricGateProvider.overrideWithValue(
     biometrics ?? FakeBiometrics(available: false),
   ),
+  windowGuardProvider.overrideWithValue(guard ?? FakeWindowGuard()),
 ];
 
-Widget app(FakeBridge bridge, {FakeBiometrics? biometrics}) {
+Widget app(
+  FakeBridge bridge, {
+  FakeBiometrics? biometrics,
+  FakeWindowGuard? guard,
+}) {
   return ProviderScope(
-    overrides: _overrides(bridge, biometrics),
+    overrides: _overrides(bridge, biometrics, guard: guard),
     child: const GerfautApp(),
   );
 }
@@ -411,6 +421,54 @@ void main() {
       // Nothing of the settings, and nothing of a wallet, is behind it.
       expect(find.text('Network'), findsNothing);
       expect(find.text('Cold storage'), findsNothing);
+    });
+  });
+
+  group('the window', () {
+    testWidgets('a vault with a lock marks the window secure', (tester) async {
+      final guard = FakeWindowGuard();
+      await tester.pumpWidget(app(locked(), guard: guard));
+      await tester.pumpAndSettle();
+
+      // The task switcher photographs the app before the lock draws;
+      // only the window flag keeps a balance out of that picture.
+      expect(guard.secure, isTrue);
+    });
+
+    testWidgets('a vault without a lock leaves the window plain', (
+      tester,
+    ) async {
+      final guard = FakeWindowGuard();
+      await tester.pumpWidget(app(FakeBridge(), guard: guard));
+      await tester.pumpAndSettle();
+
+      // Said once, and as plain: screenshots keep working, for the user
+      // who wants to show a screen as much as for the emulator tests.
+      expect(guard.calls, [false]);
+    });
+
+    test('the window follows the lock as the settings change', () {
+      final guard = FakeWindowGuard();
+      final container = ProviderContainer(
+        overrides: _overrides(locked(), null, guard: guard),
+      );
+      addTearDown(container.dispose);
+      final lock = container.read(lockProvider.notifier);
+
+      lock.syncFromSettings(pinLock);
+      expect(guard.secure, isTrue);
+
+      // A refetch that says the same thing does not ask again.
+      lock.syncFromSettings(pinLock);
+      expect(guard.calls, [true]);
+
+      // Turning the lock off hands the window back.
+      lock.syncFromSettings(null);
+      expect(guard.calls, [true, false]);
+
+      // And on again, from the settings card, secures it again.
+      lock.syncFromSettings(pinLock);
+      expect(guard.calls, [true, false, true]);
     });
   });
 

@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/electrum.dart';
 import 'package:gerfaut/src/models.dart';
+import 'package:gerfaut/src/window.dart';
 import 'package:url_launcher_platform_interface/link.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
@@ -32,6 +33,18 @@ class FakeUrlLauncher extends UrlLauncherPlatform {
     launched.add(url);
     return true;
   }
+}
+
+/// Records what the window was asked to be instead of touching the
+/// activity.
+class FakeWindowGuard implements WindowGuard {
+  final List<bool> calls = [];
+
+  /// The last state asked for; null when nothing was asked yet.
+  bool? get secure => calls.isEmpty ? null : calls.last;
+
+  @override
+  Future<void> setSecure(bool secure) async => calls.add(secure);
 }
 
 WalletMeta makeMeta({

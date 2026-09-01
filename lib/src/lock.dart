@@ -10,12 +10,15 @@
 // that does not count is the one Gerfaut sends the user on itself — a
 // file picker, a save dialog, a share sheet.
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_auth/local_auth.dart';
 
 import 'models.dart';
 import 'state.dart';
+import 'window.dart';
 
 /// The phone's own prompt, behind an interface so no test ever reaches
 /// the platform. The core never sees a biometric: the system answers,
@@ -128,6 +131,15 @@ class LockController extends Notifier<LockState> {
   /// screen they are standing on.
   void syncFromSettings(AppLock? lock) {
     final first = !state.loaded;
+    // The window follows the lock: secure while one exists, plain
+    // otherwise. The task switcher photographs the app on its way out,
+    // before the lock screen draws, so the lock alone would leave a
+    // balance readable there. Without a lock nothing is hidden, and
+    // screenshots stay possible.
+    final secure = lock != null;
+    if (first || (state.lock != null) != secure) {
+      unawaited(ref.read(windowGuardProvider).setSecure(secure));
+    }
     state = LockState(
       lock: lock,
       loaded: true,
