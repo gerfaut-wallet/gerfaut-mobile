@@ -148,6 +148,60 @@ WalletSnapshot makeSnapshot({
   );
 }
 
+/// One key of a policy fixture, with a stand-in for the key material.
+PolicyKey makePolicyKey(int index, {String? fingerprint, String? originPath}) {
+  final letter = String.fromCharCode(0x41 + index);
+  return PolicyKey(
+    id: 'k$index',
+    label: 'Key $letter',
+    fingerprint: fingerprint ?? '0000000$index',
+    originPath: originPath ?? "m/84'/1'/0'",
+    keyShort: 'tpubKey$letter…$index$index$index$index',
+  );
+}
+
+/// A single-key policy: one primary branch, open now. The default the
+/// fake bridge hands out for any wallet nobody configured.
+PolicySnapshot makePolicy({
+  PolicyKind kind = PolicyKind.singleKey,
+  ScriptKind script = ScriptKind.segwit,
+  String descriptor = 'wpkh(tpub.../0/*)#checksum',
+  String policy = 'pk(Key A)',
+  List<PolicyKey>? keys,
+  List<PolicyBranch>? branches,
+  int tipHeight = 800000,
+  int computedAt = 1750000000,
+  int coins = 0,
+  bool hasTimelocks = false,
+}) {
+  return PolicySnapshot(
+    kind: kind,
+    script: script,
+    descriptor: descriptor,
+    policy: policy,
+    keys: keys ?? [makePolicyKey(0)],
+    branches:
+        branches ??
+        const [
+          PolicyBranch(
+            id: 'b0',
+            role: BranchRole.primary,
+            label: 'Primary',
+            summary: 'Key A',
+            condition: KeyCondition(keyId: 'k0'),
+            timelocks: [],
+            state: SpendableNow(),
+            spendableNow: true,
+          ),
+        ],
+    tipHeight: tipHeight,
+    computedAt: computedAt,
+    timeBasis: TimeBasis.wallClock,
+    coins: coins,
+    hasTimelocks: hasTimelocks,
+  );
+}
+
 ParsedInput makeParsedInput({
   RecognizedKind kind = RecognizedKind.multipathDescriptor,
   List<Network> networks = const [
@@ -430,6 +484,20 @@ class FakeBridge implements GerfautBridge {
       throw BridgeException('wallet_not_found', 'wallet not found: $id');
     }
     return snapshot;
+  }
+
+  /// Policies by wallet id; a wallet with none gets a single-key one.
+  final Map<String, PolicySnapshot> policies = {};
+
+  /// Policy hook; throw a [BridgeException] to simulate a descriptor
+  /// the core cannot read. Takes precedence over [policies] when set.
+  PolicySnapshot Function(String id)? onWalletPolicy;
+
+  @override
+  Future<PolicySnapshot> walletPolicy(String id) async {
+    final policy = onWalletPolicy;
+    if (policy != null) return policy(id);
+    return policies[id] ?? makePolicy();
   }
 
   @override

@@ -47,6 +47,11 @@ abstract class GerfautBridge {
   );
   Future<List<WalletMeta>> listWallets([Network? network]);
   Future<WalletSnapshot> walletSnapshot(String id);
+
+  /// The wallet's descriptor read as a spending policy: keys, branches
+  /// and every timelock evaluated against the chain tip and the coins.
+  /// A watched address yields a snapshot with no keys and no branches.
+  Future<PolicySnapshot> walletPolicy(String id);
   Future<TxDetail> txDetail(String id, String txid);
   Future<List<UtxoInfo>> utxos(String id);
   Future<List<AddressEntry>> receiveAddresses(String id, int lookahead);
@@ -219,6 +224,11 @@ class RustBridge implements GerfautBridge {
   @override
   Future<WalletSnapshot> walletSnapshot(String id) async {
     return WalletSnapshot.fromJson(_object(await rust.walletSnapshot(id: id)));
+  }
+
+  @override
+  Future<PolicySnapshot> walletPolicy(String id) async {
+    return PolicySnapshot.fromJson(_object(await rust.walletPolicy(id: id)));
   }
 
   @override

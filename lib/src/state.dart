@@ -41,6 +41,12 @@ final snapshotProvider = FutureProvider.family<WalletSnapshot, String>((
   return ref.watch(bridgeProvider).walletSnapshot(id);
 });
 
+/// The spending policy of one wallet, read against the chain tip and
+/// the coins of the last sync.
+final policyProvider = FutureProvider.family<PolicySnapshot, String>((ref, id) {
+  return ref.watch(bridgeProvider).walletPolicy(id);
+});
+
 /// Unspent outputs of one wallet.
 final utxosProvider = FutureProvider.family<List<UtxoInfo>, String>((ref, id) {
   return ref.watch(bridgeProvider).utxos(id);
@@ -371,10 +377,12 @@ class SyncController extends Notifier<Set<String>> {
     ref.invalidate(walletsProvider);
     if (id != null) {
       ref.invalidate(snapshotProvider(id));
+      ref.invalidate(policyProvider(id));
       ref.invalidate(utxosProvider(id));
       ref.invalidate(addressListProvider(id));
     } else {
       ref.invalidate(snapshotProvider);
+      ref.invalidate(policyProvider);
       ref.invalidate(utxosProvider);
       ref.invalidate(addressListProvider);
     }

@@ -2098,3 +2098,546 @@ class TorStatus {
   /// Whether this build carries the built-in client.
   final bool embeddedAvailable;
 }
+
+// --- policy --------------------------------------------------------------
+
+/// The shape of a wallet's policy, at a glance.
+enum PolicyKind {
+  /// One key, nothing else.
+  singleKey('single_key'),
+
+  /// One threshold of plain keys.
+  multisig('multisig'),
+
+  /// Anything with a timelock, a hash, or nested conditions.
+  miniscript('miniscript'),
+
+  /// A watched address: no descriptor to read.
+  address('address');
+
+  const PolicyKind(this.id);
+
+  final String id;
+
+  static PolicyKind fromId(String id) =>
+      PolicyKind.values.firstWhere((k) => k.id == id);
+}
+
+/// What the time-based figures of a snapshot were measured against.
+enum TimeBasis {
+  /// The device clock. The chain's median time trails it by up to a
+  /// couple of hours.
+  wallClock('wall_clock');
+
+  const TimeBasis(this.id);
+
+  final String id;
+
+  static TimeBasis fromId(String id) =>
+      TimeBasis.values.firstWhere((b) => b.id == id);
+}
+
+/// What a spending branch is for, guessed by the core from its locks.
+enum BranchRole {
+  /// No timelock: the everyday path.
+  primary('primary'),
+
+  /// The shortest timelocked path.
+  recovery('recovery'),
+
+  /// The second shortest timelocked path.
+  emergency('emergency'),
+
+  /// Further timelocked paths, and paths with no key or needing a
+  /// hash preimage.
+  other('other');
+
+  const BranchRole(this.id);
+
+  final String id;
+
+  static BranchRole fromId(String id) =>
+      BranchRole.values.firstWhere((r) => r.id == id);
+}
+
+/// One key of the policy. The same extended key on two derivation
+/// paths is one key.
+class PolicyKey {
+  const PolicyKey({
+    required this.id,
+    required this.label,
+    required this.fingerprint,
+    required this.originPath,
+    required this.keyShort,
+  });
+
+  factory PolicyKey.fromJson(Map<String, dynamic> json) {
+    return PolicyKey(
+      id: json['id'] as String,
+      label: json['label'] as String,
+      fingerprint: json['fingerprint'] as String?,
+      originPath: json['origin_path'] as String?,
+      keyShort: json['key_short'] as String,
+    );
+  }
+
+  /// Stable within the snapshot: `k0`, `k1`, ...
+  final String id;
+
+  /// `Key A`, `Key B`, ... then `Key 27` past the alphabet.
+  final String label;
+
+  /// Eight lowercase hex digits, when the key carries an origin.
+  final String? fingerprint;
+
+  /// Origin path, `m/48'/1'/0'/2'`, when the key carries one.
+  final String? originPath;
+
+  /// The key as written, shortened around an ellipsis.
+  final String keyShort;
+}
+
+/// An absolute lock: `after(n)`, a block height or a unix time.
+sealed class AbsoluteLock {
+  const AbsoluteLock();
+
+  factory AbsoluteLock.fromJson(Map<String, dynamic> json) {
+    return switch (json['kind'] as String) {
+      'height' => HeightLock(height: json['height'] as int),
+      'time' => TimeLock(unix: json['unix'] as int),
+      final other => throw FormatException('unknown absolute lock: $other'),
+    };
+  }
+}
+
+class HeightLock extends AbsoluteLock {
+  const HeightLock({required this.height});
+
+  final int height;
+}
+
+class TimeLock extends AbsoluteLock {
+  const TimeLock({required this.unix});
+
+  final int unix;
+}
+
+/// A relative lock: `older(n)`, counted from each coin's confirmation.
+/// A time-based one comes with its seconds already multiplied out.
+sealed class RelativeLock {
+  const RelativeLock();
+
+  factory RelativeLock.fromJson(Map<String, dynamic> json) {
+    return switch (json['kind'] as String) {
+      'blocks' => BlocksLock(blocks: json['blocks'] as int),
+      'seconds' => SecondsLock(seconds: json['seconds'] as int),
+      final other => throw FormatException('unknown relative lock: $other'),
+    };
+  }
+
+  /// Whether the lock counts time rather than blocks.
+  bool get isTimeBased => this is SecondsLock;
+}
+
+class BlocksLock extends RelativeLock {
+  const BlocksLock({required this.blocks});
+
+  final int blocks;
+}
+
+class SecondsLock extends RelativeLock {
+  const SecondsLock({required this.seconds});
+
+  final int seconds;
+}
+
+/// A spending condition, as the policy states it. A threshold with
+/// `k == n` is an "and", one with `k == 1` an "or".
+sealed class PolicyCondition {
+  const PolicyCondition();
+
+  factory PolicyCondition.fromJson(Map<String, dynamic> json) {
+    return switch (json['kind'] as String) {
+      'key' => KeyCondition(keyId: json['key_id'] as String),
+      'thresh' => ThreshCondition(
+        k: json['k'] as int,
+        n: json['n'] as int,
+        items: (json['items'] as List)
+            .map((c) => PolicyCondition.fromJson(c as Map<String, dynamic>))
+            .toList(),
+      ),
+      'after' => AfterCondition(
+        lock: AbsoluteLock.fromJson(json['lock'] as Map<String, dynamic>),
+      ),
+      'older' => OlderCondition(
+        lock: RelativeLock.fromJson(json['lock'] as Map<String, dynamic>),
+      ),
+      'preimage' => PreimageCondition(hash: json['hash'] as String),
+      final other => throw FormatException('unknown condition: $other'),
+    };
+  }
+}
+
+class KeyCondition extends PolicyCondition {
+  const KeyCondition({required this.keyId});
+
+  final String keyId;
+}
+
+class ThreshCondition extends PolicyCondition {
+  const ThreshCondition({
+    required this.k,
+    required this.n,
+    required this.items,
+  });
+
+  final int k;
+  final int n;
+  final List<PolicyCondition> items;
+}
+
+class AfterCondition extends PolicyCondition {
+  const AfterCondition({required this.lock});
+
+  final AbsoluteLock lock;
+}
+
+class OlderCondition extends PolicyCondition {
+  const OlderCondition({required this.lock});
+
+  final RelativeLock lock;
+}
+
+/// A hash whose preimage must be revealed: `sha256`, `hash256`,
+/// `ripemd160` or `hash160`.
+class PreimageCondition extends PolicyCondition {
+  const PreimageCondition({required this.hash});
+
+  final String hash;
+}
+
+/// Which lock a [PolicyTimelock] entry is about.
+sealed class TimelockRef {
+  const TimelockRef();
+
+  factory TimelockRef.fromJson(Map<String, dynamic> json) {
+    final lock = json['lock'] as Map<String, dynamic>;
+    return switch (json['kind'] as String) {
+      'absolute' => AbsoluteTimelock(lock: AbsoluteLock.fromJson(lock)),
+      'relative' => RelativeTimelock(lock: RelativeLock.fromJson(lock)),
+      final other => throw FormatException('unknown timelock: $other'),
+    };
+  }
+
+  /// Whether the lock is judged by a clock rather than by a height.
+  bool get isTimeBased => switch (this) {
+    AbsoluteTimelock(:final lock) => lock is TimeLock,
+    RelativeTimelock(:final lock) => lock.isTimeBased,
+  };
+}
+
+class AbsoluteTimelock extends TimelockRef {
+  const AbsoluteTimelock({required this.lock});
+
+  final AbsoluteLock lock;
+}
+
+class RelativeTimelock extends TimelockRef {
+  const RelativeTimelock({required this.lock});
+
+  final RelativeLock lock;
+}
+
+/// What still separates a lock from opening. Block figures come with
+/// their ten-minute estimate; a time figure has no block count.
+class Remaining {
+  const Remaining({
+    required this.remainingBlocks,
+    required this.remainingSeconds,
+    required this.unlocksAtUnix,
+  });
+
+  factory Remaining.fromJson(Map<String, dynamic> json) {
+    return Remaining(
+      remainingBlocks: json['remaining_blocks'] as int?,
+      remainingSeconds: json['remaining_seconds'] as int?,
+      unlocksAtUnix: json['unlocks_at_unix'] as int?,
+    );
+  }
+
+  final int? remainingBlocks;
+  final int? remainingSeconds;
+  final int? unlocksAtUnix;
+}
+
+/// Where one lock stands against the chain and the coins.
+sealed class LockState {
+  const LockState();
+
+  factory LockState.fromJson(Map<String, dynamic> json) {
+    return switch (json['kind'] as String) {
+      'unlocked' => const UnlockedLock(),
+      'locked' => LockedLock(remaining: Remaining.fromJson(json)),
+      'per_coin' => PerCoinLock(
+        unlocked: json['unlocked'] as int,
+        waiting: json['waiting'] as int,
+        locked: json['locked'] as int,
+        next: json['next'] == null
+            ? null
+            : Remaining.fromJson(json['next'] as Map<String, dynamic>),
+      ),
+      'no_coins' => NoCoinsLock(
+        blocks: json['blocks'] as int?,
+        seconds: json['seconds'] as int?,
+      ),
+      final other => throw FormatException('unknown lock state: $other'),
+    };
+  }
+}
+
+/// An absolute lock the chain has passed.
+class UnlockedLock extends LockState {
+  const UnlockedLock();
+}
+
+/// An absolute lock still ahead.
+class LockedLock extends LockState {
+  const LockedLock({required this.remaining});
+
+  final Remaining remaining;
+}
+
+/// A relative lock, counted coin by coin. `waiting` coins are not
+/// confirmed yet, so their count has not started; `next` is the locked
+/// coin that opens first.
+class PerCoinLock extends LockState {
+  const PerCoinLock({
+    required this.unlocked,
+    required this.waiting,
+    required this.locked,
+    required this.next,
+  });
+
+  final int unlocked;
+  final int waiting;
+  final int locked;
+  final Remaining? next;
+}
+
+/// A relative lock with no coin to count from: the raw duration.
+class NoCoinsLock extends LockState {
+  const NoCoinsLock({required this.blocks, required this.seconds});
+
+  final int? blocks;
+  final int? seconds;
+}
+
+/// One timelock of a branch.
+class PolicyTimelock {
+  const PolicyTimelock({
+    required this.lock,
+    required this.required,
+    required this.state,
+  });
+
+  factory PolicyTimelock.fromJson(Map<String, dynamic> json) {
+    return PolicyTimelock(
+      lock: TimelockRef.fromJson(json['lock'] as Map<String, dynamic>),
+      required: json['required'] as bool,
+      state: LockState.fromJson(json['state'] as Map<String, dynamic>),
+    );
+  }
+
+  final TimelockRef lock;
+
+  /// False when the lock sits under a threshold that can be met
+  /// without it: it then never holds the branch back.
+  final bool required;
+  final LockState state;
+}
+
+/// Whether a branch can be spent from right now.
+sealed class BranchState {
+  const BranchState();
+
+  factory BranchState.fromJson(Map<String, dynamic> json) {
+    return switch (json['kind'] as String) {
+      'spendable_now' => const SpendableNow(),
+      'locked' => LockedBranch(
+        until: Remaining.fromJson(json['until'] as Map<String, dynamic>),
+      ),
+      'per_coin' => PerCoinBranch(
+        unlocked: json['unlocked'] as int,
+        waiting: json['waiting'] as int,
+        locked: json['locked'] as int,
+        next: json['next'] == null
+            ? null
+            : Remaining.fromJson(json['next'] as Map<String, dynamic>),
+      ),
+      'no_coins' => const NoCoinsBranch(),
+      'needs_preimage' => const NeedsPreimage(),
+      final other => throw FormatException('unknown branch state: $other'),
+    };
+  }
+}
+
+class SpendableNow extends BranchState {
+  const SpendableNow();
+}
+
+/// Only absolute locks, and the chain has not passed them all.
+class LockedBranch extends BranchState {
+  const LockedBranch({required this.until});
+
+  final Remaining until;
+}
+
+/// At least one relative lock: a coin is unlocked once every lock of
+/// the branch is met for it.
+class PerCoinBranch extends BranchState {
+  const PerCoinBranch({
+    required this.unlocked,
+    required this.waiting,
+    required this.locked,
+    required this.next,
+  });
+
+  final int unlocked;
+  final int waiting;
+  final int locked;
+  final Remaining? next;
+
+  int get total => unlocked + waiting + locked;
+}
+
+/// A relative lock with no coin to count from.
+class NoCoinsBranch extends BranchState {
+  const NoCoinsBranch();
+}
+
+/// The branch needs a hash preimage; keys and locks say nothing about
+/// whether one is at hand.
+class NeedsPreimage extends BranchState {
+  const NeedsPreimage();
+}
+
+/// One way to spend: a top-level alternative of the policy.
+class PolicyBranch {
+  const PolicyBranch({
+    required this.id,
+    required this.role,
+    required this.label,
+    required this.summary,
+    required this.condition,
+    required this.timelocks,
+    required this.state,
+    required this.spendableNow,
+  });
+
+  factory PolicyBranch.fromJson(Map<String, dynamic> json) {
+    return PolicyBranch(
+      id: json['id'] as String,
+      role: BranchRole.fromId(json['role'] as String),
+      label: json['label'] as String,
+      summary: json['summary'] as String,
+      condition: PolicyCondition.fromJson(
+        json['condition'] as Map<String, dynamic>,
+      ),
+      timelocks: (json['timelocks'] as List)
+          .map((t) => PolicyTimelock.fromJson(t as Map<String, dynamic>))
+          .toList(),
+      state: BranchState.fromJson(json['state'] as Map<String, dynamic>),
+      spendableNow: json['spendable_now'] as bool,
+    );
+  }
+
+  /// Stable within the snapshot: `b0`, `b1`, ...
+  final String id;
+  final BranchRole role;
+
+  /// `Primary`, `Recovery`, `Emergency`, `Primary B`, `Recovery 3`...
+  final String label;
+
+  /// The core's one-sentence reading of the branch.
+  final String summary;
+  final PolicyCondition condition;
+
+  /// Every lock of the branch, optional ones included, in the order
+  /// the policy names them.
+  final List<PolicyTimelock> timelocks;
+  final BranchState state;
+  final bool spendableNow;
+}
+
+/// A wallet's policy read against the chain.
+class PolicySnapshot {
+  const PolicySnapshot({
+    required this.kind,
+    required this.script,
+    required this.descriptor,
+    required this.policy,
+    required this.keys,
+    required this.branches,
+    required this.tipHeight,
+    required this.computedAt,
+    required this.timeBasis,
+    required this.coins,
+    required this.hasTimelocks,
+  });
+
+  factory PolicySnapshot.fromJson(Map<String, dynamic> json) {
+    return PolicySnapshot(
+      kind: PolicyKind.fromId(json['kind'] as String),
+      script: ScriptKind.fromId(json['script'] as String),
+      descriptor: json['descriptor'] as String,
+      policy: json['policy'] as String,
+      keys: (json['keys'] as List)
+          .map((k) => PolicyKey.fromJson(k as Map<String, dynamic>))
+          .toList(),
+      branches: (json['branches'] as List)
+          .map((b) => PolicyBranch.fromJson(b as Map<String, dynamic>))
+          .toList(),
+      tipHeight: json['tip_height'] as int,
+      computedAt: json['computed_at'] as int,
+      timeBasis: TimeBasis.fromId(json['time_basis'] as String),
+      coins: json['coins'] as int,
+      hasTimelocks: json['has_timelocks'] as bool,
+    );
+  }
+
+  final PolicyKind kind;
+  final ScriptKind script;
+
+  /// The external descriptor as given, or the address of a watched
+  /// address.
+  final String descriptor;
+
+  /// The normalized semantic policy with key labels in place of keys:
+  /// `or(pk(Key A),and(pk(Key B),older(52560)))`.
+  final String policy;
+  final List<PolicyKey> keys;
+  final List<PolicyBranch> branches;
+  final int tipHeight;
+
+  /// When the snapshot was computed, unix seconds.
+  final int computedAt;
+  final TimeBasis timeBasis;
+
+  /// Number of coins the relative locks were counted over.
+  final int coins;
+  final bool hasTimelocks;
+
+  /// The key a condition names, by its id.
+  PolicyKey? keyById(String id) {
+    for (final key in keys) {
+      if (key.id == id) return key;
+    }
+    return null;
+  }
+
+  /// Whether any lock of any branch is judged by a clock: those read
+  /// against this device's time, which the chain can trail.
+  bool get hasTimeBasedLocks => branches.any(
+    (branch) => branch.timelocks.any((lock) => lock.lock.isTimeBased),
+  );
+}

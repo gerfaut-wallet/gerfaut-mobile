@@ -242,6 +242,18 @@ pub async fn wallet_snapshot(id: String) -> String {
     }
 }
 
+/// The wallet's descriptor read as a spending policy: its keys, its
+/// branches, and every timelock evaluated against the chain tip and the
+/// wallet's coins. Returns a serialized `PolicySnapshot`; a watched
+/// address yields one with no keys and no branches.
+pub async fn wallet_policy(id: String) -> String {
+    let manager = try_json!(manager());
+    match manager.policy(&id).await {
+        Ok(policy) => to_json(&policy),
+        Err(e) => core_error_json(&e),
+    }
+}
+
 pub async fn tx_detail(id: String, txid: String) -> String {
     let manager = try_json!(manager());
     match manager.tx_detail(&id, &txid).await {

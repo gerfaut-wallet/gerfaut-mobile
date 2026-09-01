@@ -74,6 +74,13 @@ Future<String> renameWallet({required String id, required String name}) =>
 Future<String> walletSnapshot({required String id}) =>
     RustLib.instance.api.crateApiWalletSnapshot(id: id);
 
+/// The wallet's descriptor read as a spending policy: its keys, its
+/// branches, and every timelock evaluated against the chain tip and the
+/// wallet's coins. Returns a serialized `PolicySnapshot`; a watched
+/// address yields one with no keys and no branches.
+Future<String> walletPolicy({required String id}) =>
+    RustLib.instance.api.crateApiWalletPolicy(id: id);
+
 Future<String> txDetail({required String id, required String txid}) =>
     RustLib.instance.api.crateApiTxDetail(id: id, txid: txid);
 

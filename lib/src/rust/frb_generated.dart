@@ -69,7 +69,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 1712931102;
+  int get rustContentHash => -53844971;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -225,6 +225,8 @@ abstract class RustLibApi extends BaseApi {
   Future<String> crateApiUtxos({required String id});
 
   Future<String> crateApiVerifyAppLock({required String secret});
+
+  Future<String> crateApiWalletPolicy({required String id});
 
   Future<String> crateApiWalletSnapshot({required String id});
 }
@@ -1589,7 +1591,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "verify_app_lock", argNames: ["secret"]);
 
   @override
-  Future<String> crateApiWalletSnapshot({required String id}) {
+  Future<String> crateApiWalletPolicy({required String id}) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -1599,6 +1601,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             generalizedFrbRustBinding,
             serializer,
             funcId: 45,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiWalletPolicyConstMeta,
+        argValues: [id],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletPolicyConstMeta =>
+      const TaskConstMeta(debugName: "wallet_policy", argNames: ["id"]);
+
+  @override
+  Future<String> crateApiWalletSnapshot({required String id}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(id, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 46,
             port: port_,
           );
         },
