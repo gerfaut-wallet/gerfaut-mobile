@@ -89,7 +89,8 @@ class _TorSectionState extends ConsumerState<TorSection> {
                     'starts its own Tor client, or uses the one already '
                     'running on this device when told to.'
               : 'An address ending in .onion goes through Tor. This build '
-                    'has no Tor of its own: start Tor or Orbot first.',
+                    'has no Tor of its own: choose System below, with a Tor '
+                    'app such as Orbot running on this device.',
           style: tokens.bodySmall.copyWith(color: tokens.textMuted),
         ),
         const SizedBox(height: GerfautSpacing.md),
@@ -111,19 +112,20 @@ class _TorSectionState extends ConsumerState<TorSection> {
         // The system proxy is whatever answers on a local port. On a
         // desktop that is the user's own daemon; on a phone the port is
         // first come, first served, and the app holding it learns every
-        // .onion name and can answer for the server. So Automatic
-        // prefers the built-in client on Android, and choosing the
+        // .onion name and can answer for the server. So on Android
+        // Automatic is the built-in client and nothing else — the core
+        // never falls back to a local port there — and choosing the
         // system one is said for what it is.
         Text(switch (tor.mode) {
           TorMode.auto =>
-            'The built-in Tor first; the Tor on this device only when '
-                'this build has none of its own.',
+            'The built-in Tor. A Tor app on this device is used only '
+                'when you choose it below.',
           TorMode.system =>
             'Only the Tor on this device, at '
                 '${tor.socksProxy ?? status?.socksProxy ?? '127.0.0.1:9050'}. '
                 'On a phone any app can answer on that port and pose as '
-                'Tor, which is why Automatic prefers the built-in client '
-                'on Android.',
+                'Tor, which is why Automatic never falls back to it on '
+                'Android.',
           TorMode.embedded =>
             'Only the built-in Tor. The first connection takes a little '
                 'longer while it starts.',

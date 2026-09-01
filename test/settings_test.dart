@@ -1006,27 +1006,62 @@ void main() {
         find.text(
           'Only the Tor on this device, at 127.0.0.1:9050. On a phone any '
           'app can answer on that port and pose as Tor, which is why '
-          'Automatic prefers the built-in client on Android.',
+          'Automatic never falls back to it on Android.',
         ),
         findsOneWidget,
       );
     });
 
-    testWidgets('automatic says the built-in client comes first', (
+    testWidgets('automatic is the built-in client and nothing else', (
       tester,
     ) async {
       useTallSurface(tester);
       await tester.pumpWidget(settingsApp(withTor(TorMode.auto)));
       await tester.pumpAndSettle();
 
+      // On Android the core never falls back to a local port under
+      // Automatic: a Tor app on the phone is used only when chosen.
       expect(
         find.text(
-          'The built-in Tor first; the Tor on this device only when this '
-          'build has none of its own.',
+          'The built-in Tor. A Tor app on this device is used only when '
+          'you choose it below.',
         ),
         findsOneWidget,
       );
       expect(find.textContaining('if it answers'), findsNothing);
+      expect(find.textContaining('built-in Tor first'), findsNothing);
+    });
+
+    testWidgets('a build without its own Tor says what to choose', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = withTor(TorMode.auto);
+      bridge.onTorStatus = (tor) => TorStatus(
+        mode: tor.mode,
+        socksProxy: '127.0.0.1:9050',
+        via: null,
+        socks: null,
+        running: false,
+        bootstrapped: false,
+        bootstrapPercent: 0,
+        error: null,
+        embeddedAvailable: false,
+      );
+      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpAndSettle();
+
+      // Starting Orbot is not enough on its own: Automatic would still
+      // not use it, so the card names the mode to pick.
+      expect(
+        find.text(
+          'An address ending in .onion goes through Tor. This build has no '
+          'Tor of its own: choose System below, with a Tor app such as '
+          'Orbot running on this device.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('start Tor or Orbot first'), findsNothing);
     });
   });
 
