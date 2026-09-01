@@ -61,26 +61,28 @@ WalletMeta makeMeta({
   );
 }
 
-BalanceSnapshot makeBalance(int totalSats) {
+BalanceSnapshot makeBalance(int totalSats, {int? pendingNetSats}) {
   return BalanceSnapshot(
     confirmed: totalSats,
     trustedPending: 0,
     untrustedPending: 0,
     immature: 0,
     total: totalSats,
+    pendingNetSats: pendingNetSats,
   );
 }
 
 WalletSnapshot makeSnapshot({
   WalletMeta? meta,
   int totalSats = 0,
+  int? pendingNetSats,
   List<TxSummary> txs = const [],
   int tipHeight = 0,
   bool truncated = false,
 }) {
   return WalletSnapshot(
     meta: meta ?? makeMeta(totalSats: totalSats),
-    balance: makeBalance(totalSats),
+    balance: makeBalance(totalSats, pendingNetSats: pendingNetSats),
     txs: txs,
     tipHeight: tipHeight,
     truncated: truncated,

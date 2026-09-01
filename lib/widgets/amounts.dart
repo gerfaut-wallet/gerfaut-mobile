@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/format.dart';
 import '../src/state.dart';
@@ -60,6 +61,45 @@ class BalanceAmount extends ConsumerWidget {
           Text(fiat, style: tokens.figureOf(color: tokens.textMuted)),
         ],
       ],
+    );
+  }
+}
+
+/// What of a balance is still moving: the signed sum of the
+/// transactions not yet in a block, behind a clock. The total above it
+/// already counts this; the line says how much of it the chain has not
+/// taken yet, and which way it is going. Amber is the colour of
+/// waiting, and the sign and the glyph say it without the colour.
+class PendingAmount extends ConsumerWidget {
+  const PendingAmount({super.key, required this.sats});
+
+  final int sats;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final masked = ref.watch(maskedProvider);
+    final unit = ref.watch(unitProvider);
+    final figure = masked ? maskedValue : formatAmountSigned(sats, unit);
+    return Semantics(
+      label: '$figure pending',
+      excludeSemantics: true,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(LucideIcons.clock, size: 13, color: tokens.pending),
+          const SizedBox(width: GerfautSpacing.xs + 2),
+          Text(
+            figure,
+            style: tokens.figureOf(
+              weight: FontWeight.w500,
+              color: tokens.pending,
+            ),
+            maxLines: 1,
+            softWrap: false,
+          ),
+        ],
+      ),
     );
   }
 }

@@ -399,4 +399,126 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byTooltip('Sync'), findsOneWidget);
   });
+  Widget homeOf(FakeBridge bridge) => ProviderScope(
+    overrides: [bridgeProvider.overrideWithValue(bridge)],
+    child: MaterialApp(
+      theme: themeFrom(GerfautTokens.light, Brightness.light),
+      home: const WalletHomeScreen(walletId: 'w1'),
+    ),
+  );
+  const synced = SyncStamp(
+    at: 1755000000,
+    tipHeight: 100,
+    backend: 'mempool.space',
+  );
+
+  testWidgets('a settled balance says nothing about being settled', (
+    tester,
+  ) async {
+    final meta = makeMeta(totalSats: 123456, lastSync: synced);
+    final bridge = FakeBridge(
+      wallets: [meta],
+      snapshots: {'w1': makeSnapshot(meta: meta, totalSats: 123456)},
+    );
+    await tester.pumpWidget(homeOf(bridge));
+    await tester.pumpAndSettle();
+
+    // The normal state does not announce itself: no note, no clock.
+    expect(find.text('All funds confirmed.'), findsNothing);
+    expect(find.textContaining('pending'), findsNothing);
+    expect(find.byIcon(LucideIcons.clock), findsNothing);
+  });
+
+  testWidgets('what is still out of a block reads under the total, signed', (
+    tester,
+  ) async {
+    final meta = makeMeta(totalSats: 173456, lastSync: synced);
+    final bridge = FakeBridge(
+      wallets: [meta],
+      snapshots: {
+        'w1': makeSnapshot(
+          meta: meta,
+          totalSats: 173456,
+          pendingNetSats: 50000,
+        ),
+      },
+    );
+    await tester.pumpWidget(homeOf(bridge));
+    await tester.pumpAndSettle();
+
+    // The total already counts the arriving funds; the line under it
+    // says how much of it is still waiting, in the unit of the total.
+    expect(
+      find.textContaining('0.00173456', findRichText: true),
+      findsOneWidget,
+    );
+    final figure = formatAmountSigned(50000, AmountUnit.btc);
+    expect(find.text(figure), findsOneWidget);
+    expect(find.byIcon(LucideIcons.clock), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.text(figure)).style!.color,
+      GerfautTokens.light.pending,
+    );
+    expect(
+      find.text('Includes pending funds not yet confirmed.'),
+      findsNothing,
+    );
+
+    // Masked, the figure hides and the clock stays: that something is
+    // in flight is not an amount.
+    await tester.tap(find.byTooltip('Hide balances'));
+    await tester.pumpAndSettle();
+    expect(find.text(figure), findsNothing);
+    expect(find.byIcon(LucideIcons.clock), findsOneWidget);
+  });
+
+  testWidgets('a spend the chain has not taken yet reads as a minus', (
+    tester,
+  ) async {
+    final meta = makeMeta(totalSats: 69000, lastSync: synced);
+    final bridge = FakeBridge(
+      wallets: [meta],
+      snapshots: {
+        'w1': makeSnapshot(
+          meta: meta,
+          totalSats: 69000,
+          pendingNetSats: -31000,
+        ),
+      },
+    );
+    await tester.pumpWidget(homeOf(bridge));
+    await tester.pumpAndSettle();
+
+    final figure = formatAmountSigned(-31000, AmountUnit.btc);
+    expect(figure, startsWith('-'));
+    expect(find.text(figure), findsOneWidget);
+    expect(find.byIcon(LucideIcons.clock), findsOneWidget);
+  });
+
+  testWidgets('a sync failure outranks the pending line', (tester) async {
+    final meta = makeMeta(totalSats: 173456, lastSync: synced);
+    final bridge = FakeBridge(
+      wallets: [meta],
+      snapshots: {
+        'w1': makeSnapshot(
+          meta: meta,
+          totalSats: 173456,
+          pendingNetSats: 50000,
+        ),
+      },
+    );
+    bridge.onSyncWallet = (_) =>
+        throw const BridgeException('sync', 'mempool.space: timed out');
+    await tester.pumpWidget(homeOf(bridge));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Sync'));
+    await tester.pumpAndSettle();
+
+    // A figure whose source is in doubt is not one to detail.
+    expect(
+      find.text('Sync failed: showing the last known balance.'),
+      findsOneWidget,
+    );
+    expect(find.byIcon(LucideIcons.clock), findsNothing);
+  });
 }

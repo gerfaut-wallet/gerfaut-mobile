@@ -276,6 +276,7 @@ class BalanceSnapshot {
     required this.untrustedPending,
     required this.immature,
     required this.total,
+    this.pendingNetSats,
   });
 
   factory BalanceSnapshot.fromJson(Map<String, dynamic> json) {
@@ -285,6 +286,7 @@ class BalanceSnapshot {
       untrustedPending: json['untrusted_pending'] as int,
       immature: json['immature'] as int,
       total: json['total'] as int,
+      pendingNetSats: json['pending_net_sats'] as int?,
     );
   }
 
@@ -294,7 +296,10 @@ class BalanceSnapshot {
   final int immature;
   final int total;
 
-  bool get hasPending => trustedPending > 0 || untrustedPending > 0;
+  /// Signed sum of the transactions not yet in a block: what of [total]
+  /// is still arriving, or has left it without the chain having taken
+  /// it yet. Null once everything is settled.
+  final int? pendingNetSats;
 }
 
 /// When and against what a wallet last synced.

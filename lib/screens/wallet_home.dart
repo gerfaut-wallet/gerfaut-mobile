@@ -157,15 +157,14 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
   }
 
   /// The figure alone can lie: a wallet that never reached a backend
-  /// shows zero. The note says where the number comes from.
+  /// shows zero. The note says where the number comes from, and only
+  /// then: a balance with nothing to explain explains nothing. "All
+  /// funds confirmed" was the normal state announcing itself.
   static String? _balanceNote(WalletSnapshot snapshot, String? error) {
     final synced = snapshot.meta.lastSync != null;
     if (error != null && !synced) return 'Sync failed: nothing fetched yet.';
     if (error != null) return 'Sync failed: showing the last known balance.';
     if (!synced) return 'Not synced yet.';
-    if (snapshot.balance.hasPending) {
-      return 'Includes pending funds not yet confirmed.';
-    }
     return null;
   }
 
@@ -173,6 +172,9 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final syncError = ref.watch(syncErrorsProvider)[widget.walletId];
     final note = _balanceNote(snapshot, syncError);
+    // A note about the sync outranks the pending line: a figure whose
+    // source is in doubt is not one to detail.
+    final pending = note == null ? snapshot.balance.pendingNetSats : null;
     return DefaultTabController(
       length: 2,
       child: Column(
@@ -219,6 +221,9 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                           note,
                           style: tokens.label.copyWith(color: tokens.textMuted),
                         ),
+                      ] else if (pending != null) ...[
+                        const SizedBox(height: GerfautSpacing.sm),
+                        PendingAmount(sats: pending),
                       ],
                     ],
                   ),
