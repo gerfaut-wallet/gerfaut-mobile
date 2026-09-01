@@ -359,13 +359,14 @@ String _noun(PolicyCondition condition, PolicySnapshot snapshot) {
 // --- timelocks ----------------------------------------------------------
 
 /// One timelock on one line: "52 560 blocks after the coin arrives ≈
-/// about 1 year", "block 801 432 ≈ in about 10 days", "after Mar 17,
-/// 2030". A lock the branch can do without ends in "(optional)".
+/// 1 year", "block 801 432 ≈ in 10 days", "after Mar 17, 2030". A lock
+/// the branch can do without ends in "(optional)". The "≈" is the
+/// hedge: an estimate said as "about" behind it would be hedged twice.
 String describeTimelock(PolicyTimelock timelock) {
   final text = switch (timelock.lock) {
     RelativeTimelock(lock: BlocksLock(:final blocks)) =>
       '${formatBlocks(blocks)} after the coin arrives '
-          '≈ ${formatDuration(blocks * blockSeconds)}',
+          '≈ ${formatDuration(blocks * blockSeconds, hedge: false)}',
     RelativeTimelock(lock: SecondsLock(:final seconds)) =>
       '${formatDuration(seconds)} after the coin arrives',
     AbsoluteTimelock(lock: HeightLock(:final height)) => _absolute(
@@ -387,7 +388,8 @@ String _absolute(String lock, LockState state) {
       return '$lock · passed';
     case LockedLock(:final remaining):
       final seconds = secondsLeft(remaining);
-      return seconds == null ? lock : '$lock ≈ in ${formatDuration(seconds)}';
+      if (seconds == null) return lock;
+      return '$lock ≈ in ${formatDuration(seconds, hedge: false)}';
     case PerCoinLock() || NoCoinsLock():
       return lock;
   }
@@ -422,7 +424,7 @@ class BranchStatus {
 
   final StateTone tone;
 
-  /// "Spendable now", "In 1 432 blocks ≈ about 10 days", "3 of 5 coins
+  /// "Spendable now", "In 1 432 blocks ≈ 10 days", "3 of 5 coins
   /// unlocked · next in about 12 days", "No coins yet".
   final String label;
 
@@ -498,14 +500,16 @@ StateTone _toneOf(Remaining remaining) {
   return seconds <= soonThresholdSeconds ? StateTone.soon : StateTone.far;
 }
 
-/// "In 1 432 blocks ≈ about 10 days", or "In about 10 days" for a lock
-/// the chain judges by time.
+/// "In 1 432 blocks ≈ 10 days", or "In about 10 days" for a lock the
+/// chain judges by time: the estimate is hedged once, by the "≈" where
+/// there is one and by the word where there is not.
 String _countdown(Remaining remaining) {
   final blocks = remaining.remainingBlocks;
   final seconds = secondsLeft(remaining);
   if (seconds == null) return 'Locked';
   if (blocks == null) return 'In ${formatDuration(seconds)}';
-  return 'In ${formatBlocks(blocks)} ≈ ${formatDuration(seconds)}';
+  return 'In ${formatBlocks(blocks)} '
+      '≈ ${formatDuration(seconds, hedge: false)}';
 }
 
 String? _dateOf(Remaining remaining) {

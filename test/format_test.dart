@@ -203,6 +203,14 @@ void main() {
       expect(formatDuration(60), 'about 1 minute');
     });
 
+    test('drops the hedge for a line that already carries one', () {
+      expect(formatDuration(10 * 86400, hedge: false), '10 days');
+      expect(formatDuration(36 * 3600, hedge: false), '1 day 12 hours');
+      expect(formatDuration(60, hedge: false), '1 minute');
+      // Under a minute there is no figure to hedge.
+      expect(formatDuration(59, hedge: false), 'under a minute');
+    });
+
     test('carries a twelfth month into the year', () {
       // 365-day years and 30-day months leave room for a twelfth month
       // past the eleventh: it is a year, never "1 year 12 months".

@@ -296,12 +296,12 @@ void main() {
       final liana = _snapshot(lianaPolicyJson());
       expect(
         describeTimelock(liana.branches[1].timelocks.single),
-        '52 560 blocks after the coin arrives ≈ about 1 year',
+        '52 560 blocks after the coin arrives ≈ 1 year',
       );
       final height = _snapshot(heightLockedPolicyJson());
       expect(
         describeTimelock(height.branches.single.timelocks.single),
-        'block 801 432 ≈ in about 10 days',
+        'block 801 432 ≈ in 10 days',
       );
       expect(
         describeTimelock(
@@ -327,7 +327,7 @@ void main() {
             ),
           ),
         ),
-        'after Mar 17, 2030 ≈ in about 5 years',
+        'after Mar 17, 2030 ≈ in 5 years',
       );
       expect(
         describeTimelock(
@@ -337,7 +337,7 @@ void main() {
             state: NoCoinsLock(blocks: 100, seconds: null),
           ),
         ),
-        '100 blocks after the coin arrives ≈ about 17 hours (optional)',
+        '100 blocks after the coin arrives ≈ 17 hours (optional)',
       );
       expect(
         describeTimelock(
@@ -359,7 +359,7 @@ void main() {
     test('a lone coin gets its own countdown and progress', () {
       final far = describeBranchState(recovery(lianaPolicyJson()));
       expect(far.tone, StateTone.far);
-      expect(far.label, 'In 20 440 blocks ≈ about 142 days');
+      expect(far.label, 'In 20 440 blocks ≈ 142 days');
       expect(far.date, isNotNull);
       expect(far.progress, closeTo((52560 - 20440) / 52560, 0.001));
 
@@ -367,7 +367,7 @@ void main() {
         recovery(lianaPolicyJson(remainingBlocks: 1432)),
       );
       expect(soon.tone, StateTone.soon);
-      expect(soon.label, 'In 1 432 blocks ≈ about 10 days');
+      expect(soon.label, 'In 1 432 blocks ≈ 10 days');
 
       expect(
         describeBranchState(recovery(lianaPolicyJson(locked: 0, unlocked: 1))),
@@ -414,14 +414,14 @@ void main() {
         _snapshot(heightLockedPolicyJson()).branches.single,
       );
       expect(soon.tone, StateTone.soon);
-      expect(soon.label, 'In 1 432 blocks ≈ about 10 days');
+      expect(soon.label, 'In 1 432 blocks ≈ 10 days');
       expect(soon.progress, isNull, reason: 'no coin to count from');
 
       final far = describeBranchState(
         _snapshot(heightLockedPolicyJson(remaining: 20000)).branches.single,
       );
       expect(far.tone, StateTone.far);
-      expect(far.label, 'In 20 000 blocks ≈ about 139 days');
+      expect(far.label, 'In 20 000 blocks ≈ 139 days');
     });
 
     test('states without a countdown have their own words', () {
@@ -469,9 +469,9 @@ void main() {
       expect(find.text('PRIMARY'), findsOneWidget);
       expect(find.text('RECOVERY'), findsOneWidget);
       expect(find.text('Spendable now'), findsOneWidget);
-      expect(find.text('In 20 440 blocks ≈ about 142 days'), findsOneWidget);
+      expect(find.text('In 20 440 blocks ≈ 142 days'), findsOneWidget);
       expect(
-        find.text('52 560 blocks after the coin arrives ≈ about 1 year'),
+        find.text('52 560 blocks after the coin arrives ≈ 1 year'),
         findsOneWidget,
       );
       expect(
@@ -495,9 +495,7 @@ void main() {
         _bridgeWith(lianaPolicyJson(remainingBlocks: 1432)),
       );
       await tester.pumpAndSettle();
-      final soon = tester.widget<Text>(
-        find.text('In 1 432 blocks ≈ about 10 days'),
-      );
+      final soon = tester.widget<Text>(find.text('In 1 432 blocks ≈ 10 days'));
       expect(soon.style?.color, GerfautTokens.light.pending);
 
       await _pumpPolicy(
@@ -505,9 +503,7 @@ void main() {
         _bridgeWith(heightLockedPolicyJson(remaining: 20000)),
       );
       await tester.pumpAndSettle();
-      final far = tester.widget<Text>(
-        find.text('In 20 000 blocks ≈ about 139 days'),
-      );
+      final far = tester.widget<Text>(find.text('In 20 000 blocks ≈ 139 days'));
       expect(far.style?.color, GerfautTokens.light.textMuted);
     });
 
@@ -663,7 +659,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('RECOVERY'), findsOneWidget);
-      expect(find.text('In 20 440 blocks ≈ about 142 days'), findsOneWidget);
+      expect(find.text('In 20 440 blocks ≈ 142 days'), findsOneWidget);
     });
   });
 }

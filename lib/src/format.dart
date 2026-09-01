@@ -212,8 +212,10 @@ const int _day = 24 * _hour;
 const int _month = 30 * _day;
 const int _year = 365 * _day;
 
-/// A duration as an estimate, always said as one: `about 10 days`,
-/// `about 3 hours`, `about 1 year 2 months`.
+/// A duration as an estimate, said as one: `about 10 days`, `about 3
+/// hours`, `about 1 year 2 months`. With [hedge] off the figure comes
+/// bare — `10 days` — for a line that already carries a "≈": hedged
+/// twice, an estimate reads as a doubt.
 ///
 /// Two units while the leading count is one or two — "about 1 day 12
 /// hours" is where rounding to a day would be a third off — and one
@@ -223,8 +225,9 @@ const int _year = 365 * _day;
 ///
 /// A 365-day year leaves room for a twelfth 30-day month, which is
 /// carried rather than said: "1 year 12 months" is two years.
-String formatDuration(int seconds) {
+String formatDuration(int seconds, {bool hedge = true}) {
   if (seconds < _minute) return 'under a minute';
+  final about = hedge ? 'about ' : '';
   String unit(int count, String name) => '$count $name${count == 1 ? '' : 's'}';
   String twoOrOne(int big, String bigName, int small, String smallName) {
     var lead = seconds ~/ big;
@@ -233,15 +236,15 @@ String formatDuration(int seconds) {
       lead += 1;
       rest = 0;
     }
-    if (lead >= 3) return 'about ${unit((seconds / big).round(), bigName)}';
+    if (lead >= 3) return '$about${unit((seconds / big).round(), bigName)}';
     final head = unit(lead, bigName);
-    return rest == 0 ? 'about $head' : 'about $head ${unit(rest, smallName)}';
+    return rest == 0 ? '$about$head' : '$about$head ${unit(rest, smallName)}';
   }
 
   if (seconds >= _year) return twoOrOne(_year, 'year', _month, 'month');
   if (seconds >= _day) return twoOrOne(_day, 'day', _hour, 'hour');
   if (seconds >= _hour) return twoOrOne(_hour, 'hour', _minute, 'minute');
-  return 'about ${unit(seconds ~/ _minute, 'minute')}';
+  return '$about${unit(seconds ~/ _minute, 'minute')}';
 }
 
 /// File-name slug of a wallet name: lowercase, runs of anything but
