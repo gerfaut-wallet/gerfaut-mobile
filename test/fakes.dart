@@ -8,6 +8,7 @@ import 'dart:typed_data';
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/documents.dart';
 import 'package:gerfaut/src/electrum.dart';
+import 'package:gerfaut/src/home_widgets.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/screen.dart';
 import 'package:gerfaut/src/window.dart';
@@ -63,6 +64,43 @@ class FakeScreenKeeper implements ScreenKeeper {
 
   @override
   Future<void> release() async => releases++;
+}
+
+/// Holds what the widgets would read, and counts the redraws, instead
+/// of reaching the launcher.
+class FakeWidgetBoard implements WidgetBoard {
+  FakeWidgetBoard({Set<String> installed = const {}})
+    : installed = {...installed};
+
+  /// The provider names the fake reports as placed on a home screen.
+  Set<String> installed;
+
+  /// What the store holds right now: a removed key is gone from here.
+  final Map<String, String> data = {};
+
+  /// Every redraw asked for, in order.
+  final List<String> updates = [];
+
+  /// How many times the set of placed widgets was asked for.
+  int installedAsks = 0;
+
+  @override
+  Future<void> saveWidgetData(String key, String? value) async {
+    if (value == null) {
+      data.remove(key);
+    } else {
+      data[key] = value;
+    }
+  }
+
+  @override
+  Future<void> updateWidget(String name) async => updates.add(name);
+
+  @override
+  Future<Set<String>> installedWidgets() async {
+    installedAsks++;
+    return {...installed};
+  }
 }
 
 /// Records what would have been written instead of opening the

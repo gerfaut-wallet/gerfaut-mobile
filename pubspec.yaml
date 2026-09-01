@@ -53,6 +53,7 @@ dependencies:
   workmanager: ^0.10.9
   local_auth: ^3.0.2
   wakelock_plus: ^1.8.0
+  home_widget: ^0.9.3
 
 dev_dependencies:
   flutter_test:

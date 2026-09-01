@@ -174,6 +174,25 @@ String formatDate(int unixSeconds) {
   return '${_months[local.month - 1]} $day, ${local.year}';
 }
 
+/// A clock time in the reader's zone, 24-hour, no date: `12:40`. For a
+/// figure whose freshness matters more than its day.
+String formatClock(int unixSeconds) {
+  final local = DateTime.fromMillisecondsSinceEpoch(unixSeconds * 1000)
+      .toLocal();
+  final hour = local.hour.toString().padLeft(2, '0');
+  final minute = local.minute.toString().padLeft(2, '0');
+  return '$hour:$minute';
+}
+
+/// A fee rate in sat/vB: whole when it is whole, else one decimal.
+/// `12.0` -> `"12 sat/vB"`, `8.5` -> `"8.5 sat/vB"`.
+String formatFeeRate(double rate) {
+  final digits = rate == rate.roundToDouble()
+      ? rate.toStringAsFixed(0)
+      : rate.toStringAsFixed(1);
+  return '$digits sat/vB';
+}
+
 /// A byte count the way a file manager states it: whole bytes under a
 /// kilobyte, then one decimal in binary units. `1229` -> `"1.2 KB"`.
 String formatBytes(int bytes) {

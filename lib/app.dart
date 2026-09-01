@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'screens/home.dart';
 import 'screens/lock_screen.dart';
 import 'screens/welcome.dart';
+import 'src/home_widgets.dart';
 import 'src/lock.dart';
 import 'src/notifications.dart';
 import 'src/onboarding.dart';
@@ -88,6 +89,12 @@ class _Hydrated extends ConsumerWidget {
         ref
             .read(onboardingSeenProvider.notifier)
             .hydrate(prefs['onboarding.seen']);
+        ref
+            .read(widgetBalancesProvider.notifier)
+            .hydrate(prefs['widgets.balances']);
+        // The widgets follow from here: everything they show is
+        // hydrated now, so the first thing they get is the right thing.
+        ref.read(widgetFeedProvider);
       }
       // The vault says whether a lock exists, every time it is read:
       // the first reading with one in it is what puts the screen up.
@@ -140,6 +147,12 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
         lock.noteHidden();
       case AppLifecycleState.resumed:
         lock.noteResumed();
+        // The launcher may have gained or lost a widget meanwhile. Only
+        // once the preferences are in: a feed started before them would
+        // publish the defaults first.
+        if (ref.read(prefsHydratedProvider)) {
+          ref.read(widgetFeedProvider).resume();
+        }
       case AppLifecycleState.inactive:
         break;
     }

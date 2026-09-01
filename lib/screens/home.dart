@@ -22,25 +22,29 @@ import 'wallet_home.dart';
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
-  void _autoSyncOnce(WidgetRef ref) {
-    ref.listen(walletsProvider, (_, next) {
-      final wallets = next.valueOrNull;
-      final network = ref.read(settingsProvider).valueOrNull?.activeNetwork;
-      if (wallets != null &&
-          wallets.isNotEmpty &&
-          network != null &&
-          !ref.read(autoSyncedProvider)) {
-        ref.read(autoSyncedProvider.notifier).state = true;
-        // One background refresh at startup; data stays visibly stamped.
-        ref.read(syncProvider.notifier).syncAll(network);
-      }
+  /// One background refresh at startup, the first time this screen sees
+  /// wallets to refresh; data stays visibly stamped. Read off the build
+  /// rather than listened for: the list often loads before this screen
+  /// first builds — whatever feeds the home-screen widgets asks for it
+  /// first — and a listener would wait for a change that never comes.
+  void _autoSyncOnce(BuildContext context, WidgetRef ref) {
+    final wallets = ref.watch(walletsProvider).valueOrNull;
+    final network = ref.read(settingsProvider).valueOrNull?.activeNetwork;
+    if (wallets == null || wallets.isEmpty || network == null) return;
+    if (ref.read(autoSyncedProvider)) return;
+    // Off the frame: starting a sync moves provider state, which a
+    // build in progress must not.
+    Future.microtask(() {
+      if (!context.mounted || ref.read(autoSyncedProvider)) return;
+      ref.read(autoSyncedProvider.notifier).state = true;
+      ref.read(syncProvider.notifier).syncAll(network);
     });
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    _autoSyncOnce(ref);
+    _autoSyncOnce(context, ref);
 
     final settings = ref.watch(settingsProvider);
     final wallets = ref.watch(walletsProvider);
