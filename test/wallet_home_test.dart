@@ -547,6 +547,36 @@ void main() {
     expect(find.text('2 of 3 keys sign.'), findsOneWidget);
   });
 
+  testWidgets('a screen reader can open the policy page from the row', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    final meta = makeMeta(totalSats: 5000);
+    final bridge = FakeBridge(
+      wallets: [meta],
+      snapshots: {'w1': makeSnapshot(meta: meta, totalSats: 5000)},
+    );
+    bridge.policies['w1'] = PolicySnapshot.fromJson(multisigPolicyJson());
+    await tester.pumpWidget(homeOf(bridge));
+    await tester.pumpAndSettle();
+
+    // One node for the whole row, and a double-tap that acts: the ink
+    // well's own tap is excluded with the rest of the child semantics.
+    final row = find.semantics.byLabel('Policy: 2 of 3 keys');
+    expect(
+      row,
+      isSemantics(
+        label: 'Policy: 2 of 3 keys',
+        isButton: true,
+        hasTapAction: true,
+      ),
+    );
+    tester.semantics.tap(row);
+    await tester.pumpAndSettle();
+    expect(find.text('2 of 3 keys sign.'), findsOneWidget);
+    handle.dispose();
+  });
+
   testWidgets('a policy that cannot be read still opens its page', (
     tester,
   ) async {

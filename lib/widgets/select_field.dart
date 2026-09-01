@@ -124,6 +124,7 @@ class _GerfautSelectState<T> extends State<GerfautSelect<T>> {
       button: true,
       label: widget.label,
       value: subtitle == null ? title : '$title, $subtitle',
+      onTap: _open,
       excludeSemantics: true,
       child: Material(
         color: tokens.surfaceSunken,

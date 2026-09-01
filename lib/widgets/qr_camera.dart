@@ -394,6 +394,7 @@ class _TorchButton extends StatelessWidget {
       button: true,
       toggled: on,
       label: on ? 'Turn the light off' : 'Turn the light on',
+      onTap: onPressed,
       excludeSemantics: true,
       child: Material(
         color: dark.surface.withValues(alpha: 0.85),

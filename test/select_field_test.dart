@@ -121,6 +121,11 @@ void main() {
     expect(semantics.label, 'Display currency');
     expect(semantics.value, 'EUR, Euro');
     expect(semantics.flagsCollection.isButton, isTrue);
+
+    // A screen reader's double-tap opens it like a finger does.
+    tester.semantics.tap(find.semantics.byLabel('Display currency'));
+    await tester.pumpAndSettle();
+    expect(find.text('US dollar'), findsOneWidget);
     handle.dispose();
   });
 

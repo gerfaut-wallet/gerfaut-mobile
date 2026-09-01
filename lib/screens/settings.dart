@@ -1187,6 +1187,7 @@ class _ScanButton extends StatelessWidget {
       button: true,
       // "Scan" alone says nothing once the field is out of sight.
       label: 'Scan a server address QR code',
+      onTap: onPressed,
       excludeSemantics: true,
       child: SecondaryButton(
         label: 'Scan',

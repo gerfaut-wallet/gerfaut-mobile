@@ -653,9 +653,13 @@ class _PolicyRow extends ConsumerWidget {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final policy = ref.watch(policyProvider(walletId)).valueOrNull;
     final digest = policy == null ? null : policyDigest(policy);
+    // Excluding the child's semantics drops the ink well's tap with
+    // them: the node has to carry its own, or a screen reader's
+    // double-tap lands on nothing.
     return Semantics(
       button: true,
       label: digest == null ? 'Policy' : 'Policy: $digest',
+      onTap: onOpen,
       excludeSemantics: true,
       child: Material(
         color: Colors.transparent,
