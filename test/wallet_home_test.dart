@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
+import 'package:gerfaut/widgets/notice.dart';
 import 'package:gerfaut/widgets/status_pill.dart';
 import 'package:gerfaut/widgets/sync_button.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -15,6 +16,7 @@ import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
 
 import 'fakes.dart';
+import 'policy_fixtures.dart';
 
 void main() {
   testWidgets('wallet home shows the balance and masks it on demand', (
@@ -520,5 +522,49 @@ void main() {
       findsOneWidget,
     );
     expect(find.byIcon(LucideIcons.clock), findsNothing);
+  });
+
+  testWidgets('the balance card links the policy page', (tester) async {
+    final meta = makeMeta(totalSats: 5000);
+    final bridge = FakeBridge(
+      wallets: [meta],
+      snapshots: {'w1': makeSnapshot(meta: meta, totalSats: 5000)},
+    );
+    bridge.policies['w1'] = PolicySnapshot.fromJson(multisigPolicyJson());
+    await tester.pumpWidget(homeOf(bridge));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Policy'), findsOneWidget);
+    expect(find.text('2 of 3 keys'), findsOneWidget);
+
+    // The digest is structure, not an amount: the eye leaves it alone.
+    await tester.tap(find.byTooltip('Hide balances'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 of 3 keys'), findsOneWidget);
+
+    await tester.tap(find.text('Policy'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 of 3 keys sign.'), findsOneWidget);
+  });
+
+  testWidgets('a policy that cannot be read still opens its page', (
+    tester,
+  ) async {
+    final meta = makeMeta();
+    final bridge = FakeBridge(
+      wallets: [meta],
+      snapshots: {'w1': makeSnapshot(meta: meta)},
+    );
+    bridge.onWalletPolicy = (_) =>
+        throw const BridgeException('descriptor', 'the policy cannot be read');
+    await tester.pumpWidget(homeOf(bridge));
+    await tester.pumpAndSettle();
+
+    // The row stands without its digest, and still leads to the page.
+    expect(find.text('Policy'), findsOneWidget);
+    await tester.tap(find.text('Policy'));
+    await tester.pumpAndSettle();
+    expect(find.byType(GerfautNotice), findsOneWidget);
+    expect(find.text('the policy cannot be read'), findsOneWidget);
   });
 }

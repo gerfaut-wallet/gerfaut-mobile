@@ -1,13 +1,62 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/material.dart' hide LockState;
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gerfaut/app.dart';
+import 'package:gerfaut/screens/policy.dart';
+import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/policy_text.dart';
+import 'package:gerfaut/src/state.dart';
+import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/address_chip.dart';
+import 'package:gerfaut/widgets/notice.dart';
+import 'package:gerfaut/widgets/status_pill.dart';
 
+import 'fakes.dart';
 import 'policy_fixtures.dart';
 
 PolicySnapshot _snapshot(Map<String, dynamic> json) =>
     PolicySnapshot.fromJson(json);
+
+/// A fake bridge holding one wallet whose policy is [policyJson].
+FakeBridge _bridgeWith(Map<String, dynamic> policyJson) {
+  final meta = makeMeta();
+  final bridge = FakeBridge(
+    wallets: [meta],
+    snapshots: {'w1': makeSnapshot(meta: meta)},
+  );
+  bridge.policies['w1'] = _snapshot(policyJson);
+  return bridge;
+}
+
+/// Pumps the policy screen of wallet `w1` on a Pixel 2 sized frame.
+Future<void> _pumpPolicy(
+  WidgetTester tester,
+  FakeBridge bridge, {
+  Brightness brightness = Brightness.light,
+}) async {
+  tester.view.physicalSize = const Size(411, 731);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [bridgeProvider.overrideWithValue(bridge)],
+      child: MaterialApp(
+        theme: themeFrom(
+          brightness == Brightness.light
+              ? GerfautTokens.light
+              : GerfautTokens.dark,
+          brightness,
+        ),
+        home: const PolicyScreen(walletId: 'w1'),
+      ),
+    ),
+  );
+}
 
 /// A time lock at noon UTC on 17 March 2030, still far ahead of the
 /// fixture clock.
@@ -398,6 +447,223 @@ void main() {
         describeBranchState(withState(const NeedsPreimage())).tone,
         StateTone.secret,
       );
+    });
+  });
+
+  group('PolicyScreen', () {
+    testWidgets('lays out a card per branch, primary first', (tester) async {
+      await _pumpPolicy(tester, _bridgeWith(lianaPolicyJson()));
+      await tester.pumpAndSettle();
+
+      // The bar names the page; the body names the wallet.
+      expect(find.text('Policy'), findsOneWidget);
+      expect(find.text('COLD STORAGE'), findsOneWidget);
+      expect(
+        find.text(
+          'Key A signs. '
+          'A recovery key can spend once a coin has waited about 1 year.',
+        ),
+        findsOneWidget,
+      );
+
+      expect(find.text('PRIMARY'), findsOneWidget);
+      expect(find.text('RECOVERY'), findsOneWidget);
+      expect(find.text('Spendable now'), findsOneWidget);
+      expect(find.text('In 20 440 blocks ≈ about 142 days'), findsOneWidget);
+      expect(
+        find.text('52 560 blocks after the coin arrives ≈ about 1 year'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Key B and a coin having waited 52 560 blocks'),
+        findsOneWidget,
+      );
+      // The countdown carries its estimated day and its progress bar.
+      expect(find.textContaining('Around '), findsOneWidget);
+      expect(find.byType(LockProgress), findsOneWidget);
+      // Key pills carry the fingerprint; the footer repeats it in full.
+      expect(find.textContaining('e5f60718'), findsNWidgets(2));
+      expect(find.text('KEYS'), findsOneWidget);
+      expect(find.text('DESCRIPTOR'), findsOneWidget);
+      // A block lock reads the chain, not a clock: no clock caveat.
+      expect(find.textContaining("device's clock"), findsNothing);
+    });
+
+    testWidgets('colours a lock only within thirty days', (tester) async {
+      await _pumpPolicy(
+        tester,
+        _bridgeWith(lianaPolicyJson(remainingBlocks: 1432)),
+      );
+      await tester.pumpAndSettle();
+      final soon = tester.widget<Text>(
+        find.text('In 1 432 blocks ≈ about 10 days'),
+      );
+      expect(soon.style?.color, GerfautTokens.light.pending);
+
+      await _pumpPolicy(
+        tester,
+        _bridgeWith(heightLockedPolicyJson(remaining: 20000)),
+      );
+      await tester.pumpAndSettle();
+      final far = tester.widget<Text>(
+        find.text('In 20 000 blocks ≈ about 139 days'),
+      );
+      expect(far.style?.color, GerfautTokens.light.textMuted);
+    });
+
+    testWidgets('counts coins one by one under a relative lock', (
+      tester,
+    ) async {
+      await _pumpPolicy(
+        tester,
+        _bridgeWith(
+          lianaPolicyJson(
+            unlocked: 3,
+            locked: 1,
+            waiting: 2,
+            remainingBlocks: 1728,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          '3 of 6 coins unlocked · next in about 12 days '
+          '· 2 waiting for a block',
+        ),
+        findsOneWidget,
+      );
+      expect(find.byType(LockProgress), findsOneWidget);
+    });
+
+    testWidgets('keeps a single key to three lines', (tester) async {
+      await _pumpPolicy(tester, _bridgeWith(singleKeyPolicyJson()));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('One key signs. Any coin is spendable now.'),
+        findsOneWidget,
+      );
+      // No card: it would say the sentence a second time.
+      expect(find.text('PRIMARY'), findsNothing);
+      expect(find.byType(StatusPill), findsNothing);
+      expect(find.text('KEYS'), findsOneWidget);
+      expect(find.text('DESCRIPTOR'), findsOneWidget);
+    });
+
+    testWidgets('gives a watched address its sentence and address', (
+      tester,
+    ) async {
+      await _pumpPolicy(tester, _bridgeWith(addressPolicyJson()));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('An address has no policy Gerfaut can read.'),
+        findsOneWidget,
+      );
+      expect(find.byType(AddressChip), findsOneWidget);
+      expect(find.text('KEYS'), findsNothing);
+      expect(find.text('DESCRIPTOR'), findsNothing);
+    });
+
+    testWidgets('loads quietly and states an error in a notice', (
+      tester,
+    ) async {
+      final completer = Completer<PolicySnapshot>();
+      final bridge = _bridgeWith(singleKeyPolicyJson());
+      bridge.onWalletPolicy = (_) => completer.future;
+      await _pumpPolicy(tester, bridge);
+      await tester.pump();
+      expect(find.byType(PolicyPlaceholder), findsOneWidget);
+
+      completer.complete(_snapshot(singleKeyPolicyJson()));
+      await tester.pumpAndSettle();
+      expect(find.byType(PolicyPlaceholder), findsNothing);
+      expect(
+        find.text('One key signs. Any coin is spendable now.'),
+        findsOneWidget,
+      );
+
+      final failing = _bridgeWith(singleKeyPolicyJson());
+      failing.onWalletPolicy = (_) => throw const BridgeException(
+        'descriptor',
+        'the policy cannot be read: bad',
+      );
+      await _pumpPolicy(tester, failing);
+      await tester.pumpAndSettle();
+      expect(find.byType(GerfautNotice), findsOneWidget);
+      expect(find.text('the policy cannot be read: bad'), findsOneWidget);
+    });
+
+    testWidgets('unfolds the descriptor and copies it', (tester) async {
+      String? copied;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+            if (call.method == 'Clipboard.setData') {
+              copied = (call.arguments as Map)['text'] as String?;
+            }
+            return null;
+          });
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null);
+      });
+
+      final snapshot = _snapshot(lianaPolicyJson());
+      await _pumpPolicy(tester, _bridgeWith(lianaPolicyJson()));
+      await tester.pumpAndSettle();
+
+      // Closed by default: the descriptor is the last thing one reads.
+      expect(find.textContaining('wsh(or_d('), findsNothing);
+      await tester.ensureVisible(find.text('DESCRIPTOR'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('DESCRIPTOR'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('wsh(or_d('), findsOneWidget);
+      expect(
+        find.text('or(pk(Key A),and(pk(Key B),older(52560)))'),
+        findsOneWidget,
+      );
+
+      await tester.ensureVisible(find.byTooltip('Copy descriptor'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Copy descriptor'));
+      await tester.pump();
+      expect(copied, snapshot.descriptor);
+      expect(find.text('Copied'), findsOneWidget);
+      // Let the feedback timer run out before the tree goes away.
+      await tester.pump(const Duration(seconds: 2));
+    });
+
+    testWidgets('says the clock caveat once for time-based locks', (
+      tester,
+    ) async {
+      // Turn the Liana block lock into a 512-second-unit time lock.
+      final json = lianaPolicyJson();
+      final branch = (json['branches'] as List)[1] as Map<String, dynamic>;
+      final lock = (branch['timelocks'] as List)[0] as Map<String, dynamic>;
+      (lock['lock'] as Map<String, dynamic>)['lock'] = {
+        'kind': 'seconds',
+        'seconds': 51200,
+      };
+      await _pumpPolicy(tester, _bridgeWith(json));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          "Time locks compare against this device's clock; "
+          'the chain can lag by up to two hours.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('holds up in the dark theme', (tester) async {
+      await _pumpPolicy(
+        tester,
+        _bridgeWith(lianaPolicyJson()),
+        brightness: Brightness.dark,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('RECOVERY'), findsOneWidget);
+      expect(find.text('In 20 440 blocks ≈ about 142 days'), findsOneWidget);
     });
   });
 }
