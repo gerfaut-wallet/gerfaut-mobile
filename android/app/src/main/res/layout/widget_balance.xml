@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The balance widget: the total, up to four wallet rows, and how old
+     the figures are. Rows start hidden; the provider shows the ones the
+     app filled and the granted height takes. Masked, the app writes
+     "•••••" and this layout shows it without knowing. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_card"
+    android:orientation="vertical"
+    android:paddingLeft="14dp"
+    android:paddingRight="14dp"
+    android:paddingTop="12dp"
+    android:paddingBottom="12dp">
+
+    <TextView
+        android:id="@+id/balance_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/widget_balance_label"
+        android:textAllCaps="true"
+        android:textSize="12sp"
+        android:fontFamily="sans-serif-medium"
+        android:letterSpacing="0.04"
+        android:textColor="@color/widget_text_muted"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/balance_total"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:text="@string/widget_masked_placeholder"
+        android:textSize="22sp"
+        android:fontFamily="sans-serif-medium"
+        android:fontFeatureSettings="'tnum'"
+        android:letterSpacing="-0.01"
+        android:textColor="@color/widget_text"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <LinearLayout
+        android:id="@+id/balance_rows"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="4dp"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:id="@+id/balance_row1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/balance_row1_name"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:textSize="13sp"
+                android:fontFamily="sans-serif"
+                android:textColor="@color/widget_text_muted"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/balance_row1_figure"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="13sp"
+                android:fontFamily="sans-serif"
+                android:fontFeatureSettings="'tnum'"
+                android:letterSpacing="-0.01"
+                android:textColor="@color/widget_text"
+                android:maxLines="1" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/balance_row2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/balance_row2_name"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:textSize="13sp"
+                android:fontFamily="sans-serif"
+                android:textColor="@color/widget_text_muted"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/balance_row2_figure"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="13sp"
+                android:fontFamily="sans-serif"
+                android:fontFeatureSettings="'tnum'"
+                android:letterSpacing="-0.01"
+                android:textColor="@color/widget_text"
+                android:maxLines="1" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/balance_row3"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/balance_row3_name"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:textSize="13sp"
+                android:fontFamily="sans-serif"
+                android:textColor="@color/widget_text_muted"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/balance_row3_figure"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="13sp"
+                android:fontFamily="sans-serif"
+                android:fontFeatureSettings="'tnum'"
+                android:letterSpacing="-0.01"
+                android:textColor="@color/widget_text"
+                android:maxLines="1" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/balance_row4"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/balance_row4_name"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:textSize="13sp"
+                android:fontFamily="sans-serif"
+                android:textColor="@color/widget_text_muted"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/balance_row4_figure"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="13sp"
+                android:fontFamily="sans-serif"
+                android:fontFeatureSettings="'tnum'"
+                android:letterSpacing="-0.01"
+                android:textColor="@color/widget_text"
+                android:maxLines="1" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/balance_synced"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textSize="12sp"
+        android:fontFamily="sans-serif"
+        android:fontFeatureSettings="'tnum'"
+        android:textColor="@color/widget_text_muted"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:visibility="gone" />
+</LinearLayout>

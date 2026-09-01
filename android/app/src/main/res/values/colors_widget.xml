@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Toundra roles for the home-screen widgets, light theme. A widget
+     cannot read lib/theme/tokens.dart, so these mirror it value for
+     value: the two files change together. Dark values in values-night.
+     Neige surface, Brume border, Nuit text, Ardoise metadata. -->
+<resources>
+    <color name="widget_surface">#FFFFFF</color>
+    <color name="widget_border">#C7D2DB</color>
+    <color name="widget_text">#0D1317</color>
+    <color name="widget_text_muted">#55636F</color>
+</resources>

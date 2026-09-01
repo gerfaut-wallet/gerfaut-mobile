@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Card radius before Android 12; values-v31 takes the system's. -->
+<resources>
+    <dimen name="widget_corner_radius">12dp</dimen>
+</resources>

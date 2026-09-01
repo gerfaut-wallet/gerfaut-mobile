@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Two cells by two by default, resizable down to one row, where only
+     the height stays. updatePeriodMillis stays zero: the app and its
+     background task push updates; the widget never asks the network for
+     anything itself. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="110dp"
+    android:minHeight="40dp"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="40dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="2"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/widget_network"
+    android:previewLayout="@layout/widget_network"
+    android:description="@string/widget_network_description"
+    android:widgetCategory="home_screen" />

@@ -48,6 +48,42 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- The three home-screen widgets. Exported, as the launcher
+             delivers APPWIDGET_UPDATE from outside the app; the data
+             they draw is only what the app chose to publish for them. -->
+        <receiver
+            android:name=".PriceWidgetProvider"
+            android:label="@string/widget_price_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_price_info" />
+        </receiver>
+        <receiver
+            android:name=".BalanceWidgetProvider"
+            android:label="@string/widget_balance_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_balance_info" />
+        </receiver>
+        <receiver
+            android:name=".NetworkWidgetProvider"
+            android:label="@string/widget_network_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_network_info" />
+        </receiver>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

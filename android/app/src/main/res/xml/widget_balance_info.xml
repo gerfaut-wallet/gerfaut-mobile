@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Two cells by two at least; taller shows more wallet rows.
+     updatePeriodMillis stays zero: the app and its background task push
+     updates; the widget never asks the network for anything itself. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="110dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="110dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="2"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/widget_balance"
+    android:previewLayout="@layout/widget_balance"
+    android:description="@string/widget_balance_description"
+    android:widgetCategory="home_screen" />

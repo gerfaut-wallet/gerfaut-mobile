@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Toundra roles for the home-screen widgets, dark theme, following
+     the system setting the way widgets do. Mirrors
+     lib/theme/tokens.dart: the two files change together. Nuit polaire
+     surface, Schiste border, Écume text, Brouillard metadata. -->
+<resources>
+    <color name="widget_surface">#0B0F14</color>
+    <color name="widget_border">#2A3440</color>
+    <color name="widget_text">#E6ECF2</color>
+    <color name="widget_text_muted">#8A98A6</color>
+</resources>
