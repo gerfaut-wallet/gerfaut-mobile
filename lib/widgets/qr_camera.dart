@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_zxing/flutter_zxing.dart' as zxing;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -15,7 +16,8 @@ import '../theme/tokens.dart';
 /// attempts. A descriptor code fills the viewfinder, so it never fell
 /// inside that square, and an animated code loops far faster than one
 /// frame per second. Here the whole frame is read, as often as the
-/// decoder keeps up, the way the desktop scanner already works.
+/// decoder keeps up and at most fifteen times a second, the way the
+/// desktop scanner already works.
 class QrCamera extends StatefulWidget {
   const QrCamera({super.key, required this.onFrame});
 
@@ -27,6 +29,25 @@ class QrCamera extends StatefulWidget {
   /// per side; 720p leaves too few pixels on each of them to survive a
   /// hand-held shot.
   static const ResolutionPreset resolution = ResolutionPreset.veryHigh;
+
+  /// The least time between two decodes: 66 ms, at most fifteen a
+  /// second. Every decode copies the frame's whole luminance plane,
+  /// about two megabytes at 1080p, over to the decoder; a phone
+  /// streaming thirty frames a second would otherwise spend its time
+  /// copying rather than reading. A frame arriving sooner is dropped,
+  /// never queued, so the scanner still works on the freshest picture,
+  /// and an animated code at five frames a second is still read three
+  /// times per frame. A fixed pause between attempts is what made the
+  /// packaged view unusable; this is a ceiling, not a pause.
+  static const Duration minDecodeInterval = Duration(milliseconds: 66);
+
+  /// Whether a frame arriving at [now] is decoded, given when the last
+  /// decode started (null before the first). Pure, so the cadence is
+  /// tested without a camera.
+  @visibleForTesting
+  static bool shouldDecode(DateTime? lastStartedAt, DateTime now) =>
+      lastStartedAt == null ||
+      now.difference(lastStartedAt) >= minDecodeInterval;
 
   /// How a frame is handed to the decoder: the whole image, never a
   /// crop, read as a luminance plane. Exposed for the test that guards
@@ -59,6 +80,9 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
   /// A decode is in flight: further frames are dropped rather than
   /// queued, so the scanner always works on the freshest picture.
   bool _decoding = false;
+
+  /// When the last decode started, for [QrCamera.shouldDecode].
+  DateTime? _lastDecodeStartedAt;
 
   /// Set on dispose: a decode that returns late must not touch the
   /// tree, and the camera must not be started again.
@@ -178,12 +202,27 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
 
   Future<void> _onImage(CameraImage image) async {
     if (_decoding || _closed || !mounted) return;
+    final now = DateTime.now();
+    if (!QrCamera.shouldDecode(_lastDecodeStartedAt, now)) return;
+    _lastDecodeStartedAt = now;
     _decoding = true;
+    // A debug build times every decode and prints it under the
+    // `flutter` log tag, each line starting with `qr-decode`: what a
+    // real phone makes of a frame is one
+    // `adb logcat -s flutter | grep qr-decode` away.
+    final clock = kDebugMode ? (Stopwatch()..start()) : null;
     try {
       final code = await zxing.zx.processCameraImage(
         image,
         QrCamera.decodeParams(image.width, image.height),
       );
+      if (clock != null) {
+        debugPrint(
+          'qr-decode ${clock.elapsedMilliseconds} ms, '
+          '${image.width}x${image.height}, '
+          '${code.isValid ? 'code' : 'nothing'}',
+        );
+      }
       final text = code.text?.trim();
       if (_closed || !mounted || !code.isValid) return;
       if (text != null && text.isNotEmpty) widget.onFrame(text);

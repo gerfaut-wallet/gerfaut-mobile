@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_zxing/flutter_zxing.dart' as zxing;
 import 'package:gerfaut/app.dart';
+import 'package:gerfaut/screens/backup_qr.dart' show frameInterval;
 import 'package:gerfaut/screens/scan.dart';
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/models.dart';
@@ -400,6 +401,50 @@ void main() {
 
     test('the stream carries enough pixels for a dense code', () {
       expect(QrCamera.resolution, ResolutionPreset.veryHigh);
+    });
+  });
+
+  group('the decode cadence', () {
+    final start = DateTime(2026, 8, 30, 12);
+
+    test('the first frame is read at once', () {
+      expect(QrCamera.shouldDecode(null, start), isTrue);
+    });
+
+    test('a frame arriving sooner than the interval is dropped', () {
+      // Dropped, not queued: the next one read is the freshest.
+      expect(
+        QrCamera.shouldDecode(
+          start,
+          start.add(const Duration(milliseconds: 30)),
+        ),
+        isFalse,
+      );
+      expect(
+        QrCamera.shouldDecode(
+          start,
+          start.add(const Duration(milliseconds: 65)),
+        ),
+        isFalse,
+      );
+    });
+
+    test('a frame arriving at the interval or later is read', () {
+      expect(
+        QrCamera.shouldDecode(start, start.add(QrCamera.minDecodeInterval)),
+        isTrue,
+      );
+      expect(
+        QrCamera.shouldDecode(start, start.add(const Duration(seconds: 1))),
+        isTrue,
+      );
+    });
+
+    test('the ceiling is fifteen reads a second, never a pause', () {
+      // Each read copies a two-megabyte luminance plane; fifteen a
+      // second still catches an animated code three times per frame.
+      expect(QrCamera.minDecodeInterval.inMilliseconds, lessThanOrEqualTo(66));
+      expect(QrCamera.minDecodeInterval, lessThan(frameInterval));
     });
   });
 }
