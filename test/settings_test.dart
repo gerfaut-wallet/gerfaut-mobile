@@ -972,6 +972,11 @@ void main() {
   });
 
   group('scanning a server address', () {
+    /// What the form says of a scanned onion address, under the default
+    /// Tor mode.
+    const onionNote =
+        'A Tor hidden service: reached through Tor only (mode: Automatic).';
+
     /// The settings screen with the camera replaced by a button that
     /// hands one frame over, the way a printed code in front of the
     /// lens does.
@@ -1064,8 +1069,12 @@ void main() {
       expect(bridge.parsedBackends, ['gerfautexample123.onion:50001:t']);
       expect(fieldTexts(tester).take(2), ['gerfautexample123.onion', '50001']);
       expect(tlsOn(tester), isFalse);
-      // The onion address is not the Tor card's business to decide.
+      // What the core made of the address is said under the fields,
+      // with the Tor mode in force; nothing is saved or switched for it.
+      expect(find.text(onionNote), findsOneWidget);
+      expect(find.byIcon(LucideIcons.eyeOff), findsOneWidget);
       expect(bridge.savedBackends, isEmpty);
+      expect(bridge.torSettingsCalls, isEmpty);
 
       await tester.tap(find.text('Save backend'));
       await tester.pumpAndSettle();
@@ -1073,6 +1082,78 @@ void main() {
         (bridge.savedBackends[Network.mainnet]! as CustomElectrum).url,
         'tcp://gerfautexample123.onion:50001',
       );
+    });
+
+    testWidgets('the onion fact names the Tor mode in force', (tester) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge(
+        settings: const Settings(
+          activeNetwork: Network.mainnet,
+          backends: {
+            Network.mainnet: CustomElectrum(url: 'ssl://node.local:50002'),
+          },
+          appPrefs: {},
+          tor: TorSettings(mode: TorMode.embedded),
+        ),
+      );
+      bridge.onParseBackend = (_) => const ScannedBackend(
+        kind: 'esplora',
+        url: 'http://gerfautexample123.onion/api',
+        host: 'gerfautexample123.onion',
+        port: null,
+        tls: false,
+        onion: true,
+      );
+      await tester.pumpWidget(
+        settingsWithCamera(bridge, 'http://gerfautexample123.onion/api'),
+      );
+      await tester.pumpAndSettle();
+
+      await scan(tester);
+
+      // An Esplora endpoint on an onion address: the note sits under
+      // its URL field just the same.
+      expect(find.text('SERVER URL'), findsOneWidget);
+      expect(
+        find.text(
+          'A Tor hidden service: reached through Tor only (mode: Built-in).',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the onion fact goes with the fields it described', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = ownElectrum();
+      bridge.onParseBackend = (_) => const ScannedBackend(
+        kind: 'electrum',
+        url: 'tcp://gerfautexample123.onion:50001',
+        host: 'gerfautexample123.onion',
+        port: 50001,
+        tls: false,
+        onion: true,
+      );
+      await tester.pumpWidget(
+        settingsWithCamera(bridge, 'gerfautexample123.onion:50001:t'),
+      );
+      await tester.pumpAndSettle();
+      await scan(tester);
+      expect(find.text(onionNote), findsOneWidget);
+
+      // A keystroke in the host: the fields no longer hold what was
+      // scanned, so the fact no longer describes them.
+      await tester.enterText(find.byType(TextField).first, 'node.local');
+      await tester.pumpAndSettle();
+      expect(find.text(onionNote), findsNothing);
+
+      // Scanned again, then another backend option chosen: gone again.
+      await scan(tester);
+      expect(find.text(onionNote), findsOneWidget);
+      await tester.tap(find.text('My own Esplora'));
+      await tester.pumpAndSettle();
+      expect(find.text(onionNote), findsNothing);
     });
 
     testWidgets('an Esplora endpoint scanned here switches the choice', (
@@ -1100,6 +1181,8 @@ void main() {
       expect(find.text('SERVER URL'), findsOneWidget);
       expect(find.text('HOST'), findsNothing);
       expect(fieldTexts(tester).first, 'https://esplora.example.org/api');
+      // A plain host on the web: nothing to say about Tor.
+      expect(find.byIcon(LucideIcons.eyeOff), findsNothing);
 
       await tester.tap(find.text('Save backend'));
       await tester.pumpAndSettle();

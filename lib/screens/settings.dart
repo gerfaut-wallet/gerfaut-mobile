@@ -76,6 +76,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   /// under the field the scan was meant to fill.
   String? _scanError;
 
+  /// The last scanned address names a Tor hidden service. Said under the
+  /// fields for as long as they hold what was scanned: a keystroke or
+  /// another backend option and the fact no longer describes them.
+  bool _scannedOnion = false;
+
   /// Host whose accepted certificate is one tap from being forgotten.
   String? _forgettingHost;
 
@@ -221,13 +226,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _backendKind = kind;
       _certificateNote = null;
       _scanError = null;
+      _scannedOnion = false;
     });
   }
 
   /// A backend field was typed in: the Save button follows what it now
-  /// holds, and a refused scan no longer describes it.
+  /// holds, and neither a refused scan nor an onion fact describes it
+  /// any more.
   void _onBackendFieldChanged() {
-    setState(() => _scanError = null);
+    setState(() {
+      _scanError = null;
+      _scannedOnion = false;
+    });
   }
 
   /// Reads a server address off a QR code: the one a node prints beside
@@ -263,6 +273,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() {
       _scanError = null;
       _certificateNote = null;
+      _scannedOnion = backend.onion;
       if (backend.kind == 'esplora') {
         _backendKind = 'custom_esplora';
         _esploraController.text = backend.url;
@@ -580,6 +591,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     const SizedBox(height: GerfautSpacing.sm),
                     _ScanRefusal(reason: _scanError!, tokens: tokens),
                   ],
+                  if (_scannedOnion) ...[
+                    const SizedBox(height: GerfautSpacing.sm),
+                    _OnionNote(mode: settings.tor.mode, tokens: tokens),
+                  ],
                 ],
                 if (_backendKind == 'custom_electrum') ...[
                   const SizedBox(height: GerfautSpacing.sm),
@@ -647,6 +662,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ),
                     ],
                   ),
+                  if (_scannedOnion) ...[
+                    const SizedBox(height: GerfautSpacing.sm),
+                    _OnionNote(mode: settings.tor.mode, tokens: tokens),
+                  ],
                 ],
                 if (_backendKind != 'public_esplora') ...[
                   const SizedBox(height: GerfautSpacing.sm),
@@ -1117,6 +1136,38 @@ class _ScanRefusal extends StatelessWidget {
         reason,
         style: tokens.bodySmall.copyWith(color: tokens.textMuted),
       ),
+    );
+  }
+}
+
+/// What the core read off the scanned address: a Tor hidden service,
+/// so this backend is reached through Tor and nothing else. Names the
+/// Tor mode in force, which the card below is the place to change.
+class _OnionNote extends StatelessWidget {
+  const _OnionNote({required this.mode, required this.tokens});
+
+  final TorMode mode;
+  final GerfautTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          // Sits on the first line of the text, whatever its size.
+          padding: const EdgeInsets.only(top: 3),
+          child: Icon(LucideIcons.eyeOff, size: 15, color: tokens.textMuted),
+        ),
+        const SizedBox(width: GerfautSpacing.sm),
+        Expanded(
+          child: Text(
+            'A Tor hidden service: reached through Tor only '
+            '(mode: ${mode.label}).',
+            style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+          ),
+        ),
+      ],
     );
   }
 }
