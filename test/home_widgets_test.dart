@@ -1,10 +1,14 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gerfaut/app.dart';
+import 'package:gerfaut/screens/settings/widgets_section.dart';
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/home_widgets.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
+import 'package:gerfaut/theme/tokens.dart';
 
 import 'fakes.dart';
 
@@ -556,6 +560,46 @@ void main() {
       expect(board.data[WidgetKeys.priceFigure], 'kept');
       expect(board.data.containsKey(WidgetKeys.networkNextBlock), isFalse);
       expect(board.data[WidgetKeys.balanceSynced], 'Synced 2 h ago');
+    });
+  });
+
+  group('the widgets settings', () {
+    testWidgets('the switch writes the preference and republishes', (
+      tester,
+    ) async {
+      final bridge = _bridge();
+      final board = FakeWidgetBoard(installed: {HomeWidgets.balance});
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            bridgeProvider.overrideWithValue(bridge),
+            widgetBoardProvider.overrideWithValue(board),
+            widgetSchedulerProvider.overrideWithValue((wanted) async {}),
+          ],
+          child: MaterialApp(
+            theme: themeFrom(GerfautTokens.light, Brightness.light),
+            home: const Scaffold(body: WidgetsSection()),
+          ),
+        ),
+      );
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(WidgetsSection)),
+      );
+      container.read(widgetFeedProvider);
+      await tester.pumpAndSettle();
+      expect(board.data[WidgetKeys.balanceTotal], maskedValue);
+      expect(find.text('Show balances on widgets'), findsOneWidget);
+      expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+      expect(bridge.appPrefs['widgets.balances'], '1');
+      expect(board.data[WidgetKeys.balanceTotal], '1.00050000 BTC');
+
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+      expect(bridge.appPrefs['widgets.balances'], '0');
+      expect(board.data[WidgetKeys.balanceTotal], maskedValue);
     });
   });
 }
