@@ -1046,9 +1046,15 @@ class FakeBridge implements GerfautBridge {
     lock = null;
   }
 
+  /// Holds every verify until completed, the way the core's slow hash
+  /// holds a real one; null answers at once.
+  Completer<void>? verifyGate;
+
   @override
   Future<LockVerdict> verifyAppLock(String secret) async {
     lockCalls.add('verify');
+    final gate = verifyGate;
+    if (gate != null) await gate.future;
     if (lock == null) throw const BridgeException('lock', 'no lock is set');
     if (secret == lockSecret) {
       lockFailures = 0;

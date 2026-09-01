@@ -17,6 +17,8 @@
 // failures, shows the number, the way any calculator would: no message,
 // no hint, no vibration.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -39,28 +41,38 @@ class CalculatorScreen extends ConsumerStatefulWidget {
 class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
   final _calc = Calculator();
 
-  /// The core is being asked about a number; = waits its turn.
+  /// The core is being asked about a number; the next one is arithmetic
+  /// alone until it has answered.
   bool _checking = false;
 
-  Future<void> _equals() async {
-    if (_checking) return;
+  /// Equals is a calculator key first: the display answers at once,
+  /// whatever was typed, and only then is a PIN-shaped number tried on
+  /// the lock, out of sight. Waiting for the core's slow hash before
+  /// showing the result would make a bare four-digit number visibly
+  /// slower than "2 + 2", and that difference is a tell.
+  void _equals() {
     final digits = _calc.bareDigits;
-    if (digits != null &&
-        digits.length >= CalculatorScreen.minPinLength &&
-        digits.length <= CalculatorScreen.maxPinLength) {
-      setState(() => _checking = true);
-      try {
-        final verdict = await ref.read(lockProvider.notifier).unlock(digits);
-        // Unlocked, the gate replaces this screen with the app.
-        if (verdict.unlocked) return;
-      } catch (_) {
-        // No lock to open, or a core that would not answer: a calculator.
-      } finally {
-        if (mounted) setState(() => _checking = false);
-      }
-      if (!mounted) return;
-    }
     setState(_calc.equals);
+    if (_checking ||
+        digits == null ||
+        digits.length < CalculatorScreen.minPinLength ||
+        digits.length > CalculatorScreen.maxPinLength) {
+      return;
+    }
+    _checking = true;
+    unawaited(_tryPin(digits));
+  }
+
+  Future<void> _tryPin(String digits) async {
+    try {
+      // Unlocked, the gate replaces this screen with the app; refused,
+      // the number stays on the display, the way any calculator would.
+      await ref.read(lockProvider.notifier).unlock(digits);
+    } catch (_) {
+      // No lock to open, or a core that would not answer: a calculator.
+    } finally {
+      _checking = false;
+    }
   }
 
   void _press(void Function() key) => setState(key);

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -284,6 +286,32 @@ void main() {
       expect(bridge.lockCalls, contains('verify'));
     });
 
+    testWidgets('the display answers before the core does', (tester) async {
+      // The core's hash is slow on purpose. A PIN-shaped number that
+      // waited for it would show its result later than "5 + 6" does,
+      // and the delay alone would say which numbers are tried.
+      final bridge = locked(wallets: [makeMeta()])
+        ..verifyGate = Completer<void>();
+      await tester.pumpWidget(disguisedApp(bridge));
+      await tester.pumpAndSettle();
+
+      for (final d in ['1', '2', '3', '4']) {
+        await tester.tap(find.widgetWithText(InkWell, d));
+        await tester.pump();
+      }
+      await tester.tap(find.bySemanticsLabel('Equals'));
+      await tester.pump();
+
+      // The result is on the display while the core is still thinking.
+      expect(find.text('1,234'), findsOneWidget);
+      expect(bridge.lockCalls, ['verify']);
+      expect(find.byType(CalculatorScreen), findsOneWidget);
+
+      bridge.verifyGate!.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Cold storage'), findsOneWidget);
+    });
+
     testWidgets('an expression with an operator never asks the core', (
       tester,
     ) async {
@@ -321,7 +349,7 @@ void main() {
       await tester.tap(find.bySemanticsLabel('Equals'));
       await tester.pumpAndSettle();
 
-      // Three digits at least before the core is troubled: a two-key
+      // Four digits at least before the core is troubled: a two-key
       // sum must not wind the anti-PIN delay up.
       expect(bridge.lockCalls, isEmpty);
       expect(find.byType(CalculatorScreen), findsOneWidget);
