@@ -259,10 +259,13 @@ void main() {
       expect(data[WidgetKeys.networkHour], isNull);
     });
 
-    test('a fee rate is whole when it is whole, else one decimal', () {
+    test('a fee rate keeps one decimal, and drops a zero one', () {
       expect(formatFeeRate(12), '12 sat/vB');
       expect(formatFeeRate(8.5), '8.5 sat/vB');
-      expect(formatFeeRate(1.02), '1.0 sat/vB');
+      // Rounded to the decimal shown, 1.02 is 1.0, and "1.0" is "1".
+      expect(formatFeeRate(1.02), '1 sat/vB');
+      expect(formatFeeRate(0.96), '1 sat/vB');
+      expect(formatFeeRate(2.25), '2.3 sat/vB');
     });
   });
 
