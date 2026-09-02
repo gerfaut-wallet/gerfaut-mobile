@@ -12,6 +12,7 @@ import 'package:gerfaut/src/notifications.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/window.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/notice.dart';
 
 import 'fakes.dart';
 
@@ -114,7 +115,18 @@ void main() {
       expect(find.textContaining('typing your PIN into it'), findsOneWidget);
       expect(find.textContaining('still list "Gerfaut"'), findsOneWidget);
       expect(find.textContaining('widgets are turned off'), findsOneWidget);
+      expect(find.textContaining('older Gerfaut thumbnail'), findsOneWidget);
+      // The facts are a list; the one consequence that bites is the
+      // single note, and the only amber on the sheet.
       expect(find.textContaining('cannot be opened'), findsOneWidget);
+      expect(find.byType(GerfautNotice), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(GerfautNotice),
+          matching: find.textContaining('cannot be opened'),
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('confirming enables the disguise and turns widgets off', (

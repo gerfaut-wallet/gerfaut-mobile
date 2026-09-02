@@ -512,22 +512,26 @@ class _ConfirmSecretSheetState extends State<_ConfirmSecretSheet> {
   }
 }
 
-/// The confirmation for turning the disguise on: what changes, what
-/// stays, and the one thing that goes wrong if the PIN is forgotten.
+/// The confirmation for turning the disguise on: what changes and what
+/// stays, said once as plain facts, and the one consequence that bites
+/// in a note of its own. Five amber panels in a row read as a wall of
+/// warnings, and a wall is skipped; one panel is read.
 class _DisguiseSheet extends StatelessWidget {
   const _DisguiseSheet();
+
+  static const List<String> facts = [
+    'The launcher will show a calculator named "Calculator".',
+    'Open the wallet by typing your PIN into it, then =.',
+    'Settings → Apps and the app store still list "Gerfaut".',
+    'Notifications and home-screen widgets are turned off while disguised.',
+    'Clear your recent apps once: Android may still show an older Gerfaut '
+        'thumbnail.',
+  ];
 
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    const points = [
-      'The launcher will show a calculator named "Calculator".',
-      'Open the wallet by typing your PIN into it, then =.',
-      'Settings → Apps and the app store still list "Gerfaut".',
-      'Notifications and home-screen widgets are turned off while '
-          'disguised.',
-      'Forget the PIN and the app cannot be opened: it is the only way in.',
-    ];
+    final muted = tokens.bodySmall.copyWith(color: tokens.textMuted);
     return Padding(
       padding: EdgeInsets.only(
         left: GerfautSpacing.md,
@@ -541,12 +545,39 @@ class _DisguiseSheet extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text('Disguise the app', style: tokens.h2),
-            const SizedBox(height: GerfautSpacing.md),
-            for (final point in points) ...[
-              GerfautNotice(tone: NoticeTone.info, message: point),
-              const SizedBox(height: GerfautSpacing.sm),
-            ],
             const SizedBox(height: GerfautSpacing.sm),
+            Text(
+              'Gerfaut hides behind a working calculator. What that means:',
+              style: tokens.body,
+            ),
+            const SizedBox(height: GerfautSpacing.sm),
+            for (final fact in facts)
+              Padding(
+                padding: const EdgeInsets.only(bottom: GerfautSpacing.xs),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FirstLine(
+                      style: muted,
+                      child: Icon(
+                        LucideIcons.dot,
+                        size: 16,
+                        color: tokens.textMuted,
+                      ),
+                    ),
+                    const SizedBox(width: GerfautSpacing.sm),
+                    Expanded(child: Text(fact, style: muted)),
+                  ],
+                ),
+              ),
+            const SizedBox(height: GerfautSpacing.sm),
+            const GerfautNotice(
+              tone: NoticeTone.info,
+              message:
+                  'Forget the PIN and the app cannot be opened: it is the '
+                  'only way in.',
+            ),
+            const SizedBox(height: GerfautSpacing.md),
             PrimaryButton(
               label: 'Turn on the disguise',
               expand: true,
