@@ -47,11 +47,18 @@ class PolicyScreen extends ConsumerWidget {
               const SizedBox(height: GerfautSpacing.sm),
             ],
             switch (policy) {
-              AsyncData(:final value) => _Loaded(snapshot: value),
+              // A read that failed says so, whatever it carried before.
               AsyncError(:final error) => GerfautNotice(
                 tone: NoticeTone.info,
                 message: 'The policy could not be read.',
                 detail: '$error',
+              ),
+              // Whatever the page has read stays up: a sync refetches the
+              // policy, and a refresh under way still carries the last
+              // snapshot, which is no reason to swap the cards for the
+              // placeholder. Only a page that never had one waits.
+              AsyncValue(valueOrNull: final snapshot?) => _Loaded(
+                snapshot: snapshot,
               ),
               _ => const PolicyPlaceholder(),
             },

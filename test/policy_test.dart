@@ -589,6 +589,30 @@ void main() {
       expect(find.text('the policy cannot be read: bad'), findsOneWidget);
     });
 
+    testWidgets('a refresh keeps the cards in place', (tester) async {
+      final bridge = _bridgeWith(lianaPolicyJson());
+      await _pumpPolicy(tester, bridge);
+      await tester.pumpAndSettle();
+      expect(find.text('RECOVERY'), findsOneWidget);
+
+      // A sync refetches the policy. While the core works, the page
+      // shows what it had, not the placeholder it started with.
+      final completer = Completer<PolicySnapshot>();
+      bridge.onWalletPolicy = (_) => completer.future;
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(PolicyScreen)),
+      );
+      container.invalidate(policyProvider('w1'));
+      await tester.pump();
+      expect(find.byType(PolicyPlaceholder), findsNothing);
+      expect(find.text('RECOVERY'), findsOneWidget);
+      expect(find.text('In 20 440 blocks ≈ 142 days'), findsOneWidget);
+
+      completer.complete(_snapshot(lianaPolicyJson(remainingBlocks: 1432)));
+      await tester.pumpAndSettle();
+      expect(find.text('In 1 432 blocks ≈ 10 days'), findsOneWidget);
+    });
+
     testWidgets('unfolds the descriptor and copies it', (tester) async {
       String? copied;
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
