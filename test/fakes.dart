@@ -5,6 +5,8 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
+
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/src/documents.dart';
@@ -60,6 +62,9 @@ class FakeDisguise implements Disguise {
   bool disguised;
   bool widgetsEnabled = true;
 
+  /// What the package manager answers a swap with, when it refuses.
+  PlatformException? refusal;
+
   /// Every call, in order, for assertions.
   final List<String> calls = [];
 
@@ -69,6 +74,8 @@ class FakeDisguise implements Disguise {
   @override
   Future<void> setDisguised(bool disguised) async {
     calls.add('disguise:$disguised');
+    final refusal = this.refusal;
+    if (refusal != null) throw refusal;
     this.disguised = disguised;
   }
 

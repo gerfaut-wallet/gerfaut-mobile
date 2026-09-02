@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -71,13 +72,14 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
     setState(() => _error = null);
     try {
       await ref.read(bridgeProvider).clearAppLock(current);
-      // Only once the core accepts: the launcher face is restored after
-      // the lock is gone, never before it is agreed.
-      if (disguised) await ref.read(disguiseProvider.notifier).set(false);
-      _afterChange();
     } on BridgeException catch (error) {
       if (mounted) setState(() => _error = error.message);
+      return;
     }
+    // Only once the core accepts: the launcher face is restored after
+    // the lock is gone, never before it is agreed.
+    if (disguised) await _swapFace(false);
+    _afterChange();
   }
 
   /// Puts the disguise on behind a confirmation, or takes it off at
@@ -85,7 +87,7 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
   Future<void> _setDisguise(bool on) async {
     setState(() => _error = null);
     if (!on) {
-      await ref.read(disguiseProvider.notifier).set(false);
+      await _swapFace(false);
       return;
     }
     final confirmed = await showModalBottomSheet<bool>(
@@ -94,7 +96,23 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
       builder: (_) => const _DisguiseSheet(),
     );
     if (confirmed != true) return;
-    await ref.read(disguiseProvider.notifier).set(true);
+    await _swapFace(true);
+  }
+
+  /// Asks the platform for the other launcher face. A package manager
+  /// that refuses is reported under the card; the switch stays where it
+  /// was, since the state only moves once the platform has.
+  Future<void> _swapFace(bool disguised) async {
+    try {
+      await ref.read(disguiseProvider.notifier).set(disguised);
+    } on PlatformException catch (error) {
+      if (mounted) {
+        setState(
+          () => _error =
+              error.message ?? 'The launcher entry could not be changed.',
+        );
+      }
+    }
   }
 
   /// Asks for the secret in place and hands it back, or null when the

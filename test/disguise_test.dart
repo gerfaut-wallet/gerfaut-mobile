@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
@@ -133,6 +134,27 @@ void main() {
       expect(disguise.calls, ['widgets:false', 'disguise:true']);
       expect(disguise.disguised, isTrue);
       expect(tester.widget<Switch>(_disguiseSwitch()).value, isTrue);
+    });
+
+    testWidgets('a launcher that refuses leaves the switch off and says why', (
+      tester,
+    ) async {
+      final disguise = FakeDisguise()
+        ..refusal = PlatformException(
+          code: 'failed',
+          message: 'the component could not be enabled',
+        );
+      await tester.pumpWidget(_securityApp(_locked(), disguise));
+      await tester.pumpAndSettle();
+
+      await tester.tap(_disguiseSwitch());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Turn on the disguise'));
+      await tester.pumpAndSettle();
+
+      expect(disguise.disguised, isFalse);
+      expect(tester.widget<Switch>(_disguiseSwitch()).value, isFalse);
+      expect(find.text('the component could not be enabled'), findsOneWidget);
     });
 
     testWidgets('cancelling the sheet changes nothing', (tester) async {

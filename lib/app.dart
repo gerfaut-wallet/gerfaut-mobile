@@ -130,7 +130,11 @@ class _Hydrated extends ConsumerWidget {
     if (settings.appLock != null || !disguise.loaded || !disguise.disguised) {
       return;
     }
-    unawaited(ref.read(disguiseProvider.notifier).set(false));
+    // A platform that refuses leaves the calculator up; the settings
+    // card can be asked again, and says why if it fails there too.
+    unawaited(
+      ref.read(disguiseProvider.notifier).set(false).catchError((_) {}),
+    );
   }
 }
 
