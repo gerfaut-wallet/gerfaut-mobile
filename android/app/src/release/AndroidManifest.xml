@@ -1,9 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
     <application>
-        <!-- The launcher entries are the aliases declared in src/main. The
-             filter kept on the activity there only tells the Flutter tool
-             where to start; every build removes it. -->
+        <!-- The launcher entries are the aliases declared in src/main.
+             The filter on the activity there is removed from every build,
+             so the launcher shows one entry; the Flutter tool starts the
+             enabled alias it finds in the built APK. -->
         <activity android:name=".MainActivity">
             <intent-filter tools:node="remove">
                 <action android:name="android.intent.action.MAIN"/>

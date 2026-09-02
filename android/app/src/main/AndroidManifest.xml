@@ -43,12 +43,17 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
-            <!-- For the Flutter tool only. It finds the activity to start
-                 by this filter and reads <activity> elements, never the
-                 aliases below. Every build type removes the filter again
-                 (src/debug, src/profile, src/release), so the installed
-                 app shows one launcher entry and `flutter run` still
-                 knows where to start. -->
+            <!-- Never reaches an installed app: every build type removes
+                 this filter again (src/debug, src/profile, src/release),
+                 so the launcher shows one entry, the enabled alias below.
+                 The Flutter tool does not need it either. After a build it
+                 reads the APK's manifest and starts the first enabled
+                 element named activity* that carries MAIN and LAUNCHER,
+                 aliases included: the .Launcher alias. So `flutter run`
+                 fails only while the device is disguised, when that alias
+                 is disabled; the calculator icon opens the app then. The
+                 filter stays so this activity reads as what it is, the one
+                 launcher target, in the manifest that declares it. -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
