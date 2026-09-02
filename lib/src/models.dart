@@ -2418,7 +2418,11 @@ sealed class LockState {
   factory LockState.fromJson(Map<String, dynamic> json) {
     return switch (json['kind'] as String) {
       'unlocked' => const UnlockedLock(),
-      'locked' => LockedLock(remaining: Remaining.fromJson(json)),
+      // The countdown sits under `until`, as it does on a branch; every
+      // figure in it may be null when the chain's position is unknown.
+      'locked' => LockedLock(
+        remaining: Remaining.fromJson(json['until'] as Map<String, dynamic>),
+      ),
       'per_coin' => PerCoinLock(
         unlocked: json['unlocked'] as int,
         waiting: json['waiting'] as int,
@@ -2638,7 +2642,7 @@ class PolicySnapshot {
       branches: (json['branches'] as List)
           .map((b) => PolicyBranch.fromJson(b as Map<String, dynamic>))
           .toList(),
-      tipHeight: json['tip_height'] as int,
+      tipHeight: json['tip_height'] as int?,
       computedAt: json['computed_at'] as int,
       timeBasis: TimeBasis.fromId(json['time_basis'] as String),
       coins: json['coins'] as int,
@@ -2658,7 +2662,11 @@ class PolicySnapshot {
   final String policy;
   final List<PolicyKey> keys;
   final List<PolicyBranch> branches;
-  final int tipHeight;
+
+  /// The chain tip the absolute locks were read against; null for a
+  /// wallet that has never synced, whose absolute locks then stand with
+  /// nothing to count down from.
+  final int? tipHeight;
 
   /// When the snapshot was computed, unix seconds.
   final int computedAt;

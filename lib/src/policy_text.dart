@@ -261,7 +261,7 @@ String policyDigest(PolicySnapshot snapshot) {
       return switch (branch.state) {
         SpendableNow() =>
           '$name ${branch.role == BranchRole.primary ? 'now' : 'open'}',
-        LockedBranch(:final until) => _inDuration(name, until),
+        LockedBranch(:final until) => _lockedDigest(name, branch, until),
         PerCoinBranch(:final next, :final unlocked, :final waiting) =>
           next != null
               ? _inDuration(name, next)
@@ -279,9 +279,39 @@ String policyDigest(PolicySnapshot snapshot) {
   }
 }
 
+/// "Recovery in about 142 days", or "Recovery locked" when the nearest
+/// coin's count is unknown: that it waits is known, for how long is not.
 String _inDuration(String name, Remaining remaining) {
   final seconds = secondsLeft(remaining);
-  return seconds == null ? name : '$name in ${formatDuration(seconds)}';
+  if (seconds == null) return '$name locked';
+  return '$name in ${formatDuration(seconds)}';
+}
+
+/// "Spendable in about 10 days", or "Spendable after block 900 000"
+/// when nothing counts down: a wallet that has never synced knows the
+/// lock stands, not how far off it is.
+String _lockedDigest(String name, PolicyBranch branch, Remaining until) {
+  final seconds = secondsLeft(until);
+  if (seconds != null) return '$name in ${formatDuration(seconds)}';
+  final lock = _absoluteLockText(branch);
+  return lock == null ? '$name locked' : '$name after $lock';
+}
+
+/// "block 900 000" or "Mar 17, 2030": the first required absolute lock
+/// of a branch, in words; null when it has none.
+String? _absoluteLockText(PolicyBranch branch) {
+  for (final lock in branch.timelocks) {
+    if (!lock.required) continue;
+    switch (lock.lock) {
+      case AbsoluteTimelock(lock: HeightLock(:final height)):
+        return 'block ${groupThousands('$height')}';
+      case AbsoluteTimelock(lock: TimeLock(:final unix)):
+        return formatDate(unix);
+      case RelativeTimelock():
+        continue;
+    }
+  }
+  return null;
 }
 
 /// The full duration of the first required relative lock of a branch,
@@ -450,7 +480,7 @@ BranchStatus describeBranchState(PolicyBranch branch) {
     case LockedBranch(:final until):
       return BranchStatus(
         _toneOf(until),
-        _countdown(until),
+        _countdown(until) ?? _untilLabel(branch),
         date: _dateOf(until),
       );
     case PerCoinBranch(
@@ -470,7 +500,7 @@ BranchStatus describeBranchState(PolicyBranch branch) {
         }
         return BranchStatus(
           _toneOf(next),
-          _countdown(next),
+          _countdown(next) ?? 'Locked',
           date: _dateOf(next),
           progress: _progress(branch, next),
         );
@@ -505,13 +535,22 @@ StateTone _toneOf(Remaining remaining) {
 /// "In 1 432 blocks ≈ 10 days", or "In about 10 days" for a lock the
 /// chain judges by time: the estimate is hedged once, by the "≈" where
 /// there is one and by the word where there is not.
-String _countdown(Remaining remaining) {
+String? _countdown(Remaining remaining) {
   final blocks = remaining.remainingBlocks;
   final seconds = secondsLeft(remaining);
-  if (seconds == null) return 'Locked';
+  if (seconds == null) return null;
   if (blocks == null) return 'In ${formatDuration(seconds)}';
   return 'In ${formatBlocks(blocks)} '
       '≈ ${formatDuration(seconds, hedge: false)}';
+}
+
+/// "Until block 900 000", "Until Mar 17, 2030": where a locked branch
+/// stands when nothing counts down to its lock — a wallet that has
+/// never synced has no tip to count from. "Locked" when the branch
+/// names no absolute lock to point at.
+String _untilLabel(PolicyBranch branch) {
+  final lock = _absoluteLockText(branch);
+  return lock == null ? 'Locked' : 'Until $lock';
 }
 
 String? _dateOf(Remaining remaining) {

@@ -138,6 +138,38 @@ void main() {
       expect(condition.items[1], isA<AfterCondition>());
     });
 
+    test('reads a lock countdown from under until', () {
+      const until = {
+        'remaining_blocks': 12,
+        'remaining_seconds': 7200,
+        'unlocks_at_unix': fixtureNow + 7200,
+      };
+      final lock =
+          LockState.fromJson({'kind': 'locked', 'until': until}) as LockedLock;
+      expect(lock.remaining.remainingBlocks, 12);
+      expect(lock.remaining.remainingSeconds, 7200);
+      expect(lock.remaining.unlocksAtUnix, fixtureNow + 7200);
+      // The three figures no longer come inline: that shape is refused.
+      expect(
+        () => LockState.fromJson({'kind': 'locked', ...until}),
+        throwsA(isA<TypeError>()),
+      );
+    });
+
+    test('a wallet that never synced has no tip and no countdown', () {
+      final snapshot = PolicySnapshot.fromJson(
+        unsyncedHeightLockedPolicyJson(),
+      );
+      expect(snapshot.tipHeight, isNull);
+      final branch = snapshot.branches.single;
+      final until = (branch.state as LockedBranch).until;
+      expect(until.remainingBlocks, isNull);
+      expect(until.remainingSeconds, isNull);
+      expect(until.unlocksAtUnix, isNull);
+      final lock = branch.timelocks.single.state as LockedLock;
+      expect(lock.remaining.remainingSeconds, isNull);
+    });
+
     test('reads the other lock states and conditions', () {
       expect(LockState.fromJson({'kind': 'unlocked'}), isA<UnlockedLock>());
       final noCoins = LockState.fromJson({
@@ -222,6 +254,52 @@ void main() {
         'Key A signs after block 801 432.',
       );
     });
+
+    test('one key out of several signs alone', () {
+      expect(
+        describePolicy(_snapshot(oneOfThreePolicyJson())),
+        'Any of 3 keys signs.',
+      );
+
+      // The same shape inside a miniscript, on the everyday path and on
+      // a recovery path.
+      final json = lianaPolicyJson();
+      final branches = json['branches'] as List;
+      const anyOfTwo = {
+        'kind': 'thresh',
+        'k': 1,
+        'n': 2,
+        'items': [
+          {'kind': 'key', 'key_id': 'k0'},
+          {'kind': 'key', 'key_id': 'k1'},
+        ],
+      };
+      (branches[0] as Map<String, dynamic>)['condition'] = anyOfTwo;
+      (branches[1] as Map<String, dynamic>)['condition'] = {
+        'kind': 'thresh',
+        'k': 2,
+        'n': 2,
+        'items': [
+          anyOfTwo,
+          {
+            'kind': 'older',
+            'lock': {'kind': 'blocks', 'blocks': yearInBlocks},
+          },
+        ],
+      };
+      expect(
+        describePolicy(_snapshot(json)),
+        'Any of 2 keys signs. Any of 2 recovery keys can spend once a coin '
+        'has waited about 1 year.',
+      );
+    });
+
+    test('a wallet that never synced names the block, with no countdown', () {
+      expect(
+        describePolicy(_snapshot(unsyncedHeightLockedPolicyJson())),
+        'Key A signs after block 900\u00A0000.',
+      );
+    });
   });
 
   group('policyDigest', () {
@@ -245,6 +323,13 @@ void main() {
         policyDigest(_snapshot(heightLockedPolicyJson())),
         'Spendable in about 10 days',
       );
+      expect(policyDigest(_snapshot(oneOfThreePolicyJson())), 'Any of 3 keys');
+      // Nothing counts down on a wallet that never synced: the block
+      // itself is named, never a zero.
+      expect(
+        policyDigest(_snapshot(unsyncedHeightLockedPolicyJson())),
+        'Spendable after block 900\u00A0000',
+      );
     });
   });
 
@@ -262,6 +347,12 @@ void main() {
       expect(
         describeCondition(liana.branches[1].condition, liana).text,
         'Key B and a coin having waited 52 560 blocks',
+      );
+
+      final one = _snapshot(oneOfThreePolicyJson());
+      expect(
+        describeCondition(one.branches.single.condition, one).text,
+        'Any of Key A, Key B, Key C',
       );
     });
 
@@ -312,6 +403,12 @@ void main() {
           ),
         ),
         'block 800 000 · passed',
+      );
+      // No tip to count from: the block alone, without an estimate.
+      final unsynced = _snapshot(unsyncedHeightLockedPolicyJson());
+      expect(
+        describeTimelock(unsynced.branches.single.timelocks.single),
+        'block 900\u00A0000',
       );
       expect(
         describeTimelock(
@@ -422,6 +519,35 @@ void main() {
       );
       expect(far.tone, StateTone.far);
       expect(far.label, 'In 20 000 blocks ≈ 139 days');
+
+      // A wallet that never synced: the lock stands, its distance is
+      // unknown, and no colour or day pretends otherwise.
+      final unknown = describeBranchState(
+        _snapshot(unsyncedHeightLockedPolicyJson()).branches.single,
+      );
+      expect(unknown.tone, StateTone.far);
+      expect(unknown.label, 'Until block 900\u00A0000');
+      expect(unknown.date, isNull);
+      expect(unknown.progress, isNull);
+    });
+
+    test('a coin whose count is unknown is locked, for no known time', () {
+      // The core knows the coin waits and not how long: before the first
+      // sync there is no tip to count from. No figure, no colour, no bar.
+      final json = lianaPolicyJson();
+      final branch = (json['branches'] as List)[1] as Map<String, dynamic>;
+      (branch['state'] as Map<String, dynamic>)['next'] = {
+        'remaining_blocks': null,
+        'remaining_seconds': null,
+        'unlocks_at_unix': null,
+      };
+      final snapshot = _snapshot(json);
+      final status = describeBranchState(snapshot.branches[1]);
+      expect(status.label, 'Locked');
+      expect(status.tone, StateTone.far);
+      expect(status.date, isNull);
+      expect(status.progress, isNull);
+      expect(policyDigest(snapshot), 'Recovery locked');
     });
 
     test('states without a countdown have their own words', () {
@@ -505,6 +631,24 @@ void main() {
       await tester.pumpAndSettle();
       final far = tester.widget<Text>(find.text('In 20 000 blocks ≈ 139 days'));
       expect(far.style?.color, GerfautTokens.light.textMuted);
+    });
+
+    testWidgets('a wallet that never synced shows the block, not a count', (
+      tester,
+    ) async {
+      await _pumpPolicy(tester, _bridgeWith(unsyncedHeightLockedPolicyJson()));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Key A signs after block 900\u00A0000.'),
+        findsOneWidget,
+      );
+      expect(find.text('Until block 900\u00A0000'), findsOneWidget);
+      expect(find.text('block 900\u00A0000'), findsOneWidget);
+      // No estimate, no day, no "block 0" anywhere on the page.
+      expect(find.textContaining('≈'), findsNothing);
+      expect(find.textContaining('Around '), findsNothing);
+      expect(find.textContaining('block 0'), findsNothing);
     });
 
     testWidgets('counts coins one by one under a relative lock', (

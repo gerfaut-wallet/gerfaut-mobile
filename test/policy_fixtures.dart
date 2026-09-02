@@ -142,7 +142,7 @@ Map<String, dynamic> heightLockedPolicyJson({int remaining = 1432}) {
               'lock': {'kind': 'height', 'height': fixtureTip + remaining},
             },
             'required': true,
-            'state': {'kind': 'locked', ...until},
+            'state': {'kind': 'locked', 'until': until},
           },
         ],
         'state': {'kind': 'locked', 'until': until},
@@ -156,6 +156,101 @@ Map<String, dynamic> heightLockedPolicyJson({int remaining = 1432}) {
     'has_timelocks': true,
   };
 }
+
+/// A wallet whose only path opens at block 900 000, read on a device
+/// that has never synced: no tip, so the lock is known to stand and
+/// nothing counts down to it.
+Map<String, dynamic> unsyncedHeightLockedPolicyJson() {
+  const until = {
+    'remaining_blocks': null,
+    'remaining_seconds': null,
+    'unlocks_at_unix': null,
+  };
+  return {
+    'kind': 'miniscript',
+    'script': 'witness_script',
+    'descriptor': 'wsh(and_v(v:pk(xpubKeyA/0/*),after(900000)))#0dd5eed5',
+    'policy': 'and(pk(Key A),after(900000))',
+    'keys': [_key('k0', 'Key A', 'a1b2c3d4', 'xpubKeyA…AAAAAA')],
+    'branches': [
+      {
+        'id': 'b0',
+        'role': 'primary',
+        'label': 'Primary',
+        'summary': 'Key A after block 900,000',
+        'condition': {
+          'kind': 'thresh',
+          'k': 2,
+          'n': 2,
+          'items': [
+            {'kind': 'key', 'key_id': 'k0'},
+            {
+              'kind': 'after',
+              'lock': {'kind': 'height', 'height': 900000},
+            },
+          ],
+        },
+        'timelocks': [
+          {
+            'lock': {
+              'kind': 'absolute',
+              'lock': {'kind': 'height', 'height': 900000},
+            },
+            'required': true,
+            'state': {'kind': 'locked', 'until': until},
+          },
+        ],
+        'state': {'kind': 'locked', 'until': until},
+        'spendable_now': false,
+      },
+    ],
+    'tip_height': null,
+    'computed_at': fixtureNow,
+    'time_basis': 'wall_clock',
+    'coins': 0,
+    'has_timelocks': true,
+  };
+}
+
+/// A 1-of-3 multisig: one branch, any key alone.
+Map<String, dynamic> oneOfThreePolicyJson() => {
+  'kind': 'multisig',
+  'script': 'witness_script',
+  'descriptor':
+      'wsh(sortedmulti(1,xpubKeyA/0/*,xpubKeyB/0/*,xpubKeyC/0/*))#0badcafe',
+  'policy': 'or(pk(Key A),pk(Key B),pk(Key C))',
+  'keys': [
+    _key('k0', 'Key A', 'a1b2c3d4', 'xpubKeyA…AAAAAA'),
+    _key('k1', 'Key B', 'e5f60718', 'xpubKeyB…BBBBBB'),
+    _key('k2', 'Key C', '19283746', 'xpubKeyC…CCCCCC', originPath: null),
+  ],
+  'branches': [
+    {
+      'id': 'b0',
+      'role': 'primary',
+      'label': 'Primary',
+      'summary': 'Any of 3 keys',
+      'condition': {
+        'kind': 'thresh',
+        'k': 1,
+        'n': 3,
+        'items': [
+          {'kind': 'key', 'key_id': 'k0'},
+          {'kind': 'key', 'key_id': 'k1'},
+          {'kind': 'key', 'key_id': 'k2'},
+        ],
+      },
+      'timelocks': <Map<String, dynamic>>[],
+      'state': {'kind': 'spendable_now'},
+      'spendable_now': true,
+    },
+  ],
+  'tip_height': fixtureTip,
+  'computed_at': fixtureNow,
+  'time_basis': 'wall_clock',
+  'coins': 1,
+  'has_timelocks': false,
+};
 
 /// A 2-of-3 multisig: one primary branch, open now.
 Map<String, dynamic> multisigPolicyJson() => {
