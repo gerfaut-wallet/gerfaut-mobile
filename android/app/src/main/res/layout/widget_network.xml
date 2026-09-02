@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The network widget: the block height as of the last sync, then the
      recommended fee rates. The fee block disappears whole when the app
-     wrote no rates — no fee market, or a source that did not answer. -->
+     wrote no rates — no fee market, or a source that did not answer.
+     Top-aligned like the balance card beside it: centred, a two-cell
+     card put its title in the middle of nothing. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_card"
     android:orientation="vertical"
-    android:gravity="center_vertical"
     android:paddingLeft="14dp"
     android:paddingRight="14dp"
     android:paddingTop="12dp"
