@@ -175,7 +175,8 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
 
   // --- instances -------------------------------------------------------
 
-  /// Light theme (default): Banquise / Neige / Glacier.
+  /// Light theme (default): a pale background, white surfaces, a teal
+  /// primary.
   static final GerfautTokens light = GerfautTokens(
     background: const Color(0xFFF4F7F9),
     surface: const Color(0xFFFFFFFF),
@@ -209,7 +210,8 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
     data: _data(const Color(0xFF0D1317)),
   );
 
-  /// Dark theme (option): Nuit polaire / Abysse / Glace.
+  /// Dark theme (option): a near-black background, slate surfaces, an
+  /// ice-blue primary.
   static final GerfautTokens dark = GerfautTokens(
     background: const Color(0xFF0B0F14),
     surface: const Color(0xFF161E27),

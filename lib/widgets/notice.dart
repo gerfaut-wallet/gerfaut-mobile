@@ -113,8 +113,8 @@ class GerfautNotice extends StatelessWidget {
       padding: const EdgeInsets.all(GerfautSpacing.sm + 4),
       decoration: BoxDecoration(
         // Dark theme: coloured text on the card surface, no tint. A
-        // tinted flat on Nuit polaire reads as a second card, and the
-        // colour of the words is enough there.
+        // tinted flat on the dark background reads as a second card,
+        // and the colour of the words is enough there.
         color: dark ? tokens.surface : tint,
         borderRadius: BorderRadius.circular(GerfautRadius.md),
         border: Border.all(color: ink.withValues(alpha: 0.25)),

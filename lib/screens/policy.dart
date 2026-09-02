@@ -363,8 +363,8 @@ class _KeyPill extends StatelessWidget {
 }
 
 /// The state pill of a branch, its tone mapped to the system's three:
-/// Lichen with a check when open, Ambre with a clock within thirty
-/// days, neutral otherwise.
+/// the confirmed green with a check when open, the pending amber with a
+/// clock within thirty days, neutral otherwise.
 class _StatePill extends StatelessWidget {
   const _StatePill({required this.status});
 
