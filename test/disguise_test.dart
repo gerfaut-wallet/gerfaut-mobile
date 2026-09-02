@@ -163,7 +163,7 @@ void main() {
       expect(disguise.disguised, isFalse);
     });
 
-    testWidgets('removing the PIN while disguised drops the disguise first', (
+    testWidgets('removing the PIN while disguised drops the disguise with it', (
       tester,
     ) async {
       final bridge = _locked();
@@ -172,26 +172,37 @@ void main() {
       await tester.pumpAndSettle();
 
       // The top switch turns the lock off.
-      await tester.tap(
-        find.descendant(
-          of: find.ancestor(
-            of: find.text('App lock'),
-            matching: find.byType(Row),
-          ),
-          matching: find.byType(Switch),
+      final appLock = find.descendant(
+        of: find.ancestor(
+          of: find.text('App lock'),
+          matching: find.byType(Row),
         ),
+        matching: find.byType(Switch),
       );
+      await tester.tap(appLock);
       await tester.pumpAndSettle();
 
       // The sheet says the disguise goes too.
       expect(find.textContaining('turns the disguise off'), findsOneWidget);
+
+      // The lock goes first, and only once the core agrees: a refused
+      // secret leaves the launcher face exactly where it was.
+      await tester.enterText(find.byKey(const Key('lock.current')), '0000');
+      await tester.tap(find.text('Turn off'));
+      await tester.pumpAndSettle();
+      expect(find.text('wrong PIN or password'), findsOneWidget);
+      expect(bridge.lock, isNotNull);
+      expect(disguise.disguised, isTrue);
+      expect(disguise.calls, isEmpty);
+
+      await tester.tap(appLock);
+      await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const Key('lock.current')), '1234');
       await tester.tap(find.text('Turn off'));
       await tester.pumpAndSettle();
-
       expect(bridge.lock, isNull);
       expect(disguise.disguised, isFalse);
-      expect(disguise.calls, contains('disguise:false'));
+      expect(disguise.calls, ['disguise:false', 'widgets:true']);
     });
   });
 
