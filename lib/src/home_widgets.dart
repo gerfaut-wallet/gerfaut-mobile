@@ -55,10 +55,11 @@ class PricePayload {
   const PricePayload({required this.figure, this.change, required this.asOf});
 
   /// The quote as the widget states it: the price of one bitcoin in the
-  /// quote's currency, and the clock time it was fetched at.
+  /// quote's currency, in the same figures the app's own price line
+  /// uses, and the clock time it was fetched at.
   factory PricePayload.of(PriceQuote quote) {
     return PricePayload(
-      figure: formatFiat(satsPerBtc, quote.rate, quote.currency),
+      figure: formatFiatPrice(quote.rate, quote.currency),
       asOf: 'as of ${formatClock(quote.at)}',
     );
   }

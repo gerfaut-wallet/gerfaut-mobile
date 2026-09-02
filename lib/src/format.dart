@@ -319,3 +319,19 @@ String formatFiat(int sats, double rate, FiatCurrency currency) {
   final value = sats / satsPerBtc * rate;
   return _fiatFormatter(currency, precise: value.abs() < 1).format(value);
 }
+
+final Map<FiatCurrency, NumberFormat> _wholeFiatFormatters = {};
+
+/// The price of one bitcoin in a currency: whole units from a hundred
+/// up — the cents of a five-figure price are noise, and every surface
+/// that quotes the price drops them the same way — and the currency's
+/// own decimals under that, so a currency priced in fractions still
+/// reads. `66741.37` -> `"€66,741"`, `42.5` -> `"€42.50"`.
+String formatFiatPrice(double rate, FiatCurrency currency) {
+  if (rate.abs() < 100) return formatFiat(satsPerBtc, rate, currency);
+  final formatter = _wholeFiatFormatters.putIfAbsent(
+    currency,
+    () => NumberFormat.simpleCurrency(name: currency.code, decimalDigits: 0),
+  );
+  return formatter.format(rate);
+}

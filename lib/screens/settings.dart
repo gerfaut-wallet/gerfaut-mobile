@@ -1417,7 +1417,7 @@ class _RatePreview extends ConsumerWidget {
       );
     }
     return Text(
-      '1 BTC = ${formatFiat(satsPerBtc, quote.rate, quote.currency)} · '
+      '1 BTC = ${formatFiatPrice(quote.rate, quote.currency)} · '
       'updated ${relativeTime(quote.at)}',
       style: tokens.figureOf(color: tokens.textMuted),
     );

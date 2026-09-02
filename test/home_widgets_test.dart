@@ -86,11 +86,27 @@ void main() {
   group('the price widget', () {
     test('states one bitcoin in the currency and the clock time', () {
       final payload = PricePayload.of(_quote);
-      expect(payload.figure, formatFiat(satsPerBtc, 50000, FiatCurrency.eur));
+      expect(payload.figure, '€50,000');
       expect(payload.asOf, 'as of ${formatClock(_syncedAt)}');
       // The core carries no daily change yet: the line stays hidden.
       expect(payload.toData()[WidgetKeys.priceChange], isNull);
       expect(payload.toData().keys, PricePayload.keys);
+    });
+
+    test('a euro quote drops its cents, as the app does', () {
+      // The widget once said "€66,741.00" beside an app saying "€66,394":
+      // the cents of a five-figure price are noise on both.
+      const quote = PriceQuote(
+        rate: 66741.37,
+        currency: FiatCurrency.eur,
+        source: PriceSource.kraken,
+        at: _syncedAt,
+      );
+      expect(PricePayload.of(quote).figure, '€66,741');
+      expect(formatFiatPrice(66741.37, FiatCurrency.eur), '€66,741');
+      expect(formatFiatPrice(9876543.2, FiatCurrency.jpy), '¥9,876,543');
+      // Under a hundred the currency keeps its own decimals.
+      expect(formatFiatPrice(42.5, FiatCurrency.eur), '€42.50');
     });
 
     test('the clock is the reader\'s, on 24 hours', () {
@@ -282,10 +298,7 @@ void main() {
 
       // Fiat display is off in the app: the widget fetched its own quote
       // in the preferred currency all the same.
-      expect(
-        board.data[WidgetKeys.priceFigure],
-        formatFiat(satsPerBtc, 50000, FiatCurrency.eur),
-      );
+      expect(board.data[WidgetKeys.priceFigure], '€50,000');
       expect(board.data[WidgetKeys.priceAsOf], startsWith('as of '));
       expect(board.data.containsKey(WidgetKeys.priceChange), isFalse);
       // Masked until the widget preference says otherwise.
@@ -467,10 +480,7 @@ void main() {
       expect(bridge.syncWalletCalls, 0);
       // Fiat display is off in the app; the quote comes anyway, in the
       // preferred currency, because the placed widget is the opt-in.
-      expect(
-        board.data[WidgetKeys.priceFigure],
-        formatFiat(satsPerBtc, 50000, FiatCurrency.eur),
-      );
+      expect(board.data[WidgetKeys.priceFigure], '€50,000');
       expect(board.data[WidgetKeys.balanceTotal], formatSats(100050000));
       expect(board.data[WidgetKeys.balanceSynced], 'Synced 2 h ago');
       expect(board.data[WidgetKeys.networkNextBlock], '12 sat/vB');
