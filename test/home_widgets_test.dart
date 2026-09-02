@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/settings/widgets_section.dart';
 import 'package:gerfaut/src/bridge.dart';
+import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/home_widgets.dart';
 import 'package:gerfaut/src/models.dart';
@@ -589,6 +590,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(board.data[WidgetKeys.balanceTotal], maskedValue);
       expect(find.text('Show balances on widgets'), findsOneWidget);
+      expect(
+        find.textContaining('To add one, hold an empty spot'),
+        findsOneWidget,
+      );
       expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
 
       await tester.tap(find.byType(Switch));
@@ -600,6 +605,35 @@ void main() {
       await tester.pumpAndSettle();
       expect(bridge.appPrefs['widgets.balances'], '0');
       expect(board.data[WidgetKeys.balanceTotal], maskedValue);
+    });
+
+    testWidgets('disguised, the card says the widgets are off', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            bridgeProvider.overrideWithValue(_bridge()),
+            widgetBoardProvider.overrideWithValue(FakeWidgetBoard()),
+            widgetSchedulerProvider.overrideWithValue((wanted) async {}),
+            disguiseServiceProvider.overrideWithValue(
+              FakeDisguise(disguised: true),
+            ),
+          ],
+          child: MaterialApp(
+            theme: themeFrom(GerfautTokens.light, Brightness.light),
+            home: const Scaffold(body: WidgetsSection()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The providers are disabled while the calculator is the launcher
+      // entry: there is nothing to add, so the hint does not send anyone
+      // looking for it.
+      expect(
+        find.text('Widgets are off while the app is disguised.'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('To add one'), findsNothing);
     });
   });
 }

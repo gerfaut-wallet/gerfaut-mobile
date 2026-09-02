@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../src/disguise.dart';
 import '../../src/home_widgets.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/section_card.dart';
@@ -16,6 +17,7 @@ class WidgetsSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final on = ref.watch(widgetBalancesProvider);
+    final disguised = ref.watch(disguiseProvider).disguised;
 
     return SectionCard(
       icon: LucideIcons.layoutGrid,
@@ -53,9 +55,14 @@ class WidgetsSection extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: GerfautSpacing.md),
+        // Disguised, the providers are disabled and the launcher offers
+        // none: telling someone to look for Gerfaut under Widgets would
+        // send them looking for a thing that is not there.
         Text(
-          'To add one, hold an empty spot on your home screen and pick '
-          'Gerfaut under Widgets.',
+          disguised
+              ? 'Widgets are off while the app is disguised.'
+              : 'To add one, hold an empty spot on your home screen and '
+                    'pick Gerfaut under Widgets.',
           style: tokens.bodySmall.copyWith(color: tokens.textMuted),
         ),
       ],
