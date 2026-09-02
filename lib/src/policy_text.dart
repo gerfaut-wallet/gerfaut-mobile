@@ -39,6 +39,7 @@ String describePolicy(PolicySnapshot snapshot) {
       final condition = snapshot.branches.firstOrNull?.condition;
       if (condition is ThreshCondition) {
         if (condition.k == condition.n) return 'All ${condition.n} keys sign.';
+        if (condition.k == 1) return 'Any of ${condition.n} keys signs.';
         return '${condition.k} of ${condition.n} keys sign.';
       }
       return 'One key signs. Any coin is spendable now.';
@@ -104,6 +105,7 @@ String _pathSubject(PolicyBranch branch) {
         : '${role == 'emergency' ? 'An' : 'A'} $role key';
   }
   if (k == n) return n == 2 ? 'Both $role keys' : 'All $n $role keys';
+  if (k == 1) return 'Any of $n $role keys';
   return 'Any $k of $n $role keys';
 }
 
@@ -172,10 +174,9 @@ _Subject? _subjectOf(PolicyCondition condition, PolicySnapshot snapshot) {
       final keys = items.whereType<KeyCondition>().toList();
       if (keys.length == items.length) {
         if (k == n) return _keyList(keys, snapshot);
-        return _Subject(
-          k == 1 ? 'Any of $n keys' : 'Any $k of $n keys',
-          plural: true,
-        );
+        // One key out of several signs alone: the subject is singular.
+        if (k == 1) return _Subject('Any of $n keys', plural: false);
+        return _Subject('Any $k of $n keys', plural: true);
       }
       if (k == n) {
         final parts = <_Subject>[
@@ -235,6 +236,7 @@ String policyDigest(PolicySnapshot snapshot) {
     case PolicyKind.multisig:
       final condition = snapshot.branches.firstOrNull?.condition;
       if (condition is ThreshCondition) {
+        if (condition.k == 1) return 'Any of ${condition.n} keys';
         return '${condition.k} of ${condition.n} keys';
       }
       return 'Single key';
