@@ -2,7 +2,10 @@
 <!-- The balance widget: the total, up to four wallet rows, and how old
      the figures are. Rows start hidden; the provider shows the ones the
      app filled and the granted height takes. Masked, the app writes
-     "•••••" and this layout shows it without knowing. -->
+     "•••••" and this layout shows it without knowing. A wallet row is
+     two lines, the name over its figure: side by side, a name of any
+     length and an eight-decimal figure fight for two cells' width and
+     the name loses. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
@@ -27,13 +30,19 @@
         android:maxLines="1"
         android:ellipsize="end" />
 
+    <!-- The whole figure, unit included, stays on one line: it shrinks
+         to the width it is given before anything is cut. -->
     <TextView
         android:id="@+id/balance_total"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="2dp"
         android:text="@string/widget_masked_placeholder"
         android:textSize="22sp"
+        android:autoSizeTextType="uniform"
+        android:autoSizeMinTextSize="13sp"
+        android:autoSizeMaxTextSize="22sp"
+        android:autoSizeStepGranularity="1sp"
         android:fontFamily="sans-serif-medium"
         android:fontFeatureSettings="'tnum'"
         android:letterSpacing="-0.01"
@@ -46,135 +55,134 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="4dp"
         android:orientation="vertical">
 
         <LinearLayout
             android:id="@+id/balance_row1"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:orientation="horizontal"
+            android:layout_marginTop="6dp"
+            android:orientation="vertical"
             android:visibility="gone">
 
             <TextView
                 android:id="@+id/balance_row1_name"
-                android:layout_width="0dp"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginEnd="8dp"
-                android:textSize="13sp"
-                android:fontFamily="sans-serif"
+                android:textSize="12sp"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.01"
                 android:textColor="@color/widget_text_muted"
                 android:maxLines="1"
                 android:ellipsize="end" />
 
             <TextView
                 android:id="@+id/balance_row1_figure"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textSize="13sp"
+                android:textSize="14sp"
                 android:fontFamily="sans-serif"
                 android:fontFeatureSettings="'tnum'"
                 android:letterSpacing="-0.01"
                 android:textColor="@color/widget_text"
-                android:maxLines="1" />
+                android:maxLines="1"
+                android:ellipsize="end" />
         </LinearLayout>
 
         <LinearLayout
             android:id="@+id/balance_row2"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:orientation="horizontal"
+            android:layout_marginTop="6dp"
+            android:orientation="vertical"
             android:visibility="gone">
 
             <TextView
                 android:id="@+id/balance_row2_name"
-                android:layout_width="0dp"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginEnd="8dp"
-                android:textSize="13sp"
-                android:fontFamily="sans-serif"
+                android:textSize="12sp"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.01"
                 android:textColor="@color/widget_text_muted"
                 android:maxLines="1"
                 android:ellipsize="end" />
 
             <TextView
                 android:id="@+id/balance_row2_figure"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textSize="13sp"
+                android:textSize="14sp"
                 android:fontFamily="sans-serif"
                 android:fontFeatureSettings="'tnum'"
                 android:letterSpacing="-0.01"
                 android:textColor="@color/widget_text"
-                android:maxLines="1" />
+                android:maxLines="1"
+                android:ellipsize="end" />
         </LinearLayout>
 
         <LinearLayout
             android:id="@+id/balance_row3"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:orientation="horizontal"
+            android:layout_marginTop="6dp"
+            android:orientation="vertical"
             android:visibility="gone">
 
             <TextView
                 android:id="@+id/balance_row3_name"
-                android:layout_width="0dp"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginEnd="8dp"
-                android:textSize="13sp"
-                android:fontFamily="sans-serif"
+                android:textSize="12sp"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.01"
                 android:textColor="@color/widget_text_muted"
                 android:maxLines="1"
                 android:ellipsize="end" />
 
             <TextView
                 android:id="@+id/balance_row3_figure"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textSize="13sp"
+                android:textSize="14sp"
                 android:fontFamily="sans-serif"
                 android:fontFeatureSettings="'tnum'"
                 android:letterSpacing="-0.01"
                 android:textColor="@color/widget_text"
-                android:maxLines="1" />
+                android:maxLines="1"
+                android:ellipsize="end" />
         </LinearLayout>
 
         <LinearLayout
             android:id="@+id/balance_row4"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:orientation="horizontal"
+            android:layout_marginTop="6dp"
+            android:orientation="vertical"
             android:visibility="gone">
 
             <TextView
                 android:id="@+id/balance_row4_name"
-                android:layout_width="0dp"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginEnd="8dp"
-                android:textSize="13sp"
-                android:fontFamily="sans-serif"
+                android:textSize="12sp"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.01"
                 android:textColor="@color/widget_text_muted"
                 android:maxLines="1"
                 android:ellipsize="end" />
 
             <TextView
                 android:id="@+id/balance_row4_figure"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textSize="13sp"
+                android:textSize="14sp"
                 android:fontFamily="sans-serif"
                 android:fontFeatureSettings="'tnum'"
                 android:letterSpacing="-0.01"
                 android:textColor="@color/widget_text"
-                android:maxLines="1" />
+                android:maxLines="1"
+                android:ellipsize="end" />
         </LinearLayout>
     </LinearLayout>
 

@@ -74,4 +74,10 @@ abstract class GerfautWidgetProvider : HomeWidgetProvider() {
     // against the smallest keeps every orientation whole.
     protected fun grantedHeight(options: Bundle): Int =
         options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0)
+
+    // The height the instance gets with the phone upright, in dp; zero
+    // when unknown. On a phone the smallest height is the landscape one,
+    // and a list sized for it stands mostly empty the rest of the time.
+    protected fun portraitHeight(options: Bundle): Int =
+        options.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0)
 }

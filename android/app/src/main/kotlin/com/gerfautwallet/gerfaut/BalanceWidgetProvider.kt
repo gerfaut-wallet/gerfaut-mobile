@@ -25,23 +25,31 @@ class BalanceWidgetProvider : GerfautWidgetProvider() {
                     ?: context.getString(R.string.widget_masked_placeholder),
             )
             line(R.id.balance_synced, data.getString("balance.synced", null))
-            val fit = fittingRows(grantedHeight(options))
+            // A row stands on its name alone: masked or not, the wallets
+            // are listed, and a figure the app left out reads as masked
+            // rather than taking its row with it.
+            val fit = fittingRows(portraitHeight(options))
             ROWS.forEachIndexed { index, (rowId, nameId, figureId) ->
                 val name = data.getString("balance.row${index + 1}.name", null)
-                val figure = data.getString("balance.row${index + 1}.figure", null)
-                if (name == null || figure == null || index >= fit) {
+                if (name == null || index >= fit) {
                     setViewVisibility(rowId, View.GONE)
                 } else {
                     setTextViewText(nameId, name)
-                    setTextViewText(figureId, figure)
+                    setTextViewText(
+                        figureId,
+                        data.getString("balance.row${index + 1}.figure", null)
+                            ?: context.getString(R.string.widget_masked_placeholder),
+                    )
                     setViewVisibility(rowId, View.VISIBLE)
                 }
             }
         }
     }
 
-    // How many wallet rows the granted height takes once the title, the
-    // total and the footer have theirs; all of them when it is unknown.
+    // How many wallet rows the height takes once the title, the total
+    // and the footer have theirs; all of them when it is unknown. Sized
+    // against the portrait height, the one the widget is looked at in:
+    // the landscape minimum left a two-by-two card more than half empty.
     private fun fittingRows(heightDp: Int): Int {
         if (heightDp <= 0) return ROWS.size
         return ((heightDp - FRAME_DP) / ROW_DP).coerceIn(0, ROWS.size)
@@ -56,8 +64,8 @@ class BalanceWidgetProvider : GerfautWidgetProvider() {
         )
 
         // What the fixed lines and paddings of the layout add up to,
-        // and what one wallet row takes, in dp.
-        const val FRAME_DP = 92
-        const val ROW_DP = 18
+        // and what one two-line wallet row takes with its margin, in dp.
+        const val FRAME_DP = 96
+        const val ROW_DP = 42
     }
 }

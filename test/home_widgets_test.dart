@@ -187,6 +187,23 @@ void main() {
       expect(payload.total, maskedValue);
       expect(payload.rows.map((row) => row.name), ['Cold storage', 'Spending']);
       expect(payload.rows.every((row) => row.figure == maskedValue), isTrue);
+
+      // The mask changes the figures and nothing else: as many rows as
+      // unmasked, every name written, and the freshness line with them.
+      final open = BalancePayload.of(
+        wallets,
+        unit: AmountUnit.btc,
+        masked: false,
+        now: _now,
+      );
+      expect(payload.rows, hasLength(open.rows.length));
+      final data = payload.toData();
+      expect(data[WidgetKeys.balanceRowName(1)], 'Cold storage');
+      expect(data[WidgetKeys.balanceRowFigure(1)], maskedValue);
+      expect(data[WidgetKeys.balanceRowName(2)], 'Spending');
+      expect(data[WidgetKeys.balanceRowFigure(2)], maskedValue);
+      expect(data[WidgetKeys.balanceSynced], 'Synced 2 h ago');
+      expect(payload.synced, open.synced);
     });
 
     test('lists four wallets at most; the total counts them all', () {
