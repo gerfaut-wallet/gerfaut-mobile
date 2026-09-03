@@ -18,3 +18,8 @@ tokio = { version = "1", features = ["sync"] }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
+
+# Cargo only honours [patch] in the root manifest: the same pin as in
+# gerfaut-core, see the note there.
+[patch.crates-io]
+saturating-time = { git = "https://github.com/gerfaut-wallet/saturating-time", rev = "7bef6ba00f3adaa6aff7e68966614c9d55bb60ec" }
