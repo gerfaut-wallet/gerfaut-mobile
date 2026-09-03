@@ -324,10 +324,41 @@ class SyncStamp {
 }
 
 /// Wallet metadata as stored in the vault.
+/// The glyph a wallet shows next to its name, chosen by the user. The
+/// names are Lucide's, the set is the core's: both apps draw the same
+/// icon for the same value. Listed in the order the picker shows them.
+enum WalletIcon {
+  wallet('wallet', 'Wallet'),
+  key('key', 'Key'),
+  shield('shield', 'Shield'),
+  mapPin('map_pin', 'Map pin'),
+  snowflake('snowflake', 'Snowflake'),
+  landmark('landmark', 'Landmark'),
+  piggyBank('piggy_bank', 'Piggy bank');
+
+  const WalletIcon(this.id, this.label);
+
+  /// Stable machine identifier, as serialized by the core.
+  final String id;
+
+  /// What a screen reader calls it.
+  final String label;
+
+  /// The icon behind an identifier; the generic wallet for one this
+  /// build does not know, or a vault written before icons existed.
+  static WalletIcon fromId(String? id) {
+    for (final icon in WalletIcon.values) {
+      if (icon.id == id) return icon;
+    }
+    return WalletIcon.wallet;
+  }
+}
+
 class WalletMeta {
   const WalletMeta({
     required this.id,
     required this.name,
+    this.icon = WalletIcon.wallet,
     required this.network,
     required this.kind,
     required this.recognizedAs,
@@ -344,6 +375,7 @@ class WalletMeta {
     return WalletMeta(
       id: json['id'] as String,
       name: json['name'] as String,
+      icon: WalletIcon.fromId(json['icon'] as String?),
       network: Network.fromId(json['network'] as String),
       kind: WalletKind.fromJson(json['kind'] as Map<String, dynamic>),
       recognizedAs: RecognizedKind.fromId(json['recognized_as'] as String),
@@ -364,6 +396,10 @@ class WalletMeta {
 
   final String id;
   final String name;
+
+  /// The glyph beside the name; the generic wallet unless the user
+  /// picked another.
+  final WalletIcon icon;
   final Network network;
   final WalletKind kind;
   final RecognizedKind recognizedAs;
@@ -378,6 +414,25 @@ class WalletMeta {
   final int cachedTxCount;
 
   bool get isSingleAddress => kind is SingleAddressKind;
+
+  /// The same wallet with the name or the icon changed: what a rename
+  /// or an icon pick leaves behind.
+  WalletMeta copyWith({String? name, WalletIcon? icon}) {
+    return WalletMeta(
+      id: id,
+      name: name ?? this.name,
+      icon: icon ?? this.icon,
+      network: network,
+      kind: kind,
+      recognizedAs: recognizedAs,
+      createdAt: createdAt,
+      gapLimit: gapLimit,
+      scanGap: scanGap,
+      lastSync: lastSync,
+      cachedBalance: cachedBalance,
+      cachedTxCount: cachedTxCount,
+    );
+  }
 }
 
 /// What a wallet actually watches, as stored in the vault.
@@ -1409,47 +1464,6 @@ class PriceQuote {
   final PriceSource source;
 
   /// Unix timestamp, seconds, when the quote was fetched.
-  final int at;
-}
-
-/// Recommended fee rates in sat/vB, as the core publishes them.
-class FeeEstimates {
-  const FeeEstimates({
-    required this.fastest,
-    required this.halfHour,
-    required this.hour,
-    required this.economy,
-    required this.minimum,
-    required this.at,
-  });
-
-  factory FeeEstimates.fromJson(Map<String, dynamic> json) {
-    return FeeEstimates(
-      fastest: (json['fastest'] as num).toDouble(),
-      halfHour: (json['half_hour'] as num).toDouble(),
-      hour: (json['hour'] as num).toDouble(),
-      economy: (json['economy'] as num).toDouble(),
-      minimum: (json['minimum'] as num).toDouble(),
-      at: json['at'] as int,
-    );
-  }
-
-  /// Likely next block.
-  final double fastest;
-
-  /// Within roughly 30 minutes.
-  final double halfHour;
-
-  /// Within roughly an hour.
-  final double hour;
-
-  /// No hurry.
-  final double economy;
-
-  /// Relay floor.
-  final double minimum;
-
-  /// Unix timestamp, seconds, when the estimates were fetched.
   final int at;
 }
 

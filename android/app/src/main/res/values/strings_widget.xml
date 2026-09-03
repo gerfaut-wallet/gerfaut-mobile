@@ -7,9 +7,8 @@
     <string name="widget_balance_label">Balance</string>
     <string name="widget_balance_description">Your total balance and wallets. Masked until you allow balances on widgets in the settings.</string>
     <string name="widget_network_label">Network</string>
-    <string name="widget_network_description">Block height as of the last sync, and the current fee rates.</string>
-    <string name="widget_next_block_label">Next block</string>
-    <string name="widget_hour_label">Hour</string>
+    <string name="widget_network_description">Block height as of the last sync.</string>
+    <string name="widget_block_height_label">Block height</string>
     <string name="widget_placeholder">—</string>
     <string name="widget_masked_placeholder">•••••</string>
 </resources>

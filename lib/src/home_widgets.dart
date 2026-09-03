@@ -37,8 +37,6 @@ abstract final class WidgetKeys {
   static const String balanceTotal = 'balance.total';
   static const String balanceSynced = 'balance.synced';
   static const String networkHeight = 'network.height';
-  static const String networkNextBlock = 'network.nextBlock';
-  static const String networkHour = 'network.hour';
   static const String networkFooter = 'network.footer';
 
   /// The name of the wallet on row [n], counted from one.
@@ -150,23 +148,15 @@ class BalancePayload {
 }
 
 /// What the network widget shows: the chain height as of the last sync,
-/// and the fee rates the backend recommends right now.
+/// and how old that reading is.
 class NetworkPayload {
-  const NetworkPayload({
-    required this.height,
-    this.nextBlock,
-    this.hour,
-    required this.footer,
-  });
+  const NetworkPayload({required this.height, required this.footer});
 
-  /// The height is the one the most recent sync saw; the fees are
-  /// omitted when there are none, whether the network has no fee
-  /// market or the source did not answer. A network other than
-  /// mainnet is named in the footer, so a signet height is never read
-  /// as the chain's.
+  /// The height is the one the most recent sync saw. A network other
+  /// than mainnet is named in the footer, so a signet height is never
+  /// read as the chain's.
   factory NetworkPayload.of(
     List<WalletMeta> wallets, {
-    FeeEstimates? fees,
     required Network network,
     DateTime? now,
   }) {
@@ -174,8 +164,6 @@ class NetworkPayload {
     final synced = syncedLine(wallets, now: now);
     return NetworkPayload(
       height: stamp == null ? '—' : groupThousands('${stamp.tipHeight}'),
-      nextBlock: fees == null ? null : formatFeeRate(fees.fastest),
-      hour: fees == null ? null : formatFeeRate(fees.hour),
       footer: network == Network.mainnet
           ? synced
           : '${network.label} · ${synced[0].toLowerCase()}${synced.substring(1)}',
@@ -184,20 +172,14 @@ class NetworkPayload {
 
   static const List<String> keys = [
     WidgetKeys.networkHeight,
-    WidgetKeys.networkNextBlock,
-    WidgetKeys.networkHour,
     WidgetKeys.networkFooter,
   ];
 
   final String height;
-  final String? nextBlock;
-  final String? hour;
   final String footer;
 
   Map<String, String?> toData() => {
     WidgetKeys.networkHeight: height,
-    WidgetKeys.networkNextBlock: nextBlock,
-    WidgetKeys.networkHour: hour,
     WidgetKeys.networkFooter: footer,
   };
 }
@@ -373,40 +355,11 @@ final widgetPriceProvider =
       WidgetPriceNotifier.new,
     );
 
-/// How often the open app asks for fee estimates while a network widget
-/// is placed: blocks come about that often.
-const Duration widgetFeesCadence = Duration(minutes: 10);
-
-/// Fee estimates for the network widget, refreshed on [widgetFeesCadence]
-/// while one is placed. Null when none is, and on a network with no
-/// fee market.
-class WidgetFeesNotifier extends AsyncNotifier<FeeEstimates?> {
-  Timer? _timer;
-
-  @override
-  Future<FeeEstimates?> build() async {
-    _timer?.cancel();
-    final settings = ref.watch(settingsProvider).valueOrNull;
-    final installed = await ref.watch(installedWidgetsProvider.future);
-    if (settings == null || !installed.contains(HomeWidgets.network)) {
-      return null;
-    }
-    ref.onDispose(() => _timer?.cancel());
-    _timer = Timer(widgetFeesCadence, () => ref.invalidateSelf());
-    return ref.read(bridgeProvider).fetchFees(settings.activeNetwork);
-  }
-}
-
-final widgetFeesProvider =
-    AsyncNotifierProvider<WidgetFeesNotifier, FeeEstimates?>(
-      WidgetFeesNotifier.new,
-    );
-
 /// Composes what the widgets say and hands it to the board.
 ///
 /// Created once the preferences are hydrated, it follows everything a
-/// widget shows — wallets and their syncs, the quote, the fees, the
-/// unit, the mask, the widget preference, the set of placed widgets —
+/// widget shows — wallets and their syncs, the quote, the unit, the
+/// mask, the widget preference, the set of placed widgets —
 /// and republishes on each change. Publishing coalesces: a burst of
 /// changes is written once, after the last of them.
 class WidgetFeed {
@@ -419,11 +372,6 @@ class WidgetFeed {
     });
     _ref.listen(widgetPriceProvider, (_, next) {
       if (next.hasValue && !next.isLoading) publish();
-    });
-    _ref.listen(widgetFeesProvider, (_, next) {
-      // An error hides the fee lines: a rate that could not be fetched
-      // must not stand as current.
-      if (!next.isLoading) publish();
     });
     _ref.listen(unitProvider, republish);
     _ref.listen(maskedProvider, republish);
@@ -486,7 +434,6 @@ class WidgetFeed {
     }
     final wallets = _ref.read(walletsProvider).valueOrNull ?? const [];
     final quote = _ref.read(widgetPriceProvider).valueOrNull;
-    final fees = _ref.read(widgetFeesProvider).valueOrNull;
     await write(
       _ref.read(widgetBoardProvider),
       installed: installed,
@@ -496,11 +443,7 @@ class WidgetFeed {
         unit: _ref.read(unitProvider),
         masked: _ref.read(maskedProvider) || !_ref.read(widgetBalancesProvider),
       ),
-      network: NetworkPayload.of(
-        wallets,
-        fees: fees,
-        network: settings.activeNetwork,
-      ),
+      network: NetworkPayload.of(wallets, network: settings.activeNetwork),
     );
   }
 
@@ -554,7 +497,7 @@ final widgetFeedProvider = Provider<WidgetFeed>((ref) => WidgetFeed(ref));
 
 /// What Android runs every quarter hour while widgets are placed and
 /// Gerfaut is closed: open the vault, read what the placed widgets
-/// show, fetch the price and the fees they need, publish. It never
+/// show, fetch the price if one of them needs it, publish. It never
 /// syncs the chain — balances and heights stay as of the last sync, and
 /// the line under them says so. Always answers true: the next run is
 /// soon enough for whatever did not work this time.
@@ -581,14 +524,6 @@ Future<bool> refreshWidgets({
         // The last quote stays up, with the time it carries.
       }
     }
-    FeeEstimates? fees;
-    if (installed.contains(HomeWidgets.network)) {
-      try {
-        fees = await bridge.fetchFees(network);
-      } catch (_) {
-        // No rate beats a stale one presented as current.
-      }
-    }
     await WidgetFeed.write(
       board,
       installed: installed,
@@ -600,12 +535,7 @@ Future<bool> refreshWidgets({
             prefs['mobile.masked'] == '1' || prefs['widgets.balances'] != '1',
         now: now,
       ),
-      network: NetworkPayload.of(
-        wallets,
-        fees: fees,
-        network: network,
-        now: now,
-      ),
+      network: NetworkPayload.of(wallets, network: network, now: now),
     );
     return true;
   } catch (_) {

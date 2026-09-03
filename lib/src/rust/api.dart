@@ -71,6 +71,18 @@ Future<String> removeWallet({required String id}) =>
 Future<String> renameWallet({required String id, required String name}) =>
     RustLib.instance.api.crateApiRenameWallet(id: id, name: name);
 
+/// Changes the glyph a wallet shows next to its name. `icon` is one of
+/// the serde names: `wallet`, `key`, `shield`, `map_pin`, `snowflake`,
+/// `landmark`, `piggy_bank`.
+Future<String> setWalletIcon({required String id, required String icon}) =>
+    RustLib.instance.api.crateApiSetWalletIcon(id: id, icon: icon);
+
+/// Puts the listed wallets in that order. Wallets left out keep their
+/// slots, so the list of one network reorders without moving another
+/// network's wallets. A repeated id is refused, an unknown one too.
+Future<String> reorderWallets({required List<String> ids}) =>
+    RustLib.instance.api.crateApiReorderWallets(ids: ids);
+
 Future<String> walletSnapshot({required String id}) =>
     RustLib.instance.api.crateApiWalletSnapshot(id: id);
 
@@ -292,13 +304,6 @@ Future<String> importBackup({
 /// serves the ones past the first seven. Returns a `PriceQuote`.
 Future<String> fetchPrice({required String source, required String currency}) =>
     RustLib.instance.api.crateApiFetchPrice(source: source, currency: currency);
-
-/// Fetches the recommended fee rates for a network through the backend
-/// configured for it, on the same route the chain takes. Returns a
-/// serialized `FeeEstimates`, or `null` on a network with no fee market
-/// (regtest), so the caller has nothing to hide but a line.
-Future<String> fetchFees({required String network}) =>
-    RustLib.instance.api.crateApiFetchFees(network: network);
 
 /// Checks the latest published release against the running version.
 /// Returns a serialized `UpdateCheck`.

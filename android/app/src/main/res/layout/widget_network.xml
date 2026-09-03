@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The network widget: the block height as of the last sync, then the
-     recommended fee rates. The fee block disappears whole when the app
-     wrote no rates — no fee market, or a source that did not answer.
-     Top-aligned like the balance card beside it: centred, a two-cell
-     card put its title in the middle of nothing. -->
+<!-- The network widget: the block height as of the last sync, and how
+     old that reading is. Top-aligned like the balance card beside it:
+     centred, a two-cell card put its title in the middle of nothing. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
@@ -42,82 +40,22 @@
         android:maxLines="1"
         android:ellipsize="end" />
 
-    <LinearLayout
-        android:id="@+id/network_fees"
-        android:layout_width="match_parent"
+    <TextView
+        android:id="@+id/network_block_label"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:orientation="horizontal"
-        android:visibility="gone">
-
-        <LinearLayout
-            android:id="@+id/network_next_block_column"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/network_next_block_label"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/widget_next_block_label"
-                android:textAllCaps="true"
-                android:textSize="10sp"
-                android:fontFamily="sans-serif-medium"
-                android:letterSpacing="0.04"
-                android:textColor="@color/widget_text_muted"
-                android:maxLines="1" />
-
-            <TextView
-                android:id="@+id/network_next_block"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="13sp"
-                android:fontFamily="sans-serif"
-                android:fontFeatureSettings="'tnum'"
-                android:letterSpacing="-0.01"
-                android:textColor="@color/widget_text"
-                android:maxLines="1" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/network_hour_column"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/network_hour_label"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/widget_hour_label"
-                android:textAllCaps="true"
-                android:textSize="10sp"
-                android:fontFamily="sans-serif-medium"
-                android:letterSpacing="0.04"
-                android:textColor="@color/widget_text_muted"
-                android:maxLines="1" />
-
-            <TextView
-                android:id="@+id/network_hour"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="13sp"
-                android:fontFamily="sans-serif"
-                android:fontFeatureSettings="'tnum'"
-                android:letterSpacing="-0.01"
-                android:textColor="@color/widget_text"
-                android:maxLines="1" />
-        </LinearLayout>
-    </LinearLayout>
+        android:text="@string/widget_block_height_label"
+        android:textSize="12sp"
+        android:fontFamily="sans-serif"
+        android:textColor="@color/widget_text_muted"
+        android:maxLines="1"
+        android:ellipsize="end" />
 
     <TextView
         android:id="@+id/network_footer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="6dp"
         android:textSize="12sp"
         android:fontFamily="sans-serif"
         android:fontFeatureSettings="'tnum'"

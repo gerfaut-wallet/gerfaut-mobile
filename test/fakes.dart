@@ -168,6 +168,7 @@ class FakeDocumentSaver implements DocumentSaver {
 WalletMeta makeMeta({
   String id = 'w1',
   String name = 'Cold storage',
+  WalletIcon icon = WalletIcon.wallet,
   Network network = Network.mainnet,
   int totalSats = 0,
   int gapLimit = 20,
@@ -181,6 +182,7 @@ WalletMeta makeMeta({
   return WalletMeta(
     id: id,
     name: name,
+    icon: icon,
     network: network,
     kind: kind,
     recognizedAs: RecognizedKind.multipathDescriptor,
@@ -702,29 +704,61 @@ class FakeBridge implements GerfautBridge {
   Future<void> renameWallet(String id, String name) async {
     final gate = renameGate;
     if (gate != null) await gate.future;
+    _updateMeta(id, (meta) => meta.copyWith(name: name));
+  }
+
+  /// Every icon change, in order, for assertions.
+  final List<({String id, WalletIcon icon})> iconCalls = [];
+
+  @override
+  Future<void> setWalletIcon(String id, WalletIcon icon) async {
+    iconCalls.add((id: id, icon: icon));
+    if (!wallets.any((w) => w.id == id)) {
+      throw BridgeException('wallet_not_found', 'wallet not found: $id');
+    }
+    _updateMeta(id, (meta) => meta.copyWith(icon: icon));
+  }
+
+  /// Every order handed over, in order, for assertions.
+  final List<List<String>> reorderCalls = [];
+
+  /// Reorder hook; throw a [BridgeException] to simulate a refusal.
+  void Function(List<String> ids)? onReorderWallets;
+
+  @override
+  Future<void> reorderWallets(List<String> ids) async {
+    reorderCalls.add(List.of(ids));
+    onReorderWallets?.call(ids);
+    // Mirrors the core: the listed wallets take the slots they occupy,
+    // in the order given; every other wallet stays where it is.
+    final byId = {for (final w in wallets) w.id: w};
+    for (final id in ids) {
+      if (!byId.containsKey(id)) {
+        throw BridgeException('wallet_not_found', 'wallet not found: $id');
+      }
+    }
+    if (ids.toSet().length != ids.length) {
+      throw const BridgeException('invalid_input', 'a wallet is listed twice');
+    }
+    final moving = ids.toSet();
+    var next = 0;
     wallets = [
       for (final wallet in wallets)
-        if (wallet.id == id) makeMeta(id: id, name: name) else wallet,
+        if (moving.contains(wallet.id)) byId[ids[next++]]! else wallet,
     ];
-    // The core keeps one record per wallet: the snapshot carries the new
-    // name too, not only the list.
+  }
+
+  /// Rewrites one wallet's metadata everywhere the fake keeps it: the
+  /// core keeps one record per wallet, so the snapshot follows the list.
+  void _updateMeta(String id, WalletMeta Function(WalletMeta meta) change) {
+    wallets = [
+      for (final wallet in wallets)
+        if (wallet.id == id) change(wallet) else wallet,
+    ];
     final snapshot = snapshots[id];
     if (snapshot == null) return;
-    final meta = snapshot.meta;
     snapshots[id] = WalletSnapshot(
-      meta: WalletMeta(
-        id: meta.id,
-        name: name,
-        network: meta.network,
-        kind: meta.kind,
-        recognizedAs: meta.recognizedAs,
-        createdAt: meta.createdAt,
-        gapLimit: meta.gapLimit,
-        scanGap: meta.scanGap,
-        lastSync: meta.lastSync,
-        cachedBalance: meta.cachedBalance,
-        cachedTxCount: meta.cachedTxCount,
-      ),
+      meta: change(snapshot.meta),
       balance: snapshot.balance,
       txs: snapshot.txs,
       tipHeight: snapshot.tipHeight,
@@ -883,30 +917,6 @@ class FakeBridge implements GerfautBridge {
 
   /// Update hook; the default reports the running version as current.
   UpdateCheck Function(String currentVersion)? onCheckUpdate;
-
-  /// Fee hook; the default answers a plausible market on every network
-  /// but regtest. Return null for a network with no fee market, throw a
-  /// [BridgeException] for a source that did not answer.
-  FutureOr<FeeEstimates?> Function(Network network)? onFetchFees;
-
-  /// Every network handed to fetchFees, for assertions.
-  final List<Network> feeCalls = [];
-
-  @override
-  Future<FeeEstimates?> fetchFees(Network network) async {
-    feeCalls.add(network);
-    final fetch = onFetchFees;
-    if (fetch != null) return fetch(network);
-    if (network == Network.regtest) return null;
-    return const FeeEstimates(
-      fastest: 12,
-      halfHour: 8.5,
-      hour: 4,
-      economy: 2,
-      minimum: 1,
-      at: 1755000000,
-    );
-  }
 
   @override
   Future<UpdateCheck> checkUpdate(String currentVersion) async {

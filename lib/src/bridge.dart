@@ -71,6 +71,14 @@ abstract class GerfautBridge {
   Future<int> loadMoreHistory(String id);
   Future<SyncAllReport> syncAll([Network? network]);
   Future<void> renameWallet(String id, String name);
+
+  /// Changes the glyph a wallet shows next to its name.
+  Future<void> setWalletIcon(String id, WalletIcon icon);
+
+  /// Puts the listed wallets in that order. Wallets left out keep their
+  /// slots, so the list of one network reorders without moving another
+  /// network's wallets.
+  Future<void> reorderWallets(List<String> ids);
   Future<void> removeWallet(String id);
   Future<Settings> getSettings();
   Future<void> setActiveNetwork(Network network);
@@ -96,10 +104,6 @@ abstract class GerfautBridge {
   Future<void> forgetCertificate(String host);
   Future<void> setAppPref(String key, String value);
   Future<PriceQuote> fetchPrice(PriceSource source, FiatCurrency currency);
-
-  /// Recommended fee rates for [network], through the backend configured
-  /// for it. Null on a network with no fee market (regtest).
-  Future<FeeEstimates?> fetchFees(Network network);
   Future<UpdateCheck> checkUpdate(String currentVersion);
 
   /// Decodes a transaction somebody else signed (PSBT as base64, hex or
@@ -291,6 +295,16 @@ class RustBridge implements GerfautBridge {
   }
 
   @override
+  Future<void> setWalletIcon(String id, WalletIcon icon) async {
+    _ok(await rust.setWalletIcon(id: id, icon: icon.id));
+  }
+
+  @override
+  Future<void> reorderWallets(List<String> ids) async {
+    _ok(await rust.reorderWallets(ids: ids));
+  }
+
+  @override
   Future<void> removeWallet(String id) async {
     _ok(await rust.removeWallet(id: id));
   }
@@ -354,13 +368,6 @@ class RustBridge implements GerfautBridge {
   ) async {
     final raw = await rust.fetchPrice(source: source.id, currency: currency.id);
     return PriceQuote.fromJson(_object(raw));
-  }
-
-  @override
-  Future<FeeEstimates?> fetchFees(Network network) async {
-    final decoded = _decode(await rust.fetchFees(network: network.id));
-    if (decoded == null) return null;
-    return FeeEstimates.fromJson(decoded as Map<String, dynamic>);
   }
 
   @override

@@ -434,8 +434,9 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Rotates over every public Esplora.'), findsOneWidget);
-      // The hint says who answers and what else they serve.
-      expect(find.textContaining('fee estimates'), findsOneWidget);
+      // The hint says who answers, and nothing about fee estimates: the
+      // app no longer serves any.
+      expect(find.textContaining('fee estimates'), findsNothing);
 
       await tester.tap(find.text('Save backend'));
       await tester.pumpAndSettle();

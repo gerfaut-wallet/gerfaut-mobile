@@ -77,7 +77,6 @@ Future<({ProviderContainer container, WidgetFeed feed})> _running(
   final feed = container.read(widgetFeedProvider);
   await container.read(walletsProvider.future);
   await container.read(widgetPriceProvider.future);
-  await container.read(widgetFeesProvider.future);
   await feed.publish();
   return (container: container, feed: feed);
 }
@@ -243,16 +242,7 @@ void main() {
   });
 
   group('the network widget', () {
-    const fees = FeeEstimates(
-      fastest: 12,
-      halfHour: 8.5,
-      hour: 4,
-      economy: 2,
-      minimum: 1,
-      at: _syncedAt,
-    );
-
-    test('takes the height the latest sync saw, and the fees as given', () {
+    test('takes the height the latest sync saw', () {
       final wallets = [
         // Synced later but from a shorter chain view: the later stamp
         // wins, whatever its height.
@@ -265,40 +255,28 @@ void main() {
       ];
       final payload = NetworkPayload.of(
         wallets,
-        fees: fees,
         network: Network.mainnet,
         now: _now,
       );
       expect(payload.height, groupThousands('912345'));
-      expect(payload.nextBlock, '12 sat/vB');
-      expect(payload.hour, '4 sat/vB');
       expect(payload.footer, 'Synced 2 h ago');
+      // The height and its freshness, nothing else: no fee rate ever
+      // reaches the launcher.
       expect(payload.toData().keys, NetworkPayload.keys);
+      expect(NetworkPayload.keys, [
+        WidgetKeys.networkHeight,
+        WidgetKeys.networkFooter,
+      ]);
     });
 
-    test('drops the fee lines when there are none, and names a network '
-        'that is not the chain', () {
+    test('names a network that is not the chain', () {
       final payload = NetworkPayload.of(
         [makeMeta(id: 'a', name: 'A', network: Network.signet)],
         network: Network.signet,
         now: _now,
       );
       expect(payload.height, '—');
-      expect(payload.nextBlock, isNull);
-      expect(payload.hour, isNull);
       expect(payload.footer, 'Signet · not synced yet');
-      final data = payload.toData();
-      expect(data[WidgetKeys.networkNextBlock], isNull);
-      expect(data[WidgetKeys.networkHour], isNull);
-    });
-
-    test('a fee rate keeps one decimal, and drops a zero one', () {
-      expect(formatFeeRate(12), '12 sat/vB');
-      expect(formatFeeRate(8.5), '8.5 sat/vB');
-      // Rounded to the decimal shown, 1.02 is 1.0, and "1.0" is "1".
-      expect(formatFeeRate(1.02), '1 sat/vB');
-      expect(formatFeeRate(0.96), '1 sat/vB');
-      expect(formatFeeRate(2.25), '2.3 sat/vB');
     });
   });
 
@@ -324,8 +302,7 @@ void main() {
       expect(board.data[WidgetKeys.balanceRowFigure(1)], maskedValue);
       expect(board.data[WidgetKeys.balanceSynced], startsWith('Synced '));
       expect(board.data[WidgetKeys.networkHeight], groupThousands('912345'));
-      expect(board.data[WidgetKeys.networkNextBlock], '12 sat/vB');
-      expect(board.data[WidgetKeys.networkHour], '4 sat/vB');
+      expect(board.data[WidgetKeys.networkFooter], startsWith('Synced '));
       expect(board.updates.toSet(), {
         HomeWidgets.price,
         HomeWidgets.balance,
@@ -366,8 +343,6 @@ void main() {
         expect(board.data.containsKey(WidgetKeys.balanceTotal), isFalse);
         expect(board.data.containsKey(WidgetKeys.networkHeight), isFalse);
         expect(board.updates, everyElement(HomeWidgets.price));
-        // No network widget, no fee request.
-        expect(bridge.feeCalls, isEmpty);
       },
     );
 
@@ -400,10 +375,9 @@ void main() {
       board.installed.add(HomeWidgets.network);
       feed.resume();
       await container.read(installedWidgetsProvider.future);
-      await container.read(widgetFeesProvider.future);
       await feed.publish();
       expect(board.installedAsks, 2);
-      expect(board.data[WidgetKeys.networkNextBlock], '12 sat/vB');
+      expect(board.data[WidgetKeys.networkHeight], groupThousands('912345'));
       expect(board.updates, contains(HomeWidgets.network));
     });
 
@@ -431,7 +405,7 @@ void main() {
       expect(scheduled, [false, true, false]);
     });
 
-    test('fees are left off a network with no fee market', () async {
+    test('a network that is not the chain is named under its height', () async {
       final bridge = FakeBridge(
         wallets: [
           makeMeta(
@@ -450,9 +424,7 @@ void main() {
       final board = FakeWidgetBoard(installed: {HomeWidgets.network});
       await _running(bridge, board);
 
-      expect(bridge.feeCalls, [Network.regtest]);
       expect(board.data[WidgetKeys.networkHeight], '120');
-      expect(board.data.containsKey(WidgetKeys.networkNextBlock), isFalse);
       expect(board.data[WidgetKeys.networkFooter], startsWith('Regtest · '));
     });
   });
@@ -500,7 +472,7 @@ void main() {
       expect(board.data[WidgetKeys.priceFigure], '€50,000');
       expect(board.data[WidgetKeys.balanceTotal], formatSats(100050000));
       expect(board.data[WidgetKeys.balanceSynced], 'Synced 2 h ago');
-      expect(board.data[WidgetKeys.networkNextBlock], '12 sat/vB');
+      expect(board.data[WidgetKeys.networkHeight], groupThousands('912345'));
       expect(board.updates.toSet(), {
         HomeWidgets.price,
         HomeWidgets.balance,
@@ -563,14 +535,11 @@ void main() {
         bootstrap: () async {},
       );
       expect(priceAsks, 0);
-      expect(bridge.feeCalls, isEmpty);
     });
 
     test('a source that does not answer costs a line, never the run', () async {
       final bridge = _bridge();
       bridge.onFetchPrice = (_, _) =>
-          throw const BridgeException('sync', 'no answer');
-      bridge.onFetchFees = (_) =>
           throw const BridgeException('sync', 'no answer');
       final board = FakeWidgetBoard(
         installed: {
@@ -589,7 +558,6 @@ void main() {
       );
       expect(ok, isTrue);
       expect(board.data[WidgetKeys.priceFigure], 'kept');
-      expect(board.data.containsKey(WidgetKeys.networkNextBlock), isFalse);
       expect(board.data[WidgetKeys.balanceSynced], 'Synced 2 h ago');
     });
   });

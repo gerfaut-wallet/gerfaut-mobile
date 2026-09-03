@@ -14,6 +14,7 @@ use gerfaut_core::input::{ImportOptions, ParsedInput, ScriptKind};
 use gerfaut_core::lock::LockKind;
 use gerfaut_core::price::{FiatCurrency, PriceSource};
 use gerfaut_core::store::VaultKey;
+use gerfaut_core::wallet::meta::WalletIcon;
 use gerfaut_core::{CoreError, Network, WalletManager};
 use serde_json::json;
 use tokio::sync::OnceCell;
@@ -227,6 +228,29 @@ pub async fn remove_wallet(id: String) -> String {
 pub async fn rename_wallet(id: String, name: String) -> String {
     let manager = try_json!(manager());
     match manager.rename_wallet(&id, &name).await {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Changes the glyph a wallet shows next to its name. `icon` is one of
+/// the serde names: `wallet`, `key`, `shield`, `map_pin`, `snowflake`,
+/// `landmark`, `piggy_bank`.
+pub async fn set_wallet_icon(id: String, icon: String) -> String {
+    let manager = try_json!(manager());
+    let icon: WalletIcon = try_json!(parse_variant(&icon, "wallet icon"));
+    match manager.set_wallet_icon(&id, icon).await {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Puts the listed wallets in that order. Wallets left out keep their
+/// slots, so the list of one network reorders without moving another
+/// network's wallets. A repeated id is refused, an unknown one too.
+pub async fn reorder_wallets(ids: Vec<String>) -> String {
+    let manager = try_json!(manager());
+    match manager.reorder_wallets(&ids).await {
         Ok(()) => ok_json(),
         Err(e) => core_error_json(&e),
     }
@@ -603,22 +627,6 @@ pub async fn fetch_price(source: String, currency: String) -> String {
     let currency: FiatCurrency = try_json!(parse_variant(&currency, "currency"));
     match gerfaut_core::price::fetch_price(source, currency).await {
         Ok(quote) => to_json(&quote),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// Fetches the recommended fee rates for a network through the backend
-/// configured for it, on the same route the chain takes. Returns a
-/// serialized `FeeEstimates`, or `null` on a network with no fee market
-/// (regtest), so the caller has nothing to hide but a line.
-pub async fn fetch_fees(network: String) -> String {
-    let manager = try_json!(manager());
-    let network = try_json!(parse_network(&network));
-    if !gerfaut_core::fees::supports(network) {
-        return "null".to_owned();
-    }
-    match manager.fetch_fees(network).await {
-        Ok(fees) => to_json(&fees),
         Err(e) => core_error_json(&e),
     }
 }

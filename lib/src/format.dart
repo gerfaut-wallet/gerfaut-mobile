@@ -184,17 +184,6 @@ String formatClock(int unixSeconds) {
   return '$hour:$minute';
 }
 
-/// A fee rate in sat/vB, to one decimal, the decimal dropped when it
-/// is a zero: `12.0` -> `"12 sat/vB"`, `8.5` -> `"8.5 sat/vB"`, `1.02`
-/// -> `"1 sat/vB"`. A trailing ".0" says nothing a reader can use.
-String formatFeeRate(double rate) {
-  final digits = rate.toStringAsFixed(1);
-  final shown = digits.endsWith('.0')
-      ? digits.substring(0, digits.length - 2)
-      : digits;
-  return '$shown sat/vB';
-}
-
 /// A byte count the way a file manager states it: whole bytes under a
 /// kilobyte, then one decimal in binary units. `1229` -> `"1.2 KB"`.
 String formatBytes(int bytes) {

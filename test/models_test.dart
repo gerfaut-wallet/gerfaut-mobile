@@ -112,6 +112,34 @@ void main() {
       final meta = WalletMeta.fromJson(_metaJson(withScanGap: false));
       expect(meta.scanGap, 20);
     });
+
+    test('reads the icon by its serde name', () {
+      final json = _metaJson()..['icon'] = 'piggy_bank';
+      expect(WalletMeta.fromJson(json).icon, WalletIcon.piggyBank);
+      expect(WalletIcon.fromId('map_pin'), WalletIcon.mapPin);
+      expect(WalletIcon.piggyBank.id, 'piggy_bank');
+    });
+
+    test('falls back to the wallet glyph when the icon is missing or '
+        'unknown', () {
+      // A vault written before icons existed carries none.
+      expect(WalletMeta.fromJson(_metaJson()).icon, WalletIcon.wallet);
+      // A newer core may name one this build has never heard of.
+      final json = _metaJson()..['icon'] = 'telescope';
+      expect(WalletMeta.fromJson(json).icon, WalletIcon.wallet);
+    });
+
+    test('copyWith changes the name or the icon and nothing else', () {
+      final meta = WalletMeta.fromJson(_metaJson());
+      final renamed = meta.copyWith(name: 'Savings');
+      expect(renamed.name, 'Savings');
+      expect(renamed.icon, meta.icon);
+      expect(renamed.id, meta.id);
+      expect(renamed.scanGap, meta.scanGap);
+      final iconed = meta.copyWith(icon: WalletIcon.snowflake);
+      expect(iconed.icon, WalletIcon.snowflake);
+      expect(iconed.name, meta.name);
+    });
   });
 
   group('FiatCurrency', () {
@@ -276,25 +304,6 @@ void main() {
             .severity,
         TxSeverity.info,
       );
-    });
-  });
-
-  group('FeeEstimates.fromJson', () {
-    test('reads the named targets the core publishes', () {
-      final fees = FeeEstimates.fromJson(const {
-        'fastest': 12,
-        'half_hour': 8.5,
-        'hour': 4,
-        'economy': 2,
-        'minimum': 1.02,
-        'at': 1755000000,
-      });
-      expect(fees.fastest, 12.0);
-      expect(fees.halfHour, 8.5);
-      expect(fees.hour, 4.0);
-      expect(fees.economy, 2.0);
-      expect(fees.minimum, 1.02);
-      expect(fees.at, 1755000000);
     });
   });
 

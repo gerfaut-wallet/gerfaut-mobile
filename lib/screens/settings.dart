@@ -543,7 +543,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   label: 'Public API',
                   hint:
                       'Public servers, no setup: the one that answers sees '
-                      "this wallet's addresses and serves the fee estimates.",
+                      "this wallet's addresses.",
                   onChanged: _pickBackendKind,
                 ),
                 _BackendOption(
