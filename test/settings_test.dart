@@ -18,6 +18,7 @@ import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/buttons.dart';
 import 'package:gerfaut/widgets/notice.dart';
 import 'package:gerfaut/widgets/select_field.dart';
+import 'package:gerfaut/widgets/wallet_icon.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'fakes.dart';
@@ -172,7 +173,7 @@ void main() {
     expect(find.textContaining('One request per minute'), findsNothing);
   });
 
-  testWidgets('wallet rows share one icon, the subtitle tells the kind', (
+  testWidgets('wallet rows wear their icon, the subtitle tells the kind', (
     tester,
   ) async {
     final bridge = FakeBridge(
@@ -181,6 +182,7 @@ void main() {
         makeMeta(
           id: 'w2',
           name: 'Donation address',
+          icon: WalletIcon.mapPin,
           kind: const SingleAddressKind(address: 'bc1qwatched'),
         ),
       ],
@@ -203,9 +205,172 @@ void main() {
 
     expect(find.text('Descriptor wallet'), findsOneWidget);
     expect(find.text('Single address'), findsOneWidget);
-    // One icon per row plus the section header, all the same glyph.
-    expect(find.byIcon(LucideIcons.wallet), findsNWidgets(3));
-    expect(find.byIcon(LucideIcons.mapPin), findsNothing);
+    // The section header and the first row wear the generic wallet;
+    // the second row wears the glyph its owner picked.
+    expect(find.byIcon(LucideIcons.wallet), findsNWidgets(2));
+    expect(find.byIcon(LucideIcons.mapPin), findsOneWidget);
+  });
+
+  group('wallet icons', () {
+    testWidgets('the icon action offers the seven glyphs and stores the pick', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final handle = tester.ensureSemantics();
+      final bridge = FakeBridge(wallets: [makeMeta()]);
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.wallets),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Icon'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Wallet icon'), findsOneWidget);
+      // Seven choices, in the core's order, each named for the screen
+      // reader and sized for a thumb; the current one announced as such.
+      for (final icon in WalletIcon.values) {
+        final tile = find.bySemanticsLabel(icon.label);
+        expect(tile, findsOneWidget, reason: icon.label);
+        final size = tester.getSize(tile);
+        expect(size.width, greaterThanOrEqualTo(44));
+        expect(size.height, greaterThanOrEqualTo(44));
+        expect(
+          tester.getSemantics(tile).flagsCollection.isSelected,
+          icon == WalletIcon.wallet ? Tristate.isTrue : Tristate.isFalse,
+          reason: icon.label,
+        );
+      }
+      expect(find.byType(WalletIconPicker), findsOneWidget);
+
+      await tester.tap(find.bySemanticsLabel('Snowflake'));
+      await tester.pumpAndSettle();
+
+      expect(bridge.iconCalls, [(id: 'w1', icon: WalletIcon.snowflake)]);
+      expect(find.byType(WalletIconPicker), findsNothing);
+      // The row wears it at once, and the change is confirmed.
+      expect(find.byIcon(LucideIcons.snowflake), findsOneWidget);
+      expect(find.text('Setting saved'), findsOneWidget);
+      handle.dispose();
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('picking the icon already worn writes nothing', (tester) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge(wallets: [makeMeta()]);
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.wallets),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Icon'));
+      await tester.pumpAndSettle();
+      // The grid's wallet tile, not the row's glyph or the card's.
+      await tester.tap(
+        find.descendant(
+          of: find.byType(WalletIconPicker),
+          matching: find.byIcon(LucideIcons.wallet),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(bridge.iconCalls, isEmpty);
+      expect(find.byType(WalletIconPicker), findsNothing);
+    });
+  });
+
+  group('wallet order', () {
+    FakeBridge two() => FakeBridge(
+      wallets: [
+        makeMeta(id: 'w1', name: 'Cold storage'),
+        makeMeta(id: 'w2', name: 'Spending'),
+      ],
+    );
+
+    /// Where a wallet's name sits, top to bottom.
+    double top(WidgetTester tester, String name) =>
+        tester.getTopLeft(find.text(name)).dy;
+
+    testWidgets('dragging a row by its handle stores the new order', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = two();
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.wallets),
+      );
+      await tester.pumpAndSettle();
+
+      final handles = find.byIcon(LucideIcons.gripVertical);
+      expect(handles, findsNWidgets(2));
+      expect(top(tester, 'Cold storage'), lessThan(top(tester, 'Spending')));
+
+      // The handle starts the drag at once: no hold to wait out.
+      // Three quarters of a row down: far enough for the row to take
+      // the next one's place, not so far that it overshoots it.
+      final pitch = top(tester, 'Spending') - top(tester, 'Cold storage');
+      final from = tester.getCenter(handles.first);
+      final to = from + Offset(0, pitch * 0.75);
+      final gesture = await tester.startGesture(from);
+      await tester.pump();
+      await gesture.moveTo(from + const Offset(0, 30));
+      await tester.pumpAndSettle();
+      await gesture.moveTo(to);
+      await tester.pumpAndSettle();
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      // The ids of the rows shown, in their new order, and nothing else.
+      expect(bridge.reorderCalls, [
+        ['w2', 'w1'],
+      ]);
+      expect(bridge.wallets.map((w) => w.id), ['w2', 'w1']);
+      expect(top(tester, 'Spending'), lessThan(top(tester, 'Cold storage')));
+    });
+
+    testWidgets('a refused order falls back and says why', (tester) async {
+      useTallSurface(tester);
+      final bridge = two();
+      bridge.onReorderWallets = (_) =>
+          throw const BridgeException('vault', 'the vault is read only');
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.wallets),
+      );
+      await tester.pumpAndSettle();
+
+      final handles = find.byIcon(LucideIcons.gripVertical);
+      // Three quarters of a row down: far enough for the row to take
+      // the next one's place, not so far that it overshoots it.
+      final pitch = top(tester, 'Spending') - top(tester, 'Cold storage');
+      final from = tester.getCenter(handles.first);
+      final to = from + Offset(0, pitch * 0.75);
+      final gesture = await tester.startGesture(from);
+      await tester.pump();
+      await gesture.moveTo(from + const Offset(0, 30));
+      await tester.pumpAndSettle();
+      await gesture.moveTo(to);
+      await tester.pumpAndSettle();
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(bridge.reorderCalls, hasLength(1));
+      expect(find.text('the vault is read only'), findsOneWidget);
+      // Back where the vault has it.
+      expect(top(tester, 'Cold storage'), lessThan(top(tester, 'Spending')));
+    });
+
+    testWidgets('one wallet has no handle', (tester) async {
+      useTallSurface(tester);
+      await tester.pumpWidget(
+        settingsApp(
+          FakeBridge(wallets: [makeMeta()]),
+          section: SettingsSection.wallets,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byIcon(LucideIcons.gripVertical), findsNothing);
+    });
   });
 
   testWidgets(

@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
+import 'package:gerfaut/screens/wallet_home.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:flutter/gestures.dart' show kLongPressTimeout, kPressTimeout;
 import 'package:gerfaut/widgets/brand.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -35,6 +37,75 @@ FakeBridge returning({List<WalletMeta> wallets = const []}) {
 }
 
 void main() {
+  group('the wallet cards', () {
+    testWidgets('wear the icon their owner picked', (tester) async {
+      await tester.pumpWidget(
+        app(
+          returning(
+            wallets: [
+              makeMeta(id: 'w1', name: 'Cold storage'),
+              makeMeta(id: 'w2', name: 'Savings', icon: WalletIcon.piggyBank),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(LucideIcons.wallet), findsOneWidget);
+      expect(find.byIcon(LucideIcons.piggyBank), findsOneWidget);
+    });
+
+    testWidgets('a held card moves, and the order reaches the vault', (
+      tester,
+    ) async {
+      final bridge = returning(
+        wallets: [
+          makeMeta(id: 'w1', name: 'Cold storage'),
+          makeMeta(id: 'w2', name: 'Spending'),
+        ],
+      );
+      await tester.pumpWidget(app(bridge));
+      await tester.pumpAndSettle();
+
+      double top(String name) => tester.getTopLeft(find.text(name)).dy;
+      expect(top('Cold storage'), lessThan(top('Spending')));
+
+      // Hold, then drag three quarters of a card down: far enough to
+      // take the next card's place, not so far as to overshoot it.
+      final pitch = top('Spending') - top('Cold storage');
+      final from = tester.getCenter(find.text('Cold storage'));
+      final to = from + Offset(0, pitch * 0.75);
+      final gesture = await tester.startGesture(from);
+      await tester.pump(kLongPressTimeout + kPressTimeout);
+      await tester.pumpAndSettle();
+      await gesture.moveTo(from + const Offset(0, 30));
+      await tester.pumpAndSettle();
+      await gesture.moveTo(to);
+      await tester.pumpAndSettle();
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(bridge.reorderCalls, [
+        ['w2', 'w1'],
+      ]);
+      expect(top('Spending'), lessThan(top('Cold storage')));
+
+      // A tap still opens a card, and a pull still syncs the list.
+      await tester.tap(find.text('Spending'));
+      await tester.pumpAndSettle();
+      expect(find.byType(WalletHomeScreen), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      final before = bridge.syncAllCalls;
+      await tester.fling(find.text('Spending'), const Offset(0, 300), 1000);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(bridge.syncAllCalls, before + 1);
+    });
+  });
+
   testWidgets('empty state shows the guidance and its single action', (
     tester,
   ) async {

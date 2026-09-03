@@ -7,11 +7,14 @@ import '../../src/state.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/notice.dart';
+import '../../widgets/reorder.dart';
 import '../../widgets/section_card.dart';
+import '../../widgets/wallet_icon.dart';
 import 'fields.dart';
 
 /// The Wallets section: the gap limit every wallet shares, then the
-/// wallets of the active network, each with its own actions.
+/// wallets of the active network in the order the home screen lists
+/// them, each with its own actions and a handle to move it.
 class WalletsSection extends ConsumerStatefulWidget {
   const WalletsSection({super.key});
 
@@ -28,6 +31,11 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
 
   /// Wallet whose rescan was started here; its row says so meanwhile.
   String? _rescanningId;
+
+  /// The order the rows were dropped in, by id, kept until the vault
+  /// has caught up: without it the moved row would snap back for the
+  /// frame between the drop and the refreshed list.
+  List<String>? _order;
 
   // Gap limit. Seeded from the vault, committed on blur or submit.
   final _gapLimitController = TextEditingController();
@@ -140,6 +148,58 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
     return 'Rescanned · $found';
   }
 
+  /// Offers the seven glyphs and stores the one picked. The same glyph
+  /// answers on the home card: the wallet list is refreshed with it.
+  Future<void> _pickIcon(WalletMeta wallet) async {
+    final chosen = await WalletIconPicker.show(context, current: wallet.icon);
+    if (chosen == null || chosen == wallet.icon || !mounted) return;
+    setState(() => _walletError = null);
+    try {
+      await ref.read(bridgeProvider).setWalletIcon(wallet.id, chosen);
+      ref.invalidate(walletsProvider);
+      ref.invalidate(snapshotProvider(wallet.id));
+      if (mounted) _toast('Setting saved');
+    } catch (error) {
+      if (mounted) setState(() => _walletError = '$error');
+    }
+  }
+
+  /// The rows in the order they show: the vault's, unless a drop is
+  /// still on its way there. A list that changed underneath — a wallet
+  /// added or removed meanwhile — takes the vault's order back.
+  List<WalletMeta> _inOrder(List<WalletMeta> wallets) {
+    final order = _order;
+    if (order == null) return wallets;
+    final byId = {for (final wallet in wallets) wallet.id: wallet};
+    if (order.length != wallets.length || !order.every(byId.containsKey)) {
+      _order = null;
+      return wallets;
+    }
+    return [for (final id in order) byId[id]!];
+  }
+
+  /// Moves one row and tells the core the new order of the rows shown:
+  /// only this network's wallets, so another network's keep their slots.
+  Future<void> _reorder(List<WalletMeta> shown, int from, int to) async {
+    if (from == to) return;
+    final ids = [for (final wallet in shown) wallet.id];
+    ids.insert(to, ids.removeAt(from));
+    setState(() {
+      _order = ids;
+      _walletError = null;
+    });
+    try {
+      await ref.read(bridgeProvider).reorderWallets(ids);
+      ref.invalidate(walletsProvider);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _order = null;
+        _walletError = '$error';
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
@@ -154,6 +214,7 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
       );
     }
     _seedGapLimit(settings);
+    final shown = _inOrder(wallets);
 
     return SectionCard(
       icon: LucideIcons.wallet,
@@ -202,44 +263,61 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
           ],
         ),
         const SizedBox(height: GerfautSpacing.md),
-        if (wallets.isEmpty)
+        if (shown.isEmpty)
           Text(
             'No wallets on this network yet.',
             style: tokens.bodySmall.copyWith(color: tokens.textMuted),
           )
         else
-          for (final wallet in wallets)
-            _WalletRow(
-              wallet: wallet,
-              tokens: tokens,
-              renaming: _renamingId == wallet.id,
-              confirmingRemove: _confirmRemoveId == wallet.id,
-              renameController: _renameController,
-              onRenameStart: () {
-                setState(() {
-                  _renamingId = wallet.id;
-                  _confirmRemoveId = null;
-                  _renameController.text = wallet.name;
-                });
-              },
-              onRenameSubmit: () => _rename(wallet.id),
-              onRemoveStart: () {
-                setState(() {
-                  _confirmRemoveId = wallet.id;
-                  _renamingId = null;
-                });
-              },
-              onRemoveConfirm: () => _remove(wallet.id),
-              onCancel: () {
-                setState(() {
-                  _renamingId = null;
-                  _confirmRemoveId = null;
-                });
-              },
-              rescanning: _rescanningId == wallet.id,
-              busy: sync.isSyncing(wallet.id),
-              onRescan: () => _rescan(wallet.id),
-            ),
+          // The page scrolls; this list only reorders. The order here
+          // is the order of the home screen.
+          ReorderableListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            buildDefaultDragHandles: false,
+            proxyDecorator: liftedProxy,
+            itemCount: shown.length,
+            onReorderItem: (from, to) => _reorder(shown, from, to),
+            itemBuilder: (context, index) {
+              final wallet = shown[index];
+              return _WalletRow(
+                key: ValueKey(wallet.id),
+                index: index,
+                wallet: wallet,
+                tokens: tokens,
+                // One wallet has nowhere to go: no handle to promise it.
+                movable: shown.length > 1,
+                renaming: _renamingId == wallet.id,
+                confirmingRemove: _confirmRemoveId == wallet.id,
+                renameController: _renameController,
+                onRenameStart: () {
+                  setState(() {
+                    _renamingId = wallet.id;
+                    _confirmRemoveId = null;
+                    _renameController.text = wallet.name;
+                  });
+                },
+                onRenameSubmit: () => _rename(wallet.id),
+                onPickIcon: () => _pickIcon(wallet),
+                onRemoveStart: () {
+                  setState(() {
+                    _confirmRemoveId = wallet.id;
+                    _renamingId = null;
+                  });
+                },
+                onRemoveConfirm: () => _remove(wallet.id),
+                onCancel: () {
+                  setState(() {
+                    _renamingId = null;
+                    _confirmRemoveId = null;
+                  });
+                },
+                rescanning: _rescanningId == wallet.id,
+                busy: sync.isSyncing(wallet.id),
+                onRescan: () => _rescan(wallet.id),
+              );
+            },
+          ),
         if (_walletError != null) ...[
           const SizedBox(height: GerfautSpacing.sm),
           Text(
@@ -254,13 +332,17 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
 
 class _WalletRow extends StatelessWidget {
   const _WalletRow({
+    super.key,
+    required this.index,
     required this.wallet,
     required this.tokens,
+    required this.movable,
     required this.renaming,
     required this.confirmingRemove,
     required this.renameController,
     required this.onRenameStart,
     required this.onRenameSubmit,
+    required this.onPickIcon,
     required this.onRemoveStart,
     required this.onRemoveConfirm,
     required this.onCancel,
@@ -269,13 +351,19 @@ class _WalletRow extends StatelessWidget {
     required this.onRescan,
   });
 
+  /// Position in the list, for the drag handle.
+  final int index;
   final WalletMeta wallet;
   final GerfautTokens tokens;
+
+  /// Whether a handle is shown: only when there is somewhere to move to.
+  final bool movable;
   final bool renaming;
   final bool confirmingRemove;
   final TextEditingController renameController;
   final VoidCallback onRenameStart;
   final VoidCallback onRenameSubmit;
+  final VoidCallback onPickIcon;
   final VoidCallback onRemoveStart;
   final VoidCallback onRemoveConfirm;
   final VoidCallback onCancel;
@@ -291,12 +379,17 @@ class _WalletRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final single = wallet.isSingleAddress;
+    // Under the finger, the row is the one thing that really floats:
+    // its own surface, the overlay shadow. At rest it has neither.
+    final lifted = LiftedItem.of(context);
     return Container(
       margin: const EdgeInsets.only(bottom: GerfautSpacing.sm),
       padding: const EdgeInsets.all(GerfautSpacing.md),
       decoration: BoxDecoration(
+        color: lifted ? tokens.surface : null,
         borderRadius: BorderRadius.circular(GerfautRadius.md),
         border: Border.all(color: tokens.border),
+        boxShadow: lifted ? [tokens.shadowOverlay] : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -307,7 +400,7 @@ class _WalletRow extends StatelessWidget {
               FirstLine(
                 style: tokens.body,
                 child: Icon(
-                  LucideIcons.wallet,
+                  walletGlyph(wallet.icon),
                   size: 16,
                   color: tokens.textMuted,
                 ),
@@ -380,6 +473,29 @@ class _WalletRow extends StatelessWidget {
                         ],
                       ),
               ),
+              if (movable && !renaming) ...[
+                const SizedBox(width: GerfautSpacing.sm),
+                // The handle starts a drag at once; the row itself is
+                // full of buttons a long press would fight with. The
+                // list already announces "move up" and "move down" on
+                // the row, so the glyph has nothing to add out loud.
+                ReorderableDragStartListener(
+                  index: index,
+                  child: ExcludeSemantics(
+                    child: SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: Center(
+                        child: Icon(
+                          LucideIcons.gripVertical,
+                          size: 18,
+                          color: tokens.textMuted,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
           if (confirmingRemove) ...[
@@ -413,14 +529,19 @@ class _WalletRow extends StatelessWidget {
             ),
           ] else if (!renaming) ...[
             const SizedBox(height: GerfautSpacing.xs),
-            // Three actions do not fit one line on a narrow phone: the
-            // last one flows under the others rather than overflowing.
+            // Four actions do not fit one line on a narrow phone: the
+            // last ones flow under the others rather than overflowing.
             Wrap(
               children: [
                 GhostButton(
                   label: 'Rename',
                   icon: LucideIcons.pencil,
                   onPressed: busy ? null : onRenameStart,
+                ),
+                GhostButton(
+                  label: 'Icon',
+                  icon: LucideIcons.shapes,
+                  onPressed: busy ? null : onPickIcon,
                 ),
                 // An incremental sync only looks at the addresses already
                 // revealed. Funds past them — a gap limit raised too late,

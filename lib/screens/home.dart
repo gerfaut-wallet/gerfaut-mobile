@@ -10,7 +10,9 @@ import '../widgets/app_bar.dart';
 import '../widgets/brand.dart';
 import '../widgets/buttons.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/reorder.dart';
 import '../widgets/sync_button.dart';
+import '../widgets/wallet_icon.dart';
 import 'add_wallet.dart';
 import 'broadcast.dart';
 import 'settings.dart';
@@ -113,11 +115,7 @@ class HomeScreen extends ConsumerWidget {
           ),
           IconButton(
             tooltip: 'Settings',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
-              );
-            },
+            onPressed: () => SettingsScreen.open(context),
             icon: const Icon(LucideIcons.settings, size: 20),
           ),
           const SizedBox(width: GerfautSpacing.sm),
@@ -156,7 +154,8 @@ class HomeScreen extends ConsumerWidget {
                       'Import a descriptor, xpub, or address to start '
                       'watching it.',
                 ),
-                (_, AsyncData(:final value)) => RefreshIndicator(
+                (_, AsyncData(:final value)) => _WalletList(
+                  wallets: value,
                   onRefresh: () async {
                     if (network == null) return;
                     final report = await sync.syncAll(network);
@@ -177,26 +176,6 @@ class HomeScreen extends ConsumerWidget {
                       ),
                     );
                   },
-                  child: ListView.builder(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(GerfautSpacing.md),
-                    itemCount: value.length,
-                    itemBuilder: (context, index) {
-                      final wallet = value[index];
-                      return _WalletCard(
-                        wallet: wallet,
-                        error: ref.watch(syncErrorsProvider)[wallet.id],
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) =>
-                                  WalletHomeScreen(walletId: wallet.id),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
                 ),
                 _ => Center(
                   child: Text(
@@ -227,6 +206,92 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
+/// The wallet cards, in the vault's order, pulled down to sync them all
+/// and held down to move one. The order a card is dropped in is kept
+/// here until the vault has caught up, so nothing snaps back on the
+/// way; only this network's wallets are sent, so another network's keep
+/// their slots.
+class _WalletList extends ConsumerStatefulWidget {
+  const _WalletList({required this.wallets, required this.onRefresh});
+
+  final List<WalletMeta> wallets;
+  final Future<void> Function() onRefresh;
+
+  @override
+  ConsumerState<_WalletList> createState() => _WalletListState();
+}
+
+class _WalletListState extends ConsumerState<_WalletList> {
+  /// The order the cards were dropped in, by id, until the vault has
+  /// caught up. A list that changed underneath takes the vault's back.
+  List<String>? _order;
+
+  List<WalletMeta> get _shown {
+    final order = _order;
+    final wallets = widget.wallets;
+    if (order == null) return wallets;
+    final byId = {for (final wallet in wallets) wallet.id: wallet};
+    if (order.length != wallets.length || !order.every(byId.containsKey)) {
+      _order = null;
+      return wallets;
+    }
+    return [for (final id in order) byId[id]!];
+  }
+
+  Future<void> _reorder(int from, int to) async {
+    if (from == to) return;
+    final ids = [for (final wallet in _shown) wallet.id];
+    ids.insert(to, ids.removeAt(from));
+    setState(() => _order = ids);
+    try {
+      await ref.read(bridgeProvider).reorderWallets(ids);
+      ref.invalidate(walletsProvider);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _order = null);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('$error')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = _shown;
+    final errors = ref.watch(syncErrorsProvider);
+    return RefreshIndicator(
+      onRefresh: widget.onRefresh,
+      child: ReorderableListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(GerfautSpacing.md),
+        buildDefaultDragHandles: false,
+        proxyDecorator: liftedProxy,
+        itemCount: shown.length,
+        onReorderItem: _reorder,
+        itemBuilder: (context, index) {
+          final wallet = shown[index];
+          // A hold lifts the card; a tap still opens it. A handle would
+          // be a permanent target for a rare gesture on every card.
+          return ReorderableDelayedDragStartListener(
+            key: ValueKey(wallet.id),
+            index: index,
+            child: _WalletCard(
+              wallet: wallet,
+              error: errors[wallet.id],
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => WalletHomeScreen(walletId: wallet.id),
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
 /// One watched wallet: surface card, hairline border, no shadow.
 ///
 /// The name and the balance, nothing else. A freshness line repeated on
@@ -250,66 +315,81 @@ class _WalletCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    // Held and moving, the card is the one thing on screen that really
+    // floats, and gets the one shadow. At rest, never.
+    final lifted = LiftedItem.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: GerfautSpacing.gutter),
-      child: Material(
-        color: tokens.surface,
-        borderRadius: BorderRadius.circular(GerfautRadius.lg),
-        child: InkWell(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(GerfautRadius.lg),
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.all(GerfautSpacing.md),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(GerfautRadius.lg),
-              border: Border.all(color: tokens.border),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(LucideIcons.wallet, size: 16, color: tokens.textMuted),
-                    const SizedBox(width: GerfautSpacing.sm),
-                    Expanded(
-                      child: Text(
-                        wallet.name,
-                        style: tokens.h2,
-                        overflow: TextOverflow.ellipsis,
+          boxShadow: lifted ? [tokens.shadowOverlay] : null,
+        ),
+        child: Material(
+          color: tokens.surface,
+          borderRadius: BorderRadius.circular(GerfautRadius.lg),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(GerfautRadius.lg),
+            onTap: onTap,
+            child: Container(
+              padding: const EdgeInsets.all(GerfautSpacing.md),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(GerfautRadius.lg),
+                border: Border.all(color: tokens.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        walletGlyph(wallet.icon),
+                        size: 16,
+                        color: tokens.textMuted,
+                      ),
+                      const SizedBox(width: GerfautSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          wallet.name,
+                          style: tokens.h2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: GerfautSpacing.sm),
+                  BalanceAmount(sats: wallet.cachedBalance.total),
+                  if (error != null) ...[
+                    const SizedBox(height: GerfautSpacing.sm),
+                    // One line, amber: the reason is a long press away
+                    // here, and spelled out on the wallet's page.
+                    Tooltip(
+                      message: error!,
+                      triggerMode: TooltipTriggerMode.longPress,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            LucideIcons.triangleAlert,
+                            size: 13,
+                            color: tokens.pending,
+                          ),
+                          const SizedBox(width: GerfautSpacing.xs),
+                          Flexible(
+                            child: Text(
+                              'Sync failed',
+                              style: tokens.label.copyWith(
+                                color: tokens.pending,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
-                ),
-                const SizedBox(height: GerfautSpacing.sm),
-                BalanceAmount(sats: wallet.cachedBalance.total),
-                if (error != null) ...[
-                  const SizedBox(height: GerfautSpacing.sm),
-                  // One line, amber: the reason is a long press away
-                  // here, and spelled out on the wallet's page.
-                  Tooltip(
-                    message: error!,
-                    triggerMode: TooltipTriggerMode.longPress,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          LucideIcons.triangleAlert,
-                          size: 13,
-                          color: tokens.pending,
-                        ),
-                        const SizedBox(width: GerfautSpacing.xs),
-                        Flexible(
-                          child: Text(
-                            'Sync failed',
-                            style: tokens.label.copyWith(color: tokens.pending),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
-              ],
+              ),
             ),
           ),
         ),
