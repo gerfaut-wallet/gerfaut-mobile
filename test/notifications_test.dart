@@ -73,7 +73,7 @@ Widget settingsApp(FakeBridge bridge, FakeNotifications service) {
     ],
     child: MaterialApp(
       theme: themeFrom(GerfautTokens.light, Brightness.light),
-      home: const SettingsScreen(),
+      home: const SettingsScreen(section: SettingsSection.notifications),
     ),
   );
 }

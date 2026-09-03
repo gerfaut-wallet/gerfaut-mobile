@@ -118,12 +118,16 @@ Future<ProviderContainer> pumpUnlocked(WidgetTester tester) async {
   return container;
 }
 
-Widget settingsApp(FakeBridge bridge, {FakeBiometrics? biometrics}) {
+Widget settingsApp(
+  FakeBridge bridge, {
+  FakeBiometrics? biometrics,
+  SettingsSection section = SettingsSection.security,
+}) {
   return ProviderScope(
     overrides: _overrides(bridge, biometrics),
     child: MaterialApp(
       theme: themeFrom(GerfautTokens.light, Brightness.light),
-      home: const SettingsScreen(),
+      home: SettingsScreen(section: section),
     ),
   );
 }
@@ -436,6 +440,8 @@ void main() {
       await tester.tap(find.byTooltip('Settings'));
       await tester.pumpAndSettle();
       expect(find.text('Network'), findsOneWidget);
+      await tester.tap(find.text('Security'));
+      await tester.pumpAndSettle();
 
       await tester.tap(find.text('Lock now'));
       await tester.pumpAndSettle();
@@ -637,7 +643,9 @@ void main() {
           appPrefs: {'onboarding.seen': '1'},
         ),
       );
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.about),
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Show the welcome tour'));

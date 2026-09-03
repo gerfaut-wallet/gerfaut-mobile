@@ -6,11 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/settings.dart';
+import 'package:gerfaut/screens/settings/about_section.dart';
+import 'package:gerfaut/screens/settings/network_section.dart';
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/format.dart';
-import 'package:gerfaut/src/models.dart';
-import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/disguise.dart';
+import 'package:gerfaut/src/models.dart';
+import 'package:gerfaut/src/notifications.dart';
+import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/buttons.dart';
 import 'package:gerfaut/widgets/notice.dart';
@@ -19,7 +22,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'fakes.dart';
 
-Widget settingsApp(FakeBridge bridge) {
+/// The settings opened on [section], or on the root list of sections.
+Widget settingsApp(FakeBridge bridge, {SettingsSection? section}) {
   return ProviderScope(
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
@@ -27,7 +31,7 @@ Widget settingsApp(FakeBridge bridge) {
     ],
     child: MaterialApp(
       theme: themeFrom(GerfautTokens.light, Brightness.light),
-      home: const SettingsScreen(),
+      home: SettingsScreen(section: section),
     ),
   );
 }
@@ -85,6 +89,8 @@ void main() {
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
     expect(find.text('Network'), findsOneWidget);
+    await tester.tap(find.text('General'));
+    await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(find.text('Dark'), 100);
     await tester.ensureVisible(find.text('Dark'));
@@ -105,7 +111,9 @@ void main() {
 
   testWidgets('the theme options carry a glyph each', (tester) async {
     useTallSurface(tester);
-    await tester.pumpWidget(settingsApp(FakeBridge()));
+    await tester.pumpWidget(
+      settingsApp(FakeBridge(), section: SettingsSection.general),
+    );
     await tester.pumpAndSettle();
 
     expect(find.byIcon(LucideIcons.sun), findsOneWidget);
@@ -128,14 +136,10 @@ void main() {
     tester,
   ) async {
     useTallSurface(tester);
-    await tester.pumpWidget(settingsApp(FakeBridge()));
-    await tester.pumpAndSettle();
-
-    expect(
-      find.text('Shows the fiat value next to every amount.'),
-      findsOneWidget,
+    await tester.pumpWidget(
+      settingsApp(FakeBridge(), section: SettingsSection.wallets),
     );
-    expect(find.textContaining('IP address'), findsNothing);
+    await tester.pumpAndSettle();
     expect(
       find.text(
         'How many unused addresses Gerfaut scans past the last used one.',
@@ -143,6 +147,16 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('20 is the norm'), findsNothing);
+
+    await tester.pumpWidget(
+      settingsApp(FakeBridge(), section: SettingsSection.general),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Shows the fiat value next to every amount.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('IP address'), findsNothing);
 
     // The price source hint only shows once fiat is on.
     expect(
@@ -184,8 +198,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-
-    await tester.scrollUntilVisible(find.text('Descriptor wallet'), 200);
+    await tester.tap(find.text('Wallets'));
     await tester.pumpAndSettle();
 
     expect(find.text('Descriptor wallet'), findsOneWidget);
@@ -195,58 +208,61 @@ void main() {
     expect(find.byIcon(LucideIcons.mapPin), findsNothing);
   });
 
-  testWidgets('removing a wallet asks in a panel, the buttons under the words', (
-    tester,
-  ) async {
-    useTallSurface(tester);
-    final bridge = FakeBridge(wallets: [makeMeta(name: 'Cold storage')]);
-    await tester.pumpWidget(settingsApp(bridge));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'removing a wallet asks in a panel, the buttons under the words',
+    (tester) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge(wallets: [makeMeta(name: 'Cold storage')]);
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.wallets),
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Remove'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Remove'));
+      await tester.pumpAndSettle();
 
-    const sentence =
-        'You are removing "Cold storage" from Gerfaut. This only stops '
-        'watching. Nothing moves on chain.';
-    final notice = tester.widget<GerfautNotice>(find.byType(GerfautNotice));
-    expect(notice.tone, NoticeTone.info);
-    expect(notice.actionsBelow, isTrue);
-    expect(find.text(sentence), findsOneWidget);
+      const sentence =
+          'You are removing "Cold storage" from Gerfaut. This only stops '
+          'watching. Nothing moves on chain.';
+      final notice = tester.widget<GerfautNotice>(find.byType(GerfautNotice));
+      expect(notice.tone, NoticeTone.info);
+      expect(notice.actionsBelow, isTrue);
+      expect(find.text(sentence), findsOneWidget);
 
-    // The sentence has the whole width; the two buttons share a row of
-    // their own under it, the way out first and the destructive one at
-    // the end.
-    final words = tester.getRect(find.text(sentence));
-    final cancel = tester.getRect(find.widgetWithText(GhostButton, 'Cancel'));
-    final remove = tester.getRect(
-      find.widgetWithText(DangerButton, 'Remove wallet'),
-    );
-    final panel = tester.getRect(find.byType(GerfautNotice));
-    expect(words.width, greaterThan(panel.width * 0.7));
-    expect(cancel.top, greaterThanOrEqualTo(words.bottom));
-    expect(remove.top, greaterThanOrEqualTo(words.bottom));
-    expect(cancel.center.dy, closeTo(remove.center.dy, 1));
-    expect(cancel.right, lessThan(remove.left));
-    expect(remove.right, closeTo(panel.right - 12, 1));
-    expect(remove.height, 44);
+      // The sentence has the whole width; the two buttons share a row of
+      // their own under it, the way out first and the destructive one at
+      // the end.
+      final words = tester.getRect(find.text(sentence));
+      final cancel = tester.getRect(find.widgetWithText(GhostButton, 'Cancel'));
+      final remove = tester.getRect(
+        find.widgetWithText(DangerButton, 'Remove wallet'),
+      );
+      final panel = tester.getRect(find.byType(GerfautNotice));
+      expect(words.width, greaterThan(panel.width * 0.7));
+      expect(cancel.top, greaterThanOrEqualTo(words.bottom));
+      expect(remove.top, greaterThanOrEqualTo(words.bottom));
+      expect(cancel.center.dy, closeTo(remove.center.dy, 1));
+      expect(cancel.right, lessThan(remove.left));
+      expect(remove.right, closeTo(panel.right - 12, 1));
+      expect(remove.height, 44);
 
-    // Nothing has moved yet; Cancel closes the panel and keeps the row.
-    expect(bridge.wallets, hasLength(1));
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-    expect(find.byType(GerfautNotice), findsNothing);
-    expect(find.text('Cold storage'), findsOneWidget);
+      // Nothing has moved yet; Cancel closes the panel and keeps the row.
+      expect(bridge.wallets, hasLength(1));
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.byType(GerfautNotice), findsNothing);
+      expect(find.text('Cold storage'), findsOneWidget);
 
-    await tester.tap(find.text('Remove'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Remove wallet'));
-    await tester.pumpAndSettle();
-    expect(bridge.wallets, isEmpty);
-    expect(find.text('Wallet removed'), findsOneWidget);
-    await tester.pump(const Duration(seconds: 5));
-    await tester.pumpAndSettle();
-  });
+      await tester.tap(find.text('Remove'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Remove wallet'));
+      await tester.pumpAndSettle();
+      expect(bridge.wallets, isEmpty);
+      expect(find.text('Wallet removed'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+    },
+  );
 
   testWidgets('the gap limit is seeded from the settings and committed', (
     tester,
@@ -260,7 +276,9 @@ void main() {
         gapLimit: 25,
       ),
     );
-    await tester.pumpWidget(settingsApp(bridge));
+    await tester.pumpWidget(
+      settingsApp(bridge, section: SettingsSection.wallets),
+    );
     await tester.pumpAndSettle();
 
     // Seeded from the vault settings.
@@ -283,7 +301,9 @@ void main() {
   testWidgets('an invalid gap limit snaps back without noise', (tester) async {
     useTallSurface(tester);
     final bridge = FakeBridge();
-    await tester.pumpWidget(settingsApp(bridge));
+    await tester.pumpWidget(
+      settingsApp(bridge, section: SettingsSection.wallets),
+    );
     await tester.pumpAndSettle();
 
     // Out of range: nothing saved, the field returns to the current
@@ -330,7 +350,9 @@ void main() {
       tester,
     ) async {
       useTallSurface(tester);
-      await tester.pumpWidget(settingsApp(FakeBridge()));
+      await tester.pumpWidget(
+        settingsApp(FakeBridge(), section: SettingsSection.general),
+      );
       await tester.pumpAndSettle();
       await enableFiat(tester);
 
@@ -350,7 +372,9 @@ void main() {
 
     testWidgets('the currency list reads group by group', (tester) async {
       useTallSurface(tester);
-      await tester.pumpWidget(settingsApp(FakeBridge()));
+      await tester.pumpWidget(
+        settingsApp(FakeBridge(), section: SettingsSection.general),
+      );
       await tester.pumpAndSettle();
       await enableFiat(tester);
 
@@ -374,7 +398,9 @@ void main() {
     testWidgets('picking a currency saves it', (tester) async {
       useTallSurface(tester);
       final bridge = FakeBridge();
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.general),
+      );
       await tester.pumpAndSettle();
       await enableFiat(tester);
 
@@ -392,7 +418,9 @@ void main() {
     ) async {
       useTallSurface(tester);
       final bridge = FakeBridge();
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.general),
+      );
       await tester.pumpAndSettle();
       await enableFiat(tester);
 
@@ -431,7 +459,9 @@ void main() {
       tester,
     ) async {
       useTallSurface(tester);
-      await tester.pumpWidget(settingsApp(FakeBridge()));
+      await tester.pumpWidget(
+        settingsApp(FakeBridge(), section: SettingsSection.general),
+      );
       await tester.pumpAndSettle();
       expect(find.text('Powered by CoinGecko'), findsNothing);
 
@@ -451,7 +481,9 @@ void main() {
     testWidgets('a disabled source announces itself as such', (tester) async {
       useTallSurface(tester);
       final handle = tester.ensureSemantics();
-      await tester.pumpWidget(settingsApp(FakeBridge()));
+      await tester.pumpWidget(
+        settingsApp(FakeBridge(), section: SettingsSection.general),
+      );
       await tester.pumpAndSettle();
       await enableFiat(tester);
 
@@ -474,7 +506,9 @@ void main() {
     ) async {
       useTallSurface(tester);
       final bridge = FakeBridge();
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
       await tester.pumpAndSettle();
 
       // The Tor card offers an "Automatic" of its own: this one is the
@@ -503,7 +537,9 @@ void main() {
       tester,
     ) async {
       useTallSurface(tester);
-      await tester.pumpWidget(settingsApp(FakeBridge()));
+      await tester.pumpWidget(
+        settingsApp(FakeBridge(), section: SettingsSection.network),
+      );
       await tester.pumpAndSettle();
 
       final items = serverField(tester).items;
@@ -526,7 +562,9 @@ void main() {
     testWidgets('choosing a server stores its identifier', (tester) async {
       useTallSurface(tester);
       final bridge = FakeBridge();
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.byType(GerfautSelect<String?>));
@@ -548,7 +586,9 @@ void main() {
     testWidgets('an Electrum server says what it cannot serve', (tester) async {
       useTallSurface(tester);
       final bridge = FakeBridge();
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
       await tester.pumpAndSettle();
 
       expect(
@@ -589,7 +629,9 @@ void main() {
           appPrefs: {},
         ),
       );
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
       await tester.pumpAndSettle();
 
       expect(
@@ -621,7 +663,9 @@ void main() {
           appPrefs: {},
         ),
       );
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
       await tester.pumpAndSettle();
 
       expect(find.byType(GerfautSelect<String?>), findsNothing);
@@ -636,7 +680,9 @@ void main() {
     ) async {
       useTallSurface(tester);
       final bridge = FakeBridge();
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
       await tester.pumpAndSettle();
 
       final items = serverField(tester).items;
@@ -671,7 +717,9 @@ void main() {
       bridge.onPublicServers = (_) {
         throw const BridgeException('not_initialized', 'call init first');
       };
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
       await tester.pumpAndSettle();
 
       expect(find.byType(GerfautSelect<String?>), findsNothing);
@@ -722,7 +770,9 @@ void main() {
       useTallSurface(tester);
       final bridge = ownElectrum();
       bridge.onInspectCertificate = (_) => unknown;
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
       await tester.pumpAndSettle();
       await save(tester);
 
@@ -774,7 +824,9 @@ void main() {
       useTallSurface(tester);
       final bridge = ownElectrum();
       bridge.onInspectCertificate = (_) => unknown;
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
       await tester.pumpAndSettle();
       await save(tester);
 
@@ -794,7 +846,9 @@ void main() {
       useTallSurface(tester);
       final bridge = ownElectrum();
       bridge.onInspectCertificate = (_) => unknown;
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
       await tester.pumpAndSettle();
       await save(tester);
 
@@ -818,7 +872,9 @@ void main() {
     ) async {
       useTallSurface(tester);
       final bridge = ownElectrum();
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
       await tester.pumpAndSettle();
       await save(tester);
 
@@ -833,7 +889,9 @@ void main() {
       useTallSurface(tester);
       final bridge = ownElectrum();
       bridge.onInspectCertificate = (_) => const NotTlsCertificate();
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
       await tester.pumpAndSettle();
       await save(tester);
 
@@ -855,7 +913,9 @@ void main() {
       final bridge = ownElectrum();
       bridge.onInspectCertificate = (_) =>
           const UnreachableCertificate(detail: 'connection refused');
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
       await tester.pumpAndSettle();
       await save(tester);
 
@@ -881,7 +941,9 @@ void main() {
         stored: _fingerprint,
         presented: _otherFingerprint,
       );
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
       await tester.pumpAndSettle();
       await save(tester);
 
@@ -946,7 +1008,9 @@ void main() {
         stored: _fingerprint,
         presented: _otherFingerprint,
       );
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
       await tester.pumpAndSettle();
       await save(tester);
 
@@ -971,7 +1035,9 @@ void main() {
       final bridge = ownElectrum(
         certs: const {'node.local:50002': _fingerprint},
       );
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Trusted certificates'), findsOneWidget);
@@ -1010,7 +1076,9 @@ void main() {
     ) async {
       useTallSurface(tester);
       final bridge = FakeBridge();
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
       await tester.pumpAndSettle();
 
       // A public Esplora is reached over the web PKI like any web site:
@@ -1051,7 +1119,9 @@ void main() {
       tester,
     ) async {
       useTallSurface(tester);
-      await tester.pumpWidget(settingsApp(withTor(TorMode.system)));
+      await tester.pumpWidget(
+        settingsApp(withTor(TorMode.system), section: SettingsSection.network),
+      );
       await tester.pumpAndSettle();
 
       // Any app may hold the local port first and answer for the
@@ -1070,7 +1140,9 @@ void main() {
       tester,
     ) async {
       useTallSurface(tester);
-      await tester.pumpWidget(settingsApp(withTor(TorMode.auto)));
+      await tester.pumpWidget(
+        settingsApp(withTor(TorMode.auto), section: SettingsSection.network),
+      );
       await tester.pumpAndSettle();
 
       // On Android the core never falls back to a local port under
@@ -1102,7 +1174,9 @@ void main() {
         error: null,
         embeddedAvailable: false,
       );
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
       await tester.pumpAndSettle();
 
       // Starting Orbot is not enough on its own: Automatic would still
@@ -1137,6 +1211,7 @@ void main() {
         child: MaterialApp(
           theme: themeFrom(GerfautTokens.light, Brightness.light),
           home: SettingsScreen(
+            section: SettingsSection.network,
             cameraBuilder: (onFrame) => TextButton(
               onPressed: () => onFrame(frame),
               child: const Text('frame'),
@@ -1212,7 +1287,7 @@ void main() {
       // The same scanner as the wallet import, told what it is for.
       await tester.tap(find.text('Scan'));
       await tester.pumpAndSettle();
-      expect(find.text(SettingsScreen.backendScanCaption), findsOneWidget);
+      expect(find.text(NetworkSection.backendScanCaption), findsOneWidget);
       await tester.tap(find.text('frame'));
       await tester.pumpAndSettle();
 
@@ -1400,6 +1475,172 @@ void main() {
     });
   });
 
+  group('the root list', () {
+    /// A wallet is watched, the gap limit is not the default: two facts
+    /// the rows have to say.
+    FakeBridge bridge() => FakeBridge(
+      wallets: [makeMeta()],
+      settings: const Settings(
+        activeNetwork: Network.mainnet,
+        backends: {},
+        appPrefs: {},
+        gapLimit: 25,
+      ),
+    );
+
+    testWidgets('names seven sections and says where each stands', (
+      tester,
+    ) async {
+      await tester.pumpWidget(settingsApp(bridge()));
+      await tester.pumpAndSettle();
+
+      // The desktop's taxonomy, word for word, in its order.
+      expect(SettingsSection.values.map((s) => s.title), [
+        'General',
+        'Network',
+        'Wallets',
+        'Security',
+        'Notifications',
+        'Backup & sync',
+        'About',
+      ]);
+      for (final section in SettingsSection.values) {
+        expect(find.text(section.title), findsOneWidget);
+        expect(find.byIcon(section.icon), findsOneWidget);
+      }
+      expect(find.byIcon(LucideIcons.chevronRight), findsNWidgets(7));
+      // One line each, from state the root already holds.
+      expect(find.text('BTC · no fiat · Light theme'), findsOneWidget);
+      expect(find.text('Mainnet · Public API'), findsOneWidget);
+      expect(find.text('1 wallet · gap limit 25'), findsOneWidget);
+      expect(find.text('No app lock'), findsOneWidget);
+      expect(find.text('Off'), findsOneWidget);
+      expect(find.text('Export or restore the wallet list'), findsOneWidget);
+      expect(find.text('Gerfaut $appVersion'), findsOneWidget);
+      // Nothing of the sections themselves is on the root.
+      expect(find.text('Gap limit'), findsNothing);
+      expect(find.text('Save backend'), findsNothing);
+      // A row is a 44px target at the least.
+      for (final section in SettingsSection.values) {
+        expect(
+          tester
+              .getSize(
+                find.ancestor(
+                  of: find.text(section.title),
+                  matching: find.byType(InkWell),
+                ),
+              )
+              .height,
+          greaterThanOrEqualTo(44),
+        );
+      }
+    });
+
+    testWidgets('the rows follow the state they summarise', (tester) async {
+      final locked = bridge()
+        ..lock = const AppLock(kind: LockKind.pin, biometric: true);
+      await tester.pumpWidget(settingsApp(locked));
+      await tester.pumpAndSettle();
+      expect(find.text('PIN lock · biometrics'), findsOneWidget);
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(SettingsScreen)),
+      );
+      container.read(unitProvider.notifier).set(AmountUnit.sats);
+      container.read(fiatEnabledProvider.notifier).set(true);
+      container.read(themeProvider.notifier).set(ThemePref.dark);
+      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      container.read(backgroundCheckProvider.notifier).hydrate('900');
+      await tester.pumpAndSettle();
+      expect(find.text('sats · EUR · Dark theme'), findsOneWidget);
+      expect(find.text('On · every 15 min'), findsOneWidget);
+    });
+
+    testWidgets('each row opens a page titled after it, with its cards', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      await tester.pumpWidget(settingsApp(bridge()));
+      await tester.pumpAndSettle();
+
+      const cards = <SettingsSection, List<String>>{
+        SettingsSection.general: ['Display', 'Appearance'],
+        SettingsSection.network: [
+          'Backend · Mainnet',
+          'Only wallets on the selected network are shown.',
+          'Test the connection',
+        ],
+        SettingsSection.wallets: ['Gap limit', 'Cold storage'],
+        SettingsSection.security: ['App lock'],
+        SettingsSection.notifications: [
+          'New transactions',
+          'Show balances on widgets',
+        ],
+        SettingsSection.backup: ['Export…', 'Restore…'],
+        SettingsSection.about: ['Check for updates', 'Show the welcome tour'],
+      };
+      for (final entry in cards.entries) {
+        await tester.tap(find.text(entry.key.title));
+        await tester.pumpAndSettle();
+        expect(find.byType(SettingsSectionScreen), findsOneWidget);
+        expect(find.widgetWithText(AppBar, entry.key.title), findsOneWidget);
+        expect(find.byType(BackButton), findsOneWidget);
+        for (final card in entry.value) {
+          expect(find.text(card), findsOneWidget, reason: card);
+        }
+        // The other sections stay on the root.
+        for (final other in SettingsSection.values) {
+          if (other != entry.key) expect(find.text(other.title), findsNothing);
+        }
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(find.byType(SettingsSectionScreen), findsNothing);
+      }
+    });
+
+    testWidgets('a section opens directly, and the back arrow leaves it', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            bridgeProvider.overrideWithValue(bridge()),
+            disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+          ],
+          child: MaterialApp(
+            theme: themeFrom(GerfautTokens.light, Brightness.light),
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => SettingsScreen.open(
+                    context,
+                    section: SettingsSection.wallets,
+                  ),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      // The Wallets page and nothing of the root: no list of sections
+      // stands between the caller and the wallet rows.
+      expect(find.widgetWithText(AppBar, 'Wallets'), findsOneWidget);
+      expect(find.text('Gap limit'), findsOneWidget);
+      expect(find.text('Cold storage'), findsOneWidget);
+      expect(find.text('General'), findsNothing);
+      expect(find.text('Settings'), findsNothing);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('open'), findsOneWidget);
+      expect(find.byType(SettingsScreen), findsNothing);
+    });
+  });
+
   group('rescan', () {
     TextButton button(WidgetTester tester, String label) {
       return tester.widget<TextButton>(
@@ -1424,7 +1665,9 @@ void main() {
       var found = 2;
       final bridge = FakeBridge(wallets: [makeMeta()]);
       bridge.onRescan = (id) => gate.future.then((_) => report(id, found));
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.wallets),
+      );
       await tester.pumpAndSettle();
 
       expect(
@@ -1477,7 +1720,9 @@ void main() {
       final bridge = FakeBridge(wallets: [makeMeta()]);
       bridge.onRescan = (_) =>
           throw const BridgeException('sync', 'backend unreachable: timed out');
-      await tester.pumpWidget(settingsApp(bridge));
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.wallets),
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Rescan'));

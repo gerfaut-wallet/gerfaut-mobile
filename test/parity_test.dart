@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
+import 'package:gerfaut/screens/settings.dart';
 import 'package:gerfaut/screens/tx_detail.dart';
 import 'package:gerfaut/screens/wallet_home.dart';
 import 'package:gerfaut/src/bridge.dart';
@@ -130,6 +131,8 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('General'));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('sats'), 100);
     await tester.ensureVisible(find.text('sats'));
     await tester.pumpAndSettle();
@@ -137,6 +140,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(bridge.appPrefs['display.unit'], 'sats');
 
+    // Back through the root list to the wallets.
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     await tester.pageBack();
     await tester.pumpAndSettle();
 
@@ -674,8 +680,21 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Wallets'));
+    await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(find.text('Remove'), 200);
+    // The root list stays in the tree under the pushed page: name the
+    // page's own scrollable.
+    await tester.scrollUntilVisible(
+      find.text('Remove'),
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byType(SettingsSectionScreen),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     await tester.ensureVisible(find.text('Remove'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Remove'));
