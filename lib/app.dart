@@ -298,6 +298,19 @@ ThemeData themeFrom(GerfautTokens tokens, Brightness brightness) {
         padding: EdgeInsets.zero,
       ),
     ),
+    // Every sheet from the bottom of the screen, whoever opens it: the
+    // card surface and the rounded top edge of DESIGN.md, in place of
+    // the Material defaults (a tinted surface, 28px corners) that a
+    // sheet left to itself would take.
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: tokens.surface,
+      surfaceTintColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(GerfautRadius.canvas),
+        ),
+      ),
+    ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: tokens.text,
       contentTextStyle: tokens.bodySmall.copyWith(color: tokens.background),

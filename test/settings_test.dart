@@ -263,6 +263,40 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('the picker sheet clears the gesture bar', (tester) async {
+      useTallSurface(tester);
+      tester.view.padding = const FakeViewPadding(bottom: 48);
+      await tester.pumpWidget(
+        settingsApp(
+          FakeBridge(wallets: [makeMeta()]),
+          section: SettingsSection.wallets,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Icon'));
+      await tester.pumpAndSettle();
+
+      // The sheet's own frame is the theme's: no shape of its own.
+      expect(
+        tester.widget<BottomSheet>(find.byType(BottomSheet)).shape,
+        isNull,
+      );
+      // Its content stands on the bar, not under it.
+      final padding = tester.widget<Padding>(
+        find
+            .descendant(
+              of: find.byType(WalletIconPicker),
+              matching: find.byType(Padding),
+            )
+            .first,
+      );
+      expect(
+        padding.padding.resolve(TextDirection.ltr).bottom,
+        48 + GerfautSpacing.md,
+      );
+    });
+
     testWidgets('picking the icon already worn writes nothing', (tester) async {
       useTallSurface(tester);
       final bridge = FakeBridge(wallets: [makeMeta()]);

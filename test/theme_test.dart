@@ -67,4 +67,19 @@ void main() {
     expect(light.brightness, Brightness.light);
     expect(dark.brightness, Brightness.dark);
   });
+
+  test('bottom sheets take the card surface and the sheet radius', () {
+    for (final (tokens, brightness) in [
+      (GerfautTokens.light, Brightness.light),
+      (GerfautTokens.dark, Brightness.dark),
+    ]) {
+      final sheet = themeFrom(tokens, brightness).bottomSheetTheme;
+      expect(sheet.backgroundColor, tokens.surface);
+      expect(sheet.surfaceTintColor, Colors.transparent);
+      expect(
+        (sheet.shape! as RoundedRectangleBorder).borderRadius,
+        const BorderRadius.vertical(top: Radius.circular(GerfautRadius.canvas)),
+      );
+    }
+  });
 }

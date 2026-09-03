@@ -43,12 +43,16 @@ class WalletIconPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final media = MediaQuery.of(context);
     return Padding(
       padding: EdgeInsets.only(
         left: GerfautSpacing.md,
         right: GerfautSpacing.md,
         top: GerfautSpacing.md,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + GerfautSpacing.md,
+        // Past the keyboard, and past the gesture bar: the last row of
+        // tiles has to clear both to be tapped.
+        bottom:
+            media.viewInsets.bottom + media.padding.bottom + GerfautSpacing.md,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
