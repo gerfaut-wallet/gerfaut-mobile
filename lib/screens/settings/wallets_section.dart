@@ -190,7 +190,14 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
     });
     try {
       await ref.read(bridgeProvider).reorderWallets(ids);
+      // Read the vault back, then let the local order go: nothing snaps
+      // back on the way, and an order set on the home screen afterwards
+      // is followed here rather than overruled by a drop long since
+      // landed. A newer drop keeps its own until then.
       ref.invalidate(walletsProvider);
+      await ref.read(walletsProvider.future);
+      if (!mounted || !identical(_order, ids)) return;
+      setState(() => _order = null);
     } catch (error) {
       if (!mounted) return;
       setState(() {

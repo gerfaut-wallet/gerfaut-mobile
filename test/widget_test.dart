@@ -36,6 +36,27 @@ FakeBridge returning({List<WalletMeta> wallets = const []}) {
   );
 }
 
+/// Drags whatever sits at [from] down by [by], after holding it for
+/// [hold]: the home cards lift on a long press, the settings handles at
+/// once. Three quarters of a row is the usual distance: far enough for
+/// the row to take the next one's place, not so far as to overshoot it.
+Future<void> dragDown(
+  WidgetTester tester,
+  Offset from,
+  double by, {
+  Duration hold = Duration.zero,
+}) async {
+  final gesture = await tester.startGesture(from);
+  await tester.pump(hold);
+  await tester.pumpAndSettle();
+  await gesture.moveTo(from + const Offset(0, 30));
+  await tester.pumpAndSettle();
+  await gesture.moveTo(from + Offset(0, by));
+  await tester.pumpAndSettle();
+  await gesture.up();
+  await tester.pumpAndSettle();
+}
+
 void main() {
   group('the wallet cards', () {
     testWidgets('wear the icon their owner picked', (tester) async {
@@ -70,20 +91,14 @@ void main() {
       double top(String name) => tester.getTopLeft(find.text(name)).dy;
       expect(top('Cold storage'), lessThan(top('Spending')));
 
-      // Hold, then drag three quarters of a card down: far enough to
-      // take the next card's place, not so far as to overshoot it.
+      // Hold, then drag three quarters of a card down.
       final pitch = top('Spending') - top('Cold storage');
-      final from = tester.getCenter(find.text('Cold storage'));
-      final to = from + Offset(0, pitch * 0.75);
-      final gesture = await tester.startGesture(from);
-      await tester.pump(kLongPressTimeout + kPressTimeout);
-      await tester.pumpAndSettle();
-      await gesture.moveTo(from + const Offset(0, 30));
-      await tester.pumpAndSettle();
-      await gesture.moveTo(to);
-      await tester.pumpAndSettle();
-      await gesture.up();
-      await tester.pumpAndSettle();
+      await dragDown(
+        tester,
+        tester.getCenter(find.text('Cold storage')),
+        pitch * 0.75,
+        hold: kLongPressTimeout + kPressTimeout,
+      );
 
       expect(bridge.reorderCalls, [
         ['w2', 'w1'],
@@ -103,6 +118,50 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       await tester.pumpAndSettle();
       expect(bridge.syncAllCalls, before + 1);
+    });
+
+    testWidgets('follow an order set in the settings meanwhile', (
+      tester,
+    ) async {
+      final bridge = returning(
+        wallets: [
+          makeMeta(id: 'w1', name: 'Cold storage'),
+          makeMeta(id: 'w2', name: 'Spending'),
+        ],
+      );
+      await tester.pumpWidget(app(bridge));
+      await tester.pumpAndSettle();
+
+      double top(String name) => tester.getTopLeft(find.text(name)).dy;
+      final pitch = top('Spending') - top('Cold storage');
+      await dragDown(
+        tester,
+        tester.getCenter(find.text('Cold storage')),
+        pitch * 0.75,
+        hold: kLongPressTimeout + kPressTimeout,
+      );
+      expect(top('Spending'), lessThan(top('Cold storage')));
+
+      // In the settings, the rows go back the other way round.
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Wallets'));
+      await tester.pumpAndSettle();
+      final rowPitch = top('Cold storage') - top('Spending');
+      await dragDown(
+        tester,
+        tester.getCenter(find.byIcon(LucideIcons.gripVertical).first),
+        rowPitch * 0.75,
+      );
+      expect(bridge.wallets.map((w) => w.id), ['w1', 'w2']);
+
+      // Back on the home screen, the cards stand as the vault has them,
+      // not as they were last dropped here.
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(top('Cold storage'), lessThan(top('Spending')));
     });
   });
 

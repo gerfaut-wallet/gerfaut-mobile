@@ -247,7 +247,15 @@ class _WalletListState extends ConsumerState<_WalletList> {
     setState(() => _order = ids);
     try {
       await ref.read(bridgeProvider).reorderWallets(ids);
+      // Read the vault back, then let the local order go: the provider
+      // moves from one list to the next without a gap, so nothing snaps
+      // back on the way, and an order set elsewhere afterwards — in the
+      // settings, say — is followed here rather than overruled by a
+      // drop long since landed. A newer drop keeps its own until then.
       ref.invalidate(walletsProvider);
+      await ref.read(walletsProvider.future);
+      if (!mounted || !identical(_order, ids)) return;
+      setState(() => _order = null);
     } catch (error) {
       if (!mounted) return;
       setState(() => _order = null);
