@@ -401,6 +401,57 @@ void main() {
       expect(top(tester, 'Cold storage'), lessThan(top(tester, 'Spending')));
     });
 
+    testWidgets('a row held at the edge scrolls the page to its place', (
+      tester,
+    ) async {
+      // A phone's frame: six rows do not fit it at once.
+      tester.view.physicalSize = const Size(411, 731);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final bridge = FakeBridge(
+        wallets: [
+          for (var i = 1; i <= 6; i++) makeMeta(id: 'w$i', name: 'Wallet $i'),
+        ],
+      );
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.wallets),
+      );
+      await tester.pumpAndSettle();
+
+      // Down to the last row, which starts below the fold.
+      await tester.scrollUntilVisible(
+        find.text('Wallet 6'),
+        200,
+        // The page's own, not the gap limit field's.
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Wallet 1'), findsNothing);
+
+      // Held just under the top edge, the row makes the page scroll
+      // under it until the first row is in reach; there it is dropped.
+      final page = tester.getRect(find.byType(CustomScrollView));
+      final handle = tester.getCenter(
+        find.byIcon(LucideIcons.gripVertical).last,
+      );
+      final gesture = await tester.startGesture(handle);
+      await tester.pump();
+      await gesture.moveTo(handle - const Offset(0, 30));
+      await tester.pump();
+      await gesture.moveTo(Offset(handle.dx, page.top + 4));
+      await tester.pumpAndSettle();
+      expect(find.text('Wallet 1'), findsOneWidget);
+      await gesture.moveBy(const Offset(0, 1));
+      await tester.pumpAndSettle();
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(bridge.reorderCalls, [
+        ['w6', 'w1', 'w2', 'w3', 'w4', 'w5'],
+      ]);
+      expect(top(tester, 'Wallet 6'), lessThan(top(tester, 'Wallet 1')));
+    });
+
     testWidgets('one wallet has no handle', (tester) async {
       useTallSurface(tester);
       await tester.pumpWidget(

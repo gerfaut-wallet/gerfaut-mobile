@@ -195,30 +195,38 @@ class SettingsSectionScreen extends StatelessWidget {
     return Scaffold(
       appBar: GerfautAppBar.text(section.title),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(GerfautSpacing.md),
-          children: [
-            ...switch (section) {
-              SettingsSection.general => const [GeneralSection()],
-              SettingsSection.network => [
-                // A test seam of the section; this screen only forwards
-                // its own, which is null outside a test.
-                // ignore: invalid_use_of_visible_for_testing_member
-                NetworkSection(cameraBuilder: cameraBuilder),
-              ],
-              SettingsSection.wallets => const [WalletsSection()],
-              SettingsSection.security => const [SecuritySection()],
-              SettingsSection.notifications => const [
-                NotificationsSection(),
-                WidgetsSection(),
-              ],
-              SettingsSection.backup => const [BackupSection()],
-              SettingsSection.about => const [AboutSection()],
-            },
-            const SizedBox(height: GerfautSpacing.lg),
-          ],
-        ),
+        child: switch (section) {
+          SettingsSection.general => _cards(const [GeneralSection()]),
+          SettingsSection.network => _cards([
+            // A test seam of the section; this screen only forwards
+            // its own, which is null outside a test.
+            // ignore: invalid_use_of_visible_for_testing_member
+            NetworkSection(cameraBuilder: cameraBuilder),
+          ]),
+          // The wallet rows reorder by drag, and a drag has to scroll
+          // the page to reach a row out of sight: this section is its
+          // own scroll view, with the rows as a sliver of it.
+          SettingsSection.wallets => const WalletsSection(),
+          SettingsSection.security => _cards(const [SecuritySection()]),
+          SettingsSection.notifications => _cards(const [
+            NotificationsSection(),
+            WidgetsSection(),
+          ]),
+          SettingsSection.backup => _cards(const [BackupSection()]),
+          SettingsSection.about => _cards(const [AboutSection()]),
+        },
       ),
+    );
+  }
+
+  /// The section's cards, one under the other, on a page that scrolls.
+  static Widget _cards(List<Widget> cards) {
+    return ListView(
+      padding: const EdgeInsets.all(GerfautSpacing.md),
+      children: [
+        ...cards,
+        const SizedBox(height: GerfautSpacing.lg),
+      ],
     );
   }
 }

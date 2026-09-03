@@ -15,6 +15,10 @@ import 'fields.dart';
 /// The Wallets section: the gap limit every wallet shares, then the
 /// wallets of the active network in the order the home screen lists
 /// them, each with its own actions and a handle to move it.
+///
+/// The section is its page's whole scroll view, the rows a sliver of
+/// it: a row dragged to the edge has to scroll the page to reach a row
+/// out of sight, and a list boxed inside a scrolling column cannot.
 class WalletsSection extends ConsumerStatefulWidget {
   const WalletsSection({super.key});
 
@@ -215,124 +219,153 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
     ref.watch(syncProvider);
     final sync = ref.read(syncProvider.notifier);
     if (settings == null) {
-      return Text(
-        'Loading…',
-        style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+      return Padding(
+        padding: const EdgeInsets.all(GerfautSpacing.md),
+        child: Text(
+          'Loading…',
+          style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+        ),
       );
     }
     _seedGapLimit(settings);
     final shown = _inOrder(wallets);
 
-    return SectionCard(
-      icon: LucideIcons.wallet,
-      title: 'Wallets',
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Gap limit',
-                    style: tokens.bodySmall.copyWith(
-                      fontWeight: FontWeight.w500,
-                      fontVariations: const [FontVariation('wght', 500)],
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          // The page margin, and the same room under the card as the
+          // other section pages leave.
+          padding: const EdgeInsets.fromLTRB(
+            GerfautSpacing.md,
+            GerfautSpacing.md,
+            GerfautSpacing.md,
+            GerfautSpacing.md + GerfautSpacing.lg,
+          ),
+          sliver: SliverSectionCard(
+            icon: LucideIcons.wallet,
+            title: 'Wallets',
+            slivers: [
+              SliverToBoxAdapter(child: _gapLimit(tokens)),
+              if (shown.isEmpty)
+                SliverToBoxAdapter(
+                  child: Text(
+                    'No wallets on this network yet.',
+                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                  ),
+                )
+              else
+                // The order here is the order of the home screen.
+                SliverReorderableList(
+                  proxyDecorator: liftedProxy,
+                  itemCount: shown.length,
+                  onReorderItem: (from, to) => _reorder(shown, from, to),
+                  itemBuilder: (context, index) => _row(shown, index, sync),
+                ),
+              if (_walletError != null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: GerfautSpacing.sm),
+                    child: Text(
+                      _walletError!,
+                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                     ),
                   ),
-                  Text(
-                    'How many unused addresses Gerfaut scans past '
-                    'the last used one.',
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  ),
-                  Text(
-                    'Rescan a wallet to look again from its first '
-                    'address.',
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: GerfautSpacing.sm),
-            SizedBox(
-              width: 72,
-              child: MonoField(
-                controller: _gapLimitController,
-                hint: '1-500',
-                numeric: true,
-                focusNode: _gapLimitFocus,
-                onChanged: () {},
-                onSubmitted: _commitGapLimit,
-                tokens: tokens,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: GerfautSpacing.md),
-        if (shown.isEmpty)
-          Text(
-            'No wallets on this network yet.',
-            style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-          )
-        else
-          // The page scrolls; this list only reorders. The order here
-          // is the order of the home screen.
-          ReorderableListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            buildDefaultDragHandles: false,
-            proxyDecorator: liftedProxy,
-            itemCount: shown.length,
-            onReorderItem: (from, to) => _reorder(shown, from, to),
-            itemBuilder: (context, index) {
-              final wallet = shown[index];
-              return _WalletRow(
-                key: ValueKey(wallet.id),
-                index: index,
-                wallet: wallet,
-                tokens: tokens,
-                // One wallet has nowhere to go: no handle to promise it.
-                movable: shown.length > 1,
-                renaming: _renamingId == wallet.id,
-                confirmingRemove: _confirmRemoveId == wallet.id,
-                renameController: _renameController,
-                onRenameStart: () {
-                  setState(() {
-                    _renamingId = wallet.id;
-                    _confirmRemoveId = null;
-                    _renameController.text = wallet.name;
-                  });
-                },
-                onRenameSubmit: () => _rename(wallet.id),
-                onPickIcon: () => _pickIcon(wallet),
-                onRemoveStart: () {
-                  setState(() {
-                    _confirmRemoveId = wallet.id;
-                    _renamingId = null;
-                  });
-                },
-                onRemoveConfirm: () => _remove(wallet.id),
-                onCancel: () {
-                  setState(() {
-                    _renamingId = null;
-                    _confirmRemoveId = null;
-                  });
-                },
-                rescanning: _rescanningId == wallet.id,
-                busy: sync.isSyncing(wallet.id),
-                onRescan: () => _rescan(wallet.id),
-              );
-            },
+                ),
+            ],
           ),
-        if (_walletError != null) ...[
-          const SizedBox(height: GerfautSpacing.sm),
-          Text(
-            _walletError!,
-            style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+        ),
+      ],
+    );
+  }
+
+  /// The gap limit, its two lines of explanation, and its field.
+  Widget _gapLimit(GerfautTokens tokens) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: GerfautSpacing.md),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Gap limit',
+                  style: tokens.bodySmall.copyWith(
+                    fontWeight: FontWeight.w500,
+                    fontVariations: const [FontVariation('wght', 500)],
+                  ),
+                ),
+                Text(
+                  'How many unused addresses Gerfaut scans past '
+                  'the last used one.',
+                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                ),
+                Text(
+                  'Rescan a wallet to look again from its first '
+                  'address.',
+                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: GerfautSpacing.sm),
+          SizedBox(
+            width: 72,
+            child: MonoField(
+              controller: _gapLimitController,
+              hint: '1-500',
+              numeric: true,
+              focusNode: _gapLimitFocus,
+              onChanged: () {},
+              onSubmitted: _commitGapLimit,
+              tokens: tokens,
+            ),
           ),
         ],
-      ],
+      ),
+    );
+  }
+
+  /// The row of the wallet at [index] among those [shown].
+  Widget _row(List<WalletMeta> shown, int index, SyncController sync) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final wallet = shown[index];
+    return _WalletRow(
+      key: ValueKey(wallet.id),
+      index: index,
+      wallet: wallet,
+      tokens: tokens,
+      // One wallet has nowhere to go: no handle to promise it.
+      movable: shown.length > 1,
+      renaming: _renamingId == wallet.id,
+      confirmingRemove: _confirmRemoveId == wallet.id,
+      renameController: _renameController,
+      onRenameStart: () {
+        setState(() {
+          _renamingId = wallet.id;
+          _confirmRemoveId = null;
+          _renameController.text = wallet.name;
+        });
+      },
+      onRenameSubmit: () => _rename(wallet.id),
+      onPickIcon: () => _pickIcon(wallet),
+      onRemoveStart: () {
+        setState(() {
+          _confirmRemoveId = wallet.id;
+          _renamingId = null;
+        });
+      },
+      onRemoveConfirm: () => _remove(wallet.id),
+      onCancel: () {
+        setState(() {
+          _renamingId = null;
+          _confirmRemoveId = null;
+        });
+      },
+      rescanning: _rescanningId == wallet.id,
+      busy: sync.isSyncing(wallet.id),
+      onRescan: () => _rescan(wallet.id),
     );
   }
 }
