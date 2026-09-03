@@ -128,6 +128,24 @@ void main() {
       expect(find.text('Save file'), findsOneWidget);
       expect(find.text('Share'), findsOneWidget);
       expect(find.text('Show QR code'), findsOneWidget);
+      // The backup is made: leaving is the one primary action left, and
+      // it reads as a button, full width, not as a line of text.
+      final done = find.widgetWithText(PrimaryButton, 'Done');
+      expect(done, findsOneWidget);
+      expect(tester.widget<PrimaryButton>(done).expand, isTrue);
+      expect(
+        tester.getRect(done).width,
+        closeTo(
+          tester
+              .getRect(find.widgetWithText(SecondaryButton, 'Show QR code'))
+              .width,
+          1,
+        ),
+      );
+
+      await tester.tap(done);
+      await tester.pumpAndSettle();
+      expect(find.byType(BackupExportScreen), findsNothing);
     });
 
     testWidgets('the network scope sends only that network ids', (

@@ -355,12 +355,13 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
           style: tokens.bodySmall.copyWith(color: tokens.textMuted),
         ),
         const SizedBox(height: GerfautSpacing.md),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: GhostButton(
-            label: 'Done',
-            onPressed: () => Navigator.of(context).pop(),
-          ),
+        // The backup exists and the ways out are secondary: leaving is
+        // what this state of the screen is for, so it gets the one
+        // primary button, full width, where the thumb is.
+        PrimaryButton(
+          label: 'Done',
+          expand: true,
+          onPressed: () => Navigator.of(context).pop(),
         ),
       ],
     );
