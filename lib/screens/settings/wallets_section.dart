@@ -404,8 +404,10 @@ class _WalletRow extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // On the line of the name, whichever face it wears: the
+              // field while renaming, the small one otherwise.
               FirstLine(
-                style: tokens.body,
+                style: renaming ? tokens.body : tokens.bodySmall,
                 child: Icon(
                   walletGlyph(wallet.icon),
                   size: 16,
