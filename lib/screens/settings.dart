@@ -181,10 +181,13 @@ class SettingsSectionScreen extends StatelessWidget {
   const SettingsSectionScreen({
     super.key,
     required this.section,
-    this.cameraBuilder,
+    @visibleForTesting this.cameraBuilder,
   });
 
   final SettingsSection section;
+
+  /// Replaces the camera view of the backend scanner; tests push frames
+  /// by hand.
   final CameraBuilder? cameraBuilder;
 
   @override
