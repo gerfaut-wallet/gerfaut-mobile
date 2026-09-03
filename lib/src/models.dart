@@ -323,7 +323,6 @@ class SyncStamp {
   final String backend;
 }
 
-/// Wallet metadata as stored in the vault.
 /// The glyph a wallet shows next to its name, chosen by the user. The
 /// names are Lucide's, the set is the core's: both apps draw the same
 /// icon for the same value. Listed in the order the picker shows them.
@@ -354,6 +353,7 @@ enum WalletIcon {
   }
 }
 
+/// Wallet metadata as stored in the vault.
 class WalletMeta {
   const WalletMeta({
     required this.id,
