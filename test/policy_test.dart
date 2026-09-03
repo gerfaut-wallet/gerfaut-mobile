@@ -797,6 +797,54 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
     });
 
+    testWidgets('the descriptor wraps in a box the copy button stays clear '
+        'of', (tester) async {
+      final snapshot = _snapshot(lianaPolicyJson());
+      await _pumpPolicy(tester, _bridgeWith(lianaPolicyJson()));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('DESCRIPTOR'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('DESCRIPTOR'));
+      await tester.pumpAndSettle();
+
+      final descriptor = find.text(snapshot.descriptor);
+      await tester.ensureVisible(descriptor);
+      await tester.pumpAndSettle();
+      final text = tester.getRect(descriptor);
+      final style = tester.widget<Text>(descriptor).style!;
+      final line = style.fontSize! * style.height!;
+      // Several lines, no sideways scroll: the whole string is on
+      // screen, cut to the width of the phone.
+      expect(text.height, greaterThan(line * 2));
+      expect(text.width, lessThan(tester.view.physicalSize.width));
+      expect(find.byType(SingleChildScrollView), findsWidgets);
+      expect(
+        tester
+            .widgetList<SingleChildScrollView>(
+              find.byType(SingleChildScrollView),
+            )
+            .any((s) => s.scrollDirection == Axis.horizontal),
+        isFalse,
+      );
+      // The copy glyph has a column of its own: no character under it,
+      // and the target around it is a full 44px.
+      final copy = find.byTooltip('Copy descriptor');
+      final glyph = tester.getRect(
+        find.descendant(of: copy, matching: find.byType(Icon)),
+      );
+      expect(text.right, lessThan(glyph.left));
+      expect(tester.getSize(copy).height, greaterThanOrEqualTo(44));
+
+      // The normalized policy reads the same way, with its own copy.
+      final policy = find.text(snapshot.policy);
+      expect(policy, findsOneWidget);
+      expect(find.byTooltip('Copy policy'), findsOneWidget);
+      expect(
+        tester.widget<Text>(policy).style!.fontSize,
+        GerfautTokens.light.data.fontSize,
+      );
+    });
+
     testWidgets('says the clock caveat once for time-based locks', (
       tester,
     ) async {

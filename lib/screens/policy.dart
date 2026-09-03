@@ -499,9 +499,10 @@ class _KeysSection extends StatelessWidget {
 }
 
 /// The descriptor as imported, behind a disclosure closed by default,
-/// with the normalized policy under it. Both scroll sideways in their
-/// own box: a descriptor is one long line, and wrapping it would break
-/// it where nobody breaks it.
+/// with the normalized policy under it. Both wrap in a box of their
+/// own that scrolls past a set height, the way the raw transaction
+/// does: a descriptor is one long string, and a line that scrolls
+/// sideways hides most of it behind the edge of the phone.
 class _DescriptorSection extends StatefulWidget {
   const _DescriptorSection({required this.descriptor, required this.policy});
 
@@ -514,17 +515,6 @@ class _DescriptorSection extends StatefulWidget {
 
 class _DescriptorSectionState extends State<_DescriptorSection> {
   bool _open = false;
-  bool _copied = false;
-
-  Future<void> _copy() async {
-    await Clipboard.setData(ClipboardData(text: widget.descriptor));
-    if (!mounted) return;
-    setState(() => _copied = true);
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Copied')));
-    await Future<void>.delayed(const Duration(milliseconds: 1500));
-    if (mounted) setState(() => _copied = false);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -559,39 +549,10 @@ class _DescriptorSectionState extends State<_DescriptorSection> {
         ),
         if (_open) ...[
           const SizedBox(height: GerfautSpacing.xs),
-          Stack(
-            children: [
-              Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: tokens.surfaceSunken,
-                  borderRadius: BorderRadius.circular(GerfautRadius.md),
-                ),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.fromLTRB(
-                    GerfautSpacing.md,
-                    GerfautSpacing.md,
-                    GerfautSpacing.xxl,
-                    GerfautSpacing.md,
-                  ),
-                  child: Text(widget.descriptor, style: tokens.data),
-                ),
-              ),
-              Positioned(
-                top: GerfautSpacing.xs,
-                right: GerfautSpacing.xs,
-                child: IconButton(
-                  onPressed: _copy,
-                  tooltip: 'Copy descriptor',
-                  iconSize: 16,
-                  icon: Icon(
-                    _copied ? LucideIcons.check : LucideIcons.copy,
-                    color: _copied ? tokens.confirmed : tokens.textMuted,
-                  ),
-                ),
-              ),
-            ],
+          _CodeBox(
+            text: widget.descriptor,
+            style: tokens.data,
+            copyTooltip: 'Copy descriptor',
           ),
           const SizedBox(height: GerfautSpacing.sm),
           Text(
@@ -599,17 +560,88 @@ class _DescriptorSectionState extends State<_DescriptorSection> {
             style: tokens.label.copyWith(color: tokens.textMuted),
           ),
           const SizedBox(height: GerfautSpacing.xs),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Text(
-              widget.policy,
-              style: tokens.data.copyWith(
-                fontSize: 12,
-                color: tokens.textMuted,
-              ),
-            ),
+          _CodeBox(
+            text: widget.policy,
+            style: tokens.data.copyWith(color: tokens.textMuted),
+            copyTooltip: 'Copy policy',
           ),
         ],
+      ],
+    );
+  }
+}
+
+/// A string to read whole and to copy: a descriptor, a policy. It wraps
+/// to the width of the screen inside a sunken box that scrolls past
+/// [maxHeight], and the copy button has a column of its own on the
+/// right, reserved by the padding, so it never sits on a character.
+class _CodeBox extends StatefulWidget {
+  const _CodeBox({
+    required this.text,
+    required this.style,
+    required this.copyTooltip,
+  });
+
+  /// Tall enough for a multisig descriptor, short enough to leave the
+  /// keys above it on screen.
+  static const double maxHeight = 180;
+
+  final String text;
+  final TextStyle style;
+  final String copyTooltip;
+
+  @override
+  State<_CodeBox> createState() => _CodeBoxState();
+}
+
+class _CodeBoxState extends State<_CodeBox> {
+  bool _copied = false;
+
+  Future<void> _copy() async {
+    await Clipboard.setData(ClipboardData(text: widget.text));
+    if (!mounted) return;
+    setState(() => _copied = true);
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Copied')));
+    await Future<void>.delayed(const Duration(milliseconds: 1500));
+    if (mounted) setState(() => _copied = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    return Stack(
+      children: [
+        Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(maxHeight: _CodeBox.maxHeight),
+          decoration: BoxDecoration(
+            color: tokens.surfaceSunken,
+            borderRadius: BorderRadius.circular(GerfautRadius.md),
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(
+              GerfautSpacing.md,
+              GerfautSpacing.md,
+              GerfautSpacing.xxl,
+              GerfautSpacing.md,
+            ),
+            child: Text(widget.text, style: widget.style),
+          ),
+        ),
+        Positioned(
+          top: GerfautSpacing.xs,
+          right: GerfautSpacing.xs,
+          child: IconButton(
+            onPressed: _copy,
+            tooltip: widget.copyTooltip,
+            iconSize: 16,
+            icon: Icon(
+              _copied ? LucideIcons.check : LucideIcons.copy,
+              color: _copied ? tokens.confirmed : tokens.textMuted,
+            ),
+          ),
+        ),
       ],
     );
   }
