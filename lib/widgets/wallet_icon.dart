@@ -80,7 +80,9 @@ class WalletIconPicker extends StatelessWidget {
 }
 
 /// One choice of the grid. The outline says which one is on, and so
-/// does the announced state: an outline is not heard.
+/// does the announced state: an outline is not heard. The tap is on the
+/// semantics node itself: with the child's excluded, a screen reader
+/// has no other way to activate the tile.
 class _IconTile extends StatelessWidget {
   const _IconTile({
     required this.icon,
@@ -100,6 +102,7 @@ class _IconTile extends StatelessWidget {
       selected: selected,
       inMutuallyExclusiveGroup: true,
       label: icon.label,
+      onTap: onTap,
       excludeSemantics: true,
       child: InkWell(
         borderRadius: BorderRadius.circular(GerfautRadius.md),

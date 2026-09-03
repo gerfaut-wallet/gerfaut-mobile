@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:ui' show Tristate;
+import 'dart:ui' show SemanticsAction, Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -228,16 +228,23 @@ void main() {
 
       expect(find.text('Wallet icon'), findsOneWidget);
       // Seven choices, in the core's order, each named for the screen
-      // reader and sized for a thumb; the current one announced as such.
+      // reader and sized for a thumb; the current one announced as such,
+      // and every one activatable by that reader, not only by a finger.
       for (final icon in WalletIcon.values) {
         final tile = find.bySemanticsLabel(icon.label);
         expect(tile, findsOneWidget, reason: icon.label);
         final size = tester.getSize(tile);
         expect(size.width, greaterThanOrEqualTo(44));
         expect(size.height, greaterThanOrEqualTo(44));
+        final semantics = tester.getSemantics(tile);
         expect(
-          tester.getSemantics(tile).flagsCollection.isSelected,
+          semantics.flagsCollection.isSelected,
           icon == WalletIcon.wallet ? Tristate.isTrue : Tristate.isFalse,
+          reason: icon.label,
+        );
+        expect(
+          semantics.getSemanticsData().hasAction(SemanticsAction.tap),
+          isTrue,
           reason: icon.label,
         );
       }
