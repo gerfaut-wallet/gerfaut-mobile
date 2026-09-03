@@ -44,6 +44,7 @@ class GerfautNotice extends StatelessWidget {
     this.detail,
     this.icon,
     this.action,
+    this.actionsBelow = false,
     this.liveRegion = false,
   });
 
@@ -71,6 +72,12 @@ class GerfautNotice extends StatelessWidget {
   /// What to do about it, if anything: a ghost button, a link. Centred
   /// on the panel because it answers the whole note, not its first line.
   final Widget? action;
+
+  /// Puts [action] on a row of its own under the message, aligned to
+  /// the end, instead of beside it. For a confirmation: the sentence
+  /// takes the whole width instead of wrapping word by word against
+  /// two buttons, and the buttons get the row a pair of them needs.
+  final bool actionsBelow;
 
   /// Set it when the note appears in reaction to something the person
   /// just did, so a screen reader announces it instead of waiting to be
@@ -109,6 +116,63 @@ class GerfautNotice extends StatelessWidget {
         ? Text(hint!, style: tokens.bodySmall.copyWith(color: tokens.textMuted))
         : null;
 
+    final words = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        FirstLine(
+          style: style,
+          child: Icon(glyph, size: 16, color: ink, semanticLabel: role),
+        ),
+        const SizedBox(width: GerfautSpacing.sm),
+        Expanded(
+          // One line stays one Text: a paragraph in a Column would
+          // report an overflow the plain text never had.
+          child: second == null
+              ? Text(message, style: style)
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // With a second line under it, the first one
+                    // carries the weight that says which is which.
+                    Text(
+                      message,
+                      style: style.copyWith(
+                        fontWeight: FontWeight.w500,
+                        fontVariations: const [FontVariation('wght', 500)],
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    second,
+                  ],
+                ),
+        ),
+      ],
+    );
+
+    final Widget body;
+    if (action == null) {
+      body = words;
+    } else if (actionsBelow) {
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          words,
+          const SizedBox(height: GerfautSpacing.sm),
+          Align(alignment: Alignment.centerRight, child: action),
+        ],
+      );
+    } else {
+      body = Row(
+        children: [
+          Expanded(child: words),
+          const SizedBox(width: GerfautSpacing.sm),
+          action!,
+        ],
+      );
+    }
+
     final panel = Container(
       padding: const EdgeInsets.all(GerfautSpacing.sm + 4),
       decoration: BoxDecoration(
@@ -119,51 +183,7 @@ class GerfautNotice extends StatelessWidget {
         borderRadius: BorderRadius.circular(GerfautRadius.md),
         border: Border.all(color: ink.withValues(alpha: 0.25)),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                FirstLine(
-                  style: style,
-                  child: Icon(glyph, size: 16, color: ink, semanticLabel: role),
-                ),
-                const SizedBox(width: GerfautSpacing.sm),
-                Expanded(
-                  // One line stays one Text: a paragraph in a Column
-                  // would report an overflow the plain text never had.
-                  child: second == null
-                      ? Text(message, style: style)
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // With a second line under it, the first one
-                            // carries the weight that says which is which.
-                            Text(
-                              message,
-                              style: style.copyWith(
-                                fontWeight: FontWeight.w500,
-                                fontVariations: const [
-                                  FontVariation('wght', 500),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            second,
-                          ],
-                        ),
-                ),
-              ],
-            ),
-          ),
-          if (action != null) ...[
-            const SizedBox(width: GerfautSpacing.sm),
-            action!,
-          ],
-        ],
-      ),
+      child: body,
     );
 
     return liveRegion ? Semantics(liveRegion: true, child: panel) : panel;

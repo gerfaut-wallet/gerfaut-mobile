@@ -272,5 +272,45 @@ void main() {
 
     await tester.tap(find.text('Fix'));
     expect(tapped, 1);
+    // Beside the words, on the same row.
+    final text = tester.getRect(find.text(short));
+    final button = tester.getRect(find.text('Fix'));
+    expect(button.left, greaterThan(text.right));
+    expect(button.center.dy, closeTo(text.center.dy, 12));
+  });
+
+  testWidgets('actions below give the sentence the whole width', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      host(
+        GerfautNotice(
+          tone: NoticeTone.info,
+          message: long,
+          actionsBelow: true,
+          action: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextButton(onPressed: () {}, child: const Text('Keep')),
+              TextButton(onPressed: () {}, child: const Text('Go')),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final panel = tester.getRect(find.byType(GerfautNotice));
+    final text = tester.getRect(find.text(long));
+    final keep = tester.getRect(find.text('Keep'));
+    final go = tester.getRect(find.text('Go'));
+    // The words run to the panel's right padding, not to a button.
+    expect(text.right, closeTo(panel.right - 12, 1));
+    // The buttons sit under the words, on one row, flush right.
+    expect(keep.top, greaterThan(text.bottom));
+    expect(go.top, greaterThan(text.bottom));
+    expect(keep.center.dy, closeTo(go.center.dy, 1));
+    expect(keep.left, lessThan(go.left));
+    final row = tester.getRect(find.byType(Row).last);
+    expect(row.right, closeTo(panel.right - 12, 1));
   });
 }

@@ -1655,24 +1655,22 @@ class _WalletRow extends StatelessWidget {
               message:
                   'You are removing "${wallet.name}" from Gerfaut. '
                   'This only stops watching. Nothing moves on chain.',
-              // Stacked, and both as wide as the wider one: side by
-              // side they would leave the sentence a column eight
-              // characters across on a phone.
-              action: IntrinsicWidth(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // The destructive one is never alone: the panel is
-                    // the confirmation, and the way out sits under it.
-                    DangerButton(
-                      label: 'Remove wallet',
-                      onPressed: onRemoveConfirm,
-                    ),
-                    const SizedBox(height: GerfautSpacing.xs),
-                    GhostButton(label: 'Cancel', onPressed: onCancel),
-                  ],
-                ),
+              // The sentence gets the whole width, the buttons a row of
+              // their own under it: beside the text they left it a
+              // column eight characters across on a phone.
+              actionsBelow: true,
+              action: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // The destructive one is never alone: the panel is
+                  // the confirmation, and the way out sits beside it.
+                  GhostButton(label: 'Cancel', onPressed: onCancel),
+                  const SizedBox(width: GerfautSpacing.sm),
+                  DangerButton(
+                    label: 'Remove wallet',
+                    onPressed: onRemoveConfirm,
+                  ),
+                ],
               ),
             ),
           ] else if (!renaming) ...[

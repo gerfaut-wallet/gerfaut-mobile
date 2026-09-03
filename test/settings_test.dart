@@ -195,6 +195,59 @@ void main() {
     expect(find.byIcon(LucideIcons.mapPin), findsNothing);
   });
 
+  testWidgets('removing a wallet asks in a panel, the buttons under the words', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge(wallets: [makeMeta(name: 'Cold storage')]);
+    await tester.pumpWidget(settingsApp(bridge));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Remove'));
+    await tester.pumpAndSettle();
+
+    const sentence =
+        'You are removing "Cold storage" from Gerfaut. This only stops '
+        'watching. Nothing moves on chain.';
+    final notice = tester.widget<GerfautNotice>(find.byType(GerfautNotice));
+    expect(notice.tone, NoticeTone.info);
+    expect(notice.actionsBelow, isTrue);
+    expect(find.text(sentence), findsOneWidget);
+
+    // The sentence has the whole width; the two buttons share a row of
+    // their own under it, the way out first and the destructive one at
+    // the end.
+    final words = tester.getRect(find.text(sentence));
+    final cancel = tester.getRect(find.widgetWithText(GhostButton, 'Cancel'));
+    final remove = tester.getRect(
+      find.widgetWithText(DangerButton, 'Remove wallet'),
+    );
+    final panel = tester.getRect(find.byType(GerfautNotice));
+    expect(words.width, greaterThan(panel.width * 0.7));
+    expect(cancel.top, greaterThanOrEqualTo(words.bottom));
+    expect(remove.top, greaterThanOrEqualTo(words.bottom));
+    expect(cancel.center.dy, closeTo(remove.center.dy, 1));
+    expect(cancel.right, lessThan(remove.left));
+    expect(remove.right, closeTo(panel.right - 12, 1));
+    expect(remove.height, 44);
+
+    // Nothing has moved yet; Cancel closes the panel and keeps the row.
+    expect(bridge.wallets, hasLength(1));
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.byType(GerfautNotice), findsNothing);
+    expect(find.text('Cold storage'), findsOneWidget);
+
+    await tester.tap(find.text('Remove'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove wallet'));
+    await tester.pumpAndSettle();
+    expect(bridge.wallets, isEmpty);
+    expect(find.text('Wallet removed'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('the gap limit is seeded from the settings and committed', (
     tester,
   ) async {
