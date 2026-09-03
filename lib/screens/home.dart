@@ -371,11 +371,13 @@ class _WalletCard extends StatelessWidget {
                   BalanceAmount(sats: wallet.cachedBalance.total),
                   if (error != null) ...[
                     const SizedBox(height: GerfautSpacing.sm),
-                    // One line, amber: the reason is a long press away
-                    // here, and spelled out on the wallet's page.
+                    // One line, amber: the reason is a tap away here,
+                    // and spelled out on the wallet's page. A tap, not a
+                    // hold: holding the card is how it gets moved, and
+                    // two gestures on one press would fight for it.
                     Tooltip(
                       message: error!,
-                      triggerMode: TooltipTriggerMode.longPress,
+                      triggerMode: TooltipTriggerMode.tap,
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [

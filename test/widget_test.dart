@@ -277,7 +277,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // The one thing that contradicts the figure above it: a stale
-    // balance stated as fact is a lie. Amber, one line, reason on hold.
+    // balance stated as fact is a lie. Amber, one line, reason on tap.
     expect(find.text('Sync failed'), findsOneWidget);
     expect(find.byIcon(LucideIcons.triangleAlert), findsOneWidget);
     final warning = tester.widget<Text>(find.text('Sync failed'));
@@ -286,6 +286,14 @@ void main() {
       find.textContaining('0.00123456', findRichText: true),
       findsOneWidget,
     );
+
+    // A tap on the line shows the reason and leaves the card where it
+    // is: a hold is the card's own gesture, the one that lifts it.
+    await tester.tap(find.text('Sync failed'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('mempool.space: timed out'), findsOneWidget);
+    expect(find.byType(WalletHomeScreen), findsNothing);
+    await tester.pumpAndSettle();
   });
 
   testWidgets('the wallet list masks its balances from its own eye', (
