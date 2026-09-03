@@ -289,6 +289,7 @@ void main() {
           message: long,
           actionsBelow: true,
           action: Row(
+            key: const Key('actions'),
             mainAxisSize: MainAxisSize.min,
             children: [
               TextButton(onPressed: () {}, child: const Text('Keep')),
@@ -310,7 +311,7 @@ void main() {
     expect(go.top, greaterThan(text.bottom));
     expect(keep.center.dy, closeTo(go.center.dy, 1));
     expect(keep.left, lessThan(go.left));
-    final row = tester.getRect(find.byType(Row).last);
+    final row = tester.getRect(find.byKey(const Key('actions')));
     expect(row.right, closeTo(panel.right - 12, 1));
   });
 }
