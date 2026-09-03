@@ -226,7 +226,9 @@ class _WalletListState extends ConsumerState<_WalletList> {
   /// caught up. A list that changed underneath takes the vault's back.
   List<String>? _order;
 
-  List<WalletMeta> get _shown {
+  /// The cards in the order they show: the vault's, unless a drop is
+  /// still on its way there.
+  List<WalletMeta> _inOrder() {
     final order = _order;
     final wallets = widget.wallets;
     if (order == null) return wallets;
@@ -240,7 +242,7 @@ class _WalletListState extends ConsumerState<_WalletList> {
 
   Future<void> _reorder(int from, int to) async {
     if (from == to) return;
-    final ids = [for (final wallet in _shown) wallet.id];
+    final ids = [for (final wallet in _inOrder()) wallet.id];
     ids.insert(to, ids.removeAt(from));
     setState(() => _order = ids);
     try {
@@ -256,7 +258,7 @@ class _WalletListState extends ConsumerState<_WalletList> {
 
   @override
   Widget build(BuildContext context) {
-    final shown = _shown;
+    final shown = _inOrder();
     final errors = ref.watch(syncErrorsProvider);
     return RefreshIndicator(
       onRefresh: widget.onRefresh,
