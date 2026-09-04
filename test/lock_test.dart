@@ -15,6 +15,7 @@ import 'package:gerfaut/src/window.dart';
 import 'package:gerfaut/theme/tokens.dart';
 
 import 'fakes.dart';
+import 'menu.dart';
 
 /// Answers the phone's prompt the way a test asks it to.
 class FakeBiometrics implements BiometricGate {
@@ -437,8 +438,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(LockScreen), findsNothing);
 
-      await tester.tap(find.byTooltip('Settings'));
-      await tester.pumpAndSettle();
+      await pickFromMenu(tester, 'Settings');
       expect(find.text('Network'), findsOneWidget);
       await tester.tap(find.text('Security'));
       await tester.pumpAndSettle();
@@ -811,8 +811,7 @@ void main() {
     ) async {
       useTallSurface(tester);
       final container = await pumpUnlocked(tester);
-      await tester.tap(find.byTooltip('Settings'));
-      await tester.pumpAndSettle();
+      await pickFromMenu(tester, 'Settings');
       expect(find.text('Network'), findsOneWidget);
 
       container.read(lockProvider.notifier).expectExcursion();

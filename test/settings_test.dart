@@ -22,6 +22,7 @@ import 'package:gerfaut/widgets/wallet_icon.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'fakes.dart';
+import 'menu.dart';
 
 /// The settings opened on [section], or on the root list of sections.
 Widget settingsApp(FakeBridge bridge, {SettingsSection? section}) {
@@ -87,8 +88,7 @@ void main() {
     var app = tester.widget<MaterialApp>(find.byType(MaterialApp));
     expect(app.themeMode, ThemeMode.light);
 
-    await tester.tap(find.byTooltip('Settings'));
-    await tester.pumpAndSettle();
+    await pickFromMenu(tester, 'Settings');
     expect(find.text('Network'), findsOneWidget);
     await tester.tap(find.text('General'));
     await tester.pumpAndSettle();
@@ -198,8 +198,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Settings'));
-    await tester.pumpAndSettle();
+    await pickFromMenu(tester, 'Settings');
     await tester.tap(find.text('Wallets'));
     await tester.pumpAndSettle();
 

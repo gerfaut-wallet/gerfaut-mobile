@@ -12,6 +12,7 @@ import 'package:gerfaut/widgets/brand.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'fakes.dart';
+import 'menu.dart';
 
 Widget app(FakeBridge bridge, {Future<void> Function()? bootstrap}) {
   return ProviderScope(
@@ -143,8 +144,7 @@ void main() {
       expect(top('Spending'), lessThan(top('Cold storage')));
 
       // In the settings, the rows go back the other way round.
-      await tester.tap(find.byTooltip('Settings'));
-      await tester.pumpAndSettle();
+      await pickFromMenu(tester, 'Settings');
       await tester.tap(find.text('Wallets'));
       await tester.pumpAndSettle();
       final rowPitch = top('Cold storage') - top('Spending');
@@ -296,7 +296,56 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('the wallet list masks its balances from its own eye', (
+  testWidgets('the home header keeps the sync and menus the rest', (
+    tester,
+  ) async {
+    await tester.pumpWidget(app(returning(wallets: [makeMeta()])));
+    await tester.pumpAndSettle();
+
+    // Two glyphs in the bar: what is used on the way past, and the way
+    // to everything else.
+    expect(find.byTooltip('Sync'), findsOneWidget);
+    expect(find.byTooltip('More'), findsOneWidget);
+    expect(find.byTooltip('Settings'), findsNothing);
+    expect(find.byTooltip('Broadcast'), findsNothing);
+    expect(find.byTooltip('Hide balances'), findsNothing);
+
+    await openMenu(tester);
+    const order = ['Hide balances', 'Broadcast', 'Settings'];
+    double top(String label) => tester.getTopLeft(find.text(label)).dy;
+    for (var i = 0; i < order.length; i++) {
+      if (i > 0) expect(top(order[i]), greaterThan(top(order[i - 1])));
+      expect(menuRowHeight(tester, order[i]), greaterThanOrEqualTo(44));
+    }
+
+    // A tap beside it closes it, and the page underneath is untouched.
+    await tester.tapAt(const Offset(20, 500));
+    await tester.pumpAndSettle();
+    expect(find.text('Settings'), findsNothing);
+    expect(find.text('Cold storage'), findsOneWidget);
+
+    await pickFromMenu(tester, 'Broadcast');
+    expect(find.text('SIGNED TRANSACTION OR PSBT'), findsOneWidget);
+  });
+
+  testWidgets('an empty vault still reaches the settings, sync aside', (
+    tester,
+  ) async {
+    await tester.pumpWidget(app(returning()));
+    await tester.pumpAndSettle();
+
+    // Nothing to sync, so the button says so by greying out; the menu
+    // is the way on either way.
+    final sync = find.ancestor(
+      of: find.byTooltip('Sync'),
+      matching: find.byType(IconButton),
+    );
+    expect(tester.widget<IconButton>(sync).onPressed, isNull);
+    await pickFromMenu(tester, 'Settings');
+    expect(find.text('Network'), findsOneWidget);
+  });
+
+  testWidgets('the wallet list masks its balances from its own menu', (
     tester,
   ) async {
     final bridge = FakeBridge(wallets: [makeMeta(totalSats: 123456)]);
@@ -308,15 +357,16 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(find.byTooltip('Hide balances'));
-    await tester.pumpAndSettle();
+    await pickFromMenu(tester, 'Hide balances');
 
     expect(find.textContaining('0.00123456', findRichText: true), findsNothing);
     expect(find.textContaining('•••••', findRichText: true), findsWidgets);
-    expect(find.byIcon(LucideIcons.eyeOff), findsOneWidget);
     expect(bridge.appPrefs['mobile.masked'], '1');
 
-    await tester.tap(find.byTooltip('Show balances'));
+    // The entry now offers the way back, under the other label.
+    await openMenu(tester);
+    expect(find.byIcon(LucideIcons.eye), findsOneWidget);
+    await tester.tap(find.text('Show balances'));
     await tester.pumpAndSettle();
 
     expect(

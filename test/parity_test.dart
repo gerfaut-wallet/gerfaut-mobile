@@ -18,6 +18,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
 import 'fakes.dart';
+import 'menu.dart';
 
 Widget app(FakeBridge bridge, {Widget? home}) {
   return ProviderScope(
@@ -129,8 +130,7 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(find.byTooltip('Settings'));
-    await tester.pumpAndSettle();
+    await pickFromMenu(tester, 'Settings');
     await tester.tap(find.text('General'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('sats'), 100);
@@ -678,8 +678,7 @@ void main() {
     await tester.pumpWidget(app(bridge));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Settings'));
-    await tester.pumpAndSettle();
+    await pickFromMenu(tester, 'Settings');
     await tester.tap(find.text('Wallets'));
     await tester.pumpAndSettle();
 

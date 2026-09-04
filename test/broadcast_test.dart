@@ -20,6 +20,7 @@ import 'package:gerfaut/widgets/tx_diagram.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'fakes.dart';
+import 'menu.dart';
 
 /// The palette of a theme, so a test can walk both.
 GerfautTokens tokensOf(Brightness brightness) =>
@@ -676,8 +677,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // The home screen opens the broadcast page for the workspace.
-    await tester.tap(find.byTooltip('Broadcast'));
-    await tester.pumpAndSettle();
+    await pickFromMenu(tester, 'Broadcast');
 
     expect(find.text('RECENT BROADCASTS'), findsOneWidget);
     // Only the workspace network's entries, each checked once.

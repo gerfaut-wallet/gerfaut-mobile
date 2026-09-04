@@ -10,6 +10,7 @@ import '../widgets/app_bar.dart';
 import '../widgets/brand.dart';
 import '../widgets/buttons.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/overflow_menu.dart';
 import '../widgets/reorder.dart';
 import '../widgets/sync_button.dart';
 import '../widgets/wallet_icon.dart';
@@ -86,37 +87,42 @@ class HomeScreen extends ConsumerWidget {
           ],
         ),
         actions: [
-          // The list shows balances, so it masks them from here too.
-          IconButton(
-            tooltip: masked ? 'Show balances' : 'Hide balances',
-            onPressed: () => ref.read(maskedProvider.notifier).toggle(),
-            icon: Icon(masked ? LucideIcons.eyeOff : LucideIcons.eye, size: 20),
-          ),
-          // Syncs every wallet of the network at once, and turns for as
-          // long as any of them is still working.
+          // The one action of the way past, and the only one left in
+          // the bar: syncs every wallet of the network at once, and
+          // turns for as long as any of them is still working.
           SyncButton(
             syncing: sync.syncingAny,
             onPressed: network == null || (wallets.valueOrNull?.isEmpty ?? true)
                 ? null
                 : () => sync.syncAll(network),
           ),
-          // A transaction belongs to the workspace network, not to one
-          // wallet: broadcasting starts from here.
-          IconButton(
-            tooltip: 'Broadcast',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const BroadcastScreen(),
-                ),
-              );
-            },
-            icon: const Icon(LucideIcons.radio, size: 20),
-          ),
-          IconButton(
-            tooltip: 'Settings',
-            onPressed: () => SettingsScreen.open(context),
-            icon: const Icon(LucideIcons.settings, size: 20),
+          OverflowMenu(
+            items: [
+              // The list shows balances, so it masks them from here too.
+              OverflowMenuItem(
+                icon: masked ? LucideIcons.eye : LucideIcons.eyeOff,
+                label: masked ? 'Show balances' : 'Hide balances',
+                onSelected: () => ref.read(maskedProvider.notifier).toggle(),
+              ),
+              // A transaction belongs to the workspace network, not to
+              // one wallet: broadcasting starts from here.
+              OverflowMenuItem(
+                icon: LucideIcons.radio,
+                label: 'Broadcast',
+                onSelected: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const BroadcastScreen(),
+                    ),
+                  );
+                },
+              ),
+              OverflowMenuItem(
+                icon: LucideIcons.settings,
+                label: 'Settings',
+                onSelected: () => SettingsScreen.open(context),
+              ),
+            ],
           ),
           const SizedBox(width: GerfautSpacing.sm),
         ],
