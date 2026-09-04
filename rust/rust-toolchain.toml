@@ -1,0 +1,15 @@
+# The mobile crate is its own Cargo workspace and does not inherit the
+# pin from gerfaut-core, so it carries the same one.
+#
+# Cargokit builds the Android libraries with `rustup run stable cargo`,
+# which sets RUSTUP_TOOLCHAIN and overrides this file. The reproducible
+# container resolves `stable` to this exact version so both agree; a
+# direct `cargo build` here honours the file as written.
+[toolchain]
+channel = "1.97.0"
+components = ["rustfmt", "clippy"]
+targets = [
+    "aarch64-linux-android",
+    "armv7-linux-androideabi",
+    "x86_64-linux-android",
+]
