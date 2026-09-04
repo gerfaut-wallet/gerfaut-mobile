@@ -1,11 +1,14 @@
-# Builds a signed release APK on every `v*` tag and attaches it to a draft
-# GitHub Release (review, sign with scripts/sign-release.ps1, then publish).
-# Manual runs build the same APK and upload it as a workflow artifact only.
+# Builds the release APKs on every `v*` tag and attaches them to a draft
+# GitHub Release (review, add the signed SHA256SUMS with
+# scripts/sign-release.ps1, then publish).
+# Manual runs build the same APKs and upload them as workflow artifacts only.
 #
-# Standard Android CI signing: the app's own release keystore is stored in
-# this repository's Actions secrets and restored to a runner-local file for
-# the Gradle signing config. Nothing here touches Bitcoin keys; Gerfaut is
-# watch-only by design.
+# The APKs are built unsigned inside the pinned container of
+# `reproducible/`, then signed here with the app's own release keystore,
+# stored in this repository's Actions secrets. Anyone can rebuild the same
+# container and check that the payload matches, byte for byte; see
+# docs/REPRODUCIBLE-BUILDS.md. Nothing here touches Bitcoin keys; Gerfaut
+# is watch-only by design.
 #
 #   git tag v0.1.0 && git push origin v0.1.0
 
@@ -27,61 +30,82 @@ jobs:
         with:
           path: gerfaut-mobile
 
-      # The Rust crate depends on the sibling gerfaut-core checkout.
+      # The Rust crate depends on the sibling gerfaut-core checkout, at the
+      # revision this release pins.
+      - name: Read the pinned gerfaut-core revision
+        id: core
+        run: echo "rev=$(cat gerfaut-mobile/reproducible/gerfaut-core.rev)" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v4
         with:
           repository: gerfaut-wallet/gerfaut-core
+          ref: ${{ steps.core.outputs.rev }}
           ssh-key: ${{ secrets.CORE_DEPLOY_KEY }}
           path: gerfaut-core
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+      - name: Build the unsigned APKs
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            gerfaut-mobile/reproducible/verify.sh --out "$PWD/unsigned" --version "$GITHUB_REF_NAME"
+          else
+            gerfaut-mobile/reproducible/verify.sh --out "$PWD/unsigned"
+          fi
 
-      - uses: swatinem/rust-cache@v2
-        with:
-          workspaces: gerfaut-mobile/rust
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-
-      - name: Restore signing keystore
+      - name: Restore the signing keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
 
-      - name: Build APK
-        working-directory: gerfaut-mobile
+      # With v1 off, apksigner adds no zip entry at all: it only inserts
+      # an APK signing block, so every entry stays exactly where the
+      # container put it and the published APK can be compared with a
+      # rebuild. v1 is only needed below API 24, and minSdk here is 24.
+      - name: Sign
         env:
-          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/release.keystore
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
-          flutter pub get
-          flutter build apk --release
-          cp build/app/outputs/flutter-apk/app-release.apk \
-            "gerfaut-${GITHUB_REF_NAME}-android.apk"
+          sdk="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          apksigner="$(ls -d "$sdk"/build-tools/*/apksigner | sort -V | tail -1)"
+          mkdir -p signed
+          for apk in unsigned/*-unsigned.apk; do
+            base="${apk##*/}"
+            name="${base%-unsigned.apk}.apk"
+            "$apksigner" sign \
+              --ks "$RUNNER_TEMP/release.keystore" \
+              --ks-pass env:KEYSTORE_PASSWORD \
+              --ks-key-alias "$KEY_ALIAS" \
+              --key-pass env:KEYSTORE_PASSWORD \
+              --v1-signing-enabled false \
+              --v2-signing-enabled true \
+              --v3-signing-enabled true \
+              --out "signed/$name" "$apk"
+            "$apksigner" verify --print-certs "signed/$name"
+          done
+          rm -f "$RUNNER_TEMP/release.keystore"
+          ls -l signed
+
+      # The published APK and the rebuild must differ only by the signature.
+      - name: Check the signature is the only difference
+        run: |
+          for apk in signed/*.apk; do
+            name="$(basename "$apk" .apk)"
+            python3 gerfaut-mobile/reproducible/compare.py --signed "$apk" "unsigned/$name-unsigned.apk"
+          done
 
       - uses: actions/upload-artifact@v4
         with:
           name: gerfaut-android-apk
-          path: gerfaut-mobile/gerfaut-*-android.apk
+          path: signed/*.apk
 
       - name: Draft release
         if: startsWith(github.ref, 'refs/tags/')
-        working-directory: gerfaut-mobile
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
             --draft \
+            --repo "$GITHUB_REPOSITORY" \
             --title "Gerfaut $GITHUB_REF_NAME" \
-            --notes-file .github/release-notes.md \
-            "gerfaut-${GITHUB_REF_NAME}-android.apk"
+            --notes-file gerfaut-mobile/.github/release-notes.md \
+            signed/*.apk
