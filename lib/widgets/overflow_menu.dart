@@ -255,8 +255,12 @@ class _MenuRow extends StatelessWidget {
                     if (detail != null)
                       Text(
                         detail,
+                        // The label face at its size, but not its
+                        // tracking: `label` is spaced for uppercase, and
+                        // this line is a sentence ("2 of 3 keys").
                         style: tokens.label.copyWith(
                           fontSize: 11,
+                          letterSpacing: 0,
                           color: tokens.textMuted,
                         ),
                         maxLines: 1,
