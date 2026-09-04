@@ -1,9 +1,14 @@
 # Pinned toolchain for reproducible Gerfaut Android builds.
 #
-# Every input that can change the output bytes is pinned here: the base
-# image by digest, the JDK by the base image, the Android SDK components
-# by exact revision, Flutter by tag and commit, Rust by version. The
-# image builds *unsigned* APKs; signing happens later, in the release
+# Everything that shapes the APK is pinned here: the base image by
+# digest, the JDK by the base image, the Android SDK components by exact
+# revision, Flutter by tag and commit, Rust by version. What is not
+# pinned is the image's own build — apt pulls the live jammy pocket and
+# platform-tools has no revision — which changes the image without
+# changing the APKs it produces; the caveats are spelled out in
+# docs/REPRODUCIBLE-BUILDS.md.
+#
+# The image builds *unsigned* APKs; signing happens later, in the release
 # workflow, with a key this image never sees.
 #
 # Build and run it through reproducible/verify.sh, which also exports the

@@ -37,7 +37,7 @@ The first release: Gerfaut for Android.
   phone for them.
 - Signet, testnet4 and regtest alongside mainnet.
 - One APK per processor architecture instead of one carrying all three:
-  about 48 MB to download rather than 127.
+  50 MB to download on a 64-bit ARM phone rather than 127.
 - Reproducible builds. The APKs are built in a container where every tool
   version is pinned, so the same commit always produces the same bytes.
   Rebuild them yourself and compare; only the signature should differ.

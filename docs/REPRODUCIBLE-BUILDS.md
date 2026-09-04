@@ -10,7 +10,7 @@ That last point is the honest limit of the exercise. The release key stays on th
 
 - Docker, and a Linux container engine (Docker Desktop on Windows and macOS works)
 - git and Python 3
-- About 10 GB of free disk for the image, a few more while a build runs, and
+- About 15 GB of free disk for the image, a few more while a build runs, and
   8 GB of RAM given to the container engine
 - Roughly half an hour per build on a recent laptop
 
@@ -52,7 +52,7 @@ python3 reproducible/compare.py --signed \
 
 `compare.py` reads both zip indexes, hashes every entry, and prints `payload identical, only the signature differs` when they match. Anything else is listed entry by entry, and the exit code is non-zero. It needs nothing but Python.
 
-[apksigcopier](https://github.com/obfusk/apksigcopier), the tool F-Droid and WalletScrutiny reach for, does not work on these APKs. It grafts the signature onto a rebuilt copy of your file, and its zip writer does not reproduce the alignment padding the Android Gradle Plugin writes into each stored entry's extra field. Every entry can be identical and it still reports a digest mismatch. Checked with apksigcopier 1.1.1 on the arm64 APK of this repository: 397 entries came back out with a different extra-field length. Use `compare.py`, which reads the entries instead of rewriting them.
+[apksigcopier](https://github.com/obfusk/apksigcopier), the tool F-Droid and WalletScrutiny reach for, does not work on these APKs. It grafts the signature onto a rebuilt copy of your file, and its zip writer does not reproduce the alignment padding the Android Gradle Plugin writes into each stored entry's extra field. Every entry can be identical and it still reports a digest mismatch. That is what we saw with apksigcopier 1.1.1 on this repository's arm64 APK, on one machine and one version, so take it as the reason for the tool below rather than as a verdict on theirs. `compare.py` reads the entries where they lie instead of rewriting them, which is why it is the route documented here.
 
 ## What is pinned
 
