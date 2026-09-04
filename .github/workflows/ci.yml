@@ -1,8 +1,10 @@
 name: CI
 
-# Analysis and widget tests only: the APK build needs the sibling
-# gerfaut-core checkout and the Android NDK, which stay local until the
-# repositories go public.
+# Flutter analysis and widget tests on every push and pull request, and a
+# Clippy pass over the Rust crate on push only: the crate depends on the
+# sibling gerfaut-core checkout, which comes from a deploy key, and a pull
+# request from a fork never gets one. The APKs themselves are built by the
+# release and reproducible workflows.
 on:
   push:
     branches: [main]
@@ -22,3 +24,34 @@ jobs:
         run: flutter analyze
       - name: Test
         run: flutter test
+
+  rust:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: gerfaut-mobile
+
+      # The same revision the release builds against, so a green run here
+      # means the APK compiles.
+      - name: Read the pinned gerfaut-core revision
+        id: core
+        run: echo "rev=$(cat gerfaut-mobile/reproducible/gerfaut-core.rev)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          repository: gerfaut-wallet/gerfaut-core
+          ref: ${{ steps.core.outputs.rev }}
+          ssh-key: ${{ secrets.CORE_DEPLOY_KEY }}
+          path: gerfaut-core
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: gerfaut-mobile/rust
+
+      - name: Clippy
+        working-directory: gerfaut-mobile/rust
+        run: |
+          rustup show
+          cargo clippy --all-targets -- -D warnings
