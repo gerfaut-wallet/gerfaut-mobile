@@ -16,6 +16,7 @@ import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
 
 import 'fakes.dart';
+import 'menu.dart';
 import 'policy_fixtures.dart';
 
 void main() {
@@ -51,8 +52,7 @@ void main() {
     expect(find.text('Receive'), findsOneWidget);
 
     // The eye masks every amount, and the preference is persisted.
-    await tester.tap(find.byTooltip('Hide balances'));
-    await tester.pumpAndSettle();
+    await pickFromMenu(tester, 'Hide balances');
 
     expect(find.textContaining('0.00123456', findRichText: true), findsNothing);
     expect(find.textContaining('•••••', findRichText: true), findsWidgets);
@@ -103,7 +103,7 @@ void main() {
     );
   });
 
-  testWidgets('every action of the wallet is in its header', (tester) async {
+  testWidgets('the header keeps the sync and menus the rest', (tester) async {
     final meta = makeMeta();
     final bridge = FakeBridge(
       wallets: [meta],
@@ -120,31 +120,93 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Nothing hides under a menu any more, and the name keeps the room
-    // that buys: it starts against the back arrow.
-    expect(find.byTooltip('More'), findsNothing);
-    expect(find.byTooltip('Hide balances'), findsOneWidget);
+    // Two glyphs in the bar, and the name keeps everything the other
+    // three gave up: it starts against the back arrow.
     expect(find.byTooltip('Sync'), findsOneWidget);
-    expect(find.byTooltip('Broadcast'), findsOneWidget);
-    expect(find.byTooltip('Export CSV'), findsOneWidget);
+    expect(find.byTooltip('More'), findsOneWidget);
+    expect(find.byTooltip('Hide balances'), findsNothing);
+    expect(find.byTooltip('Broadcast'), findsNothing);
+    expect(find.byTooltip('Export CSV'), findsNothing);
     expect(
       tester.getRect(find.text('Cold storage')).left,
-      lessThan(tester.getRect(find.byTooltip('Hide balances')).left),
+      lessThan(tester.getRect(find.byTooltip('Sync')).left),
     );
 
-    await tester.tap(find.byTooltip('Broadcast'));
+    await openMenu(tester);
+    // The differentiator first, the rarest last.
+    const order = [
+      'Policy',
+      'Rename wallet',
+      'Hide balances',
+      'Export CSV',
+      'Broadcast',
+    ];
+    double top(String label) => tester.getTopLeft(find.text(label)).dy;
+    for (var i = 1; i < order.length; i++) {
+      expect(top(order[i]), greaterThan(top(order[i - 1])));
+      // A menu row is as big a target as any other control.
+      expect(menuRowHeight(tester, order[i]), greaterThanOrEqualTo(44));
+    }
+
+    await tester.tap(find.text('Broadcast'));
     await tester.pumpAndSettle();
     expect(find.text('SIGNED TRANSACTION OR PSBT'), findsOneWidget);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Export CSV'));
-    await tester.pumpAndSettle();
+    await pickFromMenu(tester, 'Export CSV');
     expect(
       find.text("This wallet's transaction history as a CSV file."),
       findsOneWidget,
     );
+  });
+
+  testWidgets('the menu renames the wallet, and only once it can', (
+    tester,
+  ) async {
+    final meta = makeMeta();
+    final bridge = FakeBridge(
+      wallets: [meta],
+      snapshots: {'w1': makeSnapshot(meta: meta)},
+    );
+    final gate = Completer<void>();
+    bridge.snapshotGate = gate;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [bridgeProvider.overrideWithValue(bridge)],
+        child: MaterialApp(
+          theme: themeFrom(GerfautTokens.light, Brightness.light),
+          home: const WalletHomeScreen(walletId: 'w1'),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // Nothing to rename while the name is unknown: the entry is not
+    // offered rather than offered dead.
+    await openMenu(tester);
+    expect(find.text('Rename wallet'), findsNothing);
+    await tester.tapAt(const Offset(20, 500));
+    await tester.pumpAndSettle();
+
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    // Once loaded, the menu opens the dialog the title opens.
+    await pickFromMenu(tester, 'Rename wallet');
+    final field = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(TextField),
+    );
+    expect(tester.widget<TextField>(field).controller?.text, 'Cold storage');
+    await tester.enterText(field, 'Vault');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(bridge.wallets.single.name, 'Vault');
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('a transaction row reads in one line, date included', (
@@ -468,8 +530,7 @@ void main() {
 
     // Masked, the figure hides and the clock stays: that something is
     // in flight is not an amount.
-    await tester.tap(find.byTooltip('Hide balances'));
-    await tester.pumpAndSettle();
+    await pickFromMenu(tester, 'Hide balances');
     expect(find.text(figure), findsNothing);
     expect(find.byIcon(LucideIcons.clock), findsOneWidget);
   });
@@ -524,7 +585,7 @@ void main() {
     expect(find.byIcon(LucideIcons.clock), findsNothing);
   });
 
-  testWidgets('the balance card links the policy page', (tester) async {
+  testWidgets('the menu links the policy page, digest and all', (tester) async {
     final meta = makeMeta(totalSats: 5000);
     final bridge = FakeBridge(
       wallets: [meta],
@@ -534,12 +595,18 @@ void main() {
     await tester.pumpWidget(homeOf(bridge));
     await tester.pumpAndSettle();
 
+    // The balance card is down to the figure it is for.
+    expect(find.text('Policy'), findsNothing);
+
+    await openMenu(tester);
+    // What the row used to show rides under the label instead.
     expect(find.text('Policy'), findsOneWidget);
     expect(find.text('2 of 3 keys'), findsOneWidget);
 
     // The digest is structure, not an amount: the eye leaves it alone.
-    await tester.tap(find.byTooltip('Hide balances'));
+    await tester.tap(find.text('Hide balances'));
     await tester.pumpAndSettle();
+    await openMenu(tester);
     expect(find.text('2 of 3 keys'), findsOneWidget);
 
     await tester.tap(find.text('Policy'));
@@ -547,7 +614,7 @@ void main() {
     expect(find.text('2 of 3 keys sign.'), findsOneWidget);
   });
 
-  testWidgets('a screen reader can open the policy page from the row', (
+  testWidgets('a screen reader can open the policy page from the menu', (
     tester,
   ) async {
     final handle = tester.ensureSemantics();
@@ -560,8 +627,9 @@ void main() {
     await tester.pumpWidget(homeOf(bridge));
     await tester.pumpAndSettle();
 
-    // One node for the whole row, and a double-tap that acts: the ink
-    // well's own tap is excluded with the rest of the child semantics.
+    // One node for the whole entry, and a double-tap that acts: the
+    // ink well's own tap is excluded with the child semantics.
+    await openMenu(tester);
     final row = find.semantics.byLabel('Policy: 2 of 3 keys');
     expect(
       row,
@@ -590,7 +658,9 @@ void main() {
     await tester.pumpWidget(homeOf(bridge));
     await tester.pumpAndSettle();
 
-    // The row stands without its digest, and still leads to the page.
+    // The entry stands without its digest, never disabled and never
+    // spinning, and still leads to the page that says why.
+    await openMenu(tester);
     expect(find.text('Policy'), findsOneWidget);
     await tester.tap(find.text('Policy'));
     await tester.pumpAndSettle();

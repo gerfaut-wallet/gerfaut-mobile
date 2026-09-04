@@ -551,8 +551,13 @@ class FakeBridge implements GerfautBridge {
     return wallets.where((w) => w.network == network).toList();
   }
 
+  /// Holds a snapshot in flight, for a test that looks at a wallet page
+  /// whose name is not known yet. Completed, the page loads.
+  Completer<void>? snapshotGate;
+
   @override
   Future<WalletSnapshot> walletSnapshot(String id) async {
+    await snapshotGate?.future;
     final snapshot = snapshots[id];
     if (snapshot == null) {
       throw BridgeException('wallet_not_found', 'wallet not found: $id');

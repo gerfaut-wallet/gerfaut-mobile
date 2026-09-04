@@ -14,6 +14,7 @@ import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/count_badge.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/overflow_menu.dart';
 import '../widgets/status_pill.dart';
 import '../widgets/sync_button.dart';
 import '../widgets/sync_indicator.dart';
@@ -83,6 +84,10 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
     final snapshot = ref.watch(snapshotProvider(widget.walletId));
     final loaded = snapshot.valueOrNull;
     final name = loaded?.meta.name;
+    // Never masked — a policy is structure, not an amount — and absent
+    // rather than pending while it loads: a menu never spins.
+    final policy = ref.watch(policyProvider(widget.walletId)).valueOrNull;
+    final digest = policy == null ? null : policyDigest(policy);
 
     return Scaffold(
       appBar: GerfautAppBar(
@@ -116,23 +121,49 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
           ),
         ),
         actions: [
-          IconButton(
-            tooltip: masked ? 'Show balances' : 'Hide balances',
-            onPressed: () => ref.read(maskedProvider.notifier).toggle(),
-            icon: Icon(masked ? LucideIcons.eyeOff : LucideIcons.eye, size: 20),
-          ),
+          // The one action of the way past stays in the bar; the rest
+          // is a tap deeper, named in words.
           SyncButton(syncing: syncing, onPressed: _sync),
-          IconButton(
-            tooltip: 'Broadcast',
-            onPressed: () => _open((_) => const BroadcastScreen()),
-            icon: const Icon(LucideIcons.radio, size: 20),
+          OverflowMenu(
+            items: [
+              // The differentiator, first: what the descriptor says and
+              // who can spend when. The digest rides under the label,
+              // so what the balance card used to show is still read
+              // here — and the entry opens even while the digest is
+              // loading or failed, because the page itself has the room
+              // to say what went wrong.
+              OverflowMenuItem(
+                icon: LucideIcons.route,
+                label: 'Policy',
+                detail: digest,
+                onSelected: () => _open((id) => PolicyScreen(walletId: id)),
+              ),
+              // The title is still the gesture; this is how it gets
+              // found. Nothing to rename until the wallet has loaded.
+              if (name != null)
+                OverflowMenuItem(
+                  icon: LucideIcons.pencil,
+                  label: 'Rename wallet',
+                  onSelected: () => _rename(name),
+                ),
+              OverflowMenuItem(
+                icon: masked ? LucideIcons.eye : LucideIcons.eyeOff,
+                label: masked ? 'Show balances' : 'Hide balances',
+                onSelected: () => ref.read(maskedProvider.notifier).toggle(),
+              ),
+              OverflowMenuItem(
+                icon: LucideIcons.fileDown,
+                label: 'Export CSV',
+                onSelected: () => _open((id) => ExportScreen(walletId: id)),
+              ),
+              OverflowMenuItem(
+                icon: LucideIcons.radio,
+                label: 'Broadcast',
+                onSelected: () => _open((_) => const BroadcastScreen()),
+              ),
+            ],
           ),
-          IconButton(
-            tooltip: 'Export CSV',
-            onPressed: () => _open((id) => ExportScreen(walletId: id)),
-            icon: const Icon(LucideIcons.fileDown, size: 20),
-          ),
-          const SizedBox(width: GerfautSpacing.xs),
+          const SizedBox(width: GerfautSpacing.sm),
         ],
       ),
       // A wallet already loaded stays on screen while it refreshes: a
@@ -227,20 +258,6 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                         const SizedBox(height: GerfautSpacing.sm),
                         PendingAmount(sats: pending),
                       ],
-                      const SizedBox(
-                        height: GerfautSpacing.sm + GerfautSpacing.xs,
-                      ),
-                      Divider(
-                        height: 1,
-                        thickness: 1,
-                        color: tokens.border.withValues(alpha: 0.6),
-                      ),
-                      // The differentiator, one tap from the balance:
-                      // what the descriptor says and who can spend when.
-                      _PolicyRow(
-                        walletId: widget.walletId,
-                        onOpen: () => _open((id) => PolicyScreen(walletId: id)),
-                      ),
                     ],
                   ),
                 ),
@@ -635,71 +652,5 @@ class _UtxoList extends ConsumerWidget {
         ),
       ),
     };
-  }
-}
-
-/// The policy link at the foot of the balance card. Never masked — a
-/// policy is structure, not an amount — and it opens even while the
-/// digest is loading or failed: the page itself has the room to say
-/// what went wrong.
-class _PolicyRow extends ConsumerWidget {
-  const _PolicyRow({required this.walletId, required this.onOpen});
-
-  final String walletId;
-  final VoidCallback onOpen;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final policy = ref.watch(policyProvider(walletId)).valueOrNull;
-    final digest = policy == null ? null : policyDigest(policy);
-    // Excluding the child's semantics drops the ink well's tap with
-    // them: the node has to carry its own, or a screen reader's
-    // double-tap lands on nothing.
-    return Semantics(
-      button: true,
-      label: digest == null ? 'Policy' : 'Policy: $digest',
-      onTap: onOpen,
-      excludeSemantics: true,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(GerfautRadius.md),
-          onTap: onOpen,
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 44),
-            child: Row(
-              children: [
-                Icon(LucideIcons.route, size: 16, color: tokens.textMuted),
-                const SizedBox(width: GerfautSpacing.sm),
-                Text(
-                  'Policy',
-                  style: tokens.bodySmall.copyWith(
-                    fontWeight: FontWeight.w500,
-                    fontVariations: const [FontVariation('wght', 500)],
-                  ),
-                ),
-                const SizedBox(width: GerfautSpacing.sm),
-                Expanded(
-                  child: Text(
-                    digest ?? '',
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                    textAlign: TextAlign.right,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: GerfautSpacing.xs),
-                Icon(
-                  LucideIcons.chevronRight,
-                  size: 16,
-                  color: tokens.textMuted,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
