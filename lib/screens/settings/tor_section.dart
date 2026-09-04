@@ -8,6 +8,7 @@ import '../../src/state.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/choice_group.dart';
+import '../../widgets/onion_icon.dart';
 import '../../widgets/section_card.dart';
 
 /// Where Tor stands right now. Read on demand: nothing is probed or
@@ -79,8 +80,10 @@ class _TorSectionState extends ConsumerState<TorSection> {
     if (tor == null) return const SizedBox.shrink();
     final embedded = status?.embeddedAvailable ?? false;
 
-    return SectionCard(
-      icon: LucideIcons.venetianMask,
+    // No semantic label on the glyph: the title beside it already
+    // says the word, and a screen reader would say it twice.
+    return SectionCard.glyph(
+      glyph: const OnionIcon(),
       title: 'Tor',
       children: [
         Text(

@@ -11,9 +11,25 @@ class SectionCard extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.children,
-  });
+  }) : glyph = null;
 
-  final IconData icon;
+  /// The same card with a glyph of our own — an [OnionIcon] — for the
+  /// one section Lucide has no icon for. The card hands it the size and
+  /// the colour every other section icon gets, through the icon theme,
+  /// so a caller never restates them and the row cannot drift.
+  const SectionCard.glyph({
+    super.key,
+    required Widget this.glyph,
+    required this.title,
+    required this.children,
+  }) : icon = null;
+
+  /// The Lucide glyph of the section; null when [glyph] draws it.
+  final IconData? icon;
+
+  /// Drawn in place of the Lucide icon; null on every other section.
+  final Widget? glyph;
+
   final String title;
   final List<Widget> children;
 
@@ -37,7 +53,7 @@ class SectionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SectionTitle(icon: icon, title: title),
+          _SectionTitle(glyph: glyph ?? Icon(icon), title: title),
           ...children,
         ],
       ),
@@ -75,7 +91,7 @@ class SliverSectionCard extends StatelessWidget {
           sliver: SliverMainAxisGroup(
             slivers: [
               SliverToBoxAdapter(
-                child: _SectionTitle(icon: icon, title: title),
+                child: _SectionTitle(glyph: Icon(icon), title: title),
               ),
               ...slivers,
             ],
@@ -89,9 +105,12 @@ class SliverSectionCard extends StatelessWidget {
 /// An icon, a title in the display face, and the gap before the
 /// controls.
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.icon, required this.title});
+  const _SectionTitle({required this.glyph, required this.title});
 
-  final IconData icon;
+  /// A Lucide [Icon] or a glyph of ours; either way it is the card
+  /// that says how big and what colour, never the caller.
+  final Widget glyph;
+
   final String title;
 
   @override
@@ -101,7 +120,10 @@ class _SectionTitle extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: GerfautSpacing.md),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: tokens.textMuted),
+          IconTheme.merge(
+            data: IconThemeData(size: 18, color: tokens.textMuted),
+            child: glyph,
+          ),
           const SizedBox(width: GerfautSpacing.sm),
           // Flexible, because a Row hands an inflexible child unbounded
           // width: at a doubled text scale on a narrow frame a one-word
