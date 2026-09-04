@@ -1,0 +1,5 @@
+# The reproducible build runs these inside a Linux container: a CRLF
+# checkout on Windows would break the shebang and change the bytes the
+# container sees.
+*.sh text eol=lf
+Dockerfile text eol=lf

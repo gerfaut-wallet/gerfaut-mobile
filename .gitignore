@@ -50,3 +50,6 @@ app.*.map.json
 
 # Rust
 /rust/target/
+
+# Reproducible build output
+/reproducible/out/
