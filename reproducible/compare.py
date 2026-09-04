@@ -30,14 +30,38 @@ def is_v1_signature(name: str) -> bool:
     return name.endswith(V1_SIGNATURE_SUFFIXES) or name == "META-INF/MANIFEST.MF"
 
 
+def stored_bytes(handle, info: zipfile.ZipInfo) -> bytes:
+    """The entry exactly as it sits in the file, still compressed.
+
+    Comparing what `read()` returns would only prove the two entries
+    decompress alike: another zlib, or the same one at another level,
+    turns identical input into different bytes, and that drift is what
+    this tool exists to catch. The local header carries its own name and
+    extra field lengths, which need not match the central directory's, so
+    the offset of the data is read from it rather than assumed.
+    """
+    handle.seek(info.header_offset)
+    header = handle.read(30)
+    name_len = int.from_bytes(header[26:28], "little")
+    extra_len = int.from_bytes(header[28:30], "little")
+    handle.seek(info.header_offset + 30 + name_len + extra_len)
+    return handle.read(info.compress_size)
+
+
 def entries(path: str, skip_signature: bool) -> dict[str, tuple]:
     found = {}
-    with zipfile.ZipFile(path) as zf:
+    with open(path, "rb") as handle, zipfile.ZipFile(handle) as zf:
         for info in zf.infolist():
             if skip_signature and is_v1_signature(info.filename):
                 continue
-            digest = hashlib.sha256(zf.read(info)).hexdigest()
-            found[info.filename] = (info.compress_type, info.CRC, info.file_size, digest)
+            digest = hashlib.sha256(stored_bytes(handle, info)).hexdigest()
+            found[info.filename] = (
+                info.compress_type,
+                info.CRC,
+                info.file_size,
+                info.compress_size,
+                digest,
+            )
     return found
 
 
@@ -97,9 +121,13 @@ def main() -> int:
 
     if args.signed:
         print("payload identical, only the signature differs")
-    else:
-        print("payload identical, but the files are not byte for byte equal")
-    return 0
+        return 0
+
+    # Two rebuilds of the same commit: any difference is a bug, and one
+    # that shows up outside the entries — in the central directory, in an
+    # extra field, in the alignment padding — is still a difference.
+    print("every entry matches, but the files are not byte for byte equal")
+    return 1
 
 
 if __name__ == "__main__":
