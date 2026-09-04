@@ -29,13 +29,27 @@ The app contains no code to generate keys, handle seeds, or sign transactions. T
 
 ## Releases
 
-A signed APK is built by CI from every `v*` tag and published on the [releases page](https://github.com/gerfaut-wallet/gerfaut-mobile/releases). Each release ships a `SHA256SUMS` manifest signed with the author's [minisign](https://jedisct1.github.io/minisign/) key:
+CI builds three signed APKs from every `v*` tag, one per processor architecture, and publishes them on the [releases page](https://github.com/gerfaut-wallet/gerfaut-mobile/releases):
+
+| File | Architecture | For |
+|---|---|---|
+| `gerfaut-<version>-android-arm64-v8a.apk` | 64-bit ARM | almost every phone, take this one |
+| `gerfaut-<version>-android-armeabi-v7a.apk` | 32-bit ARM | older or entry-level devices |
+| `gerfaut-<version>-android-x86_64.apk` | Intel and AMD | emulators, Chromebooks |
+
+Every Android phone sold since roughly 2017 runs on 64-bit ARM, so `arm64-v8a` is the answer unless you know otherwise.
+
+Each release ships a `SHA256SUMS` manifest signed with the author's [minisign](https://jedisct1.github.io/minisign/) key:
 
 ```
 RWTz3c4gUmglCX5Uvjthigz1ts3TS3ZSdhRNpFgOJRW/Wr4XjGlqTR3O
 ```
 
 Verify a download in two steps: `minisign -Vm SHA256SUMS -P <key>` proves the manifest comes from the author, then `sha256sum --check SHA256SUMS --ignore-missing` proves your file matches it.
+
+## Reproducible builds
+
+The APKs are built in a container where every tool version is pinned, so the same commit always produces the same bytes. You can rebuild a release yourself and check that only the signature differs from the published file. See [docs/REPRODUCIBLE-BUILDS.md](docs/REPRODUCIBLE-BUILDS.md).
 
 ## License
 
