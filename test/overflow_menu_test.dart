@@ -164,33 +164,25 @@ void main() {
     expect(picked, isEmpty);
   });
 
-  testWidgets('it drops into place, and a fade alone when asked to', (
+  testWidgets('it fades in where it lands, like the other floating list', (
     tester,
   ) async {
     await tester.pumpWidget(page(sample()));
     await tester.tap(find.byTooltip('More'));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 80));
+    await tester.pump(const Duration(milliseconds: 60));
     final flying = tester.getTopLeft(find.text('Policy')).dy;
-    await tester.pumpAndSettle();
-    final settled = tester.getTopLeft(find.text('Policy')).dy;
-    expect(flying, lessThan(settled));
-    expect(settled - flying, lessThanOrEqualTo(8));
+    final opacity = tester
+        .widgetList<FadeTransition>(find.byType(FadeTransition))
+        .map((f) => f.opacity.value)
+        .reduce((a, b) => a < b ? a : b);
+    expect(opacity, greaterThan(0));
+    expect(opacity, lessThan(1));
 
-    // A device asking for less motion keeps the fade and loses the
-    // travel: nothing slides, and nothing jumps either.
-    await tester.pumpWidget(
-      MediaQuery(
-        data: const MediaQueryData(disableAnimations: true),
-        child: page(sample()),
-      ),
-    );
-    await tester.tap(find.byTooltip('More'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 80));
-    final still = tester.getTopLeft(find.text('Policy')).dy;
+    // Anchored under its own button, the panel already says where it
+    // came from: it arrives in place and only its opacity moves.
     await tester.pumpAndSettle();
-    expect(tester.getTopLeft(find.text('Policy')).dy, still);
+    expect(tester.getTopLeft(find.text('Policy')).dy, flying);
   });
 
   testWidgets('a small screen at a doubled text scale scrolls, not spills', (

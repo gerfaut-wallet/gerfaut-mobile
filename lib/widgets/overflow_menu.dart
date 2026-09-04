@@ -10,10 +10,6 @@ import '../theme/tokens.dart';
 /// reading as a menu and starts reading as a panel.
 const double _menuWidth = 280;
 
-/// How far the surface travels on its way in (DESIGN.md, floating
-/// surface: a fade and 8px, 250ms, ease-out).
-const double _slide = 8;
-
 /// One entry of an [OverflowMenu].
 @immutable
 class OverflowMenuItem {
@@ -122,7 +118,7 @@ class _OverflowMenuRoute extends PopupRoute<OverflowMenuItem> {
   bool get barrierDismissible => true;
 
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 250);
+  Duration get transitionDuration => const Duration(milliseconds: 150);
 
   @override
   Widget buildTransitions(
@@ -131,19 +127,12 @@ class _OverflowMenuRoute extends PopupRoute<OverflowMenuItem> {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    final curve = CurvedAnimation(parent: animation, curve: Curves.easeOut);
-    final fade = FadeTransition(opacity: curve, child: child);
-    // Reduced motion: the travel becomes a plain fade, never a jump.
-    if (MediaQuery.disableAnimationsOf(context)) return fade;
-    return AnimatedBuilder(
-      animation: curve,
-      // Nothing but the menu is painted on this route, so translating
-      // the whole page translates the menu and nothing else.
-      builder: (context, inner) => Transform.translate(
-        offset: Offset(0, -_slide * (1 - curve.value)),
-        child: inner,
-      ),
-      child: fade,
+    // A fade only, at the speed of the other floating list in the app.
+    // A panel anchored under its own button already says where it came
+    // from; travel would only be the second answer to a settled question.
+    return FadeTransition(
+      opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+      child: child,
     );
   }
 
