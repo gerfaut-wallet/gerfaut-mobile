@@ -9,22 +9,28 @@
 
 $ErrorActionPreference = "Stop"
 
-$bash = Get-Command bash.exe -ErrorAction SilentlyContinue
+# Git Bash first, and only then whatever `bash` is on PATH. On a machine
+# with WSL installed, PATH answers with C:\Windows\System32\bash.exe: a
+# Linux shell that cannot open a C:\ path, so it would fail on the very
+# first line with "No such file or directory".
+$candidates = @(
+    "$env:ProgramFiles\Git\bin\bash.exe",
+    "${env:ProgramFiles(x86)}\Git\bin\bash.exe",
+    "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe"
+)
+$bash = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $bash) {
-    $candidates = @(
-        "$env:ProgramFiles\Git\bin\bash.exe",
-        "${env:ProgramFiles(x86)}\Git\bin\bash.exe",
-        "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe"
-    )
-    $found = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-    if (-not $found) {
-        throw "bash not found - install Git for Windows (https://git-scm.com/download/win)"
+    $onPath = Get-Command bash.exe -ErrorAction SilentlyContinue
+    if ($onPath -and $onPath.Source -notlike "$env:SystemRoot\System32\*") {
+        $bash = $onPath.Source
     }
-    $bash = $found
-} else {
-    $bash = $bash.Source
+}
+if (-not $bash) {
+    throw "Git Bash not found - install Git for Windows (https://git-scm.com/download/win)"
 }
 
-$script = Join-Path $PSScriptRoot "verify.sh"
-& $bash -lc "'$($script -replace '\', '/')' $($args -join ' ')"
+# `.Replace` and not `-replace`: the latter takes a regular expression,
+# and a lone backslash is not one — it throws before bash is ever called.
+$script = (Join-Path $PSScriptRoot "verify.sh").Replace('\', '/')
+& $bash -lc "'$script' $($args -join ' ')"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
