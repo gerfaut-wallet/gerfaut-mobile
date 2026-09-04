@@ -36,3 +36,9 @@ The first release: Gerfaut for Android.
 - Local notifications when a sync finds something new. Nothing leaves the
   phone for them.
 - Signet, testnet4 and regtest alongside mainnet.
+- One APK per processor architecture instead of one carrying all three:
+  about 48 MB to download rather than 127.
+- Reproducible builds. The APKs are built in a container where every tool
+  version is pinned, so the same commit always produces the same bytes.
+  Rebuild them yourself and compare; only the signature should differ.
+  See `docs/REPRODUCIBLE-BUILDS.md`.
