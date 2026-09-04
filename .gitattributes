@@ -3,3 +3,5 @@
 # container sees.
 *.sh text eol=lf
 Dockerfile text eol=lf
+# Read as a git revision, and a trailing carriage return is not one.
+*.rev text eol=lf
