@@ -43,6 +43,15 @@ jobs:
           ssh-key: ${{ secrets.CORE_DEPLOY_KEY }}
           path: gerfaut-core
 
+      # The pinned image is 13 GB and the build writes several more. What
+      # goes is everything the container carries its own copy of; the
+      # runner's Android SDK stays, because apksigner below comes from it.
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost \
+                      /opt/hostedtoolcache/CodeQL /usr/local/lib/node_modules
+          df -h /
+
       - name: Build the unsigned APKs
         run: |
           if [ "$GITHUB_REF_TYPE" = tag ]; then
@@ -85,8 +94,13 @@ jobs:
           rm -f "$RUNNER_TEMP/release.keystore"
           ls -l signed
 
-      # The published APK and the rebuild must differ only by the signature.
-      - name: Check the signature is the only difference
+      # Not a reproducibility check — the two files here come from the
+      # same build. What it asserts is that signing left the payload
+      # alone, entry for entry, which is what lets a verifier compare a
+      # published APK with their own unsigned rebuild at all. The
+      # reproducibility itself is proven by the `Reproducible build`
+      # workflow, which builds the same commit twice.
+      - name: Check that signing changed nothing but the signature
         run: |
           for apk in signed/*.apk; do
             name="$(basename "$apk" .apk)"
