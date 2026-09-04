@@ -1,0 +1,52 @@
+# Proof that the Android build is reproducible: the same commit is built
+# twice in the same pinned container, and the job fails if a single byte
+# of any artifact differs.
+#
+# It runs on every `v*` tag, next to the release workflow that ships the
+# signed APKs, and on demand. See docs/REPRODUCIBLE-BUILDS.md.
+
+name: Reproducible build
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  double-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: gerfaut-mobile
+
+      - name: Read the pinned gerfaut-core revision
+        id: core
+        run: echo "rev=$(cat gerfaut-mobile/reproducible/gerfaut-core.rev)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          repository: gerfaut-wallet/gerfaut-core
+          ref: ${{ steps.core.outputs.rev }}
+          ssh-key: ${{ secrets.CORE_DEPLOY_KEY }}
+          path: gerfaut-core
+
+      # The pinned image carries its own SDK, NDK and Flutter, so the
+      # runner's copies are dead weight, and two full builds need the room.
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Build twice and compare
+        run: gerfaut-mobile/reproducible/verify.sh --twice --out "$PWD/out"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unsigned-apks
+          path: |
+            out/build-1/SHA256SUMS
+            out/build-1/*.apk
