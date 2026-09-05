@@ -1,14 +1,15 @@
-# Builds the release APKs on every `v*` tag and attaches them to a draft
-# GitHub Release (review, add the signed SHA256SUMS with
-# scripts/sign-release.ps1, then publish).
+# Builds the release APKs on every `v*` tag and attaches them, unsigned,
+# to a draft GitHub Release. The signature is added on the release
+# machine by scripts/sign-release.ps1, which swaps the signed files into
+# the draft and adds the signed SHA256SUMS; then publish.
 # Manual runs build the same APKs and upload them as workflow artifacts only.
 #
-# The APKs are built unsigned inside the pinned container of
-# `reproducible/`, then signed here with the app's own release keystore,
-# stored in this repository's Actions secrets. Anyone can rebuild the same
-# container and check that the payload matches, byte for byte; see
-# docs/REPRODUCIBLE-BUILDS.md. Nothing here touches Bitcoin keys; Gerfaut
-# is watch-only by design.
+# The APKs come out of the pinned container of `reproducible/`, so anyone
+# can rebuild the same commit and check that the payload matches, byte
+# for byte; see docs/REPRODUCIBLE-BUILDS.md. The signing key never comes
+# near CI: a runner executes code this repository does not control, and
+# an Android signing key cannot be rotated once an app is installed under
+# it. Nothing here touches Bitcoin keys; Gerfaut is watch-only by design.
 #
 #   git tag v0.1.0 && git push origin v0.1.0
 
@@ -20,15 +21,18 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   apk:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # No credentials left in .git/config: nothing after a checkout talks
+      # to GitHub.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           path: gerfaut-mobile
+          persist-credentials: false
 
       # The Rust crate depends on the sibling gerfaut-core checkout, at the
       # revision this release pins.
@@ -36,20 +40,22 @@ jobs:
         id: core
         run: echo "rev=$(cat gerfaut-mobile/reproducible/gerfaut-core.rev)" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: gerfaut-wallet/gerfaut-core
           ref: ${{ steps.core.outputs.rev }}
           ssh-key: ${{ secrets.CORE_DEPLOY_KEY }}
           path: gerfaut-core
+          persist-credentials: false
 
       # The pinned image is 13 GB and the build writes several more. What
-      # goes is everything the container carries its own copy of; the
-      # runner's Android SDK stays, because apksigner below comes from it.
+      # goes is everything the container carries its own copy of, the
+      # runner's Android SDK included: nothing on the host signs anymore.
       - name: Free runner disk space
         run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost \
-                      /opt/hostedtoolcache/CodeQL /usr/local/lib/node_modules
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL \
+                      /usr/local/lib/node_modules
           df -h /
 
       - name: Build the unsigned APKs
@@ -60,66 +66,51 @@ jobs:
             gerfaut-mobile/reproducible/verify.sh --out "$PWD/unsigned"
           fi
 
-      - name: Restore the signing keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        run: printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
-
-      # With v1 off, apksigner adds no zip entry at all: it only inserts
-      # an APK signing block, so every entry stays exactly where the
-      # container put it and the published APK can be compared with a
-      # rebuild. v1 is only needed below API 24, and minSdk here is 24.
-      - name: Sign
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-        run: |
-          sdk="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
-          apksigner="$(ls -d "$sdk"/build-tools/*/apksigner | sort -V | tail -1)"
-          mkdir -p signed
-          for apk in unsigned/*-unsigned.apk; do
-            base="${apk##*/}"
-            name="${base%-unsigned.apk}.apk"
-            "$apksigner" sign \
-              --ks "$RUNNER_TEMP/release.keystore" \
-              --ks-pass env:KEYSTORE_PASSWORD \
-              --ks-key-alias "$KEY_ALIAS" \
-              --key-pass env:KEYSTORE_PASSWORD \
-              --v1-signing-enabled false \
-              --v2-signing-enabled true \
-              --v3-signing-enabled true \
-              --out "signed/$name" "$apk"
-            "$apksigner" verify --print-certs "signed/$name"
-          done
-          rm -f "$RUNNER_TEMP/release.keystore"
-          ls -l signed
-
-      # Not a reproducibility check — the two files here come from the
-      # same build. What it asserts is that signing left the payload
-      # alone, entry for entry, which is what lets a verifier compare a
-      # published APK with their own unsigned rebuild at all. The
-      # reproducibility itself is proven by the `Reproducible build`
-      # workflow, which builds the same commit twice.
-      - name: Check that signing changed nothing but the signature
-        run: |
-          for apk in signed/*.apk; do
-            name="$(basename "$apk" .apk)"
-            python3 gerfaut-mobile/reproducible/compare.py --signed "$apk" "unsigned/$name-unsigned.apk"
-          done
-
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: gerfaut-android-apk
-          path: signed/*.apk
+          name: gerfaut-android-unsigned
+          if-no-files-found: error
+          path: |
+            unsigned/*-unsigned.apk
+            unsigned/SHA256SUMS
 
-      - name: Draft release
-        if: startsWith(github.ref, 'refs/tags/')
+  # The only job that can write to the repository. It runs `gh` on what
+  # the build handed over, plus a checkout narrowed to the release notes.
+  draft:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: apk
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          sparse-checkout: .github/release-notes.md
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: gerfaut-android-unsigned
+          path: unsigned
+
+      # The draft carries the files under their `-unsigned` names until
+      # the signing script replaces them: a file nobody has signed must
+      # not look like one somebody has. `--verify-tag` refuses to invent a
+      # tag. A draft that already exists (a re-run) gets its assets
+      # replaced; a published release is never touched, `gh release
+      # create` fails on it.
+      - name: Draft the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --draft \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Gerfaut $GITHUB_REF_NAME" \
-            --notes-file gerfaut-mobile/.github/release-notes.md \
-            signed/*.apk
+          ls -l unsigned
+          if [ "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null)" = true ]; then
+            gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber unsigned/*-unsigned.apk
+          else
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+              --draft --verify-tag \
+              --title "Gerfaut $GITHUB_REF_NAME" \
+              --notes-file .github/release-notes.md \
+              unsigned/*-unsigned.apk
+          fi
