@@ -16,6 +16,7 @@ import '../theme/tokens.dart';
 import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/choice_group.dart';
+import '../widgets/premium_pill.dart';
 
 /// Where an exported file goes: written where the user points, or
 /// handed to the system share sheet.
@@ -277,7 +278,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                                     ],
                                   ),
                                 ),
-                                const _PremiumPill(),
+                                const PremiumPill(),
                               ],
                             ),
                             Text(
@@ -435,46 +436,6 @@ class _DateField extends StatelessWidget {
               const SizedBox(width: GerfautSpacing.md),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// The Bruyère badge: premium is announced, never pushed.
-class _PremiumPill extends StatelessWidget {
-  const _PremiumPill();
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: GerfautSpacing.sm,
-        vertical: 2,
-      ),
-      decoration: BoxDecoration(
-        color: tokens.premiumSurface,
-        borderRadius: BorderRadius.circular(GerfautRadius.full),
-        border: Border.all(color: tokens.premium.withValues(alpha: 0.25)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(LucideIcons.gem, size: 12, color: tokens.premium),
-          const SizedBox(width: GerfautSpacing.xs),
-          Text(
-            'PREMIUM',
-            style: TextStyle(
-              fontFamily: GerfautFonts.ui,
-              fontSize: 10,
-              height: 1.4,
-              letterSpacing: 0.5,
-              color: tokens.premium,
-              fontWeight: FontWeight.w600,
-              fontVariations: const [FontVariation('wght', 600)],
-            ),
-          ),
-        ],
       ),
     );
   }
