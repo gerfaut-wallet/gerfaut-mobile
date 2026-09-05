@@ -13,6 +13,7 @@ import 'src/lock.dart';
 import 'src/models.dart';
 import 'src/notifications.dart';
 import 'src/onboarding.dart';
+import 'src/premium.dart';
 import 'src/state.dart';
 import 'theme/tokens.dart';
 
@@ -100,6 +101,10 @@ class _Hydrated extends ConsumerWidget {
         // The widgets follow from here: everything they show is
         // hydrated now, so the first thing they get is the right thing.
         ref.read(widgetFeedProvider);
+        // The heartbeat too: it reads the premium state and asks the
+        // server at once when a wallet is watched, then every quarter
+        // hour, from wherever the app is.
+        ref.read(watchMonitorProvider);
       }
       // The vault says whether a lock exists, every time it is read:
       // the first reading with one in it is what puts the screen up.
@@ -189,6 +194,9 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
         // publish the defaults first.
         if (ref.read(prefsHydratedProvider)) {
           ref.read(widgetFeedProvider).resume();
+          // Timers sleep with the app: a beat older than the period is
+          // asked for again on the way back.
+          ref.read(watchMonitorProvider.notifier).resume();
         }
       case AppLifecycleState.inactive:
         break;
