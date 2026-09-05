@@ -139,6 +139,24 @@ String relativeTime(int unixSeconds, {DateTime? now}) {
   return '$days d ago';
 }
 
+/// The same distance in whole words, for a sentence rather than a
+/// stamp: "3 days ago", "an hour ago". A stamp abbreviates because it
+/// sits in a corner; a sentence has the room to say it.
+String relativeTimeWords(int unixSeconds, {DateTime? now}) {
+  final nowMs = (now ?? DateTime.now()).millisecondsSinceEpoch;
+  var seconds = nowMs ~/ 1000 - unixSeconds;
+  if (seconds < 0) seconds = 0;
+  if (seconds < 45) return 'just now';
+  final minutes = seconds ~/ 60;
+  if (minutes < 60) {
+    return minutes <= 1 ? 'a minute ago' : '$minutes minutes ago';
+  }
+  final hours = minutes ~/ 60;
+  if (hours < 24) return hours == 1 ? 'an hour ago' : '$hours hours ago';
+  final days = hours ~/ 24;
+  return days == 1 ? 'yesterday' : '$days days ago';
+}
+
 const List<String> _months = [
   'Jan',
   'Feb',

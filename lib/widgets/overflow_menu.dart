@@ -51,9 +51,15 @@ class OverflowMenuItem {
 /// with 8px of travel to place it. A device asking for less motion
 /// keeps the fade and loses the travel.
 class OverflowMenu extends StatefulWidget {
-  const OverflowMenu({super.key, required this.items});
+  const OverflowMenu({super.key, required this.items, this.tooltip = 'More'});
 
   final List<OverflowMenuItem> items;
+
+  /// What the button is called, out loud and on a long press. A page
+  /// header has one and "More" says it; a row in a list of several
+  /// names whose more it is, or a screen reader hears the same word
+  /// three times down the list.
+  final String tooltip;
 
   @override
   State<OverflowMenu> createState() => _OverflowMenuState();
@@ -65,7 +71,7 @@ class _OverflowMenuState extends State<OverflowMenu> {
     return IconButton(
       // The tooltip is the spoken label too: a Semantics label on top
       // would only say the same word a second time.
-      tooltip: 'More',
+      tooltip: widget.tooltip,
       onPressed: widget.items.isEmpty ? null : _open,
       icon: const Icon(LucideIcons.ellipsisVertical, size: 20),
     );

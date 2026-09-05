@@ -1,0 +1,720 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../src/bridge.dart';
+import '../src/models.dart';
+import '../src/premium.dart';
+import '../src/state.dart';
+import '../theme/tokens.dart';
+import '../widgets/app_bar.dart';
+import '../widgets/buttons.dart';
+import '../widgets/notice.dart';
+import '../widgets/password_field.dart';
+import '../widgets/pinned_action_form.dart';
+import '../widgets/status_pill.dart';
+import 'settings/fields.dart';
+
+/// The Lucide glyph of a channel kind, the same on every surface.
+IconData channelGlyph(ChannelKind kind) => switch (kind) {
+  ChannelKind.ntfy => LucideIcons.bell,
+  ChannelKind.telegram => LucideIcons.send,
+  ChannelKind.email => LucideIcons.mail,
+  ChannelKind.webhook => LucideIcons.webhook,
+};
+
+/// One line on what each kind is, under its name in the picker.
+String channelHint(ChannelKind kind) => switch (kind) {
+  ChannelKind.ntfy => 'Push to the ntfy app, on a topic only you know.',
+  ChannelKind.telegram => 'Messages from the Gerfaut bot.',
+  ChannelKind.email => 'A short e-mail per alert.',
+  ChannelKind.webhook => 'A signed POST to a server of yours.',
+};
+
+/// The `ntfy://` form of a subscribe URL: what opens the ntfy app on
+/// the topic, subscription offered.
+String ntfyAppUrl(String subscribeUrl) =>
+    subscribeUrl.replaceFirst(RegExp(r'^https?://'), 'ntfy://');
+
+/// Opens a link in the app that claims it, or the browser.
+Future<bool> openExternal(String url) {
+  return launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+}
+
+/// Offers the four kinds, each with its line of explanation, from the
+/// bottom of the screen. Answers the kind picked, or null.
+Future<ChannelKind?> showAddChannelSheet(BuildContext context) {
+  final tokens = Theme.of(context).extension<GerfautTokens>()!;
+  return showModalBottomSheet<ChannelKind>(
+    context: context,
+    useSafeArea: true,
+    builder: (sheetContext) => Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(
+            top: GerfautSpacing.sm,
+            bottom: GerfautSpacing.xs,
+          ),
+          child: Container(
+            width: 32,
+            height: 4,
+            decoration: BoxDecoration(
+              color: tokens.border,
+              borderRadius: BorderRadius.circular(GerfautRadius.full),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            GerfautSpacing.md,
+            GerfautSpacing.sm,
+            GerfautSpacing.md,
+            GerfautSpacing.xs,
+          ),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'ADD A CHANNEL',
+              style: tokens.label.copyWith(color: tokens.textMuted),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            GerfautSpacing.sm + 2,
+            0,
+            GerfautSpacing.sm + 2,
+            GerfautSpacing.md,
+          ),
+          child: Column(
+            children: [
+              for (final kind in ChannelKind.values)
+                _KindRow(
+                  kind: kind,
+                  onTap: () => Navigator.of(sheetContext).pop(kind),
+                ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// One kind to pick: the glyph, the name, and the line under it. The
+/// row of every floating list in the app: 44px at least, radius 8.
+class _KindRow extends StatelessWidget {
+  const _KindRow({required this.kind, required this.onTap});
+
+  final ChannelKind kind;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    return Semantics(
+      button: true,
+      label: '${kind.label}: ${channelHint(kind)}',
+      onTap: onTap,
+      excludeSemantics: true,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(GerfautRadius.md),
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 44),
+          padding: const EdgeInsets.symmetric(
+            horizontal: GerfautSpacing.sm + 2,
+            vertical: GerfautSpacing.sm - 2,
+          ),
+          child: Row(
+            children: [
+              Icon(channelGlyph(kind), size: 16, color: tokens.text),
+              const SizedBox(width: GerfautSpacing.sm + 2),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      kind.label,
+                      style: tokens.bodySmall.copyWith(
+                        fontWeight: FontWeight.w500,
+                        fontVariations: const [FontVariation('wght', 500)],
+                      ),
+                    ),
+                    Text(
+                      channelHint(kind),
+                      style: tokens.label.copyWith(
+                        fontSize: 11,
+                        letterSpacing: 0,
+                        color: tokens.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The page under a created ntfy channel: the topic to subscribe to,
+/// copied or opened in the ntfy app. The topic is the whole secret of
+/// the channel, so it is shown in full, in mono, and nowhere else.
+class NtfyChannelScreen extends StatefulWidget {
+  const NtfyChannelScreen({super.key, required this.subscribeUrl});
+
+  /// `https://ntfy.gerfaut-wallet.com/<topic>`.
+  final String subscribeUrl;
+
+  @override
+  State<NtfyChannelScreen> createState() => _NtfyChannelScreenState();
+}
+
+class _NtfyChannelScreenState extends State<NtfyChannelScreen> {
+  bool _noApp = false;
+
+  Future<void> _copy() async {
+    await Clipboard.setData(ClipboardData(text: widget.subscribeUrl));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Copied')));
+  }
+
+  Future<void> _openApp() async {
+    var opened = false;
+    try {
+      opened = await openExternal(ntfyAppUrl(widget.subscribeUrl));
+    } on PlatformException {
+      opened = false;
+    }
+    if (!opened && mounted) setState(() => _noApp = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    return Scaffold(
+      appBar: GerfautAppBar.text('ntfy'),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(GerfautSpacing.md),
+          child: PinnedActionForm(
+            action: PrimaryButton(
+              label: 'Open in ntfy',
+              icon: LucideIcons.externalLink,
+              expand: true,
+              onPressed: _openApp,
+            ),
+
+            children: [
+              Text(
+                'Subscribe to this topic in the ntfy app',
+                style: tokens.body,
+              ),
+              const SizedBox(height: GerfautSpacing.sm),
+              Text(
+                'Alerts for your watched wallets will arrive on it. Only '
+                'someone who knows the topic can read them: keep it to '
+                'yourself.',
+                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+              ),
+              const SizedBox(height: GerfautSpacing.md),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(GerfautSpacing.md),
+                decoration: BoxDecoration(
+                  color: tokens.surface,
+                  borderRadius: BorderRadius.circular(GerfautRadius.lg),
+                  border: Border.all(color: tokens.border),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'TOPIC URL',
+                      style: tokens.label.copyWith(color: tokens.textMuted),
+                    ),
+                    const SizedBox(height: GerfautSpacing.sm),
+                    SelectableText(
+                      widget.subscribeUrl,
+                      style: tokens.data.copyWith(fontSize: 14),
+                    ),
+                    const SizedBox(height: GerfautSpacing.sm),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: GhostButton(
+                        label: 'Copy',
+                        icon: LucideIcons.copy,
+                        onPressed: _copy,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_noApp) ...[
+                const SizedBox(height: GerfautSpacing.md),
+                const GerfautNotice(
+                  tone: NoticeTone.info,
+                  message: 'The ntfy app is not installed on this phone.',
+                  hint:
+                      'Install it from F-Droid or the Play Store, then open '
+                      'this link again, or paste the URL into it.',
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The page under a Telegram channel until the bot hears from it: the
+/// code to send, the link that sends it, and a watch on the server
+/// that turns the page into "Linked" by itself.
+class TelegramChannelScreen extends ConsumerStatefulWidget {
+  const TelegramChannelScreen({
+    super.key,
+    required this.channelId,
+    required this.code,
+    required this.startUrl,
+    this.pollEvery = const Duration(seconds: 3),
+    this.pollFor = const Duration(minutes: 2),
+  });
+
+  final String channelId;
+
+  /// The code the bot expects after `/start`.
+  final String code;
+
+  /// `https://t.me/<bot>?start=<code>`.
+  final String startUrl;
+
+  /// How often the server is asked, and for how long before the page
+  /// hands the asking over to a button.
+  final Duration pollEvery;
+  final Duration pollFor;
+
+  @override
+  ConsumerState<TelegramChannelScreen> createState() =>
+      _TelegramChannelScreenState();
+}
+
+class _TelegramChannelScreenState extends ConsumerState<TelegramChannelScreen> {
+  Timer? _timer;
+  bool _linked = false;
+  bool _checking = false;
+  bool _gaveUp = false;
+  late final DateTime _startedAt = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(widget.pollEvery, (_) => _tick());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _tick() async {
+    if (DateTime.now().difference(_startedAt) >= widget.pollFor) {
+      _timer?.cancel();
+      if (mounted) setState(() => _gaveUp = true);
+      return;
+    }
+    await _check();
+  }
+
+  Future<void> _check() async {
+    if (_checking || _linked) return;
+    _checking = true;
+    try {
+      final channels = await ref.read(bridgeProvider).premiumChannels();
+      final mine = channels.where((c) => c.id == widget.channelId);
+      if (mine.isNotEmpty && mine.first.linked && mounted) {
+        _timer?.cancel();
+        setState(() => _linked = true);
+        ref.invalidate(premiumChannelsProvider);
+      }
+    } on BridgeException {
+      // The next tick asks again; the page has nothing new to say.
+    } finally {
+      _checking = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    return Scaffold(
+      appBar: GerfautAppBar.text('Telegram'),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(GerfautSpacing.md),
+          child: PinnedActionForm(
+            action: _linked
+                ? PrimaryButton(
+                    label: 'Done',
+                    expand: true,
+                    onPressed: () => Navigator.of(context).pop(),
+                  )
+                : PrimaryButton(
+                    label: 'Open Telegram',
+                    icon: LucideIcons.externalLink,
+                    expand: true,
+                    onPressed: () => openExternal(widget.startUrl),
+                  ),
+
+            children: [
+              if (_linked) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text('Telegram is linked', style: tokens.body),
+                    ),
+                    const StatusPill.tone(
+                      tone: PillTone.neutral,
+                      icon: LucideIcons.link,
+                      label: 'Linked',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: GerfautSpacing.sm),
+                Text(
+                  'Alerts for your watched wallets will arrive from the bot.',
+                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                ),
+              ] else ...[
+                Text(
+                  'Send this to @${_bot(widget.startUrl)}',
+                  style: tokens.body,
+                ),
+                const SizedBox(height: GerfautSpacing.sm),
+                Text(
+                  'Open Telegram and press Start: the code is sent for you. '
+                  'This page follows along and says when the bot has it.',
+                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                ),
+                const SizedBox(height: GerfautSpacing.md),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(GerfautSpacing.md),
+                  decoration: BoxDecoration(
+                    color: tokens.surface,
+                    borderRadius: BorderRadius.circular(GerfautRadius.lg),
+                    border: Border.all(color: tokens.border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'LINK CODE',
+                        style: tokens.label.copyWith(color: tokens.textMuted),
+                      ),
+                      const SizedBox(height: GerfautSpacing.sm),
+                      SelectableText(
+                        '/start ${widget.code}',
+                        style: tokens.data.copyWith(fontSize: 22, height: 1.3),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: GerfautSpacing.md),
+                Row(
+                  children: [
+                    const StatusPill.tone(
+                      tone: PillTone.pending,
+                      icon: LucideIcons.clock,
+                      label: 'Waiting for the bot',
+                    ),
+                    if (_gaveUp) ...[
+                      const SizedBox(width: GerfautSpacing.sm),
+                      GhostButton(
+                        label: 'Check again',
+                        icon: LucideIcons.refreshCw,
+                        onPressed: _check,
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The bot's name out of its link, `t.me/<bot>?start=…`.
+  static String _bot(String url) {
+    final path = Uri.tryParse(url)?.pathSegments;
+    return path == null || path.isEmpty ? 'GerfautAlertsBot' : path.first;
+  }
+}
+
+/// A field and one hint: the page that adds an e-mail channel. Answers
+/// the created channel, or null when left.
+class EmailChannelScreen extends ConsumerStatefulWidget {
+  const EmailChannelScreen({super.key});
+
+  @override
+  ConsumerState<EmailChannelScreen> createState() => _EmailChannelScreenState();
+}
+
+class _EmailChannelScreenState extends ConsumerState<EmailChannelScreen> {
+  final _controller = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  bool get _wellFormed {
+    final text = _controller.text.trim();
+    final at = text.indexOf('@');
+    return at > 0 && at < text.length - 1 && !text.contains(' ');
+  }
+
+  Future<void> _add() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final created = await ref
+          .read(bridgeProvider)
+          .premiumCreateChannel(
+            ChannelKind.email,
+            target: _controller.text.trim(),
+          );
+      if (mounted) Navigator.of(context).pop(created);
+    } on BridgeException catch (error) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = error.message;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    return Scaffold(
+      appBar: GerfautAppBar.text('E-mail'),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(GerfautSpacing.md),
+          child: PinnedActionForm(
+            action: PrimaryButton(
+              label: _busy ? 'Adding…' : 'Add e-mail',
+              expand: true,
+              onPressed: _wellFormed && !_busy ? _add : null,
+            ),
+
+            children: [
+              Text(
+                'ADDRESS',
+                style: tokens.label.copyWith(color: tokens.textMuted),
+              ),
+              const SizedBox(height: GerfautSpacing.sm),
+              _EmailField(
+                controller: _controller,
+                onChanged: () => setState(() {}),
+                onSubmitted: _wellFormed && !_busy ? _add : null,
+              ),
+              const SizedBox(height: GerfautSpacing.sm),
+              Text(
+                'Alerts say which wallet moved, never an address or an amount.',
+                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: GerfautSpacing.md),
+                GerfautNotice(
+                  tone: NoticeTone.info,
+                  message: 'The server did not take this address.',
+                  detail: _error,
+                  liveRegion: true,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The e-mail field: the address keyboard, no capitals, no suggestions,
+/// the body size so the phone never zooms.
+class _EmailField extends StatelessWidget {
+  const _EmailField({
+    required this.controller,
+    required this.onChanged,
+    this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final VoidCallback onChanged;
+  final VoidCallback? onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    return TextField(
+      controller: controller,
+      autofocus: true,
+      autocorrect: false,
+      enableSuggestions: false,
+      keyboardType: TextInputType.emailAddress,
+      textCapitalization: TextCapitalization.none,
+      style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
+      onChanged: (_) => onChanged(),
+      onSubmitted: onSubmitted == null ? null : (_) => onSubmitted!(),
+      decoration: InputDecoration(
+        hintText: 'you@example.org',
+        hintStyle: tokens.data.copyWith(
+          fontSize: tokens.body.fontSize,
+          color: tokens.textMuted,
+        ),
+        filled: true,
+        fillColor: tokens.surfaceSunken,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: GerfautSpacing.md,
+          vertical: GerfautSpacing.sm,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(GerfautRadius.sm),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(GerfautRadius.sm),
+          borderSide: BorderSide(color: tokens.primary, width: 2),
+        ),
+      ),
+    );
+  }
+}
+
+/// An `https://` URL and an optional secret: the page that adds a
+/// webhook. Answers the created channel, or null when left.
+class WebhookChannelScreen extends ConsumerStatefulWidget {
+  const WebhookChannelScreen({super.key});
+
+  @override
+  ConsumerState<WebhookChannelScreen> createState() =>
+      _WebhookChannelScreenState();
+}
+
+class _WebhookChannelScreenState extends ConsumerState<WebhookChannelScreen> {
+  final _urlController = TextEditingController();
+  final _secretController = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _urlController.dispose();
+    _secretController.dispose();
+    super.dispose();
+  }
+
+  bool get _wellFormed {
+    final uri = Uri.tryParse(_urlController.text.trim());
+    return uri != null && uri.scheme == 'https' && uri.host.isNotEmpty;
+  }
+
+  Future<void> _add() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final secret = _secretController.text;
+    try {
+      final created = await ref
+          .read(bridgeProvider)
+          .premiumCreateChannel(
+            ChannelKind.webhook,
+            target: _urlController.text.trim(),
+            secret: secret.isEmpty ? null : secret,
+          );
+      if (mounted) Navigator.of(context).pop(created);
+    } on BridgeException catch (error) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = error.message;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    return Scaffold(
+      appBar: GerfautAppBar.text('Webhook'),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(GerfautSpacing.md),
+          child: PinnedActionForm(
+            action: PrimaryButton(
+              label: _busy ? 'Adding…' : 'Add webhook',
+              expand: true,
+              onPressed: _wellFormed && !_busy ? _add : null,
+            ),
+
+            children: [
+              Text(
+                'URL',
+                style: tokens.label.copyWith(color: tokens.textMuted),
+              ),
+              const SizedBox(height: GerfautSpacing.sm),
+              MonoField(
+                controller: _urlController,
+                hint: 'https://example.org/gerfaut',
+                onChanged: () => setState(() {}),
+                tokens: tokens,
+              ),
+              const SizedBox(height: GerfautSpacing.md),
+              PasswordField(
+                label: 'Secret (optional)',
+                controller: _secretController,
+              ),
+              const SizedBox(height: GerfautSpacing.sm),
+              Text(
+                'Signed with HMAC-SHA256. See the docs.',
+                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: GerfautSpacing.md),
+                GerfautNotice(
+                  tone: NoticeTone.info,
+                  message: 'The server did not take this webhook.',
+                  detail: _error,
+                  liveRegion: true,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

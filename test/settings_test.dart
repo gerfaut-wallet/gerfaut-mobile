@@ -1744,7 +1744,7 @@ void main() {
       ),
     );
 
-    testWidgets('names seven sections and says where each stands', (
+    testWidgets('names eight sections and says where each stands', (
       tester,
     ) async {
       await tester.pumpWidget(settingsApp(bridge()));
@@ -1759,12 +1759,13 @@ void main() {
         'Notifications',
         'Backup & sync',
         'About',
+        'Premium',
       ]);
       for (final section in SettingsSection.values) {
         expect(find.text(section.title), findsOneWidget);
         expect(find.byIcon(section.icon), findsOneWidget);
       }
-      expect(find.byIcon(LucideIcons.chevronRight), findsNWidgets(7));
+      expect(find.byIcon(LucideIcons.chevronRight), findsNWidgets(8));
       // One line each, from state the root already holds.
       expect(find.text('BTC · no fiat · Light theme'), findsOneWidget);
       expect(find.text('Mainnet · Public API'), findsOneWidget);
@@ -1773,6 +1774,7 @@ void main() {
       expect(find.text('Off'), findsOneWidget);
       expect(find.text('Export or restore the wallet list'), findsOneWidget);
       expect(find.text('Gerfaut $appVersion'), findsOneWidget);
+      expect(find.text('Not activated'), findsOneWidget);
       // Nothing of the sections themselves is on the root.
       expect(find.text('Gap limit'), findsNothing);
       expect(find.text('Save backend'), findsNothing);
