@@ -36,6 +36,13 @@ The first release: Gerfaut for Android.
 - Local notifications when a sync finds something new. Nothing leaves the
   phone for them.
 - Signet, testnet4 and regtest alongside mainnet.
+- Gerfaut Premium, as an eighth section of the settings. Enter the account
+  key bought on gerfaut-wallet.com, switch a wallet on, and the server
+  watches it from there; before the first one leaves the phone, a page says
+  in plain words what the server will learn. Alerts reach the ntfy app,
+  Telegram, an e-mail address or a webhook of yours, and the last 20 are
+  listed in the app. When the server misses 2 heartbeats in a row, a red
+  banner on the home screen says so until you acknowledge it.
 - One APK per processor architecture instead of one carrying all three:
   50 MB to download on a 64-bit ARM phone rather than 127.
 - Reproducible builds. The APKs are built in a container where every tool
