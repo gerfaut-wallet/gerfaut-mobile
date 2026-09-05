@@ -781,10 +781,12 @@ class FakeBridge implements GerfautBridge {
   Future<Settings> getSettings() async {
     // The vault carries the lock: the settings screen reads it there,
     // the same place the core keeps it.
+    // A preference written since is read back, the way the core reads
+    // its own file: the screens that re-read the settings see it.
     return Settings(
       activeNetwork: settings.activeNetwork,
       backends: settings.backends,
-      appPrefs: settings.appPrefs,
+      appPrefs: {...settings.appPrefs, ...appPrefs},
       gapLimit: settings.gapLimit,
       electrumCerts: settings.electrumCerts,
       appLock: lock,
