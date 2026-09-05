@@ -1213,6 +1213,381 @@ class FakeBridge implements GerfautBridge {
     if (connect != null) return connect();
     return const TorRoute(socks: '127.0.0.1:9050', via: TorVia.system);
   }
+
+  // --- premium -----------------------------------------------------------
+
+  /// The one key the fake server knows, normalized. Any other key is
+  /// unknown; this one is paid until [premiumPaidUntil].
+  String premiumServerKey = 'abcdefghijkmnpqr';
+
+  /// Unix seconds the fake server's key is paid until: January 2027.
+  int premiumPaidUntil = 1800000000;
+
+  /// The network the fake server watches, as it names it.
+  String premiumNetwork = 'bitcoin';
+
+  /// What the vault holds: the key, the claims of its certificate, the
+  /// consents, and the banner acknowledgement. Tests seed them directly.
+  String? premiumKey;
+  LicenceClaims? premiumClaims;
+  final List<WatchConsent> premiumConsents = [];
+  int? premiumAcknowledgedUntil;
+
+  /// The server side: what it watches, the channels, the log.
+  final List<WalletWatch> premiumWatched = [];
+  final List<PremiumChannel> premiumChannelList = [];
+  List<PremiumEvent> premiumEvents = [];
+
+  /// Whether a wallet handed over is scanned at once, or stays with a
+  /// null baseline until [premiumFinishScans] is called.
+  bool premiumScansInstantly = true;
+
+  /// Every call, in order, for assertions.
+  final List<String> premiumCalls = [];
+
+  /// Activation hook; throw a [BridgeException] to simulate the server
+  /// out of reach. The default answers the way the server does: unknown
+  /// key, or the licence.
+  FutureOr<PremiumLicence> Function(String key)? onPremiumActivate;
+
+  /// Watch hook; throw a [BridgeException] to simulate a refusal. The
+  /// default registers the wallet.
+  FutureOr<void> Function(String id)? onPremiumWatch;
+
+  /// Heartbeat hook; throw a [BridgeException] for a missed beat. The
+  /// default answers a fresh one.
+  FutureOr<HeartbeatReport> Function()? onPremiumHeartbeat;
+
+  /// Channel creation hook; throw a [BridgeException] to simulate a
+  /// refusal. The default adds the channel.
+  FutureOr<CreatedChannel> Function(
+    ChannelKind kind,
+    String? target,
+    String? secret,
+  )?
+  onPremiumCreateChannel;
+
+  /// Test hook; throw a [BridgeException] for a provider's refusal.
+  FutureOr<void> Function(String id)? onPremiumTestChannel;
+
+  /// Events hook; throw a [BridgeException] for a server out of reach.
+  FutureOr<List<PremiumEvent>> Function()? onPremiumEvents;
+
+  /// Wallets hook; throw a [BridgeException] for a server out of reach.
+  FutureOr<List<WalletWatch>> Function()? onPremiumWallets;
+
+  int premiumChannelIds = 0;
+
+  static String _normalizeKey(String key) =>
+      key.replaceAll(RegExp(r'[\s-]'), '').toLowerCase();
+
+  void _needKey() {
+    if (premiumKey == null) {
+      throw const BridgeException('premium_no_key', 'no premium key');
+    }
+  }
+
+  /// Marks every scanning wallet as scanned, with [coins] coins.
+  void premiumFinishScans({int coins = 3}) {
+    for (var i = 0; i < premiumWatched.length; i++) {
+      final w = premiumWatched[i];
+      if (!w.scanning) continue;
+      premiumWatched[i] = WalletWatch(
+        id: w.id,
+        name: w.name,
+        scriptKind: w.scriptKind,
+        watchedSince: w.watchedSince,
+        baselineAt: w.watchedSince + 30,
+        baselineHeight: 900000,
+        coins: coins,
+        valueSats: coins * 100000,
+      );
+    }
+  }
+
+  /// Marks a Telegram channel as linked, the way the bot does.
+  void premiumLinkTelegram(String id) {
+    for (var i = 0; i < premiumChannelList.length; i++) {
+      final c = premiumChannelList[i];
+      if (c.id != id) continue;
+      premiumChannelList[i] = PremiumChannel(
+        id: c.id,
+        kind: c.kind,
+        target: 'linked',
+        linked: true,
+        createdAt: c.createdAt,
+      );
+    }
+  }
+
+  @override
+  Future<PremiumView> premiumState() async {
+    premiumCalls.add('state');
+    return PremiumView(
+      key: premiumKey,
+      keyDisplay: premiumKey == null
+          ? null
+          : RegExp(r'.{1,4}')
+                .allMatches(premiumKey!)
+                .map((m) => m.group(0))
+                .join('-'),
+      claims: premiumKey == null ? null : premiumClaims,
+      watched: List.of(premiumConsents),
+      acknowledgedOfflineUntil: premiumAcknowledgedUntil,
+    );
+  }
+
+  @override
+  Future<PremiumLicence> premiumActivate(String key) async {
+    premiumCalls.add('activate:$key');
+    final normalized = _normalizeKey(key);
+    final activate = onPremiumActivate;
+    final PremiumLicence licence;
+    if (activate != null) {
+      licence = await activate(normalized);
+    } else {
+      if (normalized != premiumServerKey) {
+        throw const BridgeException(
+          'premium_unknown_key',
+          'the premium server does not know this key',
+        );
+      }
+      licence = PremiumLicence(
+        certificate: 'eyJ2IjoxfQ.c2ln',
+        paidUntil: premiumPaidUntil,
+        claims: LicenceClaims(
+          subject: 'ab' * 32,
+          expiresAt: premiumPaidUntil,
+          issuedAt: premiumPaidUntil - 60 * 86400,
+        ),
+      );
+    }
+    premiumKey = normalized;
+    premiumClaims = licence.claims;
+    premiumAcknowledgedUntil = null;
+    return licence;
+  }
+
+  @override
+  Future<PremiumLicence> premiumRefreshLicence() async {
+    premiumCalls.add('refresh');
+    _needKey();
+    return premiumActivate(premiumKey!);
+  }
+
+  @override
+  Future<void> premiumForgetKey() async {
+    premiumCalls.add('forget');
+    premiumKey = null;
+    premiumClaims = null;
+    premiumAcknowledgedUntil = null;
+  }
+
+  @override
+  Future<void> premiumAcknowledgeOffline(int? untilUnix) async {
+    premiumCalls.add('acknowledge:$untilUnix');
+    premiumAcknowledgedUntil = untilUnix;
+  }
+
+  @override
+  Future<PremiumAccount> premiumAccount() async {
+    premiumCalls.add('account');
+    _needKey();
+    final claims = premiumClaims;
+    return PremiumAccount(
+      active: claims != null && claims.expiresAt > premiumPaidUntil - 1,
+      paidUntil: claims?.expiresAt,
+      wallets: premiumWatched.length,
+      channels: premiumChannelList.length,
+      network: premiumNetwork,
+    );
+  }
+
+  @override
+  Future<List<WalletWatch>> premiumWallets() async {
+    premiumCalls.add('wallets');
+    _needKey();
+    final hook = onPremiumWallets;
+    if (hook != null) return hook();
+    return List.of(premiumWatched);
+  }
+
+  @override
+  Future<void> premiumWatchWallet(String id) async {
+    premiumCalls.add('watch:$id');
+    final meta = wallets.where((w) => w.id == id).firstOrNull;
+    if (meta == null) {
+      throw BridgeException('wallet_not_found', 'wallet not found: $id');
+    }
+    if (meta.isSingleAddress) {
+      throw const BridgeException(
+        'premium_rejected',
+        'single addresses cannot be watched yet',
+      );
+    }
+    // The yes is recorded first, dated now, and only once.
+    if (!premiumConsents.any((c) => c.walletId == id)) {
+      premiumConsents.add(
+        WatchConsent(
+          walletId: id,
+          consentedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        ),
+      );
+    }
+    _needKey();
+    final hook = onPremiumWatch;
+    if (hook != null) {
+      await hook(id);
+      return;
+    }
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    premiumWatched.removeWhere((w) => w.id == id);
+    premiumWatched.add(
+      WalletWatch(
+        id: id,
+        name: meta.name,
+        scriptKind: 'segwit',
+        watchedSince: now,
+        baselineAt: premiumScansInstantly ? now : null,
+        baselineHeight: premiumScansInstantly ? 900000 : null,
+        coins: premiumScansInstantly ? 3 : 0,
+        valueSats: premiumScansInstantly ? 300000 : 0,
+      ),
+    );
+    if (premiumScansInstantly) {
+      premiumEvents = [
+        PremiumEvent(
+          id: premiumEvents.length + 1,
+          kind: AlertKind.walletRegistered,
+          wallet: id,
+          walletName: meta.name,
+          at: now,
+          data: const {'coins': 3, 'value_sats': 300000, 'height': 900000},
+        ),
+        ...premiumEvents,
+      ];
+    }
+  }
+
+  @override
+  Future<void> premiumUnwatchWallet(String id) async {
+    premiumCalls.add('unwatch:$id');
+    _needKey();
+    premiumWatched.removeWhere((w) => w.id == id);
+  }
+
+  @override
+  Future<List<PremiumChannel>> premiumChannels() async {
+    premiumCalls.add('channels');
+    _needKey();
+    return List.of(premiumChannelList);
+  }
+
+  @override
+  Future<CreatedChannel> premiumCreateChannel(
+    ChannelKind kind, {
+    String? target,
+    String? secret,
+  }) async {
+    premiumCalls.add('create:${kind.id}:${target ?? ''}');
+    _needKey();
+    final hook = onPremiumCreateChannel;
+    if (hook != null) {
+      final created = await hook(kind, target, secret);
+      premiumChannelList.add(created.channel);
+      return created;
+    }
+    premiumChannelIds += 1;
+    final id = 'ch$premiumChannelIds';
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final topic = kind == ChannelKind.ntfy
+        ? 'topic$premiumChannelIds'.padRight(24, 'x')
+        : null;
+    final channel = switch (kind) {
+      ChannelKind.ntfy => PremiumChannel(
+        id: id,
+        kind: kind,
+        target: '${topic!.substring(0, 4)}…',
+        linked: true,
+        createdAt: now,
+      ),
+      ChannelKind.telegram => PremiumChannel(
+        id: id,
+        kind: kind,
+        target: '',
+        linked: false,
+        linkCode: 'code$premiumChannelIds',
+        startUrl: 'https://t.me/GerfautAlertsBot?start=code$premiumChannelIds',
+        createdAt: now,
+      ),
+      ChannelKind.email => PremiumChannel(
+        id: id,
+        kind: kind,
+        target: _maskEmail(target ?? ''),
+        linked: true,
+        createdAt: now,
+      ),
+      ChannelKind.webhook => PremiumChannel(
+        id: id,
+        kind: kind,
+        target: target ?? '',
+        linked: true,
+        createdAt: now,
+      ),
+    };
+    premiumChannelList.add(channel);
+    return CreatedChannel(
+      channel: channel,
+      topic: topic,
+      subscribeUrl: topic == null
+          ? null
+          : 'https://ntfy.gerfaut-wallet.com/$topic',
+    );
+  }
+
+  static String _maskEmail(String address) {
+    final at = address.indexOf('@');
+    if (at <= 0) return address;
+    return '${address[0]}***${address.substring(at)}';
+  }
+
+  @override
+  Future<void> premiumDeleteChannel(String id) async {
+    premiumCalls.add('delete:$id');
+    _needKey();
+    premiumChannelList.removeWhere((c) => c.id == id);
+  }
+
+  @override
+  Future<void> premiumTestChannel(String id) async {
+    premiumCalls.add('test:$id');
+    _needKey();
+    final hook = onPremiumTestChannel;
+    if (hook != null) await hook(id);
+  }
+
+  @override
+  Future<List<PremiumEvent>> premiumRecentEvents() async {
+    premiumCalls.add('events');
+    _needKey();
+    final hook = onPremiumEvents;
+    if (hook != null) return hook();
+    return premiumEvents.take(20).toList();
+  }
+
+  int premiumHeartbeatCalls = 0;
+
+  @override
+  Future<HeartbeatReport> premiumHeartbeat() async {
+    premiumHeartbeatCalls += 1;
+    premiumCalls.add('heartbeat');
+    final hook = onPremiumHeartbeat;
+    if (hook != null) return hook();
+    return HeartbeatReport(
+      now: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      tipHeight: 900000,
+    );
+  }
 }
 
 /// A well-formed txid for previews and reports.

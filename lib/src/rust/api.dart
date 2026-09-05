@@ -7,7 +7,7 @@ import 'frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `core_error_json`, `core_error_kind`, `decode_key`, `error_json`, `from_json`, `manager`, `ok_json`, `parse_network_opt`, `parse_network`, `parse_variant`, `to_json`
+// These functions are ignored because they are not marked as `pub`: `channel_view`, `core_error_json`, `core_error_kind`, `decode_key`, `error_json`, `from_json`, `manager`, `now_unix`, `ok_json`, `parse_network_opt`, `parse_network`, `parse_variant`, `premium_client`, `premium_error_kind`, `premium_view`, `store_premium`, `to_json`
 
 /// Opens (or creates) the vault under `data_dir` with a 32-byte key given
 /// as 64 hex characters. Idempotent: once initialized, later calls (hot
@@ -297,6 +297,101 @@ Future<String> importBackup({
   password: password,
   choicesJson: choicesJson,
 );
+
+/// The premium account as the vault keeps it, with its certificate
+/// read. Returns a serialized `PremiumView`.
+Future<String> premiumState() => RustLib.instance.api.crateApiPremiumState();
+
+/// Enters an account key: checks its shape, asks the server for the
+/// licence, verifies the certificate against the embedded key and
+/// stores both. Returns the serialized `Licence`. A key the server does
+/// not know, or one never paid for, comes back as the error the field
+/// shows; nothing is stored then.
+Future<String> premiumActivate({required String key}) =>
+    RustLib.instance.api.crateApiPremiumActivate(key: key);
+
+/// Fetches the certificate again with the stored key, for the paid
+/// time a renewal added, and stores it. Returns the serialized
+/// `Licence`.
+Future<String> premiumRefreshLicence() =>
+    RustLib.instance.api.crateApiPremiumRefreshLicence();
+
+/// Drops the key and its certificate from this device. The server goes
+/// on watching what it was told to; the consents given here stay, so
+/// the same key entered again asks nothing twice.
+Future<String> premiumForgetKey() =>
+    RustLib.instance.api.crateApiPremiumForgetKey();
+
+/// Keeps the "watch is offline" banner quiet until `until` (unix
+/// seconds), or lets it show again with `None`.
+Future<String> premiumAcknowledgeOffline({PlatformInt64? until}) =>
+    RustLib.instance.api.crateApiPremiumAcknowledgeOffline(until: until);
+
+/// `GET /v1/account`: paid time, counts, and the network the server
+/// watches. Returns a serialized `Account`.
+Future<String> premiumAccount() =>
+    RustLib.instance.api.crateApiPremiumAccount();
+
+/// The wallets the server watches for this key. Returns a serialized
+/// `Vec<WalletWatch>`.
+Future<String> premiumWallets() =>
+    RustLib.instance.api.crateApiPremiumWallets();
+
+/// Hands one wallet to the server, under the app's own id and name,
+/// with its descriptors as the vault holds them: both chains on two
+/// lines when the wallet has a change descriptor, the external one
+/// alone otherwise. The user's yes is recorded first, dated now; a
+/// second yes keeps the first date. A single address is refused here,
+/// before anything leaves the device.
+Future<String> premiumWatchWallet({required String id}) =>
+    RustLib.instance.api.crateApiPremiumWatchWallet(id: id);
+
+/// Tells the server to stop watching a wallet. The consent stays: the
+/// switch can go back on without the question being asked again.
+Future<String> premiumUnwatchWallet({required String id}) =>
+    RustLib.instance.api.crateApiPremiumUnwatchWallet(id: id);
+
+/// The account's channels. Returns a serialized `Vec<ChannelView>`.
+Future<String> premiumChannels() =>
+    RustLib.instance.api.crateApiPremiumChannels();
+
+/// Adds a channel. `kind` is `ntfy`, `telegram`, `email` or `webhook`;
+/// `target` is the e-mail address or the webhook URL, nothing for
+/// Telegram, and nothing for ntfy either: the topic is drawn here, 24
+/// symbols nobody guesses, and returned once with the URL to subscribe
+/// to. `secret` is the webhook's HMAC key. Returns
+/// `{channel, topic, subscribe_url}`.
+Future<String> premiumCreateChannel({
+  required String kind,
+  String? target,
+  String? secret,
+}) => RustLib.instance.api.crateApiPremiumCreateChannel(
+  kind: kind,
+  target: target,
+  secret: secret,
+);
+
+Future<String> premiumDeleteChannel({required String id}) =>
+    RustLib.instance.api.crateApiPremiumDeleteChannel(id: id);
+
+/// Sends a test message through one channel right away. The provider's
+/// refusal comes back as `premium_rejected`, in the server's words.
+Future<String> premiumTestChannel({required String id}) =>
+    RustLib.instance.api.crateApiPremiumTestChannel(id: id);
+
+/// The last events of the account, newest first, at most `RECENT_EVENTS`
+/// of them. The server serves its log oldest first behind a cursor, so
+/// the pages are walked to the end here. Returns a serialized
+/// `Vec<Event>`.
+Future<String> premiumRecentEvents() =>
+    RustLib.instance.api.crateApiPremiumRecentEvents();
+
+/// `GET /v1/heartbeat`, verified against the embedded key and this
+/// device's clock. Returns a serialized `HeartbeatReport`; a server
+/// that cannot be reached, or whose answer does not verify, is the
+/// error the "watch is offline" banner counts.
+Future<String> premiumHeartbeat() =>
+    RustLib.instance.api.crateApiPremiumHeartbeat();
 
 /// Fetches the current BTC price. `source` is one of `coingecko`,
 /// `kraken`, `mempool_space`; `currency` is one of the `FiatCurrency`

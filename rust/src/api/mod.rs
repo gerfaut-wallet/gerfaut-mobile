@@ -9,14 +9,22 @@
 use gerfaut_core::backup::{BackupOptions, ImportChoices};
 use gerfaut_core::chain::BackendConfig;
 use gerfaut_core::chain::tor::TorSettings;
+use gerfaut_core::error::PremiumError;
 use gerfaut_core::export::ExportOptions;
 use gerfaut_core::input::{ImportOptions, ParsedInput, ScriptKind};
 use gerfaut_core::lock::LockKind;
+use gerfaut_core::premium::client::{
+    DEFAULT_BASE_URL, NTFY_BASE_URL, TELEGRAM_BOT, new_ntfy_topic, ntfy_subscribe_url,
+    telegram_link_url,
+};
+use gerfaut_core::premium::licence::{self, LICENCE_PUBLIC_KEY_HEX};
+use gerfaut_core::premium::{Channel, ChannelKind, Event, PremiumClient, PremiumState};
 use gerfaut_core::price::{FiatCurrency, PriceSource};
 use gerfaut_core::store::VaultKey;
-use gerfaut_core::wallet::meta::WalletIcon;
+use gerfaut_core::wallet::meta::{WalletIcon, WalletKind};
 use gerfaut_core::{CoreError, Network, WalletManager};
 use serde_json::json;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::OnceCell;
 
 /// The process-wide manager, set once by [`init_manager`].
@@ -47,13 +55,32 @@ fn core_error_kind(error: &CoreError) -> &'static str {
         CoreError::Broadcast { .. } => "broadcast",
         CoreError::Descriptor(_) => "descriptor",
         CoreError::Tor(_) => "tor",
+        CoreError::Premium(error) => premium_error_kind(error),
         CoreError::Internal(_) => "internal",
+    }
+}
+
+/// One kind per thing the screen does about it: an unknown key sends
+/// the user back to the field, a key with no paid time to the renewal
+/// page, an unreachable server to the "watch is offline" banner.
+fn premium_error_kind(error: &PremiumError) -> &'static str {
+    match error {
+        PremiumError::NoKey => "premium_no_key",
+        PremiumError::UnknownKey => "premium_unknown_key",
+        PremiumError::NoPaidTime => "premium_no_paid_time",
+        PremiumError::Rejected(_) => "premium_rejected",
+        PremiumError::Unreachable(_) => "premium_unreachable",
+        PremiumError::UnexpectedResponse(_) => "premium_unexpected_response",
+        PremiumError::InvalidCertificate(_) => "premium_invalid_certificate",
+        PremiumError::InvalidHeartbeat(_) => "premium_invalid_heartbeat",
+        PremiumError::StaleHeartbeat { .. } => "premium_stale_heartbeat",
     }
 }
 
 /// Deserializes one JSON argument, naming what it should have been.
 fn from_json<T: serde::de::DeserializeOwned>(raw: &str, what: &str) -> Result<T, String> {
-    serde_json::from_str(raw).map_err(|e| error_json("bad_json", format!("invalid {what} JSON: {e}")))
+    serde_json::from_str(raw)
+        .map_err(|e| error_json("bad_json", format!("invalid {what} JSON: {e}")))
 }
 
 fn core_error_json(error: &CoreError) -> String {
@@ -98,8 +125,7 @@ fn decode_key(key_hex: &str) -> Result<[u8; 32], String> {
     let mut key = [0u8; 32];
     for (i, byte) in key.iter_mut().enumerate() {
         let pair = &key_hex[i * 2..i * 2 + 2];
-        *byte =
-            u8::from_str_radix(pair, 16).map_err(|_| bad("vault key must be hexadecimal"))?;
+        *byte = u8::from_str_radix(pair, 16).map_err(|_| bad("vault key must be hexadecimal"))?;
     }
     Ok(key)
 }
@@ -539,7 +565,10 @@ pub async fn app_lock() -> String {
 pub async fn set_app_lock(kind: String, secret: String, current: Option<String>) -> String {
     let manager = try_json!(manager());
     let kind: LockKind = try_json!(parse_variant(&kind, "lock kind"));
-    match manager.set_app_lock(kind, &secret, current.as_deref()).await {
+    match manager
+        .set_app_lock(kind, &secret, current.as_deref())
+        .await
+    {
         Ok(()) => ok_json(),
         Err(e) => core_error_json(&e),
     }
@@ -602,6 +631,344 @@ pub async fn import_backup(source: String, password: String, choices_json: Strin
     let manager = try_json!(manager());
     let choices: ImportChoices = try_json!(from_json(&choices_json, "ImportChoices"));
     match manager.import_backup(&source, &password, &choices).await {
+        Ok(report) => to_json(&report),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+// --- premium -----------------------------------------------------------
+
+/// The server every premium call goes to. Clearnet: the manager only
+/// routes an onion base URL through Tor.
+const PREMIUM_BASE_URL: &str = DEFAULT_BASE_URL;
+
+/// Most events the alerts card shows.
+const RECENT_EVENTS: usize = 20;
+
+/// The server caps a page of events at this many.
+const EVENTS_PAGE: u32 = 500;
+
+/// This device's clock, in unix seconds.
+fn now_unix() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or_default()
+}
+
+/// The stored account with what the screen reads off it: the claims of
+/// the certificate, verified offline against the embedded key, so the
+/// licence state shows without a network. A certificate that no longer
+/// verifies reads as no certificate.
+fn premium_view(state: &PremiumState) -> serde_json::Value {
+    let claims = state.certificate.as_deref().and_then(|certificate| {
+        licence::verify_certificate(certificate, LICENCE_PUBLIC_KEY_HEX).ok()
+    });
+    json!({
+        "key": state.key,
+        "key_display": state.key.as_deref().map(licence::format_key),
+        "claims": claims,
+        "watched": state.watched,
+        "acknowledged_offline_until": state.acknowledged_offline_until,
+        "ntfy_base_url": NTFY_BASE_URL,
+        "telegram_bot": TELEGRAM_BOT,
+    })
+}
+
+/// The premium account as the vault keeps it, with its certificate
+/// read. Returns a serialized `PremiumView`.
+pub async fn premium_state() -> String {
+    let manager = try_json!(manager());
+    to_json(&premium_view(&manager.premium_state().await))
+}
+
+/// A client for the production server carrying the stored key.
+async fn premium_client(manager: &WalletManager) -> Result<PremiumClient, String> {
+    manager
+        .premium_client(PREMIUM_BASE_URL)
+        .await
+        .map_err(|e| core_error_json(&e))
+}
+
+/// Rewrites the stored account state.
+async fn store_premium(
+    manager: &WalletManager,
+    change: impl FnOnce(&mut PremiumState),
+) -> Result<PremiumState, String> {
+    let mut state = manager.premium_state().await;
+    change(&mut state);
+    manager
+        .set_premium_state(state.clone())
+        .await
+        .map_err(|e| core_error_json(&e))?;
+    Ok(state)
+}
+
+/// Enters an account key: checks its shape, asks the server for the
+/// licence, verifies the certificate against the embedded key and
+/// stores both. Returns the serialized `Licence`. A key the server does
+/// not know, or one never paid for, comes back as the error the field
+/// shows; nothing is stored then.
+pub async fn premium_activate(key: String) -> String {
+    let manager = try_json!(manager());
+    if !licence::is_well_formed_key(&key) {
+        return error_json(
+            "invalid_input",
+            "an account key is sixteen symbols, shown as xxxx-xxxx-xxxx-xxxx",
+        );
+    }
+    let key = licence::normalize_key(&key);
+    let client = match PremiumClient::new(PREMIUM_BASE_URL, Some(key.clone()), None) {
+        Ok(client) => client,
+        Err(e) => return core_error_json(&e),
+    };
+    let licence = match client.licence().await {
+        Ok(licence) => licence,
+        Err(e) => return core_error_json(&e),
+    };
+    try_json!(
+        store_premium(manager, |state| {
+            state.key = Some(key);
+            state.certificate = Some(licence.certificate.clone());
+            state.acknowledged_offline_until = None;
+        })
+        .await
+    );
+    to_json(&licence)
+}
+
+/// Fetches the certificate again with the stored key, for the paid
+/// time a renewal added, and stores it. Returns the serialized
+/// `Licence`.
+pub async fn premium_refresh_licence() -> String {
+    let manager = try_json!(manager());
+    let client = try_json!(premium_client(manager).await);
+    let licence = match client.licence().await {
+        Ok(licence) => licence,
+        Err(e) => return core_error_json(&e),
+    };
+    try_json!(
+        store_premium(manager, |state| {
+            state.certificate = Some(licence.certificate.clone());
+        })
+        .await
+    );
+    to_json(&licence)
+}
+
+/// Drops the key and its certificate from this device. The server goes
+/// on watching what it was told to; the consents given here stay, so
+/// the same key entered again asks nothing twice.
+pub async fn premium_forget_key() -> String {
+    let manager = try_json!(manager());
+    try_json!(
+        store_premium(manager, |state| {
+            state.key = None;
+            state.certificate = None;
+            state.acknowledged_offline_until = None;
+        })
+        .await
+    );
+    ok_json()
+}
+
+/// Keeps the "watch is offline" banner quiet until `until` (unix
+/// seconds), or lets it show again with `None`.
+pub async fn premium_acknowledge_offline(until: Option<i64>) -> String {
+    let manager = try_json!(manager());
+    try_json!(
+        store_premium(manager, |state| {
+            state.acknowledged_offline_until = until;
+        })
+        .await
+    );
+    ok_json()
+}
+
+/// `GET /v1/account`: paid time, counts, and the network the server
+/// watches. Returns a serialized `Account`.
+pub async fn premium_account() -> String {
+    let manager = try_json!(manager());
+    let client = try_json!(premium_client(manager).await);
+    match client.account().await {
+        Ok(account) => to_json(&account),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// The wallets the server watches for this key. Returns a serialized
+/// `Vec<WalletWatch>`.
+pub async fn premium_wallets() -> String {
+    let manager = try_json!(manager());
+    let client = try_json!(premium_client(manager).await);
+    match client.wallets().await {
+        Ok(wallets) => to_json(&wallets),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Hands one wallet to the server, under the app's own id and name,
+/// with its descriptors as the vault holds them: both chains on two
+/// lines when the wallet has a change descriptor, the external one
+/// alone otherwise. The user's yes is recorded first, dated now; a
+/// second yes keeps the first date. A single address is refused here,
+/// before anything leaves the device.
+pub async fn premium_watch_wallet(id: String) -> String {
+    let manager = try_json!(manager());
+    let Some(meta) = manager
+        .list_wallets(None)
+        .await
+        .into_iter()
+        .find(|wallet| wallet.id == id)
+    else {
+        return core_error_json(&CoreError::WalletNotFound(id));
+    };
+    let input = match &meta.kind {
+        WalletKind::Descriptors {
+            external,
+            internal: Some(internal),
+            ..
+        } => format!("{external}\n{internal}"),
+        WalletKind::Descriptors { external, .. } => external.clone(),
+        WalletKind::SingleAddress { .. } => {
+            return error_json("premium_rejected", "single addresses cannot be watched yet");
+        }
+    };
+    let now = now_unix();
+    try_json!(store_premium(manager, |state| state.consent(&id, now)).await);
+    let client = try_json!(premium_client(manager).await);
+    match client.put_wallet(&id, &meta.name, &input).await {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Tells the server to stop watching a wallet. The consent stays: the
+/// switch can go back on without the question being asked again.
+pub async fn premium_unwatch_wallet(id: String) -> String {
+    let manager = try_json!(manager());
+    let client = try_json!(premium_client(manager).await);
+    match client.delete_wallet(&id).await {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// A channel as the screen reads it: the server's fields, plus the link
+/// that opens the bot with the code filled in while a Telegram channel
+/// waits for it.
+fn channel_view(channel: &Channel) -> serde_json::Value {
+    let mut value = json!(channel);
+    if let Some(code) = &channel.link_code {
+        value["start_url"] = json!(telegram_link_url(TELEGRAM_BOT, code));
+    }
+    value
+}
+
+/// The account's channels. Returns a serialized `Vec<ChannelView>`.
+pub async fn premium_channels() -> String {
+    let manager = try_json!(manager());
+    let client = try_json!(premium_client(manager).await);
+    match client.channels().await {
+        Ok(channels) => to_json(&channels.iter().map(channel_view).collect::<Vec<_>>()),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Adds a channel. `kind` is `ntfy`, `telegram`, `email` or `webhook`;
+/// `target` is the e-mail address or the webhook URL, nothing for
+/// Telegram, and nothing for ntfy either: the topic is drawn here, 24
+/// symbols nobody guesses, and returned once with the URL to subscribe
+/// to. `secret` is the webhook's HMAC key. Returns
+/// `{channel, topic, subscribe_url}`.
+pub async fn premium_create_channel(
+    kind: String,
+    target: Option<String>,
+    secret: Option<String>,
+) -> String {
+    let manager = try_json!(manager());
+    let kind: ChannelKind = try_json!(parse_variant(&kind, "channel kind"));
+    let (target, topic) = match (kind, target) {
+        (ChannelKind::Ntfy, None) => {
+            let topic = new_ntfy_topic();
+            (Some(topic.clone()), Some(topic))
+        }
+        (_, target) => (target, None),
+    };
+    let client = try_json!(premium_client(manager).await);
+    match client
+        .create_channel(kind, target.as_deref(), secret.as_deref())
+        .await
+    {
+        Ok(channel) => json!({
+            "channel": channel_view(&channel),
+            "topic": topic,
+            "subscribe_url": topic
+                .as_deref()
+                .map(|topic| ntfy_subscribe_url(NTFY_BASE_URL, topic)),
+        })
+        .to_string(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+pub async fn premium_delete_channel(id: String) -> String {
+    let manager = try_json!(manager());
+    let client = try_json!(premium_client(manager).await);
+    match client.delete_channel(&id).await {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Sends a test message through one channel right away. The provider's
+/// refusal comes back as `premium_rejected`, in the server's words.
+pub async fn premium_test_channel(id: String) -> String {
+    let manager = try_json!(manager());
+    let client = try_json!(premium_client(manager).await);
+    match client.test_channel(&id).await {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// The last events of the account, newest first, at most `RECENT_EVENTS`
+/// of them. The server serves its log oldest first behind a cursor, so
+/// the pages are walked to the end here. Returns a serialized
+/// `Vec<Event>`.
+pub async fn premium_recent_events() -> String {
+    let manager = try_json!(manager());
+    let client = try_json!(premium_client(manager).await);
+    let mut recent: Vec<Event> = Vec::new();
+    let mut after = 0;
+    loop {
+        let page = match client.events(after, EVENTS_PAGE).await {
+            Ok(page) => page,
+            Err(e) => return core_error_json(&e),
+        };
+        let Some(last) = page.last() else { break };
+        after = last.id;
+        let full = page.len() >= EVENTS_PAGE as usize;
+        recent.extend(page);
+        if recent.len() > RECENT_EVENTS {
+            recent.drain(..recent.len() - RECENT_EVENTS);
+        }
+        if !full {
+            break;
+        }
+    }
+    recent.reverse();
+    to_json(&recent)
+}
+
+/// `GET /v1/heartbeat`, verified against the embedded key and this
+/// device's clock. Returns a serialized `HeartbeatReport`; a server
+/// that cannot be reached, or whose answer does not verify, is the
+/// error the "watch is offline" banner counts.
+pub async fn premium_heartbeat() -> String {
+    let manager = try_json!(manager());
+    let client = try_json!(premium_client(manager).await);
+    match client.heartbeat(now_unix()).await {
         Ok(report) => to_json(&report),
         Err(e) => core_error_json(&e),
     }

@@ -1927,6 +1927,7 @@ dependencies = [
  "futures-util",
  "rand 0.9.5",
  "reqwest",
+ "ring",
  "rustls",
  "serde",
  "serde_json",

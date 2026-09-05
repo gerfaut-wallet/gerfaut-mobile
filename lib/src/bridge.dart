@@ -13,7 +13,11 @@ import 'rust/api.dart' as rust;
 /// Kinds match the desktop app: unrecognized_input, private_material,
 /// invalid_input, network_mismatch, wallet_not_found, duplicate_wallet,
 /// vault, sync, backend_unavailable, broadcast, descriptor, internal —
-/// plus the bridge-level not_initialized, bad_key, bad_json.
+/// plus the bridge-level not_initialized, bad_key, bad_json, and the
+/// premium server's: premium_no_key, premium_unknown_key,
+/// premium_no_paid_time, premium_rejected, premium_unreachable,
+/// premium_unexpected_response, premium_invalid_certificate,
+/// premium_invalid_heartbeat, premium_stale_heartbeat.
 class BridgeException implements Exception {
   const BridgeException(this.kind, this.message);
 
@@ -163,6 +167,66 @@ abstract class GerfautBridge {
   /// Resolves the route now, bootstrapping the built-in client if that
   /// is the path. Up to a minute and a half on a first run.
   Future<TorRoute> torConnect();
+
+  // --- premium -----------------------------------------------------------
+
+  /// The premium account as the vault keeps it, the certificate's
+  /// claims verified offline by the core. Never touches the network.
+  Future<PremiumView> premiumState();
+
+  /// Enters an account key: the core checks its shape, fetches the
+  /// licence, verifies the certificate and stores both. Kinds:
+  /// premium_unreachable, premium_unknown_key, premium_no_paid_time.
+  Future<PremiumLicence> premiumActivate(String key);
+
+  /// Fetches the certificate again with the stored key, for the time a
+  /// renewal added, and stores it.
+  Future<PremiumLicence> premiumRefreshLicence();
+
+  /// Drops the key and its certificate from this device. The server
+  /// goes on watching; the consents stay.
+  Future<void> premiumForgetKey();
+
+  /// Keeps the "watch is offline" banner quiet until [untilUnix], or
+  /// lets it show again with null.
+  Future<void> premiumAcknowledgeOffline(int? untilUnix);
+
+  /// Paid time, counts and the network the server watches.
+  Future<PremiumAccount> premiumAccount();
+
+  /// The wallets the server watches for this key.
+  Future<List<WalletWatch>> premiumWallets();
+
+  /// Records the user's yes for [id] and hands the wallet to the server
+  /// with its descriptors as the vault holds them. A single address is
+  /// refused before anything leaves the device.
+  Future<void> premiumWatchWallet(String id);
+
+  /// Tells the server to stop watching [id]. The consent stays.
+  Future<void> premiumUnwatchWallet(String id);
+  Future<List<PremiumChannel>> premiumChannels();
+
+  /// Adds a channel. [target] is the e-mail address or the webhook URL;
+  /// nothing for Telegram, and nothing for ntfy, whose topic the core
+  /// draws and returns once with the URL to subscribe to.
+  Future<CreatedChannel> premiumCreateChannel(
+    ChannelKind kind, {
+    String? target,
+    String? secret,
+  });
+  Future<void> premiumDeleteChannel(String id);
+
+  /// Sends a test message through a channel. A provider's refusal comes
+  /// back as premium_rejected, in the server's words.
+  Future<void> premiumTestChannel(String id);
+
+  /// The last events of the account, newest first, at most twenty.
+  Future<List<PremiumEvent>> premiumRecentEvents();
+
+  /// The server's signed heartbeat, verified by the core against the
+  /// embedded key and this device's clock. Any failure counts as a
+  /// missed beat.
+  Future<HeartbeatReport> premiumHeartbeat();
 }
 
 /// The real bridge, backed by the generated Rust bindings.
@@ -495,5 +559,97 @@ class RustBridge implements GerfautBridge {
   @override
   Future<TorRoute> torConnect() async {
     return TorRoute.fromJson(_object(await rust.torConnect()));
+  }
+
+  @override
+  Future<PremiumView> premiumState() async {
+    return PremiumView.fromJson(_object(await rust.premiumState()));
+  }
+
+  @override
+  Future<PremiumLicence> premiumActivate(String key) async {
+    return PremiumLicence.fromJson(
+      _object(await rust.premiumActivate(key: key)),
+    );
+  }
+
+  @override
+  Future<PremiumLicence> premiumRefreshLicence() async {
+    return PremiumLicence.fromJson(_object(await rust.premiumRefreshLicence()));
+  }
+
+  @override
+  Future<void> premiumForgetKey() async {
+    _ok(await rust.premiumForgetKey());
+  }
+
+  @override
+  Future<void> premiumAcknowledgeOffline(int? untilUnix) async {
+    _ok(await rust.premiumAcknowledgeOffline(until: untilUnix));
+  }
+
+  @override
+  Future<PremiumAccount> premiumAccount() async {
+    return PremiumAccount.fromJson(_object(await rust.premiumAccount()));
+  }
+
+  @override
+  Future<List<WalletWatch>> premiumWallets() async {
+    return _list(await rust.premiumWallets())
+        .map(WalletWatch.fromJson)
+        .toList();
+  }
+
+  @override
+  Future<void> premiumWatchWallet(String id) async {
+    _ok(await rust.premiumWatchWallet(id: id));
+  }
+
+  @override
+  Future<void> premiumUnwatchWallet(String id) async {
+    _ok(await rust.premiumUnwatchWallet(id: id));
+  }
+
+  @override
+  Future<List<PremiumChannel>> premiumChannels() async {
+    return _list(await rust.premiumChannels())
+        .map(PremiumChannel.fromJson)
+        .toList();
+  }
+
+  @override
+  Future<CreatedChannel> premiumCreateChannel(
+    ChannelKind kind, {
+    String? target,
+    String? secret,
+  }) async {
+    final raw = await rust.premiumCreateChannel(
+      kind: kind.id,
+      target: target,
+      secret: secret,
+    );
+    return CreatedChannel.fromJson(_object(raw));
+  }
+
+  @override
+  Future<void> premiumDeleteChannel(String id) async {
+    _ok(await rust.premiumDeleteChannel(id: id));
+  }
+
+  @override
+  Future<void> premiumTestChannel(String id) async {
+    _ok(await rust.premiumTestChannel(id: id));
+  }
+
+  @override
+  Future<List<PremiumEvent>> premiumRecentEvents() async {
+    return _list(await rust.premiumRecentEvents())
+        .map(PremiumEvent.fromJson)
+        .toList();
+  }
+
+  @override
+  Future<HeartbeatReport> premiumHeartbeat() async {
+    return HeartbeatReport.fromJson(_object(await rust.premiumHeartbeat()));
   }
 }

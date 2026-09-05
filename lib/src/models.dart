@@ -2704,3 +2704,390 @@ class PolicySnapshot {
     (branch) => branch.timelocks.any((lock) => lock.lock.isTimeBased),
   );
 }
+
+// --- premium -------------------------------------------------------------
+
+/// The signed part of a licence certificate, read after the core checked
+/// the signature against the key it embeds. Dart never verifies one: it
+/// only compares these dates with the clock.
+class LicenceClaims {
+  const LicenceClaims({
+    required this.subject,
+    required this.expiresAt,
+    required this.issuedAt,
+  });
+
+  factory LicenceClaims.fromJson(Map<String, dynamic> json) {
+    return LicenceClaims(
+      subject: json['sub'] as String,
+      expiresAt: json['exp'] as int,
+      issuedAt: json['iat'] as int,
+    );
+  }
+
+  /// Hex of the key hash: a stable name for the account, nothing more.
+  final String subject;
+
+  /// Unix seconds: when the paid time ends.
+  final int expiresAt;
+
+  /// Unix seconds: when the certificate was issued.
+  final int issuedAt;
+
+  /// Whether the paid time covers [nowUnix], the way the server judges
+  /// it: active up to the second it ends.
+  bool isActive(int nowUnix) => nowUnix < expiresAt;
+}
+
+/// A wallet the user agreed to have watched by the server, and when.
+class WatchConsent {
+  const WatchConsent({required this.walletId, required this.consentedAt});
+
+  factory WatchConsent.fromJson(Map<String, dynamic> json) {
+    return WatchConsent(
+      walletId: json['wallet_id'] as String,
+      consentedAt: json['consented_at'] as int,
+    );
+  }
+
+  final String walletId;
+
+  /// Unix seconds.
+  final int consentedAt;
+}
+
+/// The premium account as the vault keeps it, with the claims of its
+/// certificate already verified offline. Empty until a key is entered.
+class PremiumView {
+  const PremiumView({
+    this.key,
+    this.keyDisplay,
+    this.claims,
+    this.watched = const [],
+    this.acknowledgedOfflineUntil,
+    this.ntfyBaseUrl = 'https://ntfy.gerfaut-wallet.com',
+    this.telegramBot = 'GerfautAlertsBot',
+  });
+
+  factory PremiumView.fromJson(Map<String, dynamic> json) {
+    return PremiumView(
+      key: json['key'] as String?,
+      keyDisplay: json['key_display'] as String?,
+      claims: json['claims'] == null
+          ? null
+          : LicenceClaims.fromJson(json['claims'] as Map<String, dynamic>),
+      watched: (json['watched'] as List? ?? const [])
+          .map((w) => WatchConsent.fromJson(w as Map<String, dynamic>))
+          .toList(),
+      acknowledgedOfflineUntil: json['acknowledged_offline_until'] as int?,
+      ntfyBaseUrl:
+          json['ntfy_base_url'] as String? ?? 'https://ntfy.gerfaut-wallet.com',
+      telegramBot: json['telegram_bot'] as String? ?? 'GerfautAlertsBot',
+    );
+  }
+
+  /// The account key, normalized; null until one is entered.
+  final String? key;
+
+  /// The key as it is shown, `abcd-efgh-ijkm-npqr`.
+  final String? keyDisplay;
+
+  /// The stored certificate's claims; null without a key, or when the
+  /// certificate no longer verifies.
+  final LicenceClaims? claims;
+
+  /// The wallets the user agreed to send to the server.
+  final List<WatchConsent> watched;
+
+  /// Unix seconds until which the "watch is offline" banner stays
+  /// hidden because the user dismissed it.
+  final int? acknowledgedOfflineUntil;
+
+  /// The ntfy instance the server publishes to.
+  final String ntfyBaseUrl;
+
+  /// The Telegram bot that links channels, without the `@`.
+  final String telegramBot;
+
+  bool get hasKey => key != null;
+
+  /// Whether the user already said yes for this wallet.
+  bool consented(String walletId) => watched.any((w) => w.walletId == walletId);
+}
+
+/// `GET /v1/licence`, its certificate verified by the core.
+class PremiumLicence {
+  const PremiumLicence({
+    required this.certificate,
+    required this.paidUntil,
+    required this.claims,
+  });
+
+  factory PremiumLicence.fromJson(Map<String, dynamic> json) {
+    return PremiumLicence(
+      certificate: json['certificate'] as String,
+      paidUntil: json['paid_until'] as int,
+      claims: LicenceClaims.fromJson(json['claims'] as Map<String, dynamic>),
+    );
+  }
+
+  final String certificate;
+
+  /// Unix seconds.
+  final int paidUntil;
+  final LicenceClaims claims;
+}
+
+/// `GET /v1/account`.
+class PremiumAccount {
+  const PremiumAccount({
+    required this.active,
+    required this.paidUntil,
+    required this.wallets,
+    required this.channels,
+    required this.network,
+  });
+
+  factory PremiumAccount.fromJson(Map<String, dynamic> json) {
+    return PremiumAccount(
+      active: json['active'] as bool,
+      paidUntil: json['paid_until'] as int?,
+      wallets: json['wallets'] as int,
+      channels: json['channels'] as int,
+      network: json['network'] as String,
+    );
+  }
+
+  final bool active;
+
+  /// Unix seconds; null for a key never paid for.
+  final int? paidUntil;
+  final int wallets;
+  final int channels;
+
+  /// The network the server watches, as it names it (`bitcoin`).
+  final String network;
+
+  /// The server's network in the app's own terms; null for a name this
+  /// build does not know.
+  Network? get chain => switch (network) {
+    'bitcoin' || 'main' || 'mainnet' => Network.mainnet,
+    'signet' => Network.signet,
+    'testnet4' || 'testnet' || 'test' => Network.testnet4,
+    'regtest' => Network.regtest,
+    _ => null,
+  };
+}
+
+/// One wallet the server watches for the account.
+class WalletWatch {
+  const WalletWatch({
+    required this.id,
+    required this.name,
+    required this.scriptKind,
+    required this.watchedSince,
+    required this.baselineAt,
+    required this.baselineHeight,
+    required this.coins,
+    required this.valueSats,
+  });
+
+  factory WalletWatch.fromJson(Map<String, dynamic> json) {
+    return WalletWatch(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      scriptKind: json['script_kind'] as String,
+      watchedSince: json['watched_since'] as int,
+      baselineAt: json['baseline_at'] as int?,
+      baselineHeight: json['baseline_height'] as int?,
+      coins: json['coins'] as int,
+      valueSats: json['value_sats'] as int,
+    );
+  }
+
+  /// The app's own wallet id.
+  final String id;
+  final String name;
+  final String scriptKind;
+
+  /// Unix seconds.
+  final int watchedSince;
+
+  /// Unix seconds when the first scan of the UTXO set finished; null
+  /// while it runs.
+  final int? baselineAt;
+  final int? baselineHeight;
+  final int coins;
+  final int valueSats;
+
+  /// The first scan is still running.
+  bool get scanning => baselineAt == null;
+}
+
+/// Where an account wants to be told.
+enum ChannelKind {
+  ntfy('ntfy', 'ntfy'),
+  telegram('telegram', 'Telegram'),
+  email('email', 'E-mail'),
+  webhook('webhook', 'Webhook');
+
+  const ChannelKind(this.id, this.label);
+
+  /// Stable machine identifier, as serialized by the core.
+  final String id;
+  final String label;
+
+  static ChannelKind fromId(String id) =>
+      ChannelKind.values.firstWhere((k) => k.id == id);
+}
+
+/// One channel, as the server describes it.
+class PremiumChannel {
+  const PremiumChannel({
+    required this.id,
+    required this.kind,
+    required this.target,
+    required this.linked,
+    this.linkCode,
+    this.startUrl,
+    this.enabled = true,
+    required this.createdAt,
+  });
+
+  factory PremiumChannel.fromJson(Map<String, dynamic> json) {
+    return PremiumChannel(
+      id: json['id'] as String,
+      kind: ChannelKind.fromId(json['kind'] as String),
+      target: json['target'] as String? ?? '',
+      linked: json['linked'] as bool? ?? true,
+      linkCode: json['link_code'] as String?,
+      startUrl: json['start_url'] as String?,
+      enabled: json['enabled'] as bool? ?? true,
+      createdAt: json['created_at'] as int,
+    );
+  }
+
+  final String id;
+  final ChannelKind kind;
+
+  /// Masked except for webhooks: proof it is the right one, not a copy
+  /// of it.
+  final String target;
+
+  /// False for a Telegram channel whose code was not sent to the bot yet.
+  final bool linked;
+
+  /// The code to send the bot, while a Telegram channel is unlinked.
+  final String? linkCode;
+
+  /// Opens the bot with the code filled in, while it waits for it.
+  final String? startUrl;
+  final bool enabled;
+
+  /// Unix seconds.
+  final int createdAt;
+
+  /// A Telegram channel the bot has not heard from yet.
+  bool get waitingForBot => kind == ChannelKind.telegram && !linked;
+}
+
+/// What creating a channel hands back: the channel, and for ntfy the
+/// topic drawn for it, shown once with the URL to subscribe to.
+class CreatedChannel {
+  const CreatedChannel({required this.channel, this.topic, this.subscribeUrl});
+
+  factory CreatedChannel.fromJson(Map<String, dynamic> json) {
+    return CreatedChannel(
+      channel: PremiumChannel.fromJson(json['channel'] as Map<String, dynamic>),
+      topic: json['topic'] as String?,
+      subscribeUrl: json['subscribe_url'] as String?,
+    );
+  }
+
+  final PremiumChannel channel;
+  final String? topic;
+
+  /// `https://ntfy.gerfaut-wallet.com/<topic>`.
+  final String? subscribeUrl;
+}
+
+/// What happened to a watched wallet. A kind this build does not know
+/// reads as [other], so a newer server never breaks the list.
+enum AlertKind {
+  spendDetected('spend_detected'),
+  spendConfirmed('spend_confirmed'),
+  coinsGone('coins_gone'),
+  receiveDetected('receive_detected'),
+  receiveConfirmed('receive_confirmed'),
+  timelockDue('timelock_due'),
+  walletRegistered('wallet_registered'),
+  other('other');
+
+  const AlertKind(this.id);
+
+  final String id;
+
+  static AlertKind fromId(String? id) {
+    for (final kind in AlertKind.values) {
+      if (kind.id == id) return kind;
+    }
+    return AlertKind.other;
+  }
+}
+
+/// One entry of the account's event log.
+class PremiumEvent {
+  const PremiumEvent({
+    required this.id,
+    required this.kind,
+    required this.wallet,
+    required this.walletName,
+    required this.at,
+    this.data = const {},
+  });
+
+  factory PremiumEvent.fromJson(Map<String, dynamic> json) {
+    return PremiumEvent(
+      id: json['id'] as int,
+      kind: AlertKind.fromId(json['kind'] as String?),
+      wallet: json['wallet'] as String,
+      walletName: json['wallet_name'] as String,
+      at: json['at'] as int,
+      data: json['data'] as Map<String, dynamic>? ?? const {},
+    );
+  }
+
+  /// Increasing; the cursor of the server's log.
+  final int id;
+  final AlertKind kind;
+
+  /// The app's own wallet id.
+  final String wallet;
+  final String walletName;
+
+  /// Unix seconds.
+  final int at;
+
+  /// The kind's own fields, as the API documents them.
+  final Map<String, dynamic> data;
+}
+
+/// `GET /v1/heartbeat`, verified by the core against the embedded key
+/// and this device's clock.
+class HeartbeatReport {
+  const HeartbeatReport({required this.now, required this.tipHeight});
+
+  factory HeartbeatReport.fromJson(Map<String, dynamic> json) {
+    final heartbeat = json['heartbeat'] as Map<String, dynamic>;
+    return HeartbeatReport(
+      now: heartbeat['now'] as int,
+      tipHeight: heartbeat['tip_height'] as int?,
+    );
+  }
+
+  /// Unix seconds on the server.
+  final int now;
+
+  /// The chain tip the server watches from; null before its first block.
+  final int? tipHeight;
+}
