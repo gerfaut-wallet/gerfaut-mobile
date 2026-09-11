@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'screens/backup_restore.dart';
 import 'screens/calculator.dart';
 import 'screens/home.dart';
 import 'screens/lock_screen.dart';
@@ -15,24 +17,68 @@ import 'src/notifications.dart';
 import 'src/onboarding.dart';
 import 'src/premium.dart';
 import 'src/state.dart';
+import 'src/vault_key.dart';
 import 'theme/tokens.dart';
+import 'widgets/buttons.dart';
+import 'widgets/notice.dart';
 
 /// Root widget: both Toundra themes, light by default, and the startup
 /// bootstrap (Rust bridge + encrypted vault) before the home screen.
 class GerfautApp extends ConsumerStatefulWidget {
-  const GerfautApp({super.key, this.bootstrap});
+  const GerfautApp({super.key, this.bootstrap, this.startOver});
 
   /// Opens the Rust bridge and the vault at startup. Widget tests pass
   /// null (with a fake bridge override) so pumping the app never
   /// touches native code.
   final Future<void> Function()? bootstrap;
 
+  /// Sets an unopenable vault aside so that [bootstrap] can start an
+  /// empty one. The real app moves the file; widget tests pass a fake.
+  final Future<void> Function()? startOver;
+
   @override
   ConsumerState<GerfautApp> createState() => _GerfautAppState();
 }
 
 class _GerfautAppState extends ConsumerState<GerfautApp> {
-  late final Future<void>? _ready = widget.bootstrap?.call();
+  late Future<void>? _ready = widget.bootstrap?.call();
+
+  /// Reaches the navigator from outside the tree, for the one route the
+  /// bootstrap itself pushes: the restore page after a vault was set
+  /// aside.
+  final _navigator = GlobalKey<NavigatorState>();
+
+  /// Runs the bootstrap again, on a fresh future so the gate rebuilds
+  /// from its loading state.
+  void _retry() {
+    final bootstrap = widget.bootstrap;
+    if (bootstrap == null) return;
+    setState(() {
+      _ready = bootstrap();
+    });
+  }
+
+  /// Sets the vault aside, opens an empty one, and lands on the restore
+  /// page: the one place a backup brings the wallets back from. Without
+  /// a backup the page is left with the back gesture, and the empty
+  /// vault is what remains.
+  void _startOver() {
+    final bootstrap = widget.bootstrap;
+    if (bootstrap == null) return;
+    setState(() {
+      _ready = (widget.startOver ?? setVaultAside)()
+          .then((_) => bootstrap())
+          .then((_) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _navigator.currentState?.push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const BackupRestoreScreen(),
+                ),
+              );
+            });
+          });
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,12 +90,17 @@ class _GerfautAppState extends ConsumerState<GerfautApp> {
 
     return MaterialApp(
       title: 'Gerfaut',
+      navigatorKey: _navigator,
       theme: themeFrom(GerfautTokens.light, Brightness.light),
       darkTheme: themeFrom(GerfautTokens.dark, Brightness.dark),
       themeMode: themeMode,
       home: _ready == null
           ? const _Hydrated(child: _Gate())
-          : _BootstrapGate(ready: _ready),
+          : _BootstrapGate(
+              ready: _ready!,
+              onRetry: _retry,
+              onStartOver: _startOver,
+            ),
     );
   }
 }
@@ -222,7 +273,10 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
     final lock = ref.watch(lockProvider);
     final disguise = ref.watch(disguiseProvider);
     if (settings.hasError) {
-      return _StartupErrorScreen(message: '${settings.error}');
+      return _StartupErrorScreen(
+        error: settings.error!,
+        onRetry: () => ref.invalidate(settingsProvider),
+      );
     }
     if (!lock.loaded || !disguise.loaded) return const _StartupScreen();
     if (lock.locked) {
@@ -245,9 +299,15 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
 
 /// Shows a quiet loading scaffold until the bootstrap future settles.
 class _BootstrapGate extends StatelessWidget {
-  const _BootstrapGate({required this.ready});
+  const _BootstrapGate({
+    required this.ready,
+    required this.onRetry,
+    required this.onStartOver,
+  });
 
   final Future<void> ready;
+  final VoidCallback onRetry;
+  final VoidCallback onStartOver;
 
   @override
   Widget build(BuildContext context) {
@@ -258,7 +318,11 @@ class _BootstrapGate extends StatelessWidget {
           return const _StartupScreen();
         }
         if (snapshot.hasError) {
-          return _StartupErrorScreen(message: '${snapshot.error}');
+          return _StartupErrorScreen(
+            error: snapshot.error!,
+            onRetry: onRetry,
+            onStartOver: onStartOver,
+          );
         }
         return const _Hydrated(child: _Gate());
       },
@@ -361,29 +425,138 @@ class _StartupScreen extends ConsumerWidget {
   }
 }
 
-class _StartupErrorScreen extends StatelessWidget {
-  const _StartupErrorScreen({required this.message});
+/// What the app shows when the vault did not open: the error, in the
+/// core's words, and a way to try again.
+///
+/// A vault whose key is gone gets more than the words. It is the one
+/// startup failure with a cause a person can do something about, and
+/// the something is spelled out: the key does not travel with the
+/// vault, so a phone restored from a backup comes back with a file
+/// nobody can open. The way out is a fresh vault and a Gerfaut backup,
+/// behind a confirmation that says the file is set aside, not deleted.
+class _StartupErrorScreen extends StatefulWidget {
+  const _StartupErrorScreen({
+    required this.error,
+    required this.onRetry,
+    this.onStartOver,
+  });
 
-  final String message;
+  final Object error;
+  final VoidCallback onRetry;
+
+  /// Sets the vault aside and starts over; null where that makes no
+  /// sense, the settings that failed to load after the vault opened.
+  final VoidCallback? onStartOver;
+
+  @override
+  State<_StartupErrorScreen> createState() => _StartupErrorScreenState();
+}
+
+class _StartupErrorScreenState extends State<_StartupErrorScreen> {
+  bool _confirmingStartOver = false;
 
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final error = widget.error;
+    final keyGone = error is VaultKeyMissingException;
+    final muted = tokens.bodySmall.copyWith(color: tokens.textMuted);
     return Scaffold(
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Gerfaut could not start', style: tokens.body),
-              const SizedBox(height: GerfautSpacing.sm),
-              Text(
-                message,
-                style: tokens.data.copyWith(color: tokens.textMuted),
-                textAlign: TextAlign.center,
-              ),
-            ],
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(GerfautSpacing.md),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Gerfaut could not start', style: tokens.h2),
+                const SizedBox(height: GerfautSpacing.sm),
+                if (keyGone) ...[
+                  Text(
+                    'The vault is here, but the key that opens it is gone.',
+                    style: tokens.body,
+                  ),
+                  const SizedBox(height: GerfautSpacing.sm),
+                  Text(
+                    'Android keeps that key in its secure storage, apart '
+                    'from the vault, and it does not travel: a phone '
+                    'restored from a backup, moved to a new device or reset '
+                    'comes back with the vault file and without the key. '
+                    'Nothing can open the vault without it.',
+                    style: muted,
+                  ),
+                  const SizedBox(height: GerfautSpacing.sm),
+                  Text(
+                    'If the phone was only restarting, try again first. '
+                    'Otherwise, a backup made with Gerfaut brings the '
+                    'wallets back into an empty vault.',
+                    style: muted,
+                  ),
+                  const SizedBox(height: GerfautSpacing.sm),
+                  SelectableText(
+                    error.detail,
+                    style: tokens.data.copyWith(
+                      fontSize: 12,
+                      color: tokens.textMuted,
+                    ),
+                  ),
+                ] else
+                  SelectableText(
+                    '$error',
+                    style: tokens.data.copyWith(color: tokens.textMuted),
+                  ),
+                const SizedBox(height: GerfautSpacing.md),
+                Wrap(
+                  spacing: GerfautSpacing.sm,
+                  runSpacing: GerfautSpacing.sm,
+                  children: [
+                    SecondaryButton(
+                      label: 'Try again',
+                      icon: LucideIcons.refreshCw,
+                      onPressed: widget.onRetry,
+                    ),
+                    if (keyGone && widget.onStartOver != null)
+                      GhostButton(
+                        label: 'Start over…',
+                        icon: LucideIcons.archiveRestore,
+                        onPressed: _confirmingStartOver
+                            ? null
+                            : () => setState(() => _confirmingStartOver = true),
+                      ),
+                  ],
+                ),
+                if (_confirmingStartOver) ...[
+                  const SizedBox(height: GerfautSpacing.md),
+                  // Amber: the file is kept. What is lost was lost
+                  // before this screen, and the sentence says so.
+                  GerfautNotice(
+                    tone: NoticeTone.info,
+                    message:
+                        'Gerfaut opens an empty vault and the restore page. '
+                        'The vault it cannot open is set aside under another '
+                        'name, not deleted.',
+                    liveRegion: true,
+                    actionsBelow: true,
+                    action: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GhostButton(
+                          label: 'Cancel',
+                          onPressed: () =>
+                              setState(() => _confirmingStartOver = false),
+                        ),
+                        const SizedBox(width: GerfautSpacing.sm),
+                        DangerButton(
+                          label: 'Start over',
+                          onPressed: widget.onStartOver,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       ),

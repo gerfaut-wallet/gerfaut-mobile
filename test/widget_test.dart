@@ -2,25 +2,32 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
+import 'package:gerfaut/screens/backup_restore.dart';
 import 'package:gerfaut/screens/wallet_home.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/disguise.dart';
+import 'package:gerfaut/src/vault_key.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:flutter/gestures.dart' show kLongPressTimeout, kPressTimeout;
 import 'package:gerfaut/widgets/brand.dart';
+import 'package:gerfaut/widgets/buttons.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'fakes.dart';
 import 'menu.dart';
 
-Widget app(FakeBridge bridge, {Future<void> Function()? bootstrap}) {
+Widget app(
+  FakeBridge bridge, {
+  Future<void> Function()? bootstrap,
+  Future<void> Function()? startOver,
+}) {
   return ProviderScope(
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
       disguiseServiceProvider.overrideWithValue(FakeDisguise()),
     ],
-    child: GerfautApp(bootstrap: bootstrap),
+    child: GerfautApp(bootstrap: bootstrap, startOver: startOver),
   );
 }
 
@@ -389,6 +396,86 @@ void main() {
 
     expect(find.text('Gerfaut could not start'), findsOneWidget);
     expect(find.text('No wallets yet'), findsNothing);
+    // The error itself, and a way to run the bootstrap again.
+    expect(find.textContaining('vault init failed'), findsOneWidget);
+    expect(find.text('Try again'), findsOneWidget);
+    expect(find.text('Start over…'), findsNothing);
+  });
+
+  testWidgets('trying again runs the bootstrap once more', (tester) async {
+    var attempts = 0;
+    await tester.pumpWidget(
+      app(
+        returning(wallets: [makeMeta()]),
+        bootstrap: () async {
+          attempts++;
+          if (attempts == 1) throw StateError('vault init failed');
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Gerfaut could not start'), findsOneWidget);
+
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+    expect(attempts, 2);
+    expect(find.text('Gerfaut could not start'), findsNothing);
+    expect(find.text('Cold storage'), findsOneWidget);
+  });
+
+  testWidgets('a vault without its key says so, and starts over on request', (
+    tester,
+  ) async {
+    var keyGone = true;
+    var attempts = 0;
+    var setAside = 0;
+    await tester.pumpWidget(
+      app(
+        FakeBridge(),
+        bootstrap: () async {
+          attempts++;
+          if (keyGone) {
+            throw const VaultKeyMissingException(
+              'nothing is stored under its name',
+            );
+          }
+        },
+        startOver: () async {
+          setAside++;
+          keyGone = false;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Gerfaut could not start'), findsOneWidget);
+    expect(
+      find.text('The vault is here, but the key that opens it is gone.'),
+      findsOneWidget,
+    );
+    expect(find.text('nothing is stored under its name'), findsOneWidget);
+    expect(find.text('Try again'), findsOneWidget);
+
+    // Starting over asks first, and says what happens to the file.
+    await tester.tap(find.text('Start over…'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('set aside under another name'), findsOneWidget);
+    expect(setAside, 0);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('set aside under another name'), findsNothing);
+
+    await tester.tap(find.text('Start over…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(DangerButton, 'Start over'));
+    await tester.pumpAndSettle();
+
+    // The vault was set aside, the bootstrap ran again on an empty one,
+    // and the restore page is where the app lands.
+    expect(setAside, 1);
+    expect(attempts, 2);
+    expect(find.text('Gerfaut could not start'), findsNothing);
+    expect(find.byType(BackupRestoreScreen), findsOneWidget);
   });
 }
 
