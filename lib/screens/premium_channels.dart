@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../src/bridge.dart';
+import '../src/clipboard.dart';
 import '../src/models.dart';
 import '../src/premium.dart';
 import '../src/state.dart';
@@ -169,21 +170,24 @@ class _KindRow extends StatelessWidget {
 /// The page under a created ntfy channel: the topic to subscribe to,
 /// copied or opened in the ntfy app. The topic is the whole secret of
 /// the channel, so it is shown in full, in mono, and nowhere else.
-class NtfyChannelScreen extends StatefulWidget {
+class NtfyChannelScreen extends ConsumerStatefulWidget {
   const NtfyChannelScreen({super.key, required this.subscribeUrl});
 
   /// `https://ntfy.gerfaut-wallet.com/<topic>`.
   final String subscribeUrl;
 
   @override
-  State<NtfyChannelScreen> createState() => _NtfyChannelScreenState();
+  ConsumerState<NtfyChannelScreen> createState() => _NtfyChannelScreenState();
 }
 
-class _NtfyChannelScreenState extends State<NtfyChannelScreen> {
+class _NtfyChannelScreenState extends ConsumerState<NtfyChannelScreen> {
   bool _noApp = false;
 
   Future<void> _copy() async {
-    await Clipboard.setData(ClipboardData(text: widget.subscribeUrl));
+    // The topic is the whole secret of the channel: anyone holding it
+    // subscribes to the alerts of this account. It does not belong in
+    // the system's clipboard preview or its history.
+    await ref.read(sensitiveClipboardProvider).copy(widget.subscribeUrl);
     if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text('Copied')));

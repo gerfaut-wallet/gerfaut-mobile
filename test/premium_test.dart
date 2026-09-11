@@ -9,6 +9,7 @@ import 'package:gerfaut/screens/settings.dart';
 import 'package:gerfaut/screens/settings/premium_section.dart';
 import 'package:gerfaut/screens/wallet_home.dart';
 import 'package:gerfaut/src/bridge.dart';
+import 'package:gerfaut/src/clipboard.dart';
 import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/models.dart';
@@ -61,11 +62,17 @@ FakeBridge premiumBridge({List<WalletMeta>? wallets, bool activated = false}) {
 }
 
 /// The settings opened on the Premium section, or on the root list.
-Widget premiumApp(FakeBridge bridge, {bool root = false}) {
+Widget premiumApp(
+  FakeBridge bridge, {
+  bool root = false,
+  FakeSensitiveClipboard? clipboard,
+}) {
   return ProviderScope(
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
       disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+      if (clipboard != null)
+        sensitiveClipboardProvider.overrideWithValue(clipboard),
     ],
     child: MaterialApp(
       theme: themeFrom(GerfautTokens.light, Brightness.light),
@@ -588,6 +595,29 @@ void main() {
       expect(find.text('Subscribe link'), findsOneWidget);
       expect(find.text('Send a test'), findsOneWidget);
       expect(find.text('Remove'), findsOneWidget);
+    });
+
+    testWidgets('ntfy: the topic is copied as a secret', (tester) async {
+      useTallSurface(tester);
+      UrlLauncherPlatform.instance = FakeUrlLauncher();
+      final clipboard = FakeSensitiveClipboard();
+      final bridge = premiumBridge(activated: true);
+      await tester.pumpWidget(premiumApp(bridge, clipboard: clipboard));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Add a channel'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ntfy'));
+      await tester.pumpAndSettle();
+
+      // The topic is the whole secret of the channel: whoever holds it
+      // reads the alerts of this account. It never goes on the
+      // clipboard the system previews and keeps a history of.
+      final topic = bridge.appPrefs['premium.ntfy.ch1']!;
+      await tester.tap(find.text('Copy'));
+      await tester.pump();
+      expect(clipboard.copied, ['https://ntfy.gerfaut-wallet.com/$topic']);
+      await tester.pump(const Duration(seconds: 5));
     });
 
     testWidgets('telegram: the code, the link, and Linked by itself', (

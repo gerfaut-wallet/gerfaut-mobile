@@ -4,7 +4,11 @@ import android.app.Activity
 import android.app.ActivityManager
 import android.appwidget.AppWidgetManager
 import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipDescription
+import android.content.ClipboardManager
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
@@ -14,6 +18,7 @@ import android.graphics.Canvas
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PersistableBundle
 import android.provider.DocumentsContract
 import android.view.WindowManager
 import androidx.activity.result.ActivityResultLauncher
@@ -84,6 +89,15 @@ class MainActivity : FlutterFragmentActivity() {
                         result.success(null)
                     }
                 }
+                "copySensitive" -> {
+                    val text = call.arguments as? String
+                    if (text == null) {
+                        result.error("bad_argument", "copySensitive takes a string", null)
+                    } else {
+                        copySensitive(text)
+                        result.success(null)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
@@ -148,6 +162,29 @@ class MainActivity : FlutterFragmentActivity() {
         } else {
             window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
+    }
+
+    // Puts text on the clipboard, marked as something not to show.
+    //
+    // From Android 13 the system flashes a preview of everything copied
+    // and keeps a history of it, both readable over the shoulder and
+    // outside the app. A clip marked sensitive is shown as hidden there
+    // and kept out of the history. Below 13 the extra means nothing and
+    // this is an ordinary copy: the flag is all that changes, never
+    // whether the copy happens.
+    //
+    // The label stays empty on purpose. It is what a clipboard manager
+    // shows next to the entry, and an app that can wear a calculator's
+    // face must not write its own name there.
+    private fun copySensitive(text: String) {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText("", text)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            clip.description.extras = PersistableBundle().apply {
+                putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+            }
+        }
+        clipboard.setPrimaryClip(clip)
     }
 
     // Opens the system's save dialog on a new document and writes the

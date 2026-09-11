@@ -2,12 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart' hide LockState;
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/policy.dart';
 import 'package:gerfaut/src/bridge.dart';
+import 'package:gerfaut/src/clipboard.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/policy_text.dart';
 import 'package:gerfaut/src/state.dart';
@@ -38,13 +38,18 @@ Future<void> _pumpPolicy(
   WidgetTester tester,
   FakeBridge bridge, {
   Brightness brightness = Brightness.light,
+  FakeSensitiveClipboard? clipboard,
 }) async {
   tester.view.physicalSize = const Size(411, 731);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [bridgeProvider.overrideWithValue(bridge)],
+      overrides: [
+        bridgeProvider.overrideWithValue(bridge),
+        if (clipboard != null)
+          sensitiveClipboardProvider.overrideWithValue(clipboard),
+      ],
       child: MaterialApp(
         theme: themeFrom(
           brightness == Brightness.light
@@ -757,22 +762,20 @@ void main() {
       expect(find.text('In 1 432 blocks ≈ 10 days'), findsOneWidget);
     });
 
-    testWidgets('unfolds the descriptor and copies it', (tester) async {
-      String? copied;
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
-            if (call.method == 'Clipboard.setData') {
-              copied = (call.arguments as Map)['text'] as String?;
-            }
-            return null;
-          });
-      addTearDown(() {
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(SystemChannels.platform, null);
-      });
-
+    testWidgets('unfolds the descriptor and copies it as a secret', (
+      tester,
+    ) async {
+      // A descriptor names every address of a wallet, present and
+      // future, and the policy read off it says who can spend and when.
+      // Neither goes through the clipboard the system previews and
+      // keeps a history of.
+      final clipboard = FakeSensitiveClipboard();
       final snapshot = _snapshot(lianaPolicyJson());
-      await _pumpPolicy(tester, _bridgeWith(lianaPolicyJson()));
+      await _pumpPolicy(
+        tester,
+        _bridgeWith(lianaPolicyJson()),
+        clipboard: clipboard,
+      );
       await tester.pumpAndSettle();
 
       // Closed by default: the descriptor is the last thing one reads.
@@ -791,9 +794,33 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Copy descriptor'));
       await tester.pump();
-      expect(copied, snapshot.descriptor);
+      expect(clipboard.copied, [snapshot.descriptor]);
       expect(find.text('Copied'), findsOneWidget);
       // Let the feedback timer run out before the tree goes away.
+      await tester.pump(const Duration(seconds: 2));
+    });
+
+    testWidgets('the policy is copied as a secret too', (tester) async {
+      // The normalized policy says who can spend this wallet and when.
+      // It travels the same guarded way as the descriptor it came from.
+      final clipboard = FakeSensitiveClipboard();
+      final snapshot = _snapshot(lianaPolicyJson());
+      await _pumpPolicy(
+        tester,
+        _bridgeWith(lianaPolicyJson()),
+        clipboard: clipboard,
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('DESCRIPTOR'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('DESCRIPTOR'));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.byTooltip('Copy policy'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Copy policy'));
+      await tester.pump();
+      expect(clipboard.copied, [snapshot.policy]);
       await tester.pump(const Duration(seconds: 2));
     });
 

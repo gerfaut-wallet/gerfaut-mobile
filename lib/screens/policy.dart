@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../src/clipboard.dart';
 import '../src/models.dart';
 import '../src/policy_text.dart';
 import '../src/state.dart';
@@ -575,7 +575,7 @@ class _DescriptorSectionState extends State<_DescriptorSection> {
 /// to the width of the screen inside a sunken box that scrolls past
 /// [maxHeight], and the copy button has a column of its own on the
 /// right, reserved by the padding, so it never sits on a character.
-class _CodeBox extends StatefulWidget {
+class _CodeBox extends ConsumerStatefulWidget {
   const _CodeBox({
     required this.text,
     required this.style,
@@ -591,14 +591,17 @@ class _CodeBox extends StatefulWidget {
   final String copyTooltip;
 
   @override
-  State<_CodeBox> createState() => _CodeBoxState();
+  ConsumerState<_CodeBox> createState() => _CodeBoxState();
 }
 
-class _CodeBoxState extends State<_CodeBox> {
+class _CodeBoxState extends ConsumerState<_CodeBox> {
   bool _copied = false;
 
   Future<void> _copy() async {
-    await Clipboard.setData(ClipboardData(text: widget.text));
+    // A descriptor names every address of a wallet, present and future,
+    // and the policy read off it says who can spend and when. Neither
+    // belongs in the system's clipboard preview or its history.
+    await ref.read(sensitiveClipboardProvider).copy(widget.text);
     if (!mounted) return;
     setState(() => _copied = true);
     ScaffoldMessenger.of(context)

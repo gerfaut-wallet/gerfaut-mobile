@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 
 import 'package:gerfaut/src/bridge.dart';
+import 'package:gerfaut/src/clipboard.dart';
 import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/src/documents.dart';
 import 'package:gerfaut/src/electrum.dart';
@@ -139,6 +140,15 @@ class FakeWidgetBoard implements WidgetBoard {
 
 /// Records what would have been written instead of opening the
 /// system's save dialog.
+/// Records what was copied through the sensitive route instead of
+/// reaching the platform.
+class FakeSensitiveClipboard implements SensitiveClipboard {
+  final List<String> copied = [];
+
+  @override
+  Future<void> copy(String text) async => copied.add(text);
+}
+
 class FakeDocumentSaver implements DocumentSaver {
   FakeDocumentSaver({this.answer = true});
 
