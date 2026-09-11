@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../src/bridge.dart';
+import '../../src/clipboard.dart';
 import '../../src/format.dart';
 import '../../src/models.dart';
 import '../../src/premium.dart';
@@ -480,7 +481,7 @@ class _ErrorNote extends StatelessWidget {
 
 // --- 1. Licence ------------------------------------------------------------
 
-class _LicenceCard extends StatelessWidget {
+class _LicenceCard extends ConsumerWidget {
   const _LicenceCard({
     required this.view,
     required this.status,
@@ -504,15 +505,15 @@ class _LicenceCard extends StatelessWidget {
   final VoidCallback onForgetConfirm;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     return SectionCard(
       icon: LucideIcons.keyRound,
       title: 'Licence',
       children: switch (status) {
         LicenceStatus.none => _withoutKey(tokens),
-        LicenceStatus.active => _withKey(tokens, active: true),
-        LicenceStatus.expired => _withKey(tokens, active: false),
+        LicenceStatus.active => _withKey(context, ref, tokens, active: true),
+        LicenceStatus.expired => _withKey(context, ref, tokens, active: false),
       },
     );
   }
@@ -592,7 +593,29 @@ class _LicenceCard extends StatelessWidget {
     ];
   }
 
-  List<Widget> _withKey(GerfautTokens tokens, {required bool active}) {
+  /// Opens the renewal form and puts the key on the clipboard.
+  ///
+  /// The key never rides in the address: see [premiumRenewUrl]. It is
+  /// copied through the guarded clipboard, so the system shows no
+  /// preview of it and keeps none in its history, and the line that
+  /// follows says where to put it.
+  Future<void> _renew(BuildContext context, WidgetRef ref, String key) async {
+    final messenger = ScaffoldMessenger.of(context);
+    await ref.read(sensitiveClipboardProvider).copy(key);
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Key copied, paste it on the renewal page'),
+      ),
+    );
+    await openExternal(premiumRenewUrl);
+  }
+
+  List<Widget> _withKey(
+    BuildContext context,
+    WidgetRef ref,
+    GerfautTokens tokens, {
+    required bool active,
+  }) {
     final claims = view.claims!;
     final key = view.key!;
     return [
@@ -621,7 +644,7 @@ class _LicenceCard extends StatelessWidget {
           GhostButton(
             label: 'Renew',
             icon: LucideIcons.externalLink,
-            onPressed: () => openExternal(premiumRenewUrl(key)),
+            onPressed: () => _renew(context, ref, key),
           ),
           GhostButton(
             label: 'Forget this key',

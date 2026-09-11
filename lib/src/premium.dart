@@ -18,9 +18,17 @@ import 'state.dart';
 /// embedded: the app sells nothing.
 const String premiumSiteUrl = 'https://gerfaut-wallet.com/premium';
 
-/// The site with the key filled in on its renewal form; the page drops
-/// it from the address once read.
-String premiumRenewUrl(String key) => '$premiumSiteUrl?key=$key';
+/// The renewal form on that site, opened without the key.
+///
+/// A key in the address is a key written into the browser's history,
+/// offered afterwards by whatever completes addresses, handed to every
+/// redirect on the way and kept in the log of whatever serves the page.
+/// This one is the only proof of purchase there is, and the account it
+/// opens has nothing else standing in front of it. It travels by the
+/// clipboard instead, which the app marks so the system does not
+/// preview it, and the page asks for it. The fragment names the form
+/// and never leaves the browser.
+const String premiumRenewUrl = '$premiumSiteUrl#renew';
 
 /// How long alerts keep going out after the paid time ends.
 const int premiumGraceDays = 7;

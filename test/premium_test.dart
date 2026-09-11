@@ -389,21 +389,32 @@ void main() {
       expect(find.text('Renew'), findsOneWidget);
     });
 
-    testWidgets('renewing opens the site with the key filled in', (
-      tester,
-    ) async {
+    testWidgets('renewing opens the form and copies the key', (tester) async {
       useTallSurface(tester);
       final launcher = FakeUrlLauncher();
       UrlLauncherPlatform.instance = launcher;
+      final clipboard = FakeSensitiveClipboard();
       final bridge = premiumBridge(activated: true);
-      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpWidget(premiumApp(bridge, clipboard: clipboard));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Renew'));
       await tester.pumpAndSettle();
-      expect(launcher.launched, [
-        'https://gerfaut-wallet.com/premium?key=abcdefghijkmnpqr',
-      ]);
+
+      // The address carries no key: it would be written into the
+      // browser's history, offered by every completion afterwards, and
+      // passed to every redirect on the way. The fragment names the
+      // form and never leaves the browser.
+      expect(launcher.launched, ['https://gerfaut-wallet.com/premium#renew']);
+      expect(launcher.launched.single, isNot(contains(bridge.premiumKey!)));
+
+      // The key travels by the guarded clipboard, and the line says so.
+      expect(clipboard.copied, [bridge.premiumKey]);
+      expect(
+        find.text('Key copied, paste it on the renewal page'),
+        findsOneWidget,
+      );
+      await tester.pump(const Duration(seconds: 5));
     });
   });
 
