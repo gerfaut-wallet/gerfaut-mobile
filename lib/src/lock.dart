@@ -211,10 +211,25 @@ class LockController extends Notifier<LockState> {
   /// picker, a save dialog, a share sheet. Coming back from one is not
   /// coming back from the background, so the next return does not lock.
   ///
-  /// The next return spends it whether the excursion happened or not:
-  /// a picker waved away, or a permission the phone never asked about,
-  /// must not leave the door open for a real absence later.
+  /// Announced as late as it can be, against the call that opens the
+  /// screen and nothing earlier, and taken back with [forgetExcursion]
+  /// the moment it turns out no screen came up. A return spends it,
+  /// picked or waved away alike; but a screen that never opens produces
+  /// no return, and an announcement nobody takes back then waits — for
+  /// minutes or for hours — to be spent by the next real absence,
+  /// which is the one that had to lock.
   void expectExcursion() => _excursion = true;
+
+  /// The announced screen did not open: no app on the phone can show
+  /// it, a save was already under way, the platform has none to give.
+  /// Nothing went anywhere, so the next return counts again.
+  ///
+  /// Only for the branches where nothing came up. A trip that did
+  /// happen can report its failure while the app is still away — the
+  /// system hands the result back before Flutter says `resumed` — and
+  /// forgetting the excursion there would put the lock in front of
+  /// someone who never left.
+  void forgetExcursion() => _excursion = false;
 
   /// Gerfaut is back: having been away is the whole rule, unless the
   /// trip was one Gerfaut sent the user on.

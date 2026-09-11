@@ -1,9 +1,14 @@
+import 'dart:convert';
+
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/add_wallet.dart';
 import 'package:gerfaut/src/bridge.dart';
+import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
@@ -13,13 +18,21 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'fakes.dart';
 
-Widget screen(FakeBridge bridge) {
+Widget screen(FakeBridge bridge, {Future<XFile?> Function()? filePicker}) {
   return ProviderScope(
     overrides: [bridgeProvider.overrideWithValue(bridge)],
     child: MaterialApp(
       theme: themeFrom(GerfautTokens.light, Brightness.light),
-      home: const AddWalletScreen(),
+      home: AddWalletScreen(filePicker: filePicker),
     ),
+  );
+}
+
+/// The provider container behind the running screen.
+ProviderContainer containerOf(WidgetTester tester) {
+  return ProviderScope.containerOf(
+    tester.element(find.byType(AddWalletScreen)),
+    listen: false,
   );
 }
 
@@ -419,5 +432,71 @@ void main() {
       expect(bridge.parseOptions.last.script, ScriptKind.taproot);
       expect(bridge.parseOptions.last.derivation?.receive, '5/*');
     });
+  });
+
+  testWidgets('a file picked here survives the way back', (tester) async {
+    final parsed = <String>[];
+    final bridge = FakeBridge(
+      onParse: (input) {
+        parsed.add(input);
+        return makeParsedInput();
+      },
+    );
+    await tester.pumpWidget(
+      screen(
+        bridge,
+        filePicker: () async => XFile.fromData(
+          Uint8List.fromList(utf8.encode('wpkh(tpub.../0/*)#checksum')),
+          path: 'wallet.txt',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final lock = containerOf(tester).read(lockProvider.notifier);
+    lock
+      ..syncFromSettings(null)
+      ..syncFromSettings(const AppLock(kind: LockKind.pin, biometric: false));
+
+    await tester.tap(find.text('Import a file'));
+    await tester.pumpAndSettle();
+    // Android pauses Gerfaut behind the picker and resumes it after.
+    // Without the trip being announced the lock lands here and takes
+    // the file that was just chosen with it.
+    lock
+      ..noteHidden()
+      ..noteResumed();
+    expect(lock.state.locked, isFalse);
+    // What the picker handed over was parsed rather than dropped.
+    expect(parsed, ['wpkh(tpub.../0/*)#checksum']);
+  });
+
+  testWidgets('a picker that never opened does not cover a later trip', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      screen(
+        FakeBridge(),
+        filePicker: () async =>
+            throw PlatformException(code: 'ActivityNotFoundException'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final lock = containerOf(tester).read(lockProvider.notifier);
+    lock
+      ..syncFromSettings(null)
+      ..syncFromSettings(const AppLock(kind: LockKind.pin, biometric: false));
+
+    await tester.tap(find.text('Import a file'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('No app on this phone can open a file to read.'),
+      findsOneWidget,
+    );
+
+    lock
+      ..noteHidden()
+      ..noteHidden()
+      ..noteResumed();
+    expect(lock.state.locked, isTrue);
   });
 }

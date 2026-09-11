@@ -8,6 +8,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../src/bridge.dart';
 import '../src/explorer.dart';
 import '../src/format.dart';
+import '../src/lock.dart';
 import '../src/models.dart';
 import '../src/state.dart';
 import '../src/tx_file.dart';
@@ -37,7 +38,11 @@ typedef _Sent = ({RecentBroadcast record, String backend});
 /// Gerfaut never signs and never edits the transaction; the preview
 /// only makes it legible before it leaves the device.
 class BroadcastScreen extends ConsumerStatefulWidget {
-  const BroadcastScreen({super.key});
+  const BroadcastScreen({super.key, @visibleForTesting this.filePicker});
+
+  /// Stands in for the system's file picker, so a test can answer it
+  /// without a platform under the test binding.
+  final Future<XFile?> Function()? filePicker;
 
   @override
   ConsumerState<BroadcastScreen> createState() => _BroadcastScreenState();
@@ -88,7 +93,26 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
   }
 
   Future<void> _importFile() async {
-    final file = await openFile();
+    final lock = ref.read(lockProvider.notifier);
+    // The picker is a screen of the system's: Android pauses Gerfaut
+    // behind it, and coming back from a picker the user opened here is
+    // not coming back from the background. Without this the lock lands
+    // on the way in and takes the picked file with it.
+    lock.expectExcursion();
+    final XFile? file;
+    try {
+      file = await (widget.filePicker ?? openFile)();
+    } catch (_) {
+      // No picker came up: the trip goes back, or it would be spent on
+      // a real absence hours from now.
+      lock.forgetExcursion();
+      if (mounted) {
+        setState(
+          () => _inputError = 'No app on this phone can open a file to read.',
+        );
+      }
+      return;
+    }
     if (file == null) return;
     final text = transactionTextOf(await file.readAsBytes());
     if (!mounted) return;

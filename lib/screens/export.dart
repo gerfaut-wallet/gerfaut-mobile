@@ -110,6 +110,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
   ) async {
     setState(() => _exporting = true);
     final messenger = ScaffoldMessenger.of(context);
+    final lock = ref.read(lockProvider.notifier);
     try {
       final result = await ref
           .read(bridgeProvider)
@@ -120,10 +121,11 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
           : '${result.rows} transactions';
       // The save dialog and the share sheet are screens of the
       // system's: Android pauses Gerfaut behind them, and coming back
-      // from one is not coming back from the background.
-      ref.read(lockProvider.notifier).expectExcursion();
+      // from one is not coming back from the background. Each is
+      // announced against the call that opens it, and nothing earlier.
       switch (destination) {
         case _Destination.file:
+          lock.expectExcursion();
           final saved = await ref
               .read(documentSaverProvider)
               .save(
@@ -136,14 +138,27 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
             messenger.showSnackBar(SnackBar(content: Text('$rows saved')));
           }
         case _Destination.share:
-          await ref
-              .read(csvSharerProvider)
-              .shareCsv(csv: result.csv, filename: filename);
-          messenger.showSnackBar(SnackBar(content: Text('$rows exported')));
+          lock.expectExcursion();
+          try {
+            await ref
+                .read(csvSharerProvider)
+                .shareCsv(csv: result.csv, filename: filename);
+            messenger.showSnackBar(SnackBar(content: Text('$rows exported')));
+          } catch (_) {
+            // No sheet came up: nothing left the screen.
+            lock.forgetExcursion();
+            messenger.showSnackBar(
+              const SnackBar(
+                content: Text('The share sheet could not be opened.'),
+              ),
+            );
+          }
       }
     } on BridgeException catch (error) {
       messenger.showSnackBar(SnackBar(content: Text('$error')));
     } on DocumentSaveException catch (error) {
+      // A save refused before the dialog came up is no trip at all.
+      if (!error.dialogOpened) lock.forgetExcursion();
       messenger.showSnackBar(SnackBar(content: Text(error.message)));
     } finally {
       if (mounted) setState(() => _exporting = false);

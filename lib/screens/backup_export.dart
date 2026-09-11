@@ -123,15 +123,18 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
   /// The system's save dialog, then the bytes written where it points.
   Future<void> _saveFile(BackupBundle bundle) async {
     final messenger = ScaffoldMessenger.of(context);
+    final lock = ref.read(lockProvider.notifier);
+    final bytes = base64Decode(bundle.data);
     // The dialog that picks where the file goes is a screen of the
     // system's: Android pauses Gerfaut behind it, and coming back from
-    // it is not coming back from the background.
-    ref.read(lockProvider.notifier).expectExcursion();
+    // it is not coming back from the background. Announced against the
+    // call that opens it, and nothing earlier.
+    lock.expectExcursion();
     try {
       final saved = await ref
           .read(documentSaverProvider)
           .save(
-            bytes: base64Decode(bundle.data),
+            bytes: bytes,
             filename: _filename(),
             mimeType: 'application/octet-stream',
           );
@@ -140,6 +143,8 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
         messenger.showSnackBar(const SnackBar(content: Text('Saved')));
       }
     } on DocumentSaveException catch (error) {
+      // A save refused before the dialog came up is no trip at all.
+      if (!error.dialogOpened) lock.forgetExcursion();
       messenger.showSnackBar(SnackBar(content: Text(error.message)));
     }
   }
@@ -147,10 +152,21 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
   /// The share sheet, for a backup bound straight for another app or
   /// device. A screen of the system's, like the save dialog.
   Future<void> _share(BackupBundle bundle) async {
-    ref.read(lockProvider.notifier).expectExcursion();
-    await ref
-        .read(backupSharerProvider)
-        .shareBackup(bytes: base64Decode(bundle.data), filename: _filename());
+    final messenger = ScaffoldMessenger.of(context);
+    final lock = ref.read(lockProvider.notifier);
+    lock.expectExcursion();
+    try {
+      await ref
+          .read(backupSharerProvider)
+          .shareBackup(bytes: base64Decode(bundle.data), filename: _filename());
+    } catch (_) {
+      // No sheet came up: the trip goes back, or it would be spent on
+      // a real absence hours from now.
+      lock.forgetExcursion();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('The share sheet could not be opened.')),
+      );
+    }
   }
 
   void _showQr(BackupBundle bundle) {

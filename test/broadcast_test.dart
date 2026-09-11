@@ -1,13 +1,15 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:gerfaut/screens/broadcast.dart';
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/format.dart';
+import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/disguise.dart';
@@ -29,6 +31,7 @@ GerfautTokens tokensOf(Brightness brightness) =>
 Widget broadcastApp(
   FakeBridge bridge, {
   Brightness brightness = Brightness.light,
+  Future<XFile?> Function()? filePicker,
 }) {
   return ProviderScope(
     overrides: [
@@ -37,7 +40,7 @@ Widget broadcastApp(
     ],
     child: MaterialApp(
       theme: themeFrom(tokensOf(brightness), brightness),
-      home: const BroadcastScreen(),
+      home: BroadcastScreen(filePicker: filePicker),
     ),
   );
 }
@@ -768,4 +771,67 @@ void main() {
       },
     );
   }
+
+  testWidgets('a file picked here survives the way back', (tester) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge()..onPreview = (_, _) => makePreview();
+    await tester.pumpWidget(
+      broadcastApp(
+        bridge,
+        filePicker: () async => XFile.fromData(
+          Uint8List.fromList(utf8.encode('cHNidP8B')),
+          path: 'signed.psbt',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final lock = containerOf(tester).read(lockProvider.notifier);
+    lock
+      ..syncFromSettings(null)
+      ..syncFromSettings(const AppLock(kind: LockKind.pin, biometric: false));
+
+    await tester.tap(find.text('Import a file'));
+    await tester.pumpAndSettle();
+    // Android pauses Gerfaut behind the picker and resumes it after.
+    // Without the trip being announced the lock lands here and takes
+    // the file that was just chosen with it.
+    lock
+      ..noteHidden()
+      ..noteResumed();
+    expect(lock.state.locked, isFalse);
+    // What the picker handed over was decoded rather than dropped.
+    expect(find.text('Ready to broadcast'), findsOneWidget);
+    expect(bridge.previewInputs, ['cHNidP8B']);
+  });
+
+  testWidgets('a picker that never opened does not cover a later trip', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    await tester.pumpWidget(
+      broadcastApp(
+        FakeBridge(),
+        filePicker: () async =>
+            throw PlatformException(code: 'ActivityNotFoundException'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final lock = containerOf(tester).read(lockProvider.notifier);
+    lock
+      ..syncFromSettings(null)
+      ..syncFromSettings(const AppLock(kind: LockKind.pin, biometric: false));
+
+    await tester.tap(find.text('Import a file'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('No app on this phone can open a file to read.'),
+      findsOneWidget,
+    );
+
+    lock
+      ..noteHidden()
+      ..noteHidden()
+      ..noteResumed();
+    expect(lock.state.locked, isTrue);
+  });
 }

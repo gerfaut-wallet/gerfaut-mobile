@@ -8,9 +8,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// The save could not be carried out, in words fit for the screen.
 class DocumentSaveException implements Exception {
-  const DocumentSaveException(this.message);
+  const DocumentSaveException(this.message, {this.dialogOpened = true});
 
   final String message;
+
+  /// Whether the system's save dialog was reached at all.
+  ///
+  /// False when the save was refused before it could open: Gerfaut
+  /// never left the screen, nothing is coming back, and the app lock
+  /// has to be told so or it will spend the trip it was promised on
+  /// the next real absence instead.
+  final bool dialogOpened;
 
   @override
   String toString() => message;
@@ -50,12 +58,20 @@ class SystemDocumentSaver implements DocumentSaver {
       });
       return saved ?? false;
     } on PlatformException catch (error) {
+      // `write_failed` is the far side of the trip: the dialog named a
+      // place and the bytes did not make it. Every other refusal comes
+      // from before the launch — a save already under way, no app on
+      // the phone that can save one — and a code this build does not
+      // know is counted with them, since being told to lock too often
+      // costs a PIN and being told too rarely costs the lock.
       throw DocumentSaveException(
         error.message ?? 'The file could not be saved.',
+        dialogOpened: error.code == 'write_failed',
       );
     } on MissingPluginException {
       throw const DocumentSaveException(
         'Saving a file is not available on this platform.',
+        dialogOpened: false,
       );
     }
   }

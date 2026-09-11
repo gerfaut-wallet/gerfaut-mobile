@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/bridge.dart';
+import '../src/lock.dart';
 import '../src/models.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
@@ -20,7 +21,11 @@ import 'wallet_home.dart';
 /// Detection is never silent — the user validates before anything is
 /// stored.
 class AddWalletScreen extends ConsumerStatefulWidget {
-  const AddWalletScreen({super.key});
+  const AddWalletScreen({super.key, @visibleForTesting this.filePicker});
+
+  /// Stands in for the system's file picker, so a test can answer it
+  /// without a platform under the test binding.
+  final Future<XFile?> Function()? filePicker;
 
   @override
   ConsumerState<AddWalletScreen> createState() => _AddWalletScreenState();
@@ -133,7 +138,29 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
       label: 'Wallet material',
       extensions: ['txt', 'json', 'desc', 'bsms'],
     );
-    final file = await openFile(acceptedTypeGroups: const [typeGroup]);
+    final lock = ref.read(lockProvider.notifier);
+    // The picker is a screen of the system's: Android pauses Gerfaut
+    // behind it, and coming back from a picker the user opened here is
+    // not coming back from the background. Without this the lock lands
+    // on the way in and takes the picked file with it.
+    lock.expectExcursion();
+    final XFile? file;
+    try {
+      final picker = widget.filePicker;
+      file = picker != null
+          ? await picker()
+          : await openFile(acceptedTypeGroups: const [typeGroup]);
+    } catch (_) {
+      // No picker came up: the trip goes back, or it would be spent on
+      // a real absence hours from now.
+      lock.forgetExcursion();
+      if (mounted) {
+        setState(
+          () => _error = 'No app on this phone can open a file to read.',
+        );
+      }
+      return;
+    }
     if (file == null) return;
     final text = (await file.readAsString()).trim();
     _rawController.text = text;

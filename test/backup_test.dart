@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
@@ -332,6 +333,104 @@ void main() {
       expect(lock.state.locked, isFalse);
       expect(find.text('Show QR code'), findsOneWidget);
     });
+
+    testWidgets('a dialog that never opened does not cover a later trip', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      // The save was refused before the dialog could come up: no app on
+      // the phone can save a file. Gerfaut never left the screen, so
+      // nothing ever comes back to spend the trip it announced — and
+      // the next absence, whenever it comes, has to lock.
+      final saver = FakeDocumentSaver()
+        ..failure = const DocumentSaveException(
+          'no app on this device can save a file',
+          dialogOpened: false,
+        );
+      await tester.pumpWidget(
+        screen(
+          FakeBridge(wallets: [makeMeta()]),
+          const BackupExportScreen(),
+          sharer: FakeBackupSharer(),
+          saver: saver,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final lock = ProviderScope.containerOf(
+        tester.element(find.byType(BackupExportScreen)),
+      ).read(lockProvider.notifier);
+      lock
+        ..syncFromSettings(null)
+        ..syncFromSettings(const AppLock(kind: LockKind.pin, biometric: false));
+
+      await typePasswords(tester, 'correct horse', 'correct horse');
+      await tester.tap(find.text('Create backup'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save file'));
+      await tester.pumpAndSettle();
+
+      // The refusal is on screen and the backup is still here.
+      expect(
+        find.text('no app on this device can save a file'),
+        findsOneWidget,
+      );
+      expect(lock.state.locked, isFalse);
+
+      // The phone is put down and picked up again: that is a real
+      // absence, and the announcement must not have covered it.
+      lock
+        ..noteHidden()
+        ..noteHidden()
+        ..noteResumed();
+      expect(lock.state.locked, isTrue);
+    });
+
+    testWidgets('a write that failed after the dialog keeps its return', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      // The other side of the same trip: the dialog named a place and
+      // the bytes did not make it. Android hands that answer back
+      // before Flutter says the app resumed, so the trip is still owed
+      // a return, and taking the announcement back here would put the
+      // lock in front of someone who never left.
+      final saver = FakeDocumentSaver()
+        ..failure = const DocumentSaveException(
+          'the document could not be opened for writing',
+        );
+      await tester.pumpWidget(
+        screen(
+          FakeBridge(wallets: [makeMeta()]),
+          const BackupExportScreen(),
+          sharer: FakeBackupSharer(),
+          saver: saver,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final lock = ProviderScope.containerOf(
+        tester.element(find.byType(BackupExportScreen)),
+      ).read(lockProvider.notifier);
+      lock
+        ..syncFromSettings(null)
+        ..syncFromSettings(const AppLock(kind: LockKind.pin, biometric: false));
+
+      await typePasswords(tester, 'correct horse', 'correct horse');
+      await tester.tap(find.text('Create backup'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save file'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('the document could not be opened for writing'),
+        findsOneWidget,
+      );
+
+      // The return the dialog owes, arriving after its answer.
+      lock
+        ..noteHidden()
+        ..noteResumed();
+      expect(lock.state.locked, isFalse);
+      expect(find.text('Show QR code'), findsOneWidget);
+    });
   });
 
   group('animated QR', () {
@@ -566,6 +665,43 @@ void main() {
       // leaving: the flow is still there to go on with.
       expect(lock.state.locked, isFalse);
       expect(find.text('Backup read from phone.gerfaut'), findsOneWidget);
+    });
+
+    testWidgets('a picker that never opened does not cover a later trip', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge();
+      await pushRestore(
+        tester,
+        bridge,
+        // No app on the phone answers the intent: the picker throws
+        // instead of showing, and Gerfaut never leaves the screen.
+        filePicker: () async =>
+            throw PlatformException(code: 'ActivityNotFoundException'),
+      );
+      final lock = ProviderScope.containerOf(
+        tester.element(find.byType(BackupRestoreScreen)),
+      ).read(lockProvider.notifier);
+      lock
+        ..syncFromSettings(null)
+        ..syncFromSettings(const AppLock(kind: LockKind.pin, biometric: false));
+
+      await tester.tap(find.text('Open a file'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('No app on this phone can open a file to restore.'),
+        findsOneWidget,
+      );
+      expect(lock.state.locked, isFalse);
+
+      // A real absence afterwards still locks: the announcement was
+      // taken back rather than left to cover it.
+      lock
+        ..noteHidden()
+        ..noteHidden()
+        ..noteResumed();
+      expect(lock.state.locked, isTrue);
     });
 
     testWidgets('what was read holds at 340dp and twice the text size', (

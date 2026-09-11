@@ -123,11 +123,25 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
   static const int _maxBackupBytes = 8 * 1024 * 1024;
 
   Future<void> _openFile() async {
+    final lock = ref.read(lockProvider.notifier);
     // The picker is a screen of the system's: Android pauses Gerfaut
     // behind it, and coming back from a picker the user opened here is
-    // not coming back from the background.
-    ref.read(lockProvider.notifier).expectExcursion();
-    final file = await (widget.filePicker ?? _pickBackupFile)();
+    // not coming back from the background. Announced against the call
+    // that opens it, and nothing earlier.
+    lock.expectExcursion();
+    final XFile? file;
+    try {
+      file = await (widget.filePicker ?? _pickBackupFile)();
+    } catch (_) {
+      // No picker came up: the trip goes back, or it would be spent on
+      // a real absence hours from now.
+      lock.forgetExcursion();
+      if (!mounted) return;
+      setState(
+        () => _error = 'No app on this phone can open a file to restore.',
+      );
+      return;
+    }
     if (file == null) return;
     // Checked before reading: picking a video by mistake must cost a
     // sentence, not the memory of the whole file.

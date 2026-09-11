@@ -727,14 +727,54 @@ void main() {
       expect(app.container.read(lockProvider).locked, isTrue);
     });
 
-    test('one the phone never shows does not outlive its return', () async {
+    test('one the phone never shows is taken back by the screen', () async {
       final app = lockedApp();
       await app.lock.unlock('1234');
 
-      // The permission was granted already, so nothing came up and the
-      // app never left the screen.
+      // No app on the phone could show the picker, so it never opened
+      // and Gerfaut never left the screen. The framework delivers
+      // nothing at all here — not even a resume, which never arrives
+      // without an absence before it — so the screen says so itself.
       app.lock.expectExcursion();
+      app.lock.forgetExcursion();
+
+      // The real absence, whenever it comes, is the one that has to
+      // lock: hidden, paused, hidden again on the way in, then resumed.
+      app.lock.noteHidden();
+      app.lock.noteHidden();
+      app.lock.noteHidden();
       app.lock.noteResumed();
+      expect(app.container.read(lockProvider).locked, isTrue);
+    });
+
+    test('one nobody takes back is spent by whatever comes next', () async {
+      // Why every branch that does not leave has to take it back: an
+      // announcement waits, without a clock and without a deadline,
+      // and the trip it ends up covering is the next one — a phone put
+      // down for the afternoon and picked up by somebody else.
+      final app = lockedApp();
+      await app.lock.unlock('1234');
+
+      app.lock.expectExcursion();
+      app.lock.noteHidden();
+      app.lock.noteHidden();
+      app.lock.noteHidden();
+      app.lock.noteResumed();
+      expect(app.container.read(lockProvider).locked, isFalse);
+    });
+
+    test('taking one back after the trip does not undo the return', () async {
+      // The system can answer while the app is still away: the failure
+      // of a save lands before Flutter says `resumed`. The return has
+      // not happened yet, so the flag it will spend must still be there.
+      final app = lockedApp();
+      await app.lock.unlock('1234');
+
+      app.lock.expectExcursion();
+      app.lock.noteHidden();
+      app.lock.noteResumed();
+      app.lock.forgetExcursion();
+      expect(app.container.read(lockProvider).locked, isFalse);
 
       app.lock.noteHidden();
       app.lock.noteResumed();
