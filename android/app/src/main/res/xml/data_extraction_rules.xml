@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12 and later read this file instead of android:allowBackup
+     alone. Turning backup off stops the cloud copy, but a device-to-device
+     transfer still carries an app's files across unless it is excluded
+     here as well.
+
+     Gerfaut's vault must not travel. Its key is held by the Android
+     Keystore, which never leaves the phone it was made on: a vault copied
+     to another device arrives as a file nobody can open, and the app that
+     receives it cannot tell that from a vault whose key was lost. Excluding
+     the app's whole data directory from both paths keeps the two together
+     or leaves neither, which is the only honest outcome. A backup made
+     with Gerfaut is how wallets move. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+    </device-transfer>
+</data-extraction-rules>
