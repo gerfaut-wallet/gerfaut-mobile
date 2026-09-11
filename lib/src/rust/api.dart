@@ -371,6 +371,22 @@ Future<String> premiumCreateChannel({
   secret: secret,
 );
 
+/// Confirms a channel with the code the server sent to it: the six
+/// digits of a confirmation e-mail. Returns the serialized channel,
+/// linked. A code that is wrong or past its hour comes back as
+/// `premium_rejected` in the server's words, and so does one tried too
+/// many times.
+Future<String> premiumConfirmChannel({
+  required String id,
+  required String code,
+}) => RustLib.instance.api.crateApiPremiumConfirmChannel(id: id, code: code);
+
+/// Deletes the account on the server — the key, the wallets it watched,
+/// the channels, the log — and then forgets it here. Nothing local is
+/// dropped unless the server confirmed. There is no way back.
+Future<String> premiumDeleteAccount() =>
+    RustLib.instance.api.crateApiPremiumDeleteAccount();
+
 Future<String> premiumDeleteChannel({required String id}) =>
     RustLib.instance.api.crateApiPremiumDeleteChannel(id: id);
 

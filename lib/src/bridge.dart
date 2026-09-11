@@ -214,6 +214,10 @@ abstract class GerfautBridge {
     String? target,
     String? secret,
   });
+  /// Confirms a channel with the code the server sent to it. Answers
+  /// the channel, linked. A code that is wrong, expired or tried too
+  /// often comes back as premium_rejected, in the server's words.
+  Future<PremiumChannel> premiumConfirmChannel(String id, String code);
   Future<void> premiumDeleteChannel(String id);
 
   /// Sends a test message through a channel. A provider's refusal comes
@@ -227,6 +231,12 @@ abstract class GerfautBridge {
   /// embedded key and this device's clock. Any failure counts as a
   /// missed beat.
   Future<HeartbeatReport> premiumHeartbeat();
+
+  /// Deletes the account on the server — the key, the wallets it
+  /// watched, the channels, the log — and then forgets it here.
+  /// Nothing local is dropped unless the server confirmed. There is no
+  /// way back.
+  Future<void> premiumDeleteAccount();
 }
 
 /// The real bridge, backed by the generated Rust bindings.
@@ -632,6 +642,13 @@ class RustBridge implements GerfautBridge {
   }
 
   @override
+  Future<PremiumChannel> premiumConfirmChannel(String id, String code) async {
+    return PremiumChannel.fromJson(
+      _object(await rust.premiumConfirmChannel(id: id, code: code)),
+    );
+  }
+
+  @override
   Future<void> premiumDeleteChannel(String id) async {
     _ok(await rust.premiumDeleteChannel(id: id));
   }
@@ -651,5 +668,10 @@ class RustBridge implements GerfautBridge {
   @override
   Future<HeartbeatReport> premiumHeartbeat() async {
     return HeartbeatReport.fromJson(_object(await rust.premiumHeartbeat()));
+  }
+
+  @override
+  Future<void> premiumDeleteAccount() async {
+    _ok(await rust.premiumDeleteAccount());
   }
 }

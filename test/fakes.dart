@@ -1272,6 +1272,22 @@ class FakeBridge implements GerfautBridge {
   /// Test hook; throw a [BridgeException] for a provider's refusal.
   FutureOr<void> Function(String id)? onPremiumTestChannel;
 
+  /// The six digits the fake server sent to an unconfirmed channel.
+  String premiumConfirmationCode = '482913';
+
+  /// Confirmation hook; throw a [BridgeException] for a refusal — a
+  /// wrong or expired code, one tried too many times, an e-mail that
+  /// never left. The default takes [premiumConfirmationCode] and
+  /// refuses anything else.
+  FutureOr<void> Function(String id, String code)? onPremiumConfirmChannel;
+
+  /// Account deletion hook; throw a [BridgeException] to leave the
+  /// account standing, as the app must when the server did not confirm.
+  FutureOr<void> Function()? onPremiumDeleteAccount;
+
+  /// The account was deleted on the server side.
+  bool premiumAccountDeleted = false;
+
   /// Events hook; throw a [BridgeException] for a server out of reach.
   FutureOr<List<PremiumEvent>> Function()? onPremiumEvents;
 
@@ -1307,8 +1323,9 @@ class FakeBridge implements GerfautBridge {
     }
   }
 
-  /// Marks a Telegram channel as linked, the way the bot does.
-  void premiumLinkTelegram(String id) {
+  /// Marks a Telegram channel as linked, the way the bot does: with
+  /// the name of the chat that sent the code, when the server has one.
+  void premiumLinkTelegram(String id, {String? name}) {
     for (var i = 0; i < premiumChannelList.length; i++) {
       final c = premiumChannelList[i];
       if (c.id != id) continue;
@@ -1317,6 +1334,7 @@ class FakeBridge implements GerfautBridge {
         kind: c.kind,
         target: 'linked',
         linked: true,
+        linkedName: name,
         createdAt: c.createdAt,
       );
     }
@@ -1551,6 +1569,55 @@ class FakeBridge implements GerfautBridge {
     final at = address.indexOf('@');
     if (at <= 0) return address;
     return '${address[0]}***${address.substring(at)}';
+  }
+
+  @override
+  Future<PremiumChannel> premiumConfirmChannel(String id, String code) async {
+    premiumCalls.add('confirm:$id:$code');
+    _needKey();
+    final hook = onPremiumConfirmChannel;
+    if (hook != null) {
+      await hook(id, code);
+    } else if (code != premiumConfirmationCode) {
+      throw const BridgeException(
+        'premium_rejected',
+        'that code is wrong or has expired',
+      );
+    }
+    for (var i = 0; i < premiumChannelList.length; i++) {
+      final c = premiumChannelList[i];
+      if (c.id != id) continue;
+      final linked = PremiumChannel(
+        id: c.id,
+        kind: c.kind,
+        target: c.target,
+        linked: true,
+        linkedName: c.linkedName,
+        enabled: c.enabled,
+        createdAt: c.createdAt,
+      );
+      premiumChannelList[i] = linked;
+      return linked;
+    }
+    throw const BridgeException('premium_rejected', 'no such channel');
+  }
+
+  @override
+  Future<void> premiumDeleteAccount() async {
+    premiumCalls.add('delete-account');
+    _needKey();
+    final hook = onPremiumDeleteAccount;
+    if (hook != null) await hook();
+    // The server first, and only then this device: a refusal above
+    // leaves everything as it was.
+    premiumAccountDeleted = true;
+    premiumWatched.clear();
+    premiumChannelList.clear();
+    premiumEvents = [];
+    premiumKey = null;
+    premiumClaims = null;
+    premiumConsents.clear();
+    premiumAcknowledgedUntil = null;
   }
 
   @override

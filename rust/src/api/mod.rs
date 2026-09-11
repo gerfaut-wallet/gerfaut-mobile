@@ -3,8 +3,10 @@
 //! Every function takes and returns strings carrying JSON, keeping the
 //! Dart side decoupled from the core types: success payloads mirror the
 //! core structures serialized with serde, failures serialize to
-//! `{"error": {"kind": "...", "message": "..."}}`. Nothing panics across
-//! the FFI boundary.
+//! `{"error": {"kind": "...", "message": "..."}}`. A panic is not one of
+//! those: flutter_rust_bridge catches it at the boundary and raises it on
+//! the Dart side as an error of its own, outside this shape, so the Dart
+//! code must be ready for a failure that carries no `kind`.
 
 use gerfaut_core::backup::{BackupOptions, ImportChoices};
 use gerfaut_core::chain::BackendConfig;
@@ -638,8 +640,15 @@ pub async fn import_backup(source: String, password: String, choices_json: Strin
 
 // --- premium -----------------------------------------------------------
 
-/// The server every premium call goes to. Clearnet: the manager only
-/// routes an onion base URL through Tor.
+/// The server every premium call goes to.
+///
+/// Clearnet, which does not settle how the call travels: the manager
+/// sends it through Tor when the base URL is an onion and also when the
+/// backend of the active network is one, since a person who reaches
+/// their own node through Tor did not choose to show their address to
+/// this server instead. A Tor that cannot be reached then is a call
+/// that does not happen, reported as `tor`; nothing falls back to the
+/// clear.
 const PREMIUM_BASE_URL: &str = DEFAULT_BASE_URL;
 
 /// Most events the alerts card shows.
@@ -718,7 +727,13 @@ pub async fn premium_activate(key: String) -> String {
         );
     }
     let key = licence::normalize_key(&key);
-    let client = match PremiumClient::new(PREMIUM_BASE_URL, Some(key.clone()), None) {
+    // Through the manager, like every other premium call: a key typed on
+    // a phone whose node is an onion is checked over Tor too, and the
+    // check never reaches the server by the clear route.
+    let client = match manager
+        .premium_client_with_key(PREMIUM_BASE_URL, Some(key.clone()))
+        .await
+    {
         Ok(client) => client,
         Err(e) => return core_error_json(&e),
     };
@@ -908,6 +923,33 @@ pub async fn premium_create_channel(
                 .map(|topic| ntfy_subscribe_url(NTFY_BASE_URL, topic)),
         })
         .to_string(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Confirms a channel with the code the server sent to it: the six
+/// digits of a confirmation e-mail. Returns the serialized channel,
+/// linked. A code that is wrong or past its hour comes back as
+/// `premium_rejected` in the server's words, and so does one tried too
+/// many times.
+pub async fn premium_confirm_channel(id: String, code: String) -> String {
+    let manager = try_json!(manager());
+    match manager
+        .premium_confirm_channel(PREMIUM_BASE_URL, &id, &code)
+        .await
+    {
+        Ok(channel) => channel_view(&channel).to_string(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Deletes the account on the server — the key, the wallets it watched,
+/// the channels, the log — and then forgets it here. Nothing local is
+/// dropped unless the server confirmed. There is no way back.
+pub async fn premium_delete_account() -> String {
+    let manager = try_json!(manager());
+    match manager.premium_delete_account(PREMIUM_BASE_URL).await {
+        Ok(()) => ok_json(),
         Err(e) => core_error_json(&e),
     }
 }
