@@ -573,6 +573,7 @@ IconData _warningIcon(TxWarningKind kind) => switch (kind) {
   TxWarningKind.locked => LucideIcons.clock,
   TxWarningKind.inputUnknown => LucideIcons.circleHelp,
   TxWarningKind.inputSpent => LucideIcons.ban,
+  TxWarningKind.inputMismatch => LucideIcons.equalNot,
   TxWarningKind.feeUnknown => LucideIcons.circleHelp,
   TxWarningKind.dustOutput => LucideIcons.coins,
   TxWarningKind.spendsWatched => LucideIcons.wallet,

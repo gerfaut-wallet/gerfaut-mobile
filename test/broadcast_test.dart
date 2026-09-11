@@ -241,6 +241,42 @@ void main() {
     expect(find.text(formatAmount(90000, AmountUnit.btc)), findsWidgets);
   });
 
+  testWidgets('an input the chain disagrees about is shown in red', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge()
+      ..onPreview = (_, _) => makePreview(
+        source: TxSource.psbt,
+        // A PSBT that states one amount for an input while the chain
+        // records another: the fee is not what the screen would compute
+        // from the PSBT, and signing it can hand the difference to the
+        // miner. The core calls it, and calls it alert.
+        warnings: const [
+          TxWarning(
+            kind: TxWarningKind.inputMismatch,
+            message:
+                'Input 0 claims 100000 sats; the chain records 10000000 sats.',
+            severity: TxSeverity.alert,
+          ),
+        ],
+      );
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+
+    await preview(tester, '0200000001deadbeef');
+
+    expect(find.text('BEFORE YOU SEND'), findsOneWidget);
+    expect(
+      blockOf(
+        tester,
+        'Input 0 claims 100000 sats; the chain records 10000000 sats.',
+      ).color,
+      GerfautTokens.light.alertSurface,
+    );
+    expect(find.byIcon(LucideIcons.equalNot), findsOneWidget);
+  });
+
   testWidgets('an unsigned transaction cannot be sent', (tester) async {
     useTallSurface(tester);
     final bridge = FakeBridge()

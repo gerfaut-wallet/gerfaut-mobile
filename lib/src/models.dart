@@ -1661,6 +1661,7 @@ enum TxWarningKind {
   locked('locked'),
   inputUnknown('input_unknown'),
   inputSpent('input_spent'),
+  inputMismatch('input_mismatch'),
   feeUnknown('fee_unknown'),
   dustOutput('dust_output'),
   spendsWatched('spends_watched'),
@@ -1984,6 +1985,8 @@ class BackupPreview {
     required this.createdAt,
     required this.wallets,
     required this.hasSettings,
+    this.backends = const [],
+    this.electrumHosts = const [],
   });
 
   factory BackupPreview.fromJson(Map<String, dynamic> json) {
@@ -1993,12 +1996,43 @@ class BackupPreview {
           .map((w) => BackupWalletPreview.fromJson(w as Map<String, dynamic>))
           .toList(),
       hasSettings: json['has_settings'] as bool,
+      backends: ((json['backends'] as List?) ?? const [])
+          .map((b) => BackupBackend.fromJson(b as Map<String, dynamic>))
+          .toList(),
+      electrumHosts: ((json['electrum_hosts'] as List?) ?? const [])
+          .map((h) => h as String)
+          .toList(),
     );
   }
 
   final int createdAt;
   final List<BackupWalletPreview> wallets;
   final bool hasSettings;
+
+  /// The node the settings would put in place, one entry per network.
+  /// Empty when the backup carries no settings.
+  final List<BackupBackend> backends;
+
+  /// Every `host:port` whose Electrum certificate the settings would
+  /// pin. Empty when the backup carries no settings.
+  final List<String> electrumHosts;
+}
+
+/// One node a backup would put in place, as its preview names it.
+class BackupBackend {
+  const BackupBackend({required this.network, required this.backend});
+
+  factory BackupBackend.fromJson(Map<String, dynamic> json) {
+    return BackupBackend(
+      network: Network.fromId(json['network'] as String),
+      backend: json['backend'] as String,
+    );
+  }
+
+  final Network network;
+
+  /// The host alone, never a full URL: a URL may carry credentials.
+  final String backend;
 }
 
 /// Which wallets to restore (null for all) and whether to apply the
@@ -2890,6 +2924,7 @@ class WalletWatch {
     required this.baselineHeight,
     required this.coins,
     required this.valueSats,
+    this.baselinePending,
   });
 
   factory WalletWatch.fromJson(Map<String, dynamic> json) {
@@ -2900,6 +2935,7 @@ class WalletWatch {
       watchedSince: json['watched_since'] as int,
       baselineAt: json['baseline_at'] as int?,
       baselineHeight: json['baseline_height'] as int?,
+      baselinePending: json['baseline_pending'] as bool?,
       coins: json['coins'] as int,
       valueSats: json['value_sats'] as int,
     );
@@ -2920,8 +2956,16 @@ class WalletWatch {
   final int coins;
   final int valueSats;
 
-  /// The first scan is still running.
-  bool get scanning => baselineAt == null;
+  /// What the server says about the first scan, when it says anything:
+  /// null from a server that does not report it.
+  final bool? baselinePending;
+
+  /// The first scan of the UTXO set has not finished: the balances and
+  /// the counts here are not the wallet's yet.
+  ///
+  /// The server states it; a server that does not is read by the date
+  /// it stamps when the scan ends, which says the same thing.
+  bool get scanning => baselinePending ?? (baselineAt == null);
 }
 
 /// Where an account wants to be told.
@@ -2950,6 +2994,7 @@ class PremiumChannel {
     required this.linked,
     this.linkCode,
     this.startUrl,
+    this.linkedName,
     this.enabled = true,
     required this.createdAt,
   });
@@ -2962,6 +3007,7 @@ class PremiumChannel {
       linked: json['linked'] as bool? ?? true,
       linkCode: json['link_code'] as String?,
       startUrl: json['start_url'] as String?,
+      linkedName: json['linked_name'] as String?,
       enabled: json['enabled'] as bool? ?? true,
       createdAt: json['created_at'] as int,
     );
@@ -2982,6 +3028,11 @@ class PremiumChannel {
 
   /// Opens the bot with the code filled in, while it waits for it.
   final String? startUrl;
+
+  /// Who receives the alerts, when the server knows a name for them:
+  /// the Telegram chat that sent the code. Null for the other kinds,
+  /// and from a server that predates it.
+  final String? linkedName;
   final bool enabled;
 
   /// Unix seconds.

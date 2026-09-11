@@ -276,6 +276,17 @@ void main() {
       expect(info.severity, TxSeverity.info);
     });
 
+    test('an input the chain disagrees about is named and loud', () {
+      final warning = TxWarning.fromJson(const {
+        'kind': 'input_mismatch',
+        'message':
+            'Input 0 claims 100000 sats; the chain records 10000000 sats.',
+        'severity': 'alert',
+      });
+      expect(warning.kind, TxWarningKind.inputMismatch);
+      expect(warning.severity, TxSeverity.alert);
+    });
+
     test('a kind added by a newer core still arrives with its tone', () {
       // The whole point of carrying severity on the wire: a kind this
       // build cannot name no longer falls through a hand-written table.
@@ -419,6 +430,111 @@ void main() {
         }).electrumCerts,
         isEmpty,
       );
+    });
+  });
+
+  group('BackupPreview.fromJson', () {
+    test('names the node and the certificates a restore would pin', () {
+      final preview = BackupPreview.fromJson(const {
+        'created_at': 1755000000,
+        'wallets': [],
+        'has_settings': true,
+        'backends': [
+          {'network': 'mainnet', 'backend': 'electrum.example:50002'},
+          {'network': 'signet', 'backend': 'mempool.example'},
+        ],
+        'electrum_hosts': ['electrum.example:50002'],
+      });
+      expect(preview.hasSettings, isTrue);
+      expect(preview.backends.length, 2);
+      expect(preview.backends.first.network, Network.mainnet);
+      expect(preview.backends.first.backend, 'electrum.example:50002');
+      expect(preview.backends.last.network, Network.signet);
+      expect(preview.electrumHosts, ['electrum.example:50002']);
+    });
+
+    test('a backup without settings carries neither list', () {
+      final preview = BackupPreview.fromJson(const {
+        'created_at': 1755000000,
+        'wallets': [],
+        'has_settings': false,
+      });
+      expect(preview.backends, isEmpty);
+      expect(preview.electrumHosts, isEmpty);
+    });
+  });
+
+  group('PremiumChannel.fromJson', () {
+    test('reads who the channel is linked to, when the server says', () {
+      final linked = PremiumChannel.fromJson(const {
+        'id': 'ch1',
+        'kind': 'telegram',
+        'target': 'linked',
+        'linked': true,
+        'linked_name': 'Ada',
+        'created_at': 1755000000,
+      });
+      expect(linked.linkedName, 'Ada');
+      expect(linked.waitingForBot, isFalse);
+    });
+
+    test('a server that names nobody leaves the name out', () {
+      final channel = PremiumChannel.fromJson(const {
+        'id': 'ch2',
+        'kind': 'telegram',
+        'target': '',
+        'linked': false,
+        'link_code': 'abc123',
+        'created_at': 1755000000,
+      });
+      expect(channel.linkedName, isNull);
+      expect(channel.waitingForBot, isTrue);
+    });
+  });
+
+  group('WalletWatch.fromJson', () {
+    test('the server states whether the first scan is still running', () {
+      final pending = WalletWatch.fromJson(const {
+        'id': 'w1',
+        'name': 'Cold storage',
+        'script_kind': 'segwit',
+        'watched_since': 1755000000,
+        'baseline_at': null,
+        'baseline_height': null,
+        'baseline_pending': true,
+        'coins': 0,
+        'value_sats': 0,
+      });
+      expect(pending.scanning, isTrue);
+
+      // A finished scan says so even before a date is stamped on it.
+      final done = WalletWatch.fromJson(const {
+        'id': 'w1',
+        'name': 'Cold storage',
+        'script_kind': 'segwit',
+        'watched_since': 1755000000,
+        'baseline_at': null,
+        'baseline_height': null,
+        'baseline_pending': false,
+        'coins': 3,
+        'value_sats': 300000,
+      });
+      expect(done.scanning, isFalse);
+    });
+
+    test('a server that says nothing is read by the date it stamps', () {
+      Map<String, dynamic> watch(int? baselineAt) => {
+        'id': 'w1',
+        'name': 'Cold storage',
+        'script_kind': 'segwit',
+        'watched_since': 1755000000,
+        'baseline_at': baselineAt,
+        'baseline_height': null,
+        'coins': 0,
+        'value_sats': 0,
+      };
+      expect(WalletWatch.fromJson(watch(null)).scanning, isTrue);
+      expect(WalletWatch.fromJson(watch(1755000030)).scanning, isFalse);
     });
   });
 }
