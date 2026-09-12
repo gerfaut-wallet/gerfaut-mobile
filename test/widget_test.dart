@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/backup_restore.dart';
 import 'package:gerfaut/screens/wallet_home.dart';
+import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/disguise.dart';
@@ -12,6 +13,7 @@ import 'package:gerfaut/theme/tokens.dart';
 import 'package:flutter/gestures.dart' show kLongPressTimeout, kPressTimeout;
 import 'package:gerfaut/widgets/brand.dart';
 import 'package:gerfaut/widgets/buttons.dart';
+import 'package:gerfaut/widgets/notice.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'fakes.dart';
@@ -168,6 +170,93 @@ void main() {
       await tester.pumpAndSettle();
       await tester.pageBack();
       await tester.pumpAndSettle();
+      expect(top('Cold storage'), lessThan(top('Spending')));
+    });
+
+    testWidgets('a drop the vault refuses is said above them, in place', (
+      tester,
+    ) async {
+      final bridge = returning(
+        wallets: [
+          makeMeta(id: 'w1', name: 'Cold storage'),
+          makeMeta(id: 'w2', name: 'Spending'),
+        ],
+      );
+      var refuse = true;
+      bridge.onReorderWallets = (_) {
+        if (refuse) {
+          throw const BridgeException('vault_locked', 'the vault is locked');
+        }
+      };
+      await tester.pumpWidget(app(bridge));
+      await tester.pumpAndSettle();
+
+      double top(String name) => tester.getTopLeft(find.text(name)).dy;
+      final pitch = top('Spending') - top('Cold storage');
+      await dragDown(
+        tester,
+        tester.getCenter(find.text('Cold storage')),
+        pitch * 0.75,
+        hold: kLongPressTimeout + kPressTimeout,
+      );
+
+      // Not a toast: a note above the cards, amber, with the vault's own
+      // words, and the cards back in the order the vault kept.
+      expect(bridge.reorderCalls, [
+        ['w2', 'w1'],
+      ]);
+      expect(find.byType(SnackBar), findsNothing);
+      final note = tester.widget<GerfautNotice>(find.byType(GerfautNotice));
+      expect(note.tone, NoticeTone.info);
+      expect(find.text('The new order could not be saved.'), findsOneWidget);
+      expect(find.text('the vault is locked'), findsOneWidget);
+      expect(
+        tester.getBottomLeft(find.byType(GerfautNotice)).dy,
+        lessThan(top('Cold storage')),
+      );
+      expect(top('Cold storage'), lessThan(top('Spending')));
+      expect(tester.getSize(find.widgetWithText(GhostButton, 'Try again')).height, 44);
+
+      // Try again: the same order goes out once more, and lands.
+      refuse = false;
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+      expect(bridge.reorderCalls, [
+        ['w2', 'w1'],
+        ['w2', 'w1'],
+      ]);
+      expect(find.byType(GerfautNotice), findsNothing);
+      expect(top('Spending'), lessThan(top('Cold storage')));
+      expect(bridge.wallets.map((w) => w.id), ['w2', 'w1']);
+    });
+
+    testWidgets('a refused drop can simply be dismissed', (tester) async {
+      final bridge = returning(
+        wallets: [
+          makeMeta(id: 'w1', name: 'Cold storage'),
+          makeMeta(id: 'w2', name: 'Spending'),
+        ],
+      );
+      bridge.onReorderWallets = (_) {
+        throw const BridgeException('io', 'the vault could not be written');
+      };
+      await tester.pumpWidget(app(bridge));
+      await tester.pumpAndSettle();
+
+      double top(String name) => tester.getTopLeft(find.text(name)).dy;
+      final pitch = top('Spending') - top('Cold storage');
+      await dragDown(
+        tester,
+        tester.getCenter(find.text('Cold storage')),
+        pitch * 0.75,
+        hold: kLongPressTimeout + kPressTimeout,
+      );
+      expect(find.text('the vault could not be written'), findsOneWidget);
+
+      await tester.tap(find.text('Dismiss'));
+      await tester.pumpAndSettle();
+      expect(find.byType(GerfautNotice), findsNothing);
+      expect(bridge.reorderCalls, hasLength(1));
       expect(top('Cold storage'), lessThan(top('Spending')));
     });
   });

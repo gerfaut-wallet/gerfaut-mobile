@@ -13,6 +13,7 @@ import '../widgets/app_bar.dart';
 import '../widgets/brand.dart';
 import '../widgets/buttons.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/notice.dart';
 import '../widgets/overflow_menu.dart';
 import '../widgets/reorder.dart';
 import '../widgets/sync_button.dart';
@@ -280,6 +281,12 @@ class _WalletListState extends ConsumerState<_WalletList> {
   /// caught up. A list that changed underneath takes the vault's back.
   List<String>? _order;
 
+  /// The drop the vault refused: the order it asked for, and what the
+  /// vault said. Said above the cards until it is tried again or
+  /// dismissed — never a toast, which vanishes before it is read. The
+  /// cards meanwhile stand in the order the vault kept.
+  ({List<String> ids, String reason})? _refused;
+
   /// The cards in the order they show: the vault's, unless a drop is
   /// still on its way there.
   List<WalletMeta> _inOrder() {
@@ -298,7 +305,15 @@ class _WalletListState extends ConsumerState<_WalletList> {
     if (from == to) return;
     final ids = [for (final wallet in _inOrder()) wallet.id];
     ids.insert(to, ids.removeAt(from));
-    setState(() => _order = ids);
+    await _apply(ids);
+  }
+
+  /// Hands [ids] to the vault, showing that order meanwhile.
+  Future<void> _apply(List<String> ids) async {
+    setState(() {
+      _order = ids;
+      _refused = null;
+    });
     try {
       await ref.read(bridgeProvider).reorderWallets(ids);
       // Read the vault back, then let the local order go: the provider
@@ -312,16 +327,37 @@ class _WalletListState extends ConsumerState<_WalletList> {
       setState(() => _order = null);
     } catch (error) {
       if (!mounted) return;
-      setState(() => _order = null);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$error')));
+      // The vault kept whatever order it had: read it back rather than
+      // trust the list in hand, and show that one under the note.
+      ref.invalidate(walletsProvider);
+      setState(() {
+        _order = null;
+        _refused = (ids: ids, reason: '$error');
+      });
     }
   }
+
+  /// The refused drop, once more. A list that changed underneath —
+  /// a wallet added or removed meanwhile — makes the drop meaningless,
+  /// and the note simply goes.
+  void _retry() {
+    final refused = _refused;
+    if (refused == null) return;
+    final ids = {for (final wallet in widget.wallets) wallet.id};
+    if (refused.ids.length != ids.length || !refused.ids.every(ids.contains)) {
+      setState(() => _refused = null);
+      return;
+    }
+    _apply(refused.ids);
+  }
+
+  void _dismiss() => setState(() => _refused = null);
 
   @override
   Widget build(BuildContext context) {
     final shown = _inOrder();
     final errors = ref.watch(syncErrorsProvider);
+    final refused = _refused;
     return RefreshIndicator(
       onRefresh: widget.onRefresh,
       child: ReorderableListView.builder(
@@ -329,6 +365,27 @@ class _WalletListState extends ConsumerState<_WalletList> {
         padding: const EdgeInsets.all(GerfautSpacing.md),
         buildDefaultDragHandles: false,
         proxyDecorator: liftedProxy,
+        // Above the cards, in the list's own margins: the header takes
+        // the top of the padding and the first card gives it up, so the
+        // gap under the note is the header's to set.
+        header: refused == null
+            ? null
+            : Padding(
+                padding: const EdgeInsets.only(bottom: GerfautSpacing.md),
+                child: GerfautNotice(
+                  tone: NoticeTone.info,
+                  // It lands in reaction to the drop, and nothing else
+                  // on the screen says the order went back.
+                  liveRegion: true,
+                  message: 'The new order could not be saved.',
+                  detail: refused.reason,
+                  actionsBelow: true,
+                  action: ConfirmActions(
+                    cancel: GhostButton(label: 'Dismiss', onPressed: _dismiss),
+                    confirm: GhostButton(label: 'Try again', onPressed: _retry),
+                  ),
+                ),
+              ),
         itemCount: shown.length,
         onReorderItem: _reorder,
         itemBuilder: (context, index) {
