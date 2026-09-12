@@ -91,6 +91,27 @@ void main() {
       expect(bridge.backupExportCalls, isEmpty);
     });
 
+    testWidgets('the password field says what it stands in front of', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      await tester.pumpWidget(
+        screen(FakeBridge(wallets: [makeMeta()]), const BackupExportScreen()),
+      );
+      await tester.pumpAndSettle();
+
+      // The eight-character floor is what the core takes, not advice:
+      // a file guessed offline needs length, and the screen says so
+      // where the password is chosen.
+      expect(
+        find.text(
+          'This file can be copied and guessed offline: use a long '
+          'passphrase, several words.',
+        ),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('two different passwords are refused', (tester) async {
       useTallSurface(tester);
       final bridge = FakeBridge(wallets: [makeMeta()]);

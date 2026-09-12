@@ -278,6 +278,18 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
           controller: _passwordController,
           onChanged: () => setState(() => _error = null),
         ),
+        const SizedBox(height: GerfautSpacing.sm),
+        // A password on a phone stands behind the lock screen and a
+        // counter that gives up. This one stands in front of a file:
+        // whoever holds a copy tries every word they like, as fast as
+        // their machine goes, for as long as they care to. Length is
+        // the only thing that answers that, and it is said here rather
+        // than left to the eight-character floor to imply.
+        Text(
+          'This file can be copied and guessed offline: use a long '
+          'passphrase, several words.',
+          style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+        ),
         const SizedBox(height: GerfautSpacing.md),
         PasswordField(
           label: 'Confirm password',
