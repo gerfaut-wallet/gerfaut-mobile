@@ -746,6 +746,31 @@ void main() {
       expect(find.text('Waiting for the bot'), findsNothing);
     });
 
+    testWidgets('telegram: the row names the chat the bot answers', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumChannelList.add(
+        const PremiumChannel(
+          id: 'ch7',
+          kind: ChannelKind.telegram,
+          target: 'linked',
+          linked: true,
+          linkedName: 'Alice',
+          createdAt: 1,
+        ),
+      );
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Linked'), findsOneWidget);
+      // A chat id is nothing anyone recognizes; the name the bot
+      // learned is.
+      expect(find.text('Linked to Alice'), findsOneWidget);
+      expect(find.text('linked'), findsNothing);
+    });
+
     testWidgets('e-mail and webhook each take a form', (tester) async {
       useTallSurface(tester);
       final bridge = premiumBridge(activated: true);

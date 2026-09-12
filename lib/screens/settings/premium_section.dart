@@ -982,6 +982,11 @@ class _ChannelRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final topic = this.topic;
+    // Who the alerts reach, when the server knows a name for them. A
+    // server that predates the field, or a kind that has no such name,
+    // leaves it null and the row reads as it always did.
+    final name = channel.linkedName;
+    final linkedName = name == null || name.isEmpty ? null : name;
     return Container(
       constraints: const BoxConstraints(minHeight: 56),
       padding: const EdgeInsets.symmetric(vertical: GerfautSpacing.xs),
@@ -1026,6 +1031,19 @@ class _ChannelRow extends StatelessWidget {
                       letterSpacing: 0,
                       color: tokens.textMuted,
                     ),
+                  )
+                else if (linkedName != null)
+                  // A Telegram target is a chat id nobody recognizes.
+                  // The name the bot learned says which end of it this
+                  // is, which is what the masked target says elsewhere.
+                  Text(
+                    'Linked to $linkedName',
+                    style: tokens.label.copyWith(
+                      letterSpacing: 0,
+                      color: tokens.textMuted,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   )
                 else if (channel.target.isNotEmpty)
                   // Masked by the server: proof of which one, not a copy.
