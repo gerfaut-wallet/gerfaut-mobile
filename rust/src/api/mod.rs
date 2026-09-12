@@ -65,17 +65,27 @@ fn core_error_kind(error: &CoreError) -> &'static str {
 /// One kind per thing the screen does about it: an unknown key sends
 /// the user back to the field, a key with no paid time to the renewal
 /// page, an unreachable server to the "watch is offline" banner.
+///
+/// Six, the same six the desktop app answers with. A kind the screens
+/// act on the same way is a kind they can only print, and what they
+/// would print is a parser's complaint: an answer that does not decode
+/// is a captive portal's login page where JSON was promised, which is
+/// the server out of reach and nothing else. A certificate and a
+/// heartbeat that do not check out are one case too — whichever of the
+/// two it was, this device cannot trust what it was handed.
+///
+/// The match is exhaustive on purpose: a variant added to the core
+/// stops the build here until somebody says which of the six it is.
 fn premium_error_kind(error: &PremiumError) -> &'static str {
     match error {
         PremiumError::NoKey => "premium_no_key",
         PremiumError::UnknownKey => "premium_unknown_key",
         PremiumError::NoPaidTime => "premium_no_paid_time",
         PremiumError::Rejected(_) => "premium_rejected",
-        PremiumError::Unreachable(_) => "premium_unreachable",
-        PremiumError::UnexpectedResponse(_) => "premium_unexpected_response",
-        PremiumError::InvalidCertificate(_) => "premium_invalid_certificate",
-        PremiumError::InvalidHeartbeat(_) => "premium_invalid_heartbeat",
-        PremiumError::StaleHeartbeat { .. } => "premium_stale_heartbeat",
+        PremiumError::Unreachable(_) | PremiumError::UnexpectedResponse(_) => "premium_unreachable",
+        PremiumError::InvalidCertificate(_)
+        | PremiumError::InvalidHeartbeat(_)
+        | PremiumError::StaleHeartbeat { .. } => "premium_invalid",
     }
 }
 
@@ -1079,6 +1089,29 @@ mod tests {
         let value = payload(&refused);
         assert_eq!(value["error"]["kind"], "premium_rejected");
         assert_eq!(value["error"]["message"], "wrong or expired code");
+    }
+
+    /// An answer that does not decode is the server out of reach: on a
+    /// phone it is a hotel's login page, and a parser's complaint is
+    /// not something to put in front of anybody.
+    #[test]
+    fn an_answer_that_does_not_decode_is_the_server_out_of_reach() {
+        let portal = CoreError::Premium(PremiumError::UnexpectedResponse(
+            "expected value at line 1 column 1".to_owned(),
+        ));
+        assert_eq!(payload(&portal)["error"]["kind"], "premium_unreachable");
+    }
+
+    /// A certificate and a heartbeat that do not check out are one case:
+    /// this device cannot trust what it was handed.
+    #[test]
+    fn what_does_not_verify_is_one_kind() {
+        let certificate = CoreError::Premium(PremiumError::InvalidCertificate("bad".to_owned()));
+        let heartbeat = CoreError::Premium(PremiumError::InvalidHeartbeat("bad".to_owned()));
+        let stale = CoreError::Premium(PremiumError::StaleHeartbeat { skew: 900 });
+        for error in [certificate, heartbeat, stale] {
+            assert_eq!(payload(&error)["error"]["kind"], "premium_invalid");
+        }
     }
 
     /// A 5xx keeps its wrapper: the status is the only sign that the

@@ -14,10 +14,7 @@ import 'rust/api.dart' as rust;
 /// invalid_input, network_mismatch, wallet_not_found, duplicate_wallet,
 /// vault, sync, backend_unavailable, broadcast, descriptor, tor,
 /// internal — plus the bridge-level not_initialized, bad_key, bad_json,
-/// and the premium server's: premium_no_key, premium_unknown_key,
-/// premium_no_paid_time, premium_rejected, premium_unreachable,
-/// premium_unexpected_response, premium_invalid_certificate,
-/// premium_invalid_heartbeat, premium_stale_heartbeat.
+/// and the premium server's, which are [premiumErrorKinds].
 class BridgeException implements Exception {
   const BridgeException(this.kind, this.message);
 
@@ -27,6 +24,26 @@ class BridgeException implements Exception {
   @override
   String toString() => message;
 }
+
+/// Every kind a premium call can fail with, and the whole of it.
+///
+/// Six, where the core has nine: the bridge folds what a screen cannot
+/// act on differently, the way the desktop app does. An answer that
+/// does not decode goes under `premium_unreachable` — on a phone that
+/// is a hotel's login page, not something to read out — and a
+/// certificate or a heartbeat that does not check out is
+/// `premium_invalid`, whichever of the two it was.
+///
+/// This list is what holds the screens to a sentence for each: a kind
+/// added here and left unanswered fails the test that walks it.
+const List<String> premiumErrorKinds = [
+  'premium_no_key',
+  'premium_unknown_key',
+  'premium_no_paid_time',
+  'premium_rejected',
+  'premium_unreachable',
+  'premium_invalid',
+];
 
 /// Every operation the app can ask of the core.
 abstract class GerfautBridge {

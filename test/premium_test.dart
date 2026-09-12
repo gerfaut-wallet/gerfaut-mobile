@@ -1234,8 +1234,10 @@ void main() {
       tester,
     ) async {
       final bridge = watching();
-      bridge.onPremiumHeartbeat = () =>
-          throw const BridgeException('premium_stale_heartbeat', 'off');
+      bridge.onPremiumHeartbeat = () => throw const BridgeException(
+        'premium_invalid',
+        "the heartbeat is 934 seconds off this device's clock",
+      );
       await tester.pumpWidget(wholeApp(bridge));
       await tester.pumpAndSettle();
       await tester.pump(heartbeatPeriod);
