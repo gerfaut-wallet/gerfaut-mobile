@@ -338,13 +338,17 @@ class CertificateRow extends StatelessWidget {
               style: tokens.bodySmall.copyWith(color: tokens.textMuted),
             ),
             const SizedBox(height: GerfautSpacing.sm),
-            Row(
+            // A Wrap: at a large text size the way out goes under the
+            // deed rather than past the edge of the card.
+            Wrap(
+              spacing: GerfautSpacing.sm,
+              runSpacing: GerfautSpacing.sm,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 SecondaryButton(
                   label: 'Forget certificate',
                   onPressed: onForgetConfirm,
                 ),
-                const SizedBox(width: GerfautSpacing.sm),
                 GhostButton(label: 'Cancel', onPressed: onCancel),
               ],
             ),

@@ -538,20 +538,16 @@ class _StartupErrorScreenState extends State<_StartupErrorScreen> {
                         'name, not deleted.',
                     liveRegion: true,
                     actionsBelow: true,
-                    action: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        GhostButton(
-                          label: 'Cancel',
-                          onPressed: () =>
-                              setState(() => _confirmingStartOver = false),
-                        ),
-                        const SizedBox(width: GerfautSpacing.sm),
-                        DangerButton(
-                          label: 'Start over',
-                          onPressed: widget.onStartOver,
-                        ),
-                      ],
+                    action: ConfirmActions(
+                      cancel: GhostButton(
+                        label: 'Cancel',
+                        onPressed: () =>
+                            setState(() => _confirmingStartOver = false),
+                      ),
+                      confirm: DangerButton(
+                        label: 'Start over',
+                        onPressed: widget.onStartOver,
+                      ),
                     ),
                   ),
                 ],

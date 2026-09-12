@@ -520,6 +520,45 @@ void main() {
     },
   );
 
+  testWidgets('the confirmation buttons stack at twice the text size', (
+    tester,
+  ) async {
+    // A small phone, the text doubled: "Cancel" and "Remove wallet" no
+    // longer share a line, and used to run past the panel's edge — an
+    // overflow the framework reports, which is what fails this test.
+    tester.view.physicalSize = const Size(360, 3600);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearAllTestValues);
+    final bridge = FakeBridge(wallets: [makeMeta(name: 'Cold storage')]);
+    await tester.pumpWidget(
+      settingsApp(bridge, section: SettingsSection.wallets),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Remove'));
+    await tester.pumpAndSettle();
+
+    final cancel = tester.getRect(find.widgetWithText(GhostButton, 'Cancel'));
+    final remove = tester.getRect(
+      find.widgetWithText(DangerButton, 'Remove wallet'),
+    );
+    final panel = tester.getRect(find.byType(GerfautNotice));
+    // Two lines, the deed last, both inside the panel and 44px tall.
+    expect(remove.top, greaterThanOrEqualTo(cancel.bottom));
+    expect(remove.right, lessThanOrEqualTo(panel.right));
+    expect(cancel.right, lessThanOrEqualTo(panel.right));
+    expect(remove.height, 44);
+    expect(cancel.height, 44);
+
+    await tester.tap(find.text('Remove wallet'));
+    await tester.pumpAndSettle();
+    expect(bridge.wallets, isEmpty);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('the gap limit is seeded from the settings and committed', (
     tester,
   ) async {

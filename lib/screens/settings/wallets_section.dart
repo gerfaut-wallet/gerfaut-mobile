@@ -560,18 +560,15 @@ class _WalletRow extends StatelessWidget {
               // their own under it: beside the text they left it a
               // column eight characters across on a phone.
               actionsBelow: true,
-              action: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // The destructive one is never alone: the panel is
-                  // the confirmation, and the way out sits beside it.
-                  GhostButton(label: 'Cancel', onPressed: onCancel),
-                  const SizedBox(width: GerfautSpacing.sm),
-                  DangerButton(
-                    label: 'Remove wallet',
-                    onPressed: onRemoveConfirm,
-                  ),
-                ],
+              // The destructive one is never alone: the panel is the
+              // confirmation, and the way out sits beside it — or
+              // above it, once the text is too large for one line.
+              action: ConfirmActions(
+                cancel: GhostButton(label: 'Cancel', onPressed: onCancel),
+                confirm: DangerButton(
+                  label: 'Remove wallet',
+                  onPressed: onRemoveConfirm,
+                ),
               ),
             ),
           ] else if (!renaming) ...[

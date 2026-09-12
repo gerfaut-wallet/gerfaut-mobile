@@ -635,6 +635,35 @@ void main() {
       expect(find.text('Activate'), findsOneWidget);
     });
 
+    testWidgets('the confirmation buttons stack at twice the text size', (
+      tester,
+    ) async {
+      // A small phone, the text doubled: "Cancel" and "Delete and
+      // forget" no longer share a line and used to run past the card,
+      // an overflow the framework reports, which is what fails this.
+      tester.view.physicalSize = const Size(360, 3000);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearAllTestValues);
+      final bridge = premiumBridge(activated: true);
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Forget this key'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Also delete everything on the server'));
+      await tester.pumpAndSettle();
+
+      final cancel = tester.getRect(find.widgetWithText(GhostButton, 'Cancel'));
+      final delete = tester.getRect(
+        find.widgetWithText(DangerButton, 'Delete and forget'),
+      );
+      expect(delete.top, greaterThanOrEqualTo(cancel.bottom));
+      expect(delete.right, lessThanOrEqualTo(360));
+      expect(delete.height, 44);
+    });
+
     testWidgets('deleting holds the confirmation until the server answers', (
       tester,
     ) async {

@@ -635,13 +635,17 @@ class _LicenceCard extends ConsumerWidget {
         style: tokens.bodySmall.copyWith(color: tokens.textMuted),
       ),
       const SizedBox(height: GerfautSpacing.md),
-      Row(
+      // A Wrap: at a large text size the link goes under the button
+      // rather than past the edge of the card.
+      Wrap(
+        spacing: GerfautSpacing.sm,
+        runSpacing: GerfautSpacing.sm,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           PrimaryButton(
             label: activating ? 'Activating…' : 'Activate',
             onPressed: wellFormed && !activating ? onActivate : null,
           ),
-          const SizedBox(width: GerfautSpacing.sm),
           GhostButton(
             label: 'Get Premium',
             icon: LucideIcons.externalLink,
@@ -734,24 +738,20 @@ class _LicenceCard extends ConsumerWidget {
           onChanged: forgetting ? null : onDeleteAccountChanged,
         ),
         const SizedBox(height: GerfautSpacing.xs),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            GhostButton(
-              label: 'Cancel',
-              onPressed: forgetting ? null : onForgetCancel,
-            ),
-            const SizedBox(width: GerfautSpacing.sm),
-            DangerButton(
-              label: switch ((deleteAccount, forgetting)) {
-                (true, true) => 'Deleting…',
-                (true, false) => 'Delete and forget',
-                (false, true) => 'Forgetting…',
-                (false, false) => 'Forget key',
-              },
-              onPressed: forgetting ? null : onForgetConfirm,
-            ),
-          ],
+        ConfirmActions(
+          cancel: GhostButton(
+            label: 'Cancel',
+            onPressed: forgetting ? null : onForgetCancel,
+          ),
+          confirm: DangerButton(
+            label: switch ((deleteAccount, forgetting)) {
+              (true, true) => 'Deleting…',
+              (true, false) => 'Delete and forget',
+              (false, true) => 'Forgetting…',
+              (false, false) => 'Forget key',
+            },
+            onPressed: forgetting ? null : onForgetConfirm,
+          ),
         ),
       ],
     ];

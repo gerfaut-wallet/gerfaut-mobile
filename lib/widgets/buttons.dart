@@ -213,3 +213,36 @@ class DangerButton extends StatelessWidget {
     );
   }
 }
+
+/// The two buttons that close a confirmation: the way out and the deed,
+/// in that order, the deed at the end where the thumb expects the last
+/// word.
+///
+/// A Wrap and not a Row: at a large text size two labels do not share
+/// a line on a phone, and the deed then goes to a line of its own under
+/// the way out rather than past the edge of the panel. Aligned to the
+/// end whichever column it sits in.
+class ConfirmActions extends StatelessWidget {
+  const ConfirmActions({
+    super.key,
+    required this.cancel,
+    required this.confirm,
+  });
+
+  final Widget cancel;
+  final Widget confirm;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Wrap(
+        alignment: WrapAlignment.end,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: GerfautSpacing.sm,
+        runSpacing: GerfautSpacing.sm,
+        children: [cancel, confirm],
+      ),
+    );
+  }
+}
