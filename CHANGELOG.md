@@ -28,9 +28,21 @@ The first release: Gerfaut for Android.
   changes.
 - A Tor client built in: an .onion backend works with no Orbot installed.
 - An encrypted backup file, and the same backup as an animated QR code, so
-  two devices sync with no server in between.
+  two devices sync with no server in between. The export page asks for a
+  passphrase of several words, since a copied file can be guessed offline;
+  the restore page lists what the file holds, wallet by wallet and node
+  setting by node setting, before it writes anything.
+- The vault stays out of Android's own backups and device-to-device
+  transfers. It leaves the phone only as a Gerfaut backup, sealed under your
+  password.
+- A vault this phone can no longer open is never overwritten: Gerfaut sets
+  it aside under another name and offers to start over, with the restore
+  page first.
 - A PIN or password lock with biometrics, attempts slowed after three tries
   and still slowed after a restart, and a calculator disguise for the icon.
+- A secret copied from the app, an extended key, an ntfy topic or the
+  account key, is marked sensitive on the clipboard: the system shows no
+  preview of it and keeps it out of its history.
 - Home screen widgets for the price, the balance (hidden by default) and the
   block height.
 - Local notifications when a sync finds something new. Nothing leaves the
@@ -39,10 +51,21 @@ The first release: Gerfaut for Android.
 - Gerfaut Premium, as an eighth section of the settings. Enter the account
   key bought on gerfaut-wallet.com, switch a wallet on, and the server
   watches it from there; before the first one leaves the phone, a page says
-  in plain words what the server will learn. Alerts reach the ntfy app,
-  Telegram, an e-mail address or a webhook of yours, and the last 20 are
-  listed in the app. When the server misses 2 heartbeats in a row, a red
-  banner on the home screen says so until you acknowledge it.
+  in plain words what the server will learn, and the row says "First scan
+  pending" until the server has been through the wallet once. A wallet
+  removed from the phone is taken off the server with it, and one the server
+  still watches that this phone no longer has is listed with a way off.
+- Alerts reach the ntfy app, Telegram, an e-mail address or a webhook of
+  yours, and the last 20 are listed in the app. An e-mail address receives a
+  6-digit code first, typed back under its row, and nothing is sent to it
+  before; a Telegram channel names the chat it reaches; a webhook the server
+  turned off, because it points at a private address, says so with what to
+  do about it.
+- Forgetting the key can take the account with it: the server then deletes
+  the wallets it watches, the channels and the log, and whatever paid time
+  the key had left goes with them. Premium calls go through Tor whenever the
+  node connection does, never around it. When the server misses 2 heartbeats
+  in a row, a red banner on the home screen says so until you acknowledge it.
 - One APK per processor architecture instead of one carrying all three:
   50 MB to download on a 64-bit ARM phone rather than 127.
 - Reproducible builds. The APKs are built in a container where every tool
