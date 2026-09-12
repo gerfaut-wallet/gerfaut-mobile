@@ -220,7 +220,8 @@ class MainActivity : FlutterFragmentActivity() {
 
     // Opens the system's save dialog on a new document and writes the
     // bytes to whatever place it names. Answers true once written,
-    // false when the dialog was dismissed.
+    // false when the dialog was dismissed, and an error when the dialog
+    // could not open at all.
     private fun createDocument(
         filename: String,
         mimeType: String,
@@ -239,9 +240,21 @@ class MainActivity : FlutterFragmentActivity() {
         pendingSave = PendingSave(bytes, result)
         try {
             saveDialog.launch(intent)
-        } catch (error: ActivityNotFoundException) {
+        } catch (error: Exception) {
+            // Whatever kept the dialog from opening, no result is coming
+            // back for this save. The slot is freed before the caller is
+            // told, or every later save would be refused as busy for as
+            // long as this activity lives.
             pendingSave = null
-            result.error("unavailable", "no app on this device can save a file", null)
+            if (error is ActivityNotFoundException) {
+                result.error("unavailable", "no app on this device can save a file", null)
+            } else {
+                result.error(
+                    "failed",
+                    error.message ?: "the save dialog could not be opened",
+                    null,
+                )
+            }
         }
     }
 
