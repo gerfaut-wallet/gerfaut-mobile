@@ -86,6 +86,15 @@ fn from_json<T: serde::de::DeserializeOwned>(raw: &str, what: &str) -> Result<T,
 }
 
 fn core_error_json(error: &CoreError) -> String {
+    // A refusal reaches the screen in the server's own sentence: the
+    // prefix the error type wraps it in names the layer, not the thing
+    // that went wrong, and a card that prints it reads as plumbing.
+    // Everything else keeps its wrapper, the unreachable one included:
+    // the status it carries is what tells an outage from a server that
+    // answered to say it could not do the thing.
+    if let CoreError::Premium(PremiumError::Rejected(words)) = error {
+        return error_json("premium_rejected", words);
+    }
     error_json(core_error_kind(error), error)
 }
 
@@ -1049,5 +1058,41 @@ pub async fn check_update(current_version: String) -> String {
     match gerfaut_core::updates::check_update(UPDATE_REPO, &current_version).await {
         Ok(check) => to_json(&check),
         Err(e) => core_error_json(&e),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::Value;
+
+    fn payload(error: &CoreError) -> Value {
+        serde_json::from_str(&core_error_json(error)).expect("the payload is JSON")
+    }
+
+    /// The words of a refusal are the server's own, and nothing else:
+    /// they are what the card prints under "The Gerfaut server refused".
+    #[test]
+    fn a_refusal_carries_the_servers_words_alone() {
+        let refused =
+            CoreError::Premium(PremiumError::Rejected("wrong or expired code".to_owned()));
+        let value = payload(&refused);
+        assert_eq!(value["error"]["kind"], "premium_rejected");
+        assert_eq!(value["error"]["message"], "wrong or expired code");
+    }
+
+    /// A 5xx keeps its wrapper: the status is the only sign that the
+    /// server answered, and the screen reads the sentence after it.
+    #[test]
+    fn an_unreachable_server_keeps_the_status_it_answered_with() {
+        let down = CoreError::Premium(PremiumError::Unreachable(
+            "HTTP 502: the confirmation e-mail could not be sent".to_owned(),
+        ));
+        let value = payload(&down);
+        assert_eq!(value["error"]["kind"], "premium_unreachable");
+        assert_eq!(
+            value["error"]["message"],
+            "the premium server is unreachable: HTTP 502: the confirmation e-mail could not be sent"
+        );
     }
 }
