@@ -17,12 +17,17 @@ The first release: Gerfaut for Android.
   it understood before writing anything down.
 - Balance, transaction history and UTXOs per wallet, with the fiat value of
   the day and one tap to hide every amount on screen.
+- Hold a wallet card and drag it into the order you want, on the home screen
+  and in the settings. When the vault cannot keep the new order, a note above
+  the cards says so, with a button to try again.
 - Receive addresses with their QR code, the used ones marked, and a warning
   past the gap limit.
 - A Policy page for every wallet: what the descriptor allows, branch by
   branch, with each timelock counted down in blocks and in days.
 - Broadcast a signed transaction or a PSBT, read back in plain language
-  before it goes anywhere.
+  before it goes anywhere. When no backend could confirm a coin it spends,
+  Gerfaut marks the amounts and the fee as the file's claims rather than
+  the chain's, and says what to check before sending.
 - Your own node over Electrum or Esplora, or one of the public servers. A
   self-signed certificate is shown and trusted once, then refused if it ever
   changes.
@@ -31,7 +36,8 @@ The first release: Gerfaut for Android.
   two devices sync with no server in between. The export page asks for a
   passphrase of several words, since a copied file can be guessed offline;
   the restore page lists what the file holds, wallet by wallet and node
-  setting by node setting, before it writes anything.
+  setting by node setting, before it writes anything. If the system's save
+  dialog cannot open, the page says so in place, like any other failure.
 - The vault stays out of Android's own backups and device-to-device
   transfers. It leaves the phone only as a Gerfaut backup, sealed under your
   password.
@@ -55,6 +61,9 @@ The first release: Gerfaut for Android.
   pending" until the server has been through the wallet once. A wallet
   removed from the phone is taken off the server with it, and one the server
   still watches that this phone no longer has is listed with a way off.
+  Taking a wallet off the server also deletes its alert history there, so
+  Gerfaut says so and asks before doing it, whether from the switch or when
+  the wallet is removed from the phone.
 - Alerts reach the ntfy app, Telegram, an e-mail address or a webhook of
   yours, and the last 20 are listed in the app. An e-mail address receives a
   6-digit code first, typed back under its row, and nothing is sent to it
