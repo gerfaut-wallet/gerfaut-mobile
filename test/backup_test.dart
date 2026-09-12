@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:file_selector/file_selector.dart';
@@ -451,6 +452,65 @@ void main() {
         ..noteResumed();
       expect(lock.state.locked, isFalse);
       expect(find.text('Show QR code'), findsOneWidget);
+    });
+
+    testWidgets('a second tap while the dialog comes up is not a second save', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      // The dialog takes the screen a beat after the tap, and a thumb
+      // that doubles up lands in that beat. The second call used to
+      // reach the platform, be refused as busy, and have the refusal
+      // read as a dialog that never opened: the trip announced for the
+      // first dialog was taken back under it, and its return locked
+      // the app — popping this screen, and the backup on it.
+      final saver = FakeDocumentSaver()..hold = Completer<bool>();
+      await tester.pumpWidget(
+        screen(
+          FakeBridge(wallets: [makeMeta()]),
+          const BackupExportScreen(),
+          sharer: FakeBackupSharer(),
+          saver: saver,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final lock = ProviderScope.containerOf(
+        tester.element(find.byType(BackupExportScreen)),
+      ).read(lockProvider.notifier);
+      lock
+        ..syncFromSettings(null)
+        ..syncFromSettings(const AppLock(kind: LockKind.pin, biometric: false));
+
+      await typePasswords(tester, 'correct horse', 'correct horse');
+      await tester.tap(find.text('Create backup'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save file'));
+      await tester.pump();
+
+      // The button says what it is doing, and neither way out takes a
+      // second tap until the dialog has answered.
+      expect(find.text('Saving…'), findsOneWidget);
+      final share = find.widgetWithText(SecondaryButton, 'Share');
+      expect(tester.widget<SecondaryButton>(share).onPressed, isNull);
+      await tester.tap(find.text('Saving…'), warnIfMissed: false);
+      await tester.tap(share, warnIfMissed: false);
+      await tester.pump();
+      expect(saver.calls, 1);
+
+      // The dialog is up, Gerfaut hidden behind it; a place is picked
+      // and the dialog closes.
+      lock.noteHidden();
+      saver.hold!.complete(true);
+      await tester.pumpAndSettle();
+      lock.noteResumed();
+
+      expect(lock.state.locked, isFalse);
+      expect(saver.saved, hasLength(1));
+      expect(find.text('Saved'), findsOneWidget);
+      expect(find.text('Save file'), findsOneWidget);
+      expect(find.text('Show QR code'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
     });
   });
 

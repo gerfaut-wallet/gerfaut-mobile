@@ -27,6 +27,9 @@ const int minPasswordChars = 8;
 /// Which wallets a backup takes.
 enum _Scope { all, network }
 
+/// The system screen a backup leaves by.
+enum _Trip { save, share }
+
 /// Sealing the wallet list: what goes in and the password, then the
 /// ways out: a file saved where the user points, the share sheet, and an
 /// animated QR code for the other device. Nothing leaves this device
@@ -46,6 +49,11 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
   bool _creating = false;
   String? _error;
   BackupBundle? _bundle;
+
+  /// The system screen the backup is leaving by, while it is up: the
+  /// save dialog or the share sheet. One at a time, and the buttons
+  /// that open one are held until it has answered.
+  _Trip? _trip;
 
   /// Every wallet on every network, fetched once: the choice counts
   /// them, and the network option lists their ids.
@@ -121,10 +129,19 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
   }
 
   /// The system's save dialog, then the bytes written where it points.
+  ///
+  /// One trip at a time. The dialog takes the screen a beat after the
+  /// tap, and a thumb that doubles up lands a second call in that beat.
+  /// The platform refuses it as busy, and that refusal used to be read
+  /// as a dialog that never opened: the announcement below was taken
+  /// back while the first dialog was up, the return from it locked the
+  /// app, and the lock popped this screen with the backup on it.
   Future<void> _saveFile(BackupBundle bundle) async {
+    if (_trip != null) return;
     final messenger = ScaffoldMessenger.of(context);
     final lock = ref.read(lockProvider.notifier);
     final bytes = base64Decode(bundle.data);
+    setState(() => _trip = _Trip.save);
     // The dialog that picks where the file goes is a screen of the
     // system's: Android pauses Gerfaut behind it, and coming back from
     // it is not coming back from the background. Announced against the
@@ -146,14 +163,20 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
       // A save refused before the dialog came up is no trip at all.
       if (!error.dialogOpened) lock.forgetExcursion();
       messenger.showSnackBar(SnackBar(content: Text(error.message)));
+    } finally {
+      if (mounted) setState(() => _trip = null);
     }
   }
 
   /// The share sheet, for a backup bound straight for another app or
-  /// device. A screen of the system's, like the save dialog.
+  /// device. A screen of the system's, like the save dialog, and held
+  /// the same way: a second sheet asked for while the first is up is
+  /// refused by the platform, and a refusal here reads as no sheet.
   Future<void> _share(BackupBundle bundle) async {
+    if (_trip != null) return;
     final messenger = ScaffoldMessenger.of(context);
     final lock = ref.read(lockProvider.notifier);
+    setState(() => _trip = _Trip.share);
     lock.expectExcursion();
     try {
       await ref
@@ -166,6 +189,8 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
       messenger.showSnackBar(
         const SnackBar(content: Text('The share sheet could not be opened.')),
       );
+    } finally {
+      if (mounted) setState(() => _trip = null);
     }
   }
 
@@ -351,21 +376,23 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
           ),
         ),
         const SizedBox(height: GerfautSpacing.md),
+        // Both held while either system screen is up: the one in
+        // flight says so, the other waits its turn.
         Row(
           children: [
             Expanded(
               child: SecondaryButton(
-                label: 'Save file',
+                label: _trip == _Trip.save ? 'Saving…' : 'Save file',
                 icon: LucideIcons.save,
-                onPressed: () => _saveFile(bundle),
+                onPressed: _trip == null ? () => _saveFile(bundle) : null,
               ),
             ),
             const SizedBox(width: GerfautSpacing.sm),
             Expanded(
               child: SecondaryButton(
-                label: 'Share',
+                label: _trip == _Trip.share ? 'Sharing…' : 'Share',
                 icon: LucideIcons.share2,
-                onPressed: () => _share(bundle),
+                onPressed: _trip == null ? () => _share(bundle) : null,
               ),
             ),
           ],

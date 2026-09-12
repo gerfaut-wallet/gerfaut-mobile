@@ -12,9 +12,10 @@ class DocumentSaveException implements Exception {
 
   final String message;
 
-  /// Whether the system's save dialog was reached at all.
+  /// Whether a save dialog is up, or was: this call's, or the one an
+  /// earlier call opened and that still owes its return.
   ///
-  /// False when the save was refused before it could open: Gerfaut
+  /// False when the save was refused before any could open: Gerfaut
   /// never left the screen, nothing is coming back, and the app lock
   /// has to be told so or it will spend the trip it was promised on
   /// the next real absence instead.
@@ -59,14 +60,18 @@ class SystemDocumentSaver implements DocumentSaver {
       return saved ?? false;
     } on PlatformException catch (error) {
       // `write_failed` is the far side of the trip: the dialog named a
-      // place and the bytes did not make it. Every other refusal comes
-      // from before the launch — a save already under way, no app on
-      // the phone that can save one — and a code this build does not
+      // place and the bytes did not make it. `busy` is a dialog still
+      // up, the one an earlier call opened: the lock was told about
+      // that trip and is still owed its return, and reading the
+      // refusal as no dialog would take the announcement back under
+      // the dialog, then lock the app the moment it closes. Every
+      // other refusal comes from before any launch — no app on the
+      // phone that can save a file — and a code this build does not
       // know is counted with them, since being told to lock too often
       // costs a PIN and being told too rarely costs the lock.
       throw DocumentSaveException(
         error.message ?? 'The file could not be saved.',
-        dialogOpened: error.code == 'write_failed',
+        dialogOpened: error.code == 'write_failed' || error.code == 'busy',
       );
     } on MissingPluginException {
       throw const DocumentSaveException(

@@ -179,6 +179,13 @@ class FakeDocumentSaver implements DocumentSaver {
   /// A failure to raise instead of answering.
   DocumentSaveException? failure;
 
+  /// When set, the dialog stays up until this completes with its
+  /// answer, for a test that acts while it is.
+  Completer<bool>? hold;
+
+  /// Every call, answered or not: what a second tap would add.
+  int calls = 0;
+
   final List<({Uint8List bytes, String filename, String mimeType})> saved = [];
 
   @override
@@ -187,7 +194,9 @@ class FakeDocumentSaver implements DocumentSaver {
     required String filename,
     required String mimeType,
   }) async {
+    calls++;
     if (failure != null) throw failure!;
+    final answer = hold == null ? this.answer : await hold!.future;
     if (answer) {
       saved.add((bytes: bytes, filename: filename, mimeType: mimeType));
     }
