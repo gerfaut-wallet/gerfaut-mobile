@@ -16,6 +16,7 @@ import '../theme/tokens.dart';
 import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/choice_group.dart';
+import '../widgets/notice.dart';
 import '../widgets/premium_pill.dart';
 
 /// Where an exported file goes: written where the user points, or
@@ -43,6 +44,12 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
   ExportDirection? _direction;
   bool _includePending = true;
   bool _exporting = false;
+
+  /// Why the last export went nowhere: a sentence for the screen, and
+  /// under it the other side's own words when it had any. Shown beside
+  /// the buttons that were pressed, never in a toast that vanishes
+  /// before it is read.
+  ({String message, String? detail})? _failure;
 
   /// Inclusive unix-second bounds of the picked days, local time.
   int? get _fromSecs => _from == null
@@ -108,7 +115,10 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
     WalletSnapshot snapshot,
     _Destination destination,
   ) async {
-    setState(() => _exporting = true);
+    setState(() {
+      _exporting = true;
+      _failure = null;
+    });
     final messenger = ScaffoldMessenger.of(context);
     final lock = ref.read(lockProvider.notifier);
     try {
@@ -147,22 +157,22 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
           } catch (_) {
             // No sheet came up: nothing left the screen.
             lock.forgetExcursion();
-            messenger.showSnackBar(
-              const SnackBar(
-                content: Text('The share sheet could not be opened.'),
-              ),
-            );
+            _fail('The share sheet could not be opened.');
           }
       }
     } on BridgeException catch (error) {
-      messenger.showSnackBar(SnackBar(content: Text('$error')));
+      _fail('The file could not be built.', detail: error.message);
     } on DocumentSaveException catch (error) {
       // A save refused before the dialog came up is no trip at all.
       if (!error.dialogOpened) lock.forgetExcursion();
-      messenger.showSnackBar(SnackBar(content: Text(error.message)));
+      _fail('The file could not be saved.', detail: error.message);
     } finally {
       if (mounted) setState(() => _exporting = false);
     }
+  }
+
+  void _fail(String message, {String? detail}) {
+    if (mounted) setState(() => _failure = (message: message, detail: detail));
   }
 
   @override
@@ -335,6 +345,18 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                       'rounds first for a complete file.',
                       style: tokens.bodySmall.copyWith(color: tokens.pending),
                       textAlign: TextAlign.center,
+                    ),
+                  ],
+                  if (_failure != null) ...[
+                    const SizedBox(height: GerfautSpacing.sm),
+                    // Amber: nothing is at risk, the file simply did
+                    // not get where it was going, and the other side's
+                    // words say why when it had any.
+                    GerfautNotice(
+                      tone: NoticeTone.info,
+                      message: _failure!.message,
+                      detail: _failure!.detail,
+                      liveRegion: true,
                     ),
                   ],
                   const SizedBox(height: GerfautSpacing.sm),

@@ -20,6 +20,7 @@ import 'package:gerfaut/src/share.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/buttons.dart';
+import 'package:gerfaut/widgets/notice.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import 'fakes.dart';
@@ -274,8 +275,23 @@ void main() {
       await tester.tap(find.text('Save file'));
       await tester.pumpAndSettle();
 
+      // On the screen, under the buttons, in amber: a toast would be
+      // gone before the sentence was read, and the platform's words
+      // are the line to quote.
+      final note = tester.widget<GerfautNotice>(find.byType(GerfautNotice));
+      expect(note.tone, NoticeTone.info);
+      expect(note.message, 'The file could not be saved.');
+      expect(note.detail, 'The drive is full.');
       expect(find.text('The drive is full.'), findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
       expect(find.text('Saved'), findsNothing);
+      // The backup is still here for another try, and the note goes
+      // with the next one.
+      saver.failure = null;
+      await tester.tap(find.text('Save file'));
+      await tester.pumpAndSettle();
+      expect(find.byType(GerfautNotice), findsNothing);
+      expect(find.text('Saved'), findsOneWidget);
       await tester.pump(const Duration(seconds: 5));
       await tester.pumpAndSettle();
     });

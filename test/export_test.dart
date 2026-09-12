@@ -5,12 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/export.dart';
+import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/documents.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/share.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/choice_group.dart';
+import 'package:gerfaut/widgets/notice.dart';
 
 import 'fakes.dart';
 
@@ -261,6 +263,55 @@ void main() {
     // Flush the snackbar timer.
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('a save that fails is said under the buttons, not in a toast', (
+    tester,
+  ) async {
+    final saver = FakeDocumentSaver()
+      ..failure = const DocumentSaveException('The drive is full.');
+    await tester.pumpWidget(
+      exportApp(makeBridge(), FakeCsvSharer(), saver: saver),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Save file'));
+    await tester.pumpAndSettle();
+
+    final note = tester.widget<GerfautNotice>(find.byType(GerfautNotice));
+    expect(note.tone, NoticeTone.info);
+    expect(note.message, 'The file could not be saved.');
+    expect(note.detail, 'The drive is full.');
+    expect(find.byType(SnackBar), findsNothing);
+    // The filters are still there, and the note leaves with the next try.
+    expect(find.text('3 of 3 transactions selected'), findsOneWidget);
+    saver.failure = null;
+    await tester.tap(find.text('Save file'));
+    await tester.pumpAndSettle();
+    expect(find.byType(GerfautNotice), findsNothing);
+    expect(find.text('3 transactions saved'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a file the core cannot build is said the same way', (
+    tester,
+  ) async {
+    final bridge = makeBridge()
+      ..onExportTransactions = (_, _) => throw const BridgeException(
+        'internal',
+        'the history could not be read',
+      );
+    await tester.pumpWidget(exportApp(bridge, FakeCsvSharer()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Share'));
+    await tester.pumpAndSettle();
+
+    final note = tester.widget<GerfautNotice>(find.byType(GerfautNotice));
+    expect(note.message, 'The file could not be built.');
+    expect(note.detail, 'the history could not be read');
+    expect(find.byType(SnackBar), findsNothing);
   });
 
   testWidgets('a partial history warns before exporting', (tester) async {

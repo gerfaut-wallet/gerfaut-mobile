@@ -666,12 +666,19 @@ class FakeBridge implements GerfautBridge {
   /// Every export call's options, for assertions.
   final List<ExportOptions> exportCalls = [];
 
+  /// Export hook; throw a [BridgeException] for a file the core could
+  /// not build.
+  FutureOr<ExportResult> Function(String id, ExportOptions options)?
+  onExportTransactions;
+
   @override
   Future<ExportResult> exportTransactions(
     String id,
     ExportOptions options,
   ) async {
     exportCalls.add(options);
+    final hook = onExportTransactions;
+    if (hook != null) return hook(id, options);
     // Mirrors gerfaut-core's export::passes so counters and results
     // agree in tests.
     final txs = (snapshots[id]?.txs ?? []).where((tx) {

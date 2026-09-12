@@ -16,6 +16,7 @@ import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/choice_group.dart';
 import '../widgets/facts.dart';
+import '../widgets/notice.dart';
 import '../widgets/password_field.dart';
 import '../widgets/pinned_action_form.dart';
 import 'backup_qr.dart';
@@ -54,6 +55,12 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
   /// save dialog or the share sheet. One at a time, and the buttons
   /// that open one are held until it has answered.
   _Trip? _trip;
+
+  /// Why the last trip went nowhere: a sentence for the screen, and
+  /// under it the platform's own words when it had any. Under the
+  /// buttons that were pressed, never in a toast that vanishes before
+  /// it is read.
+  ({String message, String? detail})? _failure;
 
   /// Every wallet on every network, fetched once: the choice counts
   /// them, and the network option lists their ids.
@@ -141,7 +148,10 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
     final messenger = ScaffoldMessenger.of(context);
     final lock = ref.read(lockProvider.notifier);
     final bytes = base64Decode(bundle.data);
-    setState(() => _trip = _Trip.save);
+    setState(() {
+      _trip = _Trip.save;
+      _failure = null;
+    });
     // The dialog that picks where the file goes is a screen of the
     // system's: Android pauses Gerfaut behind it, and coming back from
     // it is not coming back from the background. Announced against the
@@ -162,10 +172,14 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
     } on DocumentSaveException catch (error) {
       // A save refused before the dialog came up is no trip at all.
       if (!error.dialogOpened) lock.forgetExcursion();
-      messenger.showSnackBar(SnackBar(content: Text(error.message)));
+      _fail('The file could not be saved.', detail: error.message);
     } finally {
       if (mounted) setState(() => _trip = null);
     }
+  }
+
+  void _fail(String message, {String? detail}) {
+    if (mounted) setState(() => _failure = (message: message, detail: detail));
   }
 
   /// The share sheet, for a backup bound straight for another app or
@@ -174,9 +188,11 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
   /// refused by the platform, and a refusal here reads as no sheet.
   Future<void> _share(BackupBundle bundle) async {
     if (_trip != null) return;
-    final messenger = ScaffoldMessenger.of(context);
     final lock = ref.read(lockProvider.notifier);
-    setState(() => _trip = _Trip.share);
+    setState(() {
+      _trip = _Trip.share;
+      _failure = null;
+    });
     lock.expectExcursion();
     try {
       await ref
@@ -186,9 +202,7 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
       // No sheet came up: the trip goes back, or it would be spent on
       // a real absence hours from now.
       lock.forgetExcursion();
-      messenger.showSnackBar(
-        const SnackBar(content: Text('The share sheet could not be opened.')),
-      );
+      _fail('The share sheet could not be opened.');
     } finally {
       if (mounted) setState(() => _trip = null);
     }
@@ -397,6 +411,18 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
             ),
           ],
         ),
+        if (_failure != null) ...[
+          const SizedBox(height: GerfautSpacing.sm),
+          // Amber: the backup is still here, it simply did not get
+          // where it was going, and the platform's words say why when
+          // it had any.
+          GerfautNotice(
+            tone: NoticeTone.info,
+            message: _failure!.message,
+            detail: _failure!.detail,
+            liveRegion: true,
+          ),
+        ],
         const SizedBox(height: GerfautSpacing.sm),
         SecondaryButton(
           label: 'Show QR code',
