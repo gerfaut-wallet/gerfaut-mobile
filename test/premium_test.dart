@@ -367,6 +367,85 @@ void main() {
       expect(find.text('Activate'), findsOneWidget);
     });
 
+    testWidgets('the same confirmation can take the account with it', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumConsents.add(
+        const WatchConsent(walletId: 'w1', consentedAt: 1),
+      );
+      bridge.premiumChannelList.add(
+        const PremiumChannel(
+          id: 'ch1',
+          kind: ChannelKind.webhook,
+          target: 'https://example.org/hook',
+          linked: true,
+          createdAt: 1,
+        ),
+      );
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Forget this key'));
+      await tester.pumpAndSettle();
+      expect(find.text('Forget key'), findsOneWidget);
+
+      // Ticked, the confirmation says what nothing brings back, and
+      // the button says what it does.
+      await tester.tap(find.text('Also delete everything on the server'));
+      await tester.pumpAndSettle();
+      final note = tester.widget<GerfautNotice>(find.byType(GerfautNotice));
+      expect(note.tone, NoticeTone.alert);
+      expect(note.message, contains('nothing brings any of it back'));
+      expect(find.text('Forget key'), findsNothing);
+      expect(find.text('Delete and forget'), findsOneWidget);
+      expect(bridge.premiumAccountDeleted, isFalse);
+
+      // Cancelling puts the box back down: a tick is for one press.
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Forget this key'));
+      await tester.pumpAndSettle();
+      expect(find.text('Forget key'), findsOneWidget);
+
+      await tester.tap(find.text('Also delete everything on the server'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete and forget'));
+      await tester.pumpAndSettle();
+
+      expect(bridge.premiumCalls, contains('delete-account'));
+      expect(bridge.premiumCalls, isNot(contains('forget')));
+      expect(bridge.premiumAccountDeleted, isTrue);
+      // The server went first, and everything went with it.
+      expect(bridge.premiumChannelList, isEmpty);
+      expect(bridge.premiumConsents, isEmpty);
+      expect(bridge.premiumKey, isNull);
+      expect(find.text('Activate'), findsOneWidget);
+    });
+
+    testWidgets('a server that refuses leaves the key where it was', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.onPremiumDeleteAccount = () =>
+          throw const BridgeException('premium_unreachable', 'timed out');
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Forget this key'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Also delete everything on the server'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete and forget'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Could not reach the Gerfaut server.'), findsOneWidget);
+      expect(bridge.premiumAccountDeleted, isFalse);
+      expect(bridge.premiumKey, isNotNull);
+    });
+
     testWidgets('an expired key says so in amber, with the grace', (
       tester,
     ) async {

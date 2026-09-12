@@ -48,6 +48,7 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   bool _activating = false;
   BridgeException? _licenceError;
   bool _confirmForget = false;
+  bool _deleteAccount = false;
   bool _refreshedLicence = false;
 
   // The watched wallets.
@@ -124,13 +125,32 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   Future<void> _forget() async {
     setState(() => _licenceError = null);
     try {
-      await _bridge.premiumForgetKey();
+      if (_deleteAccount) {
+        // The server first, and nothing is dropped here unless it
+        // confirmed: the core does both, in that order, so a refusal
+        // leaves the key where it was.
+        await _bridge.premiumDeleteAccount();
+      } else {
+        await _bridge.premiumForgetKey();
+      }
       if (!mounted) return;
-      setState(() => _confirmForget = false);
+      setState(() {
+        _confirmForget = false;
+        _deleteAccount = false;
+      });
       invalidatePremium(ref);
     } on BridgeException catch (error) {
       if (mounted) setState(() => _licenceError = error);
     }
+  }
+
+  /// Leaves the confirmation, and the box with it: a tick is a choice
+  /// made for one press and never a setting.
+  void _cancelForget() {
+    setState(() {
+      _confirmForget = false;
+      _deleteAccount = false;
+    });
   }
 
   // --- the wallets -------------------------------------------------------
@@ -367,10 +387,12 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
           controller: _keyController,
           activating: _activating,
           confirmingForget: _confirmForget,
+          deleteAccount: _deleteAccount,
           onActivate: _activate,
           onForgetStart: () => setState(() => _confirmForget = true),
-          onForgetCancel: () => setState(() => _confirmForget = false),
+          onForgetCancel: _cancelForget,
           onForgetConfirm: _forget,
+          onDeleteAccountChanged: (on) => setState(() => _deleteAccount = on),
         ),
         if (_licenceError != null)
           _ErrorNote(
@@ -499,10 +521,12 @@ class _LicenceCard extends ConsumerWidget {
     required this.controller,
     required this.activating,
     required this.confirmingForget,
+    required this.deleteAccount,
     required this.onActivate,
     required this.onForgetStart,
     required this.onForgetCancel,
     required this.onForgetConfirm,
+    required this.onDeleteAccountChanged,
   });
 
   final PremiumView view;
@@ -510,10 +534,15 @@ class _LicenceCard extends ConsumerWidget {
   final TextEditingController controller;
   final bool activating;
   final bool confirmingForget;
+
+  /// The account on the server goes with the key: ticked, the
+  /// confirmation is about something nothing brings back.
+  final bool deleteAccount;
   final VoidCallback onActivate;
   final VoidCallback onForgetStart;
   final VoidCallback onForgetCancel;
   final VoidCallback onForgetConfirm;
+  final ValueChanged<bool> onDeleteAccountChanged;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -666,26 +695,90 @@ class _LicenceCard extends ConsumerWidget {
       ),
       if (confirmingForget) ...[
         const SizedBox(height: GerfautSpacing.sm),
-        // Amber: nothing on chain is touched. The server keeps watching
-        // what it was told to; only this phone stops hearing about it.
+        // Amber while only this device forgets: nothing on chain is
+        // touched, the server keeps watching what it was told to, and
+        // only this phone stops hearing about it. Red once the server
+        // goes too, which is the one thing on this card that nothing
+        // undoes.
         GerfautNotice(
-          tone: NoticeTone.info,
-          message:
-              'Forgetting the key stops the watch on this device, not on '
-              'the server. It is your only proof of purchase: keep a copy '
-              'before you forget it here.',
-          actionsBelow: true,
-          action: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              GhostButton(label: 'Cancel', onPressed: onForgetCancel),
-              const SizedBox(width: GerfautSpacing.sm),
-              DangerButton(label: 'Forget key', onPressed: onForgetConfirm),
-            ],
-          ),
+          tone: deleteAccount ? NoticeTone.alert : NoticeTone.info,
+          message: deleteAccount
+              ? 'The server deletes the account this key opens: the '
+                    'wallets it watches, the channels and the log, all of '
+                    'it. The key stops working, here and anywhere else it '
+                    'was entered, and nothing brings any of it back.'
+              : 'Forgetting the key stops the watch on this device, not '
+                    'on the server. It is your only proof of purchase: '
+                    'keep a copy before you forget it here.',
+        ),
+        const SizedBox(height: GerfautSpacing.xs),
+        _DeleteAccountBox(
+          value: deleteAccount,
+          onChanged: onDeleteAccountChanged,
+        ),
+        const SizedBox(height: GerfautSpacing.xs),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            GhostButton(label: 'Cancel', onPressed: onForgetCancel),
+            const SizedBox(width: GerfautSpacing.sm),
+            DangerButton(
+              label: deleteAccount ? 'Delete and forget' : 'Forget key',
+              onPressed: onForgetConfirm,
+            ),
+          ],
         ),
       ],
     ];
+  }
+}
+
+/// The box that takes the account down with the key.
+///
+/// Off by default, and off again the moment the confirmation is left:
+/// deleting the account is a thing to ask for on purpose, once, never
+/// a preference that waits ticked for the next press.
+class _DeleteAccountBox extends StatelessWidget {
+  const _DeleteAccountBox({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    // One stop for a screen reader: the box and the words it is about
+    // cannot be acted on apart.
+    return MergeSemantics(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(GerfautRadius.md),
+        onTap: () => onChanged(!value),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Row(
+            children: [
+              Checkbox(
+                value: value,
+                activeColor: tokens.alert,
+                checkColor: tokens.onPrimary,
+                side: BorderSide(color: tokens.border, width: 2),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                ),
+                onChanged: (ticked) => onChanged(ticked ?? false),
+              ),
+              const SizedBox(width: GerfautSpacing.xs),
+              Expanded(
+                child: Text(
+                  'Also delete everything on the server',
+                  style: tokens.bodySmall,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
