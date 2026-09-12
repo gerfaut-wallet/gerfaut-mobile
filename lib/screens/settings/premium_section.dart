@@ -678,18 +678,18 @@ class _LicenceCard extends ConsumerWidget {
       ),
       if (confirmingForget) ...[
         const SizedBox(height: GerfautSpacing.sm),
-        // Amber while only this device forgets: nothing on chain is
-        // touched, the server keeps watching what it was told to, and
-        // only this phone stops hearing about it. Red once the server
-        // goes too, which is the one thing on this card that nothing
-        // undoes.
+        // Amber either way. Nothing on chain is touched by either:
+        // forgetting the key stops this phone hearing about the watch,
+        // deleting the account stops the watch itself and spends the
+        // paid time with it. That is a loss worth a warning, and the
+        // words carry it; red stays for what costs funds or privacy.
         GerfautNotice(
-          tone: deleteAccount ? NoticeTone.alert : NoticeTone.info,
+          tone: NoticeTone.info,
           message: deleteAccount
-              ? 'The server deletes the account this key opens: the '
-                    'wallets it watches, the channels and the log, all of '
-                    'it. The key stops working, here and anywhere else it '
-                    'was entered, and nothing brings any of it back.'
+              ? 'Deleting the account removes the wallets it watches, the '
+                    'channels it tells and the key itself from the server. '
+                    'This cannot be undone, and whatever paid time the key '
+                    'had left goes with it.'
               : 'Forgetting the key stops the watch on this device, not '
                     'on the server. It is your only proof of purchase: '
                     'keep a copy before you forget it here.',
@@ -742,7 +742,10 @@ class _DeleteAccountBox extends StatelessWidget {
             children: [
               Checkbox(
                 value: value,
-                activeColor: tokens.alert,
+                // Glacier: a selection, which is what the accent is
+                // for. The consequence is said in the note above, not
+                // painted on the box.
+                activeColor: tokens.primary,
                 checkColor: tokens.onPrimary,
                 side: BorderSide(color: tokens.border, width: 2),
                 shape: RoundedRectangleBorder(

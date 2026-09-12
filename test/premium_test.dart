@@ -597,13 +597,16 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Forget key'), findsOneWidget);
 
-      // Ticked, the confirmation says what nothing brings back, and
-      // the button says what it does.
+      // Ticked, the confirmation says what nothing brings back — the
+      // paid time among it — and the button says what it does. Amber,
+      // not red: nothing on chain is at stake, and red is kept for
+      // what costs funds or privacy.
       await tester.tap(find.text('Also delete everything on the server'));
       await tester.pumpAndSettle();
       final note = tester.widget<GerfautNotice>(find.byType(GerfautNotice));
-      expect(note.tone, NoticeTone.alert);
-      expect(note.message, contains('nothing brings any of it back'));
+      expect(note.tone, NoticeTone.info);
+      expect(note.message, contains('This cannot be undone'));
+      expect(note.message, contains('paid time the key had left goes with it'));
       expect(find.text('Forget key'), findsNothing);
       expect(find.text('Delete and forget'), findsOneWidget);
       expect(bridge.premiumAccountDeleted, isFalse);
