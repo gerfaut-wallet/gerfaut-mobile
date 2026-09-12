@@ -338,7 +338,11 @@ class _TelegramChannelScreenState extends ConsumerState<TelegramChannelScreen> {
   /// The hand refresh could not ask: the server's refusal, under the
   /// button, where the poll's silence would have hidden it.
   BridgeException? _error;
-  late final DateTime _startedAt = DateTime.now();
+
+  /// Ticks of the poll so far. The rest is measured in ticks, not on
+  /// the clock: a tick that fires late still counts as one, and a test
+  /// clock moves the count the same way the real one does.
+  int _ticks = 0;
 
   @override
   void initState() {
@@ -353,7 +357,8 @@ class _TelegramChannelScreenState extends ConsumerState<TelegramChannelScreen> {
   }
 
   Future<void> _tick() async {
-    if (DateTime.now().difference(_startedAt) >= widget.pollFor) {
+    _ticks += 1;
+    if (widget.pollEvery * _ticks > widget.pollFor) {
       _timer?.cancel();
       if (mounted) setState(() => _gaveUp = true);
       return;
