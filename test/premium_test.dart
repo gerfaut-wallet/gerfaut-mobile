@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -630,6 +632,48 @@ void main() {
       expect(bridge.premiumChannelList, isEmpty);
       expect(bridge.premiumConsents, isEmpty);
       expect(bridge.premiumKey, isNull);
+      expect(find.text('Activate'), findsOneWidget);
+    });
+
+    testWidgets('deleting holds the confirmation until the server answers', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      final gate = Completer<void>();
+      bridge.onPremiumDeleteAccount = () => gate.future;
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Forget this key'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Also delete everything on the server'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete and forget'));
+      await tester.pump();
+
+      // The button says what it is doing; neither it, the way out nor
+      // the box takes a press until the server has answered.
+      expect(find.text('Deleting…'), findsOneWidget);
+      final danger = find.byType(DangerButton);
+      expect(tester.widget<DangerButton>(danger).onPressed, isNull);
+      expect(
+        tester
+            .widget<GhostButton>(find.widgetWithText(GhostButton, 'Cancel'))
+            .onPressed,
+        isNull,
+      );
+      expect(tester.widget<Checkbox>(find.byType(Checkbox)).onChanged, isNull);
+      await tester.tap(danger, warnIfMissed: false);
+      await tester.pump();
+      expect(
+        bridge.premiumCalls.where((c) => c == 'delete-account'),
+        hasLength(1),
+      );
+
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(bridge.premiumAccountDeleted, isTrue);
       expect(find.text('Activate'), findsOneWidget);
     });
 
@@ -1430,6 +1474,50 @@ void main() {
       expect(bridge.premiumCalls, contains('delete:ch9'));
       expect(find.text('j***@example.org'), findsNothing);
       expect(find.text('Channel removed'), findsOneWidget);
+    });
+
+    testWidgets('adding holds the button until the server answers', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      final gate = Completer<void>();
+      // A kind the server makes on the spot: the one a second tap in
+      // the same beat would make twice.
+      bridge.onPremiumCreateChannel = (kind, _, _) async {
+        await gate.future;
+        return CreatedChannel(
+          channel: PremiumChannel(
+            id: 'chn',
+            kind: kind,
+            target: '',
+            linked: true,
+            createdAt: 1,
+          ),
+        );
+      };
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Add a channel'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Telegram'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Adding…'), findsOneWidget);
+      final add = find.widgetWithText(GhostButton, 'Adding…');
+      expect(tester.widget<GhostButton>(add).onPressed, isNull);
+      await tester.tap(add, warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(
+        bridge.premiumCalls.where((c) => c.startsWith('create:')),
+        hasLength(1),
+      );
+
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Add a channel'), findsOneWidget);
+      expect(bridge.premiumChannelList, hasLength(1));
     });
 
     testWidgets('a channel the server turned off says so, in amber', (

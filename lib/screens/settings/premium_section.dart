@@ -49,6 +49,11 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   BridgeException? _licenceError;
   bool _confirmForget = false;
   bool _deleteAccount = false;
+
+  /// The forget or the deletion is with the core: the confirmation's
+  /// buttons are held until it answers, since a second press would be
+  /// a second call, and the deletion is not a thing to ask for twice.
+  bool _forgetting = false;
   bool _refreshedLicence = false;
 
   // The watched wallets.
@@ -60,6 +65,12 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   // The channels.
   String? _busyChannelId;
   BridgeException? _channelsError;
+
+  /// A channel is being added: the sheet is up, or the server is being
+  /// asked for one. The button is held meanwhile, since the ntfy and
+  /// Telegram kinds are created on the spot and a second tap in that
+  /// beat would create a second channel.
+  bool _addingChannel = false;
 
   @override
   void initState() {
@@ -123,7 +134,11 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   }
 
   Future<void> _forget() async {
-    setState(() => _licenceError = null);
+    if (_forgetting) return;
+    setState(() {
+      _forgetting = true;
+      _licenceError = null;
+    });
     try {
       if (_deleteAccount) {
         // The server first, and nothing is dropped here unless it
@@ -141,6 +156,8 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
       invalidatePremium(ref);
     } on BridgeException catch (error) {
       if (mounted) setState(() => _licenceError = error);
+    } finally {
+      if (mounted) setState(() => _forgetting = false);
     }
   }
 
@@ -226,6 +243,16 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   // --- the channels ------------------------------------------------------
 
   Future<void> _addChannel(PremiumView view) async {
+    if (_addingChannel) return;
+    setState(() => _addingChannel = true);
+    try {
+      await _addChannelFlow(view);
+    } finally {
+      if (mounted) setState(() => _addingChannel = false);
+    }
+  }
+
+  Future<void> _addChannelFlow(PremiumView view) async {
     final kind = await showAddChannelSheet(context);
     if (kind == null || !mounted) return;
     final before = ref.read(premiumChannelsProvider).valueOrNull?.length ?? 0;
@@ -402,6 +429,7 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
           activating: _activating,
           confirmingForget: _confirmForget,
           deleteAccount: _deleteAccount,
+          forgetting: _forgetting,
           onActivate: _activate,
           onForgetStart: () => setState(() => _confirmForget = true),
           onForgetCancel: _cancelForget,
@@ -434,6 +462,7 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
         _ChannelsCard(
           view: view,
           busyChannelId: _busyChannelId,
+          adding: _addingChannel,
           onAdd: () => _addChannel(view),
           onTest: _test,
           onRemove: _remove,
@@ -507,6 +536,7 @@ class _LicenceCard extends ConsumerWidget {
     required this.activating,
     required this.confirmingForget,
     required this.deleteAccount,
+    required this.forgetting,
     required this.onActivate,
     required this.onForgetStart,
     required this.onForgetCancel,
@@ -523,6 +553,10 @@ class _LicenceCard extends ConsumerWidget {
   /// The account on the server goes with the key: ticked, the
   /// confirmation is about something nothing brings back.
   final bool deleteAccount;
+
+  /// The confirmed press is with the core: its buttons are held, and
+  /// the one pressed says what it is doing.
+  final bool forgetting;
   final VoidCallback onActivate;
   final VoidCallback onForgetStart;
   final VoidCallback onForgetCancel;
@@ -697,17 +731,25 @@ class _LicenceCard extends ConsumerWidget {
         const SizedBox(height: GerfautSpacing.xs),
         _DeleteAccountBox(
           value: deleteAccount,
-          onChanged: onDeleteAccountChanged,
+          onChanged: forgetting ? null : onDeleteAccountChanged,
         ),
         const SizedBox(height: GerfautSpacing.xs),
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            GhostButton(label: 'Cancel', onPressed: onForgetCancel),
+            GhostButton(
+              label: 'Cancel',
+              onPressed: forgetting ? null : onForgetCancel,
+            ),
             const SizedBox(width: GerfautSpacing.sm),
             DangerButton(
-              label: deleteAccount ? 'Delete and forget' : 'Forget key',
-              onPressed: onForgetConfirm,
+              label: switch ((deleteAccount, forgetting)) {
+                (true, true) => 'Deleting…',
+                (true, false) => 'Delete and forget',
+                (false, true) => 'Forgetting…',
+                (false, false) => 'Forget key',
+              },
+              onPressed: forgetting ? null : onForgetConfirm,
             ),
           ],
         ),
@@ -725,17 +767,21 @@ class _DeleteAccountBox extends StatelessWidget {
   const _DeleteAccountBox({required this.value, required this.onChanged});
 
   final bool value;
-  final ValueChanged<bool> onChanged;
+
+  /// Null while the press it governs is under way: the box cannot
+  /// change what the core is already doing.
+  final ValueChanged<bool>? onChanged;
 
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final onChanged = this.onChanged;
     // One stop for a screen reader: the box and the words it is about
     // cannot be acted on apart.
     return MergeSemantics(
       child: InkWell(
         borderRadius: BorderRadius.circular(GerfautRadius.md),
-        onTap: () => onChanged(!value),
+        onTap: onChanged == null ? null : () => onChanged(!value),
         child: Container(
           constraints: const BoxConstraints(minHeight: 44),
           child: Row(
@@ -751,7 +797,9 @@ class _DeleteAccountBox extends StatelessWidget {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(GerfautRadius.sm),
                 ),
-                onChanged: (ticked) => onChanged(ticked ?? false),
+                onChanged: onChanged == null
+                    ? null
+                    : (ticked) => onChanged(ticked ?? false),
               ),
               const SizedBox(width: GerfautSpacing.xs),
               Expanded(
@@ -1053,6 +1101,7 @@ class _ChannelsCard extends ConsumerWidget {
   const _ChannelsCard({
     required this.view,
     required this.busyChannelId,
+    required this.adding,
     required this.onAdd,
     required this.onTest,
     required this.onRemove,
@@ -1063,6 +1112,9 @@ class _ChannelsCard extends ConsumerWidget {
 
   final PremiumView view;
   final String? busyChannelId;
+
+  /// A channel is on its way: the button that starts one is held.
+  final bool adding;
   final VoidCallback onAdd;
   final void Function(PremiumChannel channel) onTest;
   final void Function(PremiumChannel channel) onRemove;
@@ -1152,9 +1204,9 @@ class _ChannelsCard extends ConsumerWidget {
           Align(
             alignment: Alignment.centerLeft,
             child: GhostButton(
-              label: 'Add a channel',
+              label: adding ? 'Adding…' : 'Add a channel',
               icon: LucideIcons.plus,
-              onPressed: onAdd,
+              onPressed: adding ? null : onAdd,
             ),
           ),
         ],
