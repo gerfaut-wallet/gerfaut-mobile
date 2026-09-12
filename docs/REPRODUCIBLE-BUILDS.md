@@ -88,7 +88,13 @@ Nothing here is papered over. These are the parts a third party cannot reproduce
 
 ### The signature
 
-By design. The release key never leaves the author's machine. Compare payloads, as described above, and check the signing certificate with `apksigner verify --print-certs`.
+By design. The release key never leaves the author's machine. Compare payloads, as described above, and check the signing certificate with `apksigner verify --print-certs`: every release is signed by the certificate whose SHA-256 digest is
+
+```
+de91a0e0c151290a0c9b34507e58d0bd0e99cdd7db41adc65b60a7c68e0ff0a7
+```
+
+A different digest means a different signer, whatever the file is called.
 
 ### The container image itself
 

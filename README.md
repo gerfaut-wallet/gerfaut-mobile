@@ -29,7 +29,7 @@ The app contains no code to generate keys, handle seeds, or sign transactions. T
 
 ## Releases
 
-CI builds three signed APKs from every `v*` tag, one per processor architecture, and publishes them on the [releases page](https://github.com/gerfaut-wallet/gerfaut-mobile/releases):
+Every `v*` tag makes CI build three APKs in a pinned container, one per processor architecture. They come out unsigned: the release key never leaves the author's machine, which signs them and publishes them on the [releases page](https://github.com/gerfaut-wallet/gerfaut-mobile/releases):
 
 | File | Architecture | For |
 |---|---|---|
@@ -45,7 +45,7 @@ Each release ships a `SHA256SUMS` manifest signed with the author's [minisign](h
 RWTz3c4gUmglCX5Uvjthigz1ts3TS3ZSdhRNpFgOJRW/Wr4XjGlqTR3O
 ```
 
-Verify a download in two steps: `minisign -Vm SHA256SUMS -P <key>` proves the manifest comes from the author, then `sha256sum --check SHA256SUMS --ignore-missing` proves your file matches it.
+Verify a download in two steps: `minisign -Vm SHA256SUMS -P <key>` proves the manifest comes from the author, then `sha256sum --check SHA256SUMS --ignore-missing` proves your file matches it. Android checks the APK signature on its own; the certificate's SHA-256 fingerprint is listed in [docs/REPRODUCIBLE-BUILDS.md](docs/REPRODUCIBLE-BUILDS.md) if you want to compare it with `apksigner verify --print-certs`.
 
 ## Reproducible builds
 
