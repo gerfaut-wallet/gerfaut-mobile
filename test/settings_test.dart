@@ -464,6 +464,59 @@ void main() {
     });
   });
 
+  testWidgets('removing a wallet the server watches says what goes with it', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge(wallets: [makeMeta(name: 'Cold storage')]);
+    bridge.premiumKey = 'abcdefghijkmnpqr';
+    bridge.premiumClaims = LicenceClaims(
+      subject: 'ab' * 32,
+      expiresAt: bridge.premiumPaidUntil,
+      issuedAt: bridge.premiumPaidUntil - 60 * 86400,
+    );
+    // Consented here and listed by the server: the removal will reach it.
+    bridge.premiumConsents.add(
+      const WatchConsent(walletId: 'w1', consentedAt: 1),
+    );
+    bridge.premiumWatched.add(
+      const WalletWatch(
+        id: 'w1',
+        name: 'Cold storage',
+        scriptKind: 'segwit',
+        watchedSince: 1755000000,
+        baselineAt: 1755000030,
+        baselineHeight: 900000,
+        coins: 2,
+        valueSats: 200000,
+      ),
+    );
+    await tester.pumpWidget(
+      settingsApp(bridge, section: SettingsSection.wallets),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Remove'));
+    await tester.pumpAndSettle();
+
+    // Still amber — a log is not funds or privacy — and the sentence
+    // says the one thing the plain removal does not: the server forgets
+    // the wallet too, alert history included.
+    final notice = tester.widget<GerfautNotice>(find.byType(GerfautNotice));
+    expect(notice.tone, NoticeTone.info);
+    expect(
+      find.text(
+        'You are removing "Cold storage" from Gerfaut and from the server, '
+        'which also deletes its alert history there. Nothing moves on chain.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.widgetWithText(DangerButton, 'Remove wallet'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets(
     'removing a wallet asks in a panel, the buttons under the words',
     (tester) async {

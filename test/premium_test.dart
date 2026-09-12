@@ -841,8 +841,38 @@ void main() {
       expect(find.textContaining('Watched since'), findsOneWidget);
       expect(find.textContaining('· 3 coins'), findsOneWidget);
 
-      // Off: removed at once, no question asked.
+      // Off: asked first, since the server deletes the wallet's alert
+      // history with the watch. Amber, under the row, the switch still
+      // on; the way out closes it, and nothing was called.
       await toggle(tester, 'Cold storage');
+      expect(bridge.premiumCalls, isNot(contains('unwatch:w1')));
+      expect(switchOf(tester, 'Cold storage').value, isTrue);
+      final question = tester.widget<GerfautNotice>(
+        find.byType(GerfautNotice),
+      );
+      expect(question.tone, NoticeTone.info);
+      expect(question.actionsBelow, isTrue);
+      expect(
+        find.text(
+          'Unwatching "Cold storage" also deletes its alert history on the '
+          'server.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester.getTopLeft(find.byType(GerfautNotice)).dy,
+        greaterThan(tester.getBottomLeft(find.text('Cold storage')).dy),
+      );
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.byType(GerfautNotice), findsNothing);
+      expect(bridge.premiumCalls, isNot(contains('unwatch:w1')));
+      expect(switchOf(tester, 'Cold storage').value, isTrue);
+
+      // The yes: one call, the question gone, the switch off.
+      await toggle(tester, 'Cold storage');
+      await tester.tap(find.widgetWithText(DangerButton, 'Unwatch wallet'));
+      await tester.pumpAndSettle();
       expect(bridge.premiumCalls, contains('unwatch:w1'));
       expect(find.byType(GerfautNotice), findsNothing);
       expect(switchOf(tester, 'Cold storage').value, isFalse);
@@ -999,7 +1029,19 @@ void main() {
       await tester.pumpWidget(premiumApp(bridge));
       await tester.pumpAndSettle();
 
+      // The same question as the switch, with the server's name for
+      // the wallet: nothing is called until it is answered.
       await tester.tap(find.text('Unwatch'));
+      await tester.pumpAndSettle();
+      expect(bridge.premiumCalls, isNot(contains('unwatch:w9')));
+      expect(
+        find.text(
+          'Unwatching "Old laptop" also deletes its alert history on the '
+          'server.',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.widgetWithText(DangerButton, 'Unwatch wallet'));
       await tester.pumpAndSettle();
       expect(bridge.premiumCalls, contains('unwatch:w9'));
       expect(find.text('Old laptop'), findsNothing);
@@ -1025,6 +1067,8 @@ void main() {
       expect(find.byType(WatchedPill), findsNWidgets(2));
 
       await toggle(tester, 'Cold storage');
+      await tester.tap(find.widgetWithText(DangerButton, 'Unwatch wallet'));
+      await tester.pumpAndSettle();
       expect(bridge.premiumCalls, contains('unwatch:w1'));
       expect(bridge.premiumCalls, isNot(contains('unwatch:w9')));
       expect(switchOf(tester, 'Cold storage').value, isFalse);

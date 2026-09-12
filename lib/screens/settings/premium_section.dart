@@ -59,6 +59,9 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   // The watched wallets.
   String? _busyWalletId;
   BridgeException? _walletsError;
+
+  /// The wallet whose unwatch is being asked about, under its row.
+  String? _confirmUnwatchId;
   Timer? _scanTimer;
   DateTime? _scanStartedAt;
 
@@ -173,24 +176,33 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   // --- the wallets -------------------------------------------------------
 
   Future<void> _setWatched(WalletMeta wallet, bool on, PremiumView view) async {
-    if (on && !view.consented(wallet.id)) {
+    if (!on) {
+      // Off is asked about first: the server deletes the wallet's alert
+      // history along with the watch, and the switch does not bring
+      // that back. The switch stays on until the answer.
+      setState(() => _confirmUnwatchId = wallet.id);
+      return;
+    }
+    if (!view.consented(wallet.id)) {
       // Once per wallet, never replayed: the yes is kept in the vault.
       final yes = await PremiumConsentScreen.ask(context, wallet);
       if (!yes || !mounted) return;
     }
-    await _askForWallet(
-      wallet.id,
-      () => on
-          ? _bridge.premiumWatchWallet(wallet.id)
-          : _bridge.premiumUnwatchWallet(wallet.id),
-    );
+    await _askForWallet(wallet.id, () => _bridge.premiumWatchWallet(wallet.id));
   }
 
   /// Takes a wallet this phone no longer has off the server: the same
-  /// call as the switch, with no wallet to ask a consent for.
-  Future<void> _unwatchOrphan(String id) {
+  /// question as the switch, then the same call, with no wallet to ask
+  /// a consent for.
+  void _unwatchOrphan(String id) => setState(() => _confirmUnwatchId = id);
+
+  /// The yes: the question goes, and the call is made.
+  Future<void> _unwatch(String id) {
+    setState(() => _confirmUnwatchId = null);
     return _askForWallet(id, () => _bridge.premiumUnwatchWallet(id));
   }
+
+  void _cancelUnwatch() => setState(() => _confirmUnwatchId = null);
 
   /// One call about one wallet: its row is busy while it runs, a
   /// failure lands under the card, and what the server holds is read
@@ -446,8 +458,11 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
         _WatchedWalletsCard(
           view: view,
           busyWalletId: _busyWalletId,
+          confirmingUnwatchId: _confirmUnwatchId,
           onToggle: (wallet, on) => _setWatched(wallet, on, view),
           onUnwatchOrphan: _unwatchOrphan,
+          onUnwatchConfirm: _unwatch,
+          onUnwatchCancel: _cancelUnwatch,
         ),
         if (walletsError != null)
           _ErrorNote(
@@ -822,16 +837,26 @@ class _WatchedWalletsCard extends ConsumerWidget {
   const _WatchedWalletsCard({
     required this.view,
     required this.busyWalletId,
+    required this.confirmingUnwatchId,
     required this.onToggle,
     required this.onUnwatchOrphan,
+    required this.onUnwatchConfirm,
+    required this.onUnwatchCancel,
   });
 
   final PremiumView view;
   final String? busyWalletId;
+
+  /// The wallet whose row carries the unwatch question, if any.
+  final String? confirmingUnwatchId;
   final void Function(WalletMeta wallet, bool on) onToggle;
 
   /// For a wallet the server watches that this phone no longer has.
   final void Function(String id) onUnwatchOrphan;
+
+  /// The two answers to the question under a row.
+  final void Function(String id) onUnwatchConfirm;
+  final VoidCallback onUnwatchCancel;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -892,19 +917,45 @@ class _WatchedWalletsCard extends ConsumerWidget {
       for (final w in byId.values)
         if (!local.contains(w.id)) w,
     ];
+    // The question sits under the row it is about, inside the same
+    // slot between two dividers: it is that row's, not the card's.
+    Widget asked(Widget row, String id, String name) {
+      if (confirmingUnwatchId != id) return row;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          row,
+          _UnwatchQuestion(
+            name: name,
+            onConfirm: () => onUnwatchConfirm(id),
+            onCancel: onUnwatchCancel,
+          ),
+        ],
+      );
+    }
+
     final rows = <Widget>[
       for (final wallet in wallets)
-        _WalletRow(
-          wallet: wallet,
-          watch: byId[wallet.id],
-          busy: busyWalletId == wallet.id,
-          onChanged: (on) => onToggle(wallet, on),
+        asked(
+          _WalletRow(
+            wallet: wallet,
+            watch: byId[wallet.id],
+            busy: busyWalletId == wallet.id,
+            onChanged: (on) => onToggle(wallet, on),
+          ),
+          wallet.id,
+          wallet.name,
         ),
       for (final orphan in orphans)
-        _OrphanRow(
-          watch: orphan,
-          busy: busyWalletId == orphan.id,
-          onUnwatch: () => onUnwatchOrphan(orphan.id),
+        asked(
+          _OrphanRow(
+            watch: orphan,
+            busy: busyWalletId == orphan.id,
+            onUnwatch: () => onUnwatchOrphan(orphan.id),
+          ),
+          orphan.id,
+          orphan.name,
         ),
     ];
     return [
@@ -1022,6 +1073,47 @@ class _WalletRow extends StatelessWidget {
     1 => '1 coin',
     final n => '$n coins',
   };
+}
+
+/// The question under a row whose switch was turned off, or whose
+/// Unwatch was pressed: taking the wallet off the server deletes its
+/// alert history there too, and that does not come back with the
+/// switch. Amber, since nothing is at stake but a log; the button that
+/// does it is the destructive one, as for every deletion that cannot
+/// be undone. Never a single tap.
+class _UnwatchQuestion extends StatelessWidget {
+  const _UnwatchQuestion({
+    required this.name,
+    required this.onConfirm,
+    required this.onCancel,
+  });
+
+  final String name;
+  final VoidCallback onConfirm;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(
+        top: GerfautSpacing.xs,
+        bottom: GerfautSpacing.sm,
+      ),
+      child: GerfautNotice(
+        tone: NoticeTone.info,
+        liveRegion: true,
+        message:
+            'Unwatching "$name" also deletes its alert history on the server.',
+        // The sentence takes the whole width; the two answers share a
+        // row of their own under it, the way out first.
+        actionsBelow: true,
+        action: ConfirmActions(
+          cancel: GhostButton(label: 'Cancel', onPressed: onCancel),
+          confirm: DangerButton(label: 'Unwatch wallet', onPressed: onConfirm),
+        ),
+      ),
+    );
+  }
 }
 
 /// A wallet the server watches that this phone no longer has. No

@@ -234,6 +234,20 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
     }
     _seedGapLimit(settings);
     final shown = _inOrder(wallets);
+    // Whether removing a wallet here also takes it off the server, for
+    // the removal note. The vault tells the server about a wallet it
+    // holds a consent for, under a key: that is what the core acts on.
+    // The server's own list, once it has answered, says whether there
+    // is still anything there to take off; until then the consent is
+    // the best word there is.
+    final premium = ref.watch(premiumStateProvider).valueOrNull;
+    final serverWatched = ref.watch(premiumWalletsProvider).valueOrNull;
+    bool watchedByServer(String id) {
+      if (premium == null || !premium.hasKey || !premium.consented(id)) {
+        return false;
+      }
+      return serverWatched?.any((w) => w.id == id) ?? true;
+    }
 
     return CustomScrollView(
       slivers: [
@@ -264,7 +278,12 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
                   proxyDecorator: liftedProxy,
                   itemCount: shown.length,
                   onReorderItem: (from, to) => _reorder(shown, from, to),
-                  itemBuilder: (context, index) => _row(shown, index, sync),
+                  itemBuilder: (context, index) => _row(
+                    shown,
+                    index,
+                    sync,
+                    watchedByServer: watchedByServer(shown[index].id),
+                  ),
                 ),
               if (_walletError != null)
                 SliverToBoxAdapter(
@@ -333,7 +352,12 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
   }
 
   /// The row of the wallet at [index] among those [shown].
-  Widget _row(List<WalletMeta> shown, int index, SyncController sync) {
+  Widget _row(
+    List<WalletMeta> shown,
+    int index,
+    SyncController sync, {
+    required bool watchedByServer,
+  }) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final wallet = shown[index];
     return _WalletRow(
@@ -345,6 +369,7 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
       movable: shown.length > 1,
       renaming: _renamingId == wallet.id,
       confirmingRemove: _confirmRemoveId == wallet.id,
+      watchedByServer: watchedByServer,
       renameController: _renameController,
       onRenameStart: () {
         setState(() {
@@ -384,6 +409,7 @@ class _WalletRow extends StatelessWidget {
     required this.movable,
     required this.renaming,
     required this.confirmingRemove,
+    required this.watchedByServer,
     required this.renameController,
     required this.onRenameStart,
     required this.onRenameSubmit,
@@ -405,6 +431,10 @@ class _WalletRow extends StatelessWidget {
   final bool movable;
   final bool renaming;
   final bool confirmingRemove;
+
+  /// The server watches this wallet: removing it here takes it off the
+  /// server as well, alert history included, and the note says so.
+  final bool watchedByServer;
   final TextEditingController renameController;
   final VoidCallback onRenameStart;
   final VoidCallback onRenameSubmit;
@@ -550,12 +580,17 @@ class _WalletRow extends StatelessWidget {
             // Amber, and its own copy says why: this only stops
             // watching, nothing moves on chain. Nothing is at stake but
             // a row in a list, and the coins are exactly where they
-            // were — red belongs to what costs funds or privacy.
+            // were — red belongs to what costs funds or privacy. A
+            // wallet the server watches loses its alert history there
+            // as well, and that is said here, where the decision is.
             GerfautNotice(
               tone: NoticeTone.info,
-              message:
-                  'You are removing "${wallet.name}" from Gerfaut. '
-                  'This only stops watching. Nothing moves on chain.',
+              message: watchedByServer
+                  ? 'You are removing "${wallet.name}" from Gerfaut and '
+                        'from the server, which also deletes its alert '
+                        'history there. Nothing moves on chain.'
+                  : 'You are removing "${wallet.name}" from Gerfaut. '
+                        'This only stops watching. Nothing moves on chain.',
               // The sentence gets the whole width, the buttons a row of
               // their own under it: beside the text they left it a
               // column eight characters across on a phone.
