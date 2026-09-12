@@ -264,10 +264,22 @@ pub async fn list_wallets(network: Option<String>) -> String {
     to_json(&manager.list_wallets(network).await)
 }
 
+/// Removes a wallet from this device. One the server watched is taken
+/// off it too, after the answer: the core queues the message in the
+/// same write as the removal, and a server out of reach hears it at
+/// the next heartbeat instead.
 pub async fn remove_wallet(id: String) -> String {
     let manager = try_json!(manager());
     match manager.remove_wallet(&id).await {
-        Ok(()) => ok_json(),
+        Ok(()) => {
+            // Not awaited, and its result not read: the wallet is gone
+            // here whatever the server says, and what could not be told
+            // stays queued in the vault until it can be.
+            flutter_rust_bridge::spawn(async move {
+                let _ = manager.premium_flush_unwatch(PREMIUM_BASE_URL).await;
+            });
+            ok_json()
+        }
         Err(e) => core_error_json(&e),
     }
 }
@@ -1028,6 +1040,11 @@ pub async fn premium_recent_events() -> String {
 /// error the "watch is offline" banner counts.
 pub async fn premium_heartbeat() -> String {
     let manager = try_json!(manager());
+    // A wallet removed while the server was out of reach leaves at the
+    // next pulse: the queue is tried before the beat, and what still
+    // cannot be told waits for the one after. Only the beat says
+    // whether the watch is alive; a queue that will not flush does not.
+    let _ = manager.premium_flush_unwatch(PREMIUM_BASE_URL).await;
     let client = try_json!(premium_client(manager).await);
     match client.heartbeat(now_unix()).await {
         Ok(report) => to_json(&report),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../src/models.dart';
+import '../../src/premium.dart';
 import '../../src/state.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/buttons.dart';
@@ -121,6 +122,10 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
     try {
       await ref.read(bridgeProvider).removeWallet(id);
       ref.invalidate(walletsProvider);
+      // The server is told after the answer, and the Premium card reads
+      // its list again rather than keep a row for a wallet that is gone.
+      ref.invalidate(premiumStateProvider);
+      ref.invalidate(premiumWalletsProvider);
       setState(() => _confirmRemoveId = null);
       _toast('Wallet removed');
     } catch (error) {
