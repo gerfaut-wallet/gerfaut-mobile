@@ -791,10 +791,18 @@ class _WalletRow extends StatelessWidget {
     if (busy) {
       line = watch == null ? 'Registering…' : 'Removing…';
     } else if (watch != null) {
-      line = watch.scanning
-          ? 'Scanning…'
-          : 'Watched since ${formatDate(watch.watchedSince)} · '
-                '${_coins(watch.coins)}';
+      // The server states the pending scan when it can, and then the
+      // row says what it is: a scan queued behind others, which is not
+      // the same promise as one under way. A server that says nothing
+      // is read by the date it stamps at the end, and that only tells
+      // us the scan is not done.
+      line = switch (watch) {
+        WalletWatch(baselinePending: true) => 'First scan pending',
+        WalletWatch(scanning: true) => 'Scanning…',
+        _ =>
+          'Watched since ${formatDate(watch.watchedSince)} · '
+              '${_coins(watch.coins)}',
+      };
     } else if (single) {
       line = 'Single addresses cannot be watched yet.';
     } else {

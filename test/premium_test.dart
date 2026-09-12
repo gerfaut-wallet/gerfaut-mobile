@@ -517,6 +517,45 @@ void main() {
       expect(find.byType(WatchedPill), findsOneWidget);
     });
 
+    testWidgets('a scan the server says is queued is named as one', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumConsents.add(
+        const WatchConsent(walletId: 'w1', consentedAt: 1),
+      );
+      // The server states the pending scan itself: the row says what
+      // it is, rather than guessing from a date it has not stamped.
+      bridge.premiumWatched.add(
+        const WalletWatch(
+          id: 'w1',
+          name: 'Cold storage',
+          scriptKind: 'segwit',
+          watchedSince: 1755000000,
+          baselineAt: null,
+          baselineHeight: null,
+          baselinePending: true,
+          coins: 0,
+          valueSats: 0,
+        ),
+      );
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      expect(find.text('First scan pending'), findsOneWidget);
+      expect(find.text('Scanning…'), findsNothing);
+      // Not watched yet, as far as the balances go.
+      expect(find.byType(WatchedPill), findsNothing);
+
+      bridge.premiumFinishScans(coins: 2);
+      await tester.pump(scanPollEvery);
+      await tester.pumpAndSettle();
+      expect(find.text('First scan pending'), findsNothing);
+      expect(find.textContaining('· 2 coins'), findsOneWidget);
+      expect(find.byType(WatchedPill), findsOneWidget);
+    });
+
     testWidgets('a refusal lands under the card, in amber', (tester) async {
       useTallSurface(tester);
       final bridge = premiumBridge(activated: true);
