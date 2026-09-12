@@ -1247,6 +1247,78 @@ void main() {
       expect(find.text('linked'), findsNothing);
     });
 
+    testWidgets('telegram: once the page rests, Check again asks out loud', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumChannelList.add(
+        const PremiumChannel(
+          id: 'ch1',
+          kind: ChannelKind.telegram,
+          target: '',
+          linked: false,
+          linkCode: 'code1',
+          startUrl: 'https://t.me/GerfautAlertsBot?start=code1',
+          createdAt: 1,
+        ),
+      );
+      // A window of nothing: the first tick is the one that gives up,
+      // and hands the asking to the button.
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [bridgeProvider.overrideWithValue(bridge)],
+          child: MaterialApp(
+            theme: themeFrom(GerfautTokens.light, Brightness.light),
+            home: const TelegramChannelScreen(
+              channelId: 'ch1',
+              code: 'code1',
+              startUrl: 'https://t.me/GerfautAlertsBot?start=code1',
+              pollEvery: Duration(seconds: 1),
+              pollFor: Duration.zero,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Check again'), findsNothing);
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(find.text('Check again'), findsOneWidget);
+      final asked = bridge.premiumCalls.where((c) => c == 'channels').length;
+
+      // Not linked yet: the tap says so, where a silent tap read as a
+      // button that did nothing.
+      await tester.tap(find.text('Check again'));
+      await tester.pumpAndSettle();
+      expect(
+        bridge.premiumCalls.where((c) => c == 'channels').length,
+        asked + 1,
+      );
+      expect(find.textContaining('has not heard from you yet'), findsOneWidget);
+      expect(find.text('Waiting for the bot'), findsOneWidget);
+
+      // The server out of reach: said in amber under the button, where
+      // the poll's silence used to swallow it.
+      bridge.onPremiumChannels = () => throw const BridgeException(
+        'premium_unreachable',
+        'the premium server is unreachable: could not connect',
+      );
+      await tester.tap(find.text('Check again'));
+      await tester.pumpAndSettle();
+      expect(find.text('Could not reach the Gerfaut server.'), findsOneWidget);
+      expect(find.textContaining('has not heard from you yet'), findsNothing);
+
+      // The bot answered: the same button finds it.
+      bridge.onPremiumChannels = null;
+      bridge.premiumLinkTelegram('ch1');
+      await tester.tap(find.text('Check again'));
+      await tester.pumpAndSettle();
+      expect(find.text('Telegram is linked'), findsOneWidget);
+      expect(find.text('Could not reach the Gerfaut server.'), findsNothing);
+      expect(find.text('Check again'), findsNothing);
+    });
+
     testWidgets('e-mail and webhook each take a form', (tester) async {
       useTallSurface(tester);
       final bridge = premiumBridge(activated: true);

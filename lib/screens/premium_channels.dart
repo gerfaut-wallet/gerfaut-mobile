@@ -330,6 +330,14 @@ class _TelegramChannelScreenState extends ConsumerState<TelegramChannelScreen> {
   bool _linked = false;
   bool _checking = false;
   bool _gaveUp = false;
+
+  /// The hand refresh asked and the bot still had not answered: said
+  /// under the button, or the tap looks like it did nothing.
+  bool _notYet = false;
+
+  /// The hand refresh could not ask: the server's refusal, under the
+  /// button, where the poll's silence would have hidden it.
+  BridgeException? _error;
   late final DateTime _startedAt = DateTime.now();
 
   @override
@@ -353,21 +361,32 @@ class _TelegramChannelScreenState extends ConsumerState<TelegramChannelScreen> {
     await _check();
   }
 
-  Future<void> _check() async {
+  /// Asks the server once. The poll asks quietly, since the next tick
+  /// asks again and a page that flickers between answers says nothing
+  /// useful; a tap on the button asks out loud, since the tap is the
+  /// last tick and whatever it finds is the whole answer.
+  Future<void> _check({bool byHand = false}) async {
     if (_checking || _linked) return;
-    _checking = true;
+    setState(() {
+      _checking = true;
+      _notYet = false;
+      _error = null;
+    });
     try {
       final channels = await ref.read(bridgeProvider).premiumChannels();
       final mine = channels.where((c) => c.id == widget.channelId);
-      if (mine.isNotEmpty && mine.first.linked && mounted) {
+      if (!mounted) return;
+      if (mine.isNotEmpty && mine.first.linked) {
         _timer?.cancel();
         setState(() => _linked = true);
         ref.invalidate(premiumChannelsProvider);
+      } else if (byHand) {
+        setState(() => _notYet = true);
       }
-    } on BridgeException {
-      // The next tick asks again; the page has nothing new to say.
+    } on BridgeException catch (error) {
+      if (byHand && mounted) setState(() => _error = error);
     } finally {
-      _checking = false;
+      if (mounted) setState(() => _checking = false);
     }
   }
 
@@ -448,23 +467,43 @@ class _TelegramChannelScreenState extends ConsumerState<TelegramChannelScreen> {
                   ),
                 ),
                 const SizedBox(height: GerfautSpacing.md),
-                Row(
+                // The page follows along for two minutes, then hands
+                // the asking to a button: a poll that never ends is a
+                // call every few seconds for as long as the page is
+                // left open. A Wrap, so the button goes under the pill
+                // at a large text size rather than past the edge.
+                Wrap(
+                  spacing: GerfautSpacing.sm,
+                  runSpacing: GerfautSpacing.sm,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     const StatusPill.tone(
                       tone: PillTone.pending,
                       icon: LucideIcons.clock,
                       label: 'Waiting for the bot',
                     ),
-                    if (_gaveUp) ...[
-                      const SizedBox(width: GerfautSpacing.sm),
+                    if (_gaveUp)
                       GhostButton(
-                        label: 'Check again',
+                        label: _checking ? 'Checking…' : 'Check again',
                         icon: LucideIcons.refreshCw,
-                        onPressed: _check,
+                        onPressed: _checking
+                            ? null
+                            : () => _check(byHand: true),
                       ),
-                    ],
                   ],
                 ),
+                if (_notYet) ...[
+                  const SizedBox(height: GerfautSpacing.sm),
+                  Text(
+                    'The bot has not heard from you yet. Send the code, '
+                    'then check again.',
+                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                  ),
+                ],
+                if (_error != null) ...[
+                  const SizedBox(height: GerfautSpacing.sm),
+                  _CheckFailed(error: _error!),
+                ],
               ],
             ],
           ),
@@ -477,6 +516,26 @@ class _TelegramChannelScreenState extends ConsumerState<TelegramChannelScreen> {
   static String _bot(String url) {
     final path = Uri.tryParse(url)?.pathSegments;
     return path == null || path.isEmpty ? 'GerfautAlertsBot' : path.first;
+  }
+}
+
+/// A hand refresh the server did not answer, in the words the premium
+/// cards use for the same failure, under the button that asked.
+class _CheckFailed extends StatelessWidget {
+  const _CheckFailed({required this.error});
+
+  final BridgeException error;
+
+  @override
+  Widget build(BuildContext context) {
+    final failure = premiumFailure(error);
+    return GerfautNotice(
+      tone: NoticeTone.info,
+      message: failure.message,
+      hint: failure.hint,
+      detail: failure.detail,
+      liveRegion: true,
+    );
   }
 }
 

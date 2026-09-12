@@ -1542,10 +1542,15 @@ class FakeBridge implements GerfautBridge {
     premiumWatched.removeWhere((w) => w.id == id);
   }
 
+  /// Channels hook; throw a [BridgeException] for a server out of reach.
+  FutureOr<List<PremiumChannel>> Function()? onPremiumChannels;
+
   @override
   Future<List<PremiumChannel>> premiumChannels() async {
     premiumCalls.add('channels');
     _needKey();
+    final hook = onPremiumChannels;
+    if (hook != null) return hook();
     return List.of(premiumChannelList);
   }
 
