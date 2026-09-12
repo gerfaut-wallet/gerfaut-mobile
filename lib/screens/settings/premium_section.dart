@@ -161,16 +161,30 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
       final yes = await PremiumConsentScreen.ask(context, wallet);
       if (!yes || !mounted) return;
     }
+    await _askForWallet(
+      wallet.id,
+      () => on
+          ? _bridge.premiumWatchWallet(wallet.id)
+          : _bridge.premiumUnwatchWallet(wallet.id),
+    );
+  }
+
+  /// Takes a wallet this phone no longer has off the server: the same
+  /// call as the switch, with no wallet to ask a consent for.
+  Future<void> _unwatchOrphan(String id) {
+    return _askForWallet(id, () => _bridge.premiumUnwatchWallet(id));
+  }
+
+  /// One call about one wallet: its row is busy while it runs, a
+  /// failure lands under the card, and what the server holds is read
+  /// again afterwards.
+  Future<void> _askForWallet(String id, Future<void> Function() call) async {
     setState(() {
-      _busyWalletId = wallet.id;
+      _busyWalletId = id;
       _walletsError = null;
     });
     try {
-      if (on) {
-        await _bridge.premiumWatchWallet(wallet.id);
-      } else {
-        await _bridge.premiumUnwatchWallet(wallet.id);
-      }
+      await call();
       if (!mounted) return;
       ref.invalidate(premiumStateProvider);
       ref.invalidate(premiumWalletsProvider);
@@ -405,6 +419,7 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
           view: view,
           busyWalletId: _busyWalletId,
           onToggle: (wallet, on) => _setWatched(wallet, on, view),
+          onUnwatchOrphan: _unwatchOrphan,
         ),
         if (walletsError != null)
           _ErrorNote(
@@ -759,11 +774,15 @@ class _WatchedWalletsCard extends ConsumerWidget {
     required this.view,
     required this.busyWalletId,
     required this.onToggle,
+    required this.onUnwatchOrphan,
   });
 
   final PremiumView view;
   final String? busyWalletId;
   final void Function(WalletMeta wallet, bool on) onToggle;
+
+  /// For a wallet the server watches that this phone no longer has.
+  final void Function(String id) onUnwatchOrphan;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -815,24 +834,42 @@ class _WatchedWalletsCard extends ConsumerWidget {
         ),
       ];
     }
-    if (wallets.isEmpty) {
-      return [
-        Text(
-          'No ${chain.label.toLowerCase()} wallets to watch yet. The server '
-          'watches ${chain.label.toLowerCase()} wallets only.',
-          style: muted,
-        ),
-      ];
-    }
-    return [
-      for (final (index, wallet) in wallets.indexed) ...[
-        if (index > 0) Divider(height: 1, thickness: 1, color: tokens.border),
+    // What the server watches that this phone no longer has: removed
+    // here before the server could be told, or handed over from
+    // another device. Listed after the phone's own wallets, each with
+    // a way off the server, since a switch needs a wallet to belong to.
+    final local = {for (final w in wallets) w.id};
+    final orphans = [
+      for (final w in byId.values)
+        if (!local.contains(w.id)) w,
+    ];
+    final rows = <Widget>[
+      for (final wallet in wallets)
         _WalletRow(
           wallet: wallet,
           watch: byId[wallet.id],
           busy: busyWalletId == wallet.id,
           onChanged: (on) => onToggle(wallet, on),
         ),
+      for (final orphan in orphans)
+        _OrphanRow(
+          watch: orphan,
+          busy: busyWalletId == orphan.id,
+          onUnwatch: () => onUnwatchOrphan(orphan.id),
+        ),
+    ];
+    return [
+      if (wallets.isEmpty) ...[
+        Text(
+          'No ${chain.label.toLowerCase()} wallets to watch yet. The server '
+          'watches ${chain.label.toLowerCase()} wallets only.',
+          style: muted,
+        ),
+        if (orphans.isNotEmpty) const SizedBox(height: GerfautSpacing.sm),
+      ],
+      for (final (index, row) in rows.indexed) ...[
+        if (index > 0) Divider(height: 1, thickness: 1, color: tokens.border),
+        row,
       ],
     ];
   }
@@ -936,6 +973,77 @@ class _WalletRow extends StatelessWidget {
     1 => '1 coin',
     final n => '$n coins',
   };
+}
+
+/// A wallet the server watches that this phone no longer has. No
+/// switch, since there is no wallet for one to belong to: the name the
+/// server kept, why the row is here, the Watched pill, and a button
+/// that takes it off the server.
+class _OrphanRow extends StatelessWidget {
+  const _OrphanRow({
+    required this.watch,
+    required this.busy,
+    required this.onUnwatch,
+  });
+
+  final WalletWatch watch;
+  final bool busy;
+  final VoidCallback onUnwatch;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    return Container(
+      constraints: const BoxConstraints(minHeight: 56),
+      padding: const EdgeInsets.symmetric(vertical: GerfautSpacing.xs),
+      child: Row(
+        children: [
+          Icon(LucideIcons.wallet, size: 16, color: tokens.textMuted),
+          const SizedBox(width: GerfautSpacing.sm + GerfautSpacing.xs),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Wrap(
+                  spacing: GerfautSpacing.sm,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      watch.name,
+                      style: tokens.bodySmall.copyWith(
+                        color: tokens.text,
+                        fontWeight: FontWeight.w500,
+                        fontVariations: const [FontVariation('wght', 500)],
+                      ),
+                    ),
+                    const WatchedPill(),
+                  ],
+                ),
+                Text(
+                  busy
+                      ? 'Removing…'
+                      : 'Removed from this phone, still watched by the server.',
+                  style: tokens.label.copyWith(
+                    letterSpacing: 0,
+                    color: tokens.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: GerfautSpacing.sm),
+          Semantics(
+            label: 'Stop watching ${watch.name} from the server',
+            child: GhostButton(
+              label: 'Unwatch',
+              onPressed: busy ? null : onUnwatch,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // --- 3. Channels -------------------------------------------------------------

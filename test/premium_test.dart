@@ -121,6 +121,18 @@ Future<void> toggle(WidgetTester tester, String wallet) async {
   await tester.pumpAndSettle();
 }
 
+/// What the server holds for a wallet this phone no longer has.
+const WalletWatch oldLaptop = WalletWatch(
+  id: 'w9',
+  name: 'Old laptop',
+  scriptKind: 'segwit',
+  watchedSince: 1755000000,
+  baselineAt: 1755000030,
+  baselineHeight: 900000,
+  coins: 2,
+  valueSats: 200000,
+);
+
 void main() {
   group('the key', () {
     test('formats as it is typed, in lowercase, pasted or not', () {
@@ -874,6 +886,91 @@ void main() {
       await toggle(tester, 'Cold storage');
       expect(find.text('This key has no paid time.'), findsOneWidget);
       expect(switchOf(tester, 'Cold storage').value, isFalse);
+    });
+
+    testWidgets('a wallet gone from this phone is listed, with a way off', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumWatched.add(oldLaptop);
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      // After the phone's own wallets, under the name the server kept.
+      expect(find.text('Old laptop'), findsOneWidget);
+      expect(
+        find.text('Removed from this phone, still watched by the server.'),
+        findsOneWidget,
+      );
+      expect(find.byType(WatchedPill), findsOneWidget);
+      expect(find.text('Unwatch'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Old laptop')).dy,
+        greaterThan(tester.getTopLeft(find.text('Donations')).dy),
+      );
+      // No switch: there is no wallet for one to belong to.
+      expect(find.byType(Switch), findsNWidgets(2));
+    });
+
+    testWidgets('Unwatch takes it off the server, and the row with it', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumWatched.add(oldLaptop);
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Unwatch'));
+      await tester.pumpAndSettle();
+      expect(bridge.premiumCalls, contains('unwatch:w9'));
+      expect(find.text('Old laptop'), findsNothing);
+      expect(find.text('Unwatch'), findsNothing);
+      expect(find.byType(GerfautNotice), findsNothing);
+    });
+
+    testWidgets("the phone's own wallets keep their switch beside it", (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumConsents.add(
+        const WatchConsent(walletId: 'w1', consentedAt: 1),
+      );
+      bridge.premiumWatched.add(oldLaptop);
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      await toggle(tester, 'Cold storage');
+      expect(bridge.premiumCalls, contains('watch:w1'));
+      expect(switchOf(tester, 'Cold storage').value, isTrue);
+      expect(find.byType(WatchedPill), findsNWidgets(2));
+
+      await toggle(tester, 'Cold storage');
+      expect(bridge.premiumCalls, contains('unwatch:w1'));
+      expect(bridge.premiumCalls, isNot(contains('unwatch:w9')));
+      expect(switchOf(tester, 'Cold storage').value, isFalse);
+      expect(find.text('Old laptop'), findsOneWidget);
+    });
+
+    testWidgets('a wallet gone from this phone shows with no local one', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(
+        wallets: [
+          makeMeta(id: 'w3', name: 'Signet tests', network: Network.signet),
+        ],
+        activated: true,
+      );
+      bridge.premiumWatched.add(oldLaptop);
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('wallets to watch yet'), findsOneWidget);
+      expect(find.text('Old laptop'), findsOneWidget);
+      expect(find.text('Unwatch'), findsOneWidget);
     });
   });
 
