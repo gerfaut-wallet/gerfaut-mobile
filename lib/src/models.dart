@@ -1807,6 +1807,14 @@ class TxPreview {
 
   /// The transaction as the network takes it, present only when ready.
   final String? hex;
+
+  /// Whether a coin this transaction spends went unconfirmed. The core
+  /// says so with an `input_unknown` caution, which covers a backend
+  /// that does not know the coin as well as no backend answering at
+  /// all; either way the value shown for it, when the file carries one,
+  /// and the fee resting on it are the file's own word, not the chain's.
+  bool get inputsUnconfirmed =>
+      warnings.any((w) => w.kind == TxWarningKind.inputUnknown);
 }
 
 /// Outcome of a broadcast.

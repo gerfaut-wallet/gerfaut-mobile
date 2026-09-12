@@ -33,6 +33,19 @@ const int _settledConfirmations = 6;
 /// the host that accepted it.
 typedef _Sent = ({RecentBroadcast record, String backend});
 
+/// The mark under a figure the file states and nobody confirmed: the
+/// inputs total, the fee, its rate. Outputs need none — they are the
+/// transaction's own, not a claim about the chain.
+const String _claimedMark = 'as claimed by the file';
+
+/// Under the core's line about a coin no backend confirmed: what that
+/// leaves unverified on this page, and what to do about it. The core
+/// names the coin; the page says what it shows in its place.
+const String _unconfirmedHint =
+    'The amount shown for it, and the fee, come from the file rather than '
+    'the chain. Compare them with what your signer shows before sending, or '
+    'preview again with a backend that knows this coin.';
+
 /// Broadcast a transaction somebody else signed: paste, import or scan
 /// it, read what it does, then hand it to the network of the workspace.
 /// Gerfaut never signs and never edits the transaction; the preview
@@ -312,6 +325,11 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
 
   Widget _buildPreviewStep(GerfautTokens tokens, TxPreview preview) {
     final sent = _sent;
+    // A coin nobody confirmed leaves every figure resting on it the
+    // file's word: the inputs total and the fee wear the mark, so the
+    // number is never read as the chain's.
+    final claimed = preview.inputsUnconfirmed;
+    final inputsTotal = sideTotal(preview.inputs.map((i) => i.valueSats));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -333,6 +351,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                 inputs: _inputBranches(preview.inputs),
                 outputs: _outputBranches(preview.outputs),
                 feeSats: preview.feeSats,
+                feeNote: claimed ? _claimedMark : null,
               ),
               if (preview.warnings.isNotEmpty) ...[
                 const SizedBox(height: GerfautSpacing.lg),
@@ -347,7 +366,8 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
               IoListHeading(
                 title: 'Inputs',
                 count: preview.inputs.length,
-                totalSats: sideTotal(preview.inputs.map((i) => i.valueSats)),
+                totalSats: inputsTotal,
+                note: claimed && inputsTotal != null ? _claimedMark : null,
               ),
               const SizedBox(height: GerfautSpacing.sm),
               for (final (index, input) in preview.inputs.indexed) ...[
@@ -624,6 +644,45 @@ class _WarningRow extends StatelessWidget {
       },
       icon: _warningIcon(warning.kind),
       message: warning.message,
+      // The core says which coin went unconfirmed; what the page shows
+      // in its place, and what to do about it, is the page's to say.
+      hint: warning.kind == TxWarningKind.inputUnknown
+          ? _unconfirmedHint
+          : null,
+    );
+  }
+}
+
+/// A fact value with [_claimedMark] under it when [claimed], the value
+/// alone otherwise. Right-aligned, like every value of the card.
+class _Claimed extends StatelessWidget {
+  const _Claimed({
+    required this.claimed,
+    required this.tokens,
+    required this.child,
+  });
+
+  final bool claimed;
+  final GerfautTokens tokens;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!claimed) return child;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        child,
+        Text(
+          _claimedMark,
+          style: tokens.label.copyWith(
+            letterSpacing: 0,
+            color: tokens.textMuted,
+          ),
+          textAlign: TextAlign.right,
+        ),
+      ],
     );
   }
 }
@@ -985,19 +1044,26 @@ class _TechnicalCard extends StatelessWidget {
           label: 'Fee',
           tokens: tokens,
           child: preview.feeSats != null
-              ? _FeeValue(sats: preview.feeSats!)
+              ? _Claimed(
+                  claimed: preview.inputsUnconfirmed,
+                  tokens: tokens,
+                  child: _FeeValue(sats: preview.feeSats!),
+                )
               : FactValue('n/a', tokens, muted: true),
         ),
         FactRow(
           label: 'Fee rate',
           tokens: tokens,
-          child: FactValue(
-            preview.feeRateSatVb != null
-                ? '${preview.feeRateSatVb!.toStringAsFixed(1)} sat/vB'
-                : 'n/a',
-            tokens,
-            muted: preview.feeRateSatVb == null,
-          ),
+          child: preview.feeRateSatVb != null
+              ? _Claimed(
+                  claimed: preview.inputsUnconfirmed,
+                  tokens: tokens,
+                  child: FactValue(
+                    '${preview.feeRateSatVb!.toStringAsFixed(1)} sat/vB',
+                    tokens,
+                  ),
+                )
+              : FactValue('n/a', tokens, muted: true),
         ),
       ],
     );
@@ -1060,10 +1126,16 @@ class _ConfirmDialog extends ConsumerWidget {
     final unit = ref.watch(unitProvider);
     final fee = preview.feeSats;
     final rate = preview.feeRateSatVb;
+    // A fee resting on a coin nobody confirmed is said as such here
+    // too: this is the last line read before the send.
+    final ending = preview.inputsUnconfirmed
+        ? ', $_claimedMark: no backend confirmed what its inputs are worth.'
+        : '.';
     final feeLine = fee == null
         ? 'Its fee could not be established.'
         : 'It pays a fee of ${masked ? maskedValue : formatAmount(fee, unit)}'
-              '${rate != null ? ' (${rate.toStringAsFixed(1)} sat/vB)' : ''}.';
+              '${rate != null ? ' (${rate.toStringAsFixed(1)} sat/vB)' : ''}'
+              '$ending';
     return AlertDialog(
       backgroundColor: tokens.surface,
       shape: RoundedRectangleBorder(

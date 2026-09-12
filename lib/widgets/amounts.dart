@@ -234,6 +234,7 @@ class IoListHeading extends ConsumerWidget {
     required this.title,
     required this.count,
     required this.totalSats,
+    this.note,
   });
 
   final String title;
@@ -241,6 +242,11 @@ class IoListHeading extends ConsumerWidget {
 
   /// What the side carries, null as soon as one value on it is unknown.
   final int? totalSats;
+
+  /// A line under the heading when the total is not the chain's word —
+  /// the broadcast preview marks a sum the file states and no backend
+  /// confirmed. Nothing when null.
+  final String? note;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -252,7 +258,7 @@ class IoListHeading extends ConsumerWidget {
         : masked
         ? maskedValue
         : formatAmount(totalSats!, unit);
-    return Row(
+    final heading = Row(
       children: [
         FieldLabel('$title ($count)', tokens: tokens),
         Text(' · ', style: tokens.label.copyWith(color: tokens.textMuted)),
@@ -267,6 +273,22 @@ class IoListHeading extends ConsumerWidget {
             maxLines: 1,
             softWrap: false,
             overflow: TextOverflow.fade,
+          ),
+        ),
+      ],
+    );
+    final note = this.note;
+    if (note == null) return heading;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        heading,
+        Text(
+          note,
+          style: tokens.label.copyWith(
+            letterSpacing: 0,
+            color: tokens.textMuted,
           ),
         ),
       ],

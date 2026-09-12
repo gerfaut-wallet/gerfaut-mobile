@@ -126,6 +126,7 @@ class TxDiagram extends ConsumerStatefulWidget {
     required this.inputs,
     required this.outputs,
     this.feeSats,
+    this.feeNote,
     this.maxRows = _rowsPerSide,
   });
 
@@ -135,6 +136,11 @@ class TxDiagram extends ConsumerStatefulWidget {
   /// The fee, when it is known: a third branch leaving the square
   /// downward. Null or zero draws none.
   final int? feeSats;
+
+  /// A line under the fee's figure when the fee is not the chain's
+  /// word — the broadcast preview marks a fee the file states and no
+  /// backend confirmed. Nothing when null.
+  final String? feeNote;
 
   /// Boxes kept per side before the rest folds into "+N more".
   final int maxRows;
@@ -262,6 +268,7 @@ class _TxDiagramState extends ConsumerState<TxDiagram> {
                     Center(
                       child: _FeeBox(
                         sats: feeSats,
+                        note: widget.feeNote,
                         masked: masked,
                         unit: unit,
                         tokens: tokens,
@@ -423,12 +430,16 @@ class _BranchBox extends StatelessWidget {
 class _FeeBox extends StatelessWidget {
   const _FeeBox({
     required this.sats,
+    required this.note,
     required this.masked,
     required this.unit,
     required this.tokens,
   });
 
   final int sats;
+
+  /// A third line under the figure, or nothing.
+  final String? note;
   final bool masked;
   final AmountUnit unit;
   final GerfautTokens tokens;
@@ -461,6 +472,18 @@ class _FeeBox extends StatelessWidget {
             muted: false,
             tokens: tokens,
           ),
+          if (note != null)
+            Text(
+              note!,
+              style: tokens.label.copyWith(
+                fontSize: _boxText,
+                height: _boxLine / _boxText,
+                letterSpacing: 0,
+                color: tokens.textMuted,
+              ),
+              maxLines: 1,
+              softWrap: false,
+            ),
         ],
       ),
     );

@@ -280,6 +280,69 @@ void main() {
     expect(find.byIcon(LucideIcons.equalNot), findsOneWidget);
   });
 
+  testWidgets("a coin nobody confirmed marks the figures as the file's", (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    // No backend answered about the coin: the core says so, in the tone
+    // it chose, and every figure resting on the PSBT's own declaration
+    // — the inputs total, the fee, its rate — wears the mark.
+    const message =
+        'Input 0 could not be checked: no backend answered about this coin. '
+        'Its value here, and the fee, are what this transaction claims, not '
+        'something confirmed.';
+    final bridge = FakeBridge()
+      ..onPreview = (_, _) => makePreview(
+        warnings: const [
+          TxWarning(
+            kind: TxWarningKind.inputUnknown,
+            message: message,
+            severity: TxSeverity.info,
+          ),
+        ],
+      );
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+    await preview(tester);
+
+    expect(blockOf(tester, message).color, GerfautTokens.light.pendingSurface);
+    expect(find.byIcon(LucideIcons.circleHelp), findsOneWidget);
+    expect(
+      find.textContaining('Compare them with what your signer shows'),
+      findsOneWidget,
+    );
+    // The fee under the diagram, the inputs total, the fee and its rate
+    // among the facts: four figures, four marks.
+    expect(find.text('as claimed by the file'), findsNWidgets(4));
+
+    // The last word before the send says it too.
+    await tester.tap(find.widgetWithText(FilledButton, 'Broadcast'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'It pays a fee of 0.00001000 BTC (7.1 sat/vB), as claimed by the '
+        'file: no backend confirmed what its inputs are worth.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('figures the chain confirmed carry no such mark', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge()..onPreview = (_, _) => makePreview();
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+    await preview(tester);
+
+    expect(find.text('as claimed by the file'), findsNothing);
+    expect(
+      find.textContaining('Compare them with what your signer shows'),
+      findsNothing,
+    );
+  });
+
   testWidgets('an unsigned transaction cannot be sent', (tester) async {
     useTallSurface(tester);
     final bridge = FakeBridge()
