@@ -628,9 +628,7 @@ class _LicenceCard extends ConsumerWidget {
     final messenger = ScaffoldMessenger.of(context);
     await ref.read(sensitiveClipboardProvider).copy(key);
     messenger.showSnackBar(
-      const SnackBar(
-        content: Text('Key copied, paste it on the renewal page'),
-      ),
+      const SnackBar(content: Text('Key copied, paste it on the renewal page')),
     );
     await openExternal(premiumRenewUrl);
   }
@@ -1117,10 +1115,27 @@ class _ChannelsCard extends ConsumerWidget {
               onSubscribe: onSubscribe,
               onLinkCode: () => onLinkCode(channel),
             ),
+            // The server turned this one off and delivers nothing to
+            // it, whatever else the row would have said: amber under
+            // the row, and the words say on their own what to do.
+            // Nothing is at risk on chain; the alerts simply do not
+            // arrive until it is done.
+            if (!channel.enabled)
+              Padding(
+                padding: const EdgeInsets.only(
+                  left:
+                      GerfautSpacing.md + GerfautSpacing.sm + GerfautSpacing.xs,
+                  bottom: GerfautSpacing.sm,
+                ),
+                child: GerfautNotice(
+                  tone: NoticeTone.info,
+                  message: offReason(channel),
+                ),
+              )
             // The code the address received, asked for under the row
             // it belongs to: an address is written to only once its
             // owner has proved they read it.
-            if (channel.kind == ChannelKind.email && !channel.linked)
+            else if (channel.kind == ChannelKind.email && !channel.linked)
               // Keyed by the channel: the field holds what was typed,
               // and a list that reorders under it must not hand that
               // to another channel's row.
@@ -1155,7 +1170,11 @@ class _ChannelsCard extends ConsumerWidget {
 }
 
 /// One channel: its glyph, its kind, the masked target under it, the
-/// Telegram state as a pill, and the actions under a menu.
+/// state as a pill when it has one, and the actions under a menu.
+///
+/// A channel the server turned off reads as such before anything
+/// else: the pill says nothing is delivered, and the menu offers no
+/// test and no code, since the server writes nothing to it either way.
 class _ChannelRow extends StatelessWidget {
   const _ChannelRow({
     required this.channel,
@@ -1186,9 +1205,11 @@ class _ChannelRow extends StatelessWidget {
     // leaves it null and the row reads as it always did.
     final name = channel.linkedName;
     final linkedName = name == null || name.isEmpty ? null : name;
+    final off = !channel.enabled;
     // The address has the code and has not sent it back: nothing is
     // delivered there until it does.
-    final awaitingCode = channel.kind == ChannelKind.email && !channel.linked;
+    final awaitingCode =
+        !off && channel.kind == ChannelKind.email && !channel.linked;
     return Container(
       constraints: const BoxConstraints(minHeight: 56),
       padding: const EdgeInsets.symmetric(vertical: GerfautSpacing.xs),
@@ -1212,7 +1233,16 @@ class _ChannelRow extends StatelessWidget {
                         fontVariations: const [FontVariation('wght', 500)],
                       ),
                     ),
-                    if (channel.kind == ChannelKind.telegram)
+                    if (off)
+                      // Amber, not red: nothing on chain is at stake,
+                      // and the glyph says it is a warning rather than
+                      // a wait.
+                      const StatusPill.tone(
+                        tone: PillTone.pending,
+                        icon: LucideIcons.triangleAlert,
+                        label: 'Not delivering',
+                      )
+                    else if (channel.kind == ChannelKind.telegram)
                       channel.linked
                           ? const StatusPill.tone(
                               tone: PillTone.neutral,
@@ -1223,8 +1253,8 @@ class _ChannelRow extends StatelessWidget {
                               tone: PillTone.pending,
                               icon: LucideIcons.clock,
                               label: 'Waiting for the bot',
-                            ),
-                    if (channel.kind == ChannelKind.email && !channel.linked)
+                            )
+                    else if (awaitingCode)
                       const StatusPill.tone(
                         tone: PillTone.pending,
                         icon: LucideIcons.clock,
@@ -1290,7 +1320,7 @@ class _ChannelRow extends StatelessWidget {
                   detail: 'Open or copy the topic again',
                   onSelected: () => onSubscribe(topic),
                 ),
-              if (channel.waitingForBot)
+              if (!off && channel.waitingForBot)
                 OverflowMenuItem(
                   icon: LucideIcons.messageSquareText,
                   label: 'Link code',
@@ -1298,8 +1328,9 @@ class _ChannelRow extends StatelessWidget {
                   onSelected: onLinkCode,
                 ),
               // Nothing is sent to a target that has not answered yet,
-              // so there is no test to offer until it has.
-              if (channel.linked)
+              // nor to one the server turned off: no test to offer
+              // whose only outcome is that refusal.
+              if (!off && channel.linked)
                 OverflowMenuItem(
                   icon: LucideIcons.bellRing,
                   label: 'Send a test',

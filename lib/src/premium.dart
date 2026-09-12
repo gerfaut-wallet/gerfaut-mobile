@@ -112,6 +112,23 @@ String ntfyTopicPref(String channelId) => 'premium.ntfy.$channelId';
 /// writes to it. Mirrors the server, which draws six.
 const int confirmationCodeLength = 6;
 
+/// What happened to a channel the server turned off, and the way back.
+///
+/// Only a webhook goes this way today — one written to a private or
+/// local address, which the server refuses to post to and disables
+/// rather than keep trying — but the flag belongs to every kind, so
+/// every kind has a sentence rather than a silence. The same words as
+/// the desktop app's.
+String offReason(PremiumChannel channel) => switch (channel.kind) {
+  ChannelKind.webhook =>
+    'This webhook points at an address that is not reachable from the '
+        'internet, so nothing is delivered to it. Point it at a public '
+        'address and add it again.',
+  _ =>
+    'The server turned this channel off, so nothing is delivered to it. '
+        'Remove it and add it again.',
+};
+
 // --- the key -------------------------------------------------------------
 
 /// The thirty-two symbols a key is drawn from: no `l`, `o`, `0` or `1`,

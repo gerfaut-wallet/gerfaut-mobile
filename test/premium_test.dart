@@ -191,7 +191,10 @@ void main() {
       expect(said('premium_unknown_key'), 'Unknown key.');
       expect(said('premium_no_paid_time'), 'This key has no paid time.');
       expect(said('premium_rejected'), 'The Gerfaut server refused.');
-      expect(said('premium_unreachable'), 'Could not reach the Gerfaut server.');
+      expect(
+        said('premium_unreachable'),
+        'Could not reach the Gerfaut server.',
+      );
       expect(said('premium_invalid'), "The server's answer did not check out.");
       for (final kind in premiumErrorKinds) {
         expect(said(kind), isNot(contains('the machine words')), reason: kind);
@@ -286,9 +289,8 @@ void main() {
             theme: themeFrom(GerfautTokens.light, Brightness.light),
             home: Builder(
               builder: (context) => MediaQuery(
-                data: MediaQuery.of(
-                  context,
-                ).copyWith(textScaler: const TextScaler.linear(2)),
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: const TextScaler.linear(2)),
                 child: Scaffold(
                   body: SingleChildScrollView(
                     child: Padding(
@@ -664,11 +666,10 @@ void main() {
         issuedAt: now - 40 * 86400,
       );
       // The refresh on opening would restore the fake's paid time.
-      bridge.onPremiumActivate = (_) =>
-          throw const BridgeException(
-            'premium_unreachable',
-            'the premium server is unreachable: could not connect',
-          );
+      bridge.onPremiumActivate = (_) => throw const BridgeException(
+        'premium_unreachable',
+        'the premium server is unreachable: could not connect',
+      );
       await tester.pumpWidget(premiumApp(bridge));
       await tester.pumpAndSettle();
 
@@ -1332,11 +1333,10 @@ void main() {
       expect(find.text('that code is wrong or has expired'), findsNothing);
 
       // A server out of reach is not a code that was refused.
-      bridge.onPremiumConfirmChannel = (_, _) =>
-          throw const BridgeException(
-            'premium_unreachable',
-            'the premium server is unreachable: could not connect',
-          );
+      bridge.onPremiumConfirmChannel = (_, _) => throw const BridgeException(
+        'premium_unreachable',
+        'the premium server is unreachable: could not connect',
+      );
       await tester.enterText(find.byType(TextField), '333333');
       await tester.pumpAndSettle();
       await tester.tap(find.text('Confirm'));
@@ -1370,7 +1370,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text('The confirmation e-mail could not be sent; try again later.'),
+        find.text(
+          'The confirmation e-mail could not be sent; try again later.',
+        ),
         findsOneWidget,
       );
       expect(find.text('The server did not take this address.'), findsNothing);
@@ -1425,6 +1427,61 @@ void main() {
       expect(bridge.premiumCalls, contains('delete:ch9'));
       expect(find.text('j***@example.org'), findsNothing);
       expect(find.text('Channel removed'), findsOneWidget);
+    });
+
+    testWidgets('a channel the server turned off says so, in amber', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      // Linked, as the server still reports it, and off: a row that
+      // read only the first flag showed a channel receiving nothing as
+      // healthy.
+      bridge.premiumChannelList.add(
+        const PremiumChannel(
+          id: 'ch7',
+          kind: ChannelKind.webhook,
+          target: 'https://10.0.0.5/gerfaut',
+          linked: true,
+          enabled: false,
+          createdAt: 1,
+        ),
+      );
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Not delivering'), findsOneWidget);
+      expect(find.text('Linked'), findsNothing);
+      final note = tester.widget<GerfautNotice>(find.byType(GerfautNotice));
+      expect(note.tone, NoticeTone.info);
+      expect(note.message, startsWith('This webhook points at an address'));
+      expect(note.message, endsWith('add it again.'));
+      // The target is still named, so the row says which one it is.
+      expect(find.text('https://10.0.0.5/gerfaut'), findsOneWidget);
+
+      // No test to offer: the server writes nothing to it. Removing it
+      // is the one thing left.
+      await tester.tap(find.byTooltip('More for Webhook'));
+      await tester.pumpAndSettle();
+      expect(find.text('Send a test'), findsNothing);
+      expect(find.text('Remove'), findsOneWidget);
+    });
+
+    testWidgets('every kind the server can turn off has a sentence', (
+      tester,
+    ) async {
+      for (final kind in ChannelKind.values) {
+        final channel = PremiumChannel(
+          id: 'x',
+          kind: kind,
+          target: '',
+          linked: true,
+          enabled: false,
+          createdAt: 1,
+        );
+        expect(offReason(channel), contains('nothing is delivered'));
+        expect(offReason(channel), endsWith('add it again.'));
+      }
     });
   });
 
@@ -1493,11 +1550,10 @@ void main() {
       tester,
     ) async {
       final bridge = watching();
-      bridge.onPremiumHeartbeat = () =>
-          throw const BridgeException(
-            'premium_unreachable',
-            'the premium server is unreachable: could not connect',
-          );
+      bridge.onPremiumHeartbeat = () => throw const BridgeException(
+        'premium_unreachable',
+        'the premium server is unreachable: could not connect',
+      );
       await tester.pumpWidget(wholeApp(bridge));
       await tester.pumpAndSettle();
 
