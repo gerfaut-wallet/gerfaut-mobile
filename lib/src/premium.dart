@@ -107,6 +107,10 @@ void invalidatePremium(WidgetRef ref) {
 /// reachable again after leaving the page.
 String ntfyTopicPref(String channelId) => 'premium.ntfy.$channelId';
 
+/// Digits in the code the server mails to an address before it ever
+/// writes to it. Mirrors the server, which draws six.
+const int confirmationCodeLength = 6;
+
 // --- the key -------------------------------------------------------------
 
 /// The thirty-two symbols a key is drawn from: no `l`, `o`, `0` or `1`,

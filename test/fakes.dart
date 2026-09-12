@@ -1570,11 +1570,13 @@ class FakeBridge implements GerfautBridge {
         startUrl: 'https://t.me/GerfautAlertsBot?start=code$premiumChannelIds',
         createdAt: now,
       ),
+      // Waiting, the way the server hands it back: the address has the
+      // code and nothing is delivered there until it comes back.
       ChannelKind.email => PremiumChannel(
         id: id,
         kind: kind,
         target: _maskEmail(target ?? ''),
-        linked: true,
+        linked: false,
         createdAt: now,
       ),
       ChannelKind.webhook => PremiumChannel(

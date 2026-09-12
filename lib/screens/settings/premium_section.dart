@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -224,11 +225,12 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
     ref.invalidate(premiumChannelsProvider);
     ref.invalidate(premiumAccountProvider);
     final channel = created.channel;
-    // The first channel proves itself at once; a Telegram channel only
-    // once the bot has heard from it, since a test before that fails.
-    // Quietly: the message itself is the confirmation, and a toast here
-    // would sit on the button of the page about to open.
-    if (before == 0 && !channel.waitingForBot) {
+    // The first channel proves itself at once; one that has not
+    // answered yet only once it has, since nothing is delivered to a
+    // target still waiting to be linked. Quietly: the message itself
+    // is the confirmation, and a toast here would sit on the button of
+    // the page about to open.
+    if (before == 0 && channel.linked) {
       unawaited(_test(channel, quiet: true));
     }
     switch (kind) {
@@ -265,6 +267,14 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
         ),
       ),
     );
+  }
+
+  /// A channel just proved itself with its code: the card reads it
+  /// again, linked, and the account's count with it.
+  void _confirmed() {
+    setState(() => _channelsError = null);
+    ref.invalidate(premiumChannelsProvider);
+    ref.invalidate(premiumAccountProvider);
   }
 
   Future<void> _test(PremiumChannel channel, {bool quiet = false}) async {
@@ -392,6 +402,7 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
           onRemove: _remove,
           onSubscribe: _openNtfy,
           onLinkCode: (channel) => _openTelegram(channel, view),
+          onConfirmed: _confirmed,
         ),
         if (channelsError != null)
           _ErrorNote(
@@ -875,6 +886,7 @@ class _ChannelsCard extends ConsumerWidget {
     required this.onRemove,
     required this.onSubscribe,
     required this.onLinkCode,
+    required this.onConfirmed,
   });
 
   final PremiumView view;
@@ -890,6 +902,10 @@ class _ChannelsCard extends ConsumerWidget {
   /// Reopens the code page of a Telegram channel the bot has not heard
   /// from yet.
   final void Function(PremiumChannel channel) onLinkCode;
+
+  /// Told once a channel has been linked by its code, so the card and
+  /// the account are read again.
+  final VoidCallback onConfirmed;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -930,6 +946,11 @@ class _ChannelsCard extends ConsumerWidget {
               onSubscribe: onSubscribe,
               onLinkCode: () => onLinkCode(channel),
             ),
+            // The code the address received, asked for under the row
+            // it belongs to: an address is written to only once its
+            // owner has proved they read it.
+            if (channel.kind == ChannelKind.email && !channel.linked)
+              _ConfirmCodeRow(channel: channel, onConfirmed: onConfirmed),
           ],
           const SizedBox(height: GerfautSpacing.sm),
           Align(
@@ -987,6 +1008,9 @@ class _ChannelRow extends StatelessWidget {
     // leaves it null and the row reads as it always did.
     final name = channel.linkedName;
     final linkedName = name == null || name.isEmpty ? null : name;
+    // The address has the code and has not sent it back: nothing is
+    // delivered there until it does.
+    final awaitingCode = channel.kind == ChannelKind.email && !channel.linked;
     return Container(
       constraints: const BoxConstraints(minHeight: 56),
       padding: const EdgeInsets.symmetric(vertical: GerfautSpacing.xs),
@@ -1022,6 +1046,12 @@ class _ChannelRow extends StatelessWidget {
                               icon: LucideIcons.clock,
                               label: 'Waiting for the bot',
                             ),
+                    if (channel.kind == ChannelKind.email && !channel.linked)
+                      const StatusPill.tone(
+                        tone: PillTone.pending,
+                        icon: LucideIcons.clock,
+                        label: 'Waiting for the code',
+                      ),
                   ],
                 ),
                 if (busy)
@@ -1031,6 +1061,19 @@ class _ChannelRow extends StatelessWidget {
                       letterSpacing: 0,
                       color: tokens.textMuted,
                     ),
+                  )
+                else if (awaitingCode)
+                  // Where the six digits went. The server masks the
+                  // address the same way whether it is waiting or
+                  // linked: enough to tell which one, never a copy.
+                  Text(
+                    'Confirmation sent to ${channel.target}',
+                    style: tokens.label.copyWith(
+                      letterSpacing: 0,
+                      color: tokens.textMuted,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   )
                 else if (linkedName != null)
                   // A Telegram target is a chat id nobody recognizes.
@@ -1076,11 +1119,14 @@ class _ChannelRow extends StatelessWidget {
                   detail: 'Send it to the bot',
                   onSelected: onLinkCode,
                 ),
-              OverflowMenuItem(
-                icon: LucideIcons.bellRing,
-                label: 'Send a test',
-                onSelected: busy ? () {} : onTest,
-              ),
+              // Nothing is sent to a target that has not answered yet,
+              // so there is no test to offer until it has.
+              if (channel.linked)
+                OverflowMenuItem(
+                  icon: LucideIcons.bellRing,
+                  label: 'Send a test',
+                  onSelected: busy ? () {} : onTest,
+                ),
               OverflowMenuItem(
                 icon: LucideIcons.trash2,
                 label: 'Remove',
@@ -1089,6 +1135,183 @@ class _ChannelRow extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The six digits the server mailed, typed back.
+///
+/// An address is written to only once its owner has shown they read
+/// it: until the code comes back the channel exists and receives
+/// nothing. So the field sits under the row it belongs to rather than
+/// on a page of its own — the channel is already made, this is the
+/// last step of making it — and what the server says about a code
+/// lands beside the field that was typed into, not under the card.
+class _ConfirmCodeRow extends ConsumerStatefulWidget {
+  const _ConfirmCodeRow({required this.channel, required this.onConfirmed});
+
+  final PremiumChannel channel;
+
+  /// Told once the server has linked the channel.
+  final VoidCallback onConfirmed;
+
+  @override
+  ConsumerState<_ConfirmCodeRow> createState() => _ConfirmCodeRowState();
+}
+
+class _ConfirmCodeRowState extends ConsumerState<_ConfirmCodeRow> {
+  final _controller = TextEditingController();
+  bool _busy = false;
+  BridgeException? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  bool get _complete => _controller.text.length == confirmationCodeLength;
+
+  Future<void> _confirm() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await ref
+          .read(bridgeProvider)
+          .premiumConfirmChannel(widget.channel.id, _controller.text);
+      if (!mounted) return;
+      _controller.clear();
+      widget.onConfirmed();
+    } on BridgeException catch (error) {
+      if (mounted) setState(() => _error = error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// What a refused code says, and the server's own sentence under it.
+  ///
+  /// The server answers in plain English and those words are the ones
+  /// that name the case — a code that is wrong, one that expired, one
+  /// tried too many times, an e-mail that never left. They are kept
+  /// verbatim; what is added is the line that says which step failed,
+  /// since the words alone do not say they are about a code.
+  (String, String?) get _problem {
+    final error = _error!;
+    return switch (error.kind) {
+      'premium_rejected' => ('The code was not accepted.', error.message),
+      'premium_unreachable' => ('Could not reach the Gerfaut server.', null),
+      _ => (error.message, null),
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final ready = _complete && !_busy;
+    return Padding(
+      // Under the row's words, not under its glyph: the block belongs
+      // to the channel above it and reads as its continuation.
+      padding: const EdgeInsets.only(
+        left: GerfautSpacing.md + GerfautSpacing.sm + GerfautSpacing.xs,
+        bottom: GerfautSpacing.sm,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('CODE', style: tokens.label.copyWith(color: tokens.textMuted)),
+          const SizedBox(height: GerfautSpacing.sm),
+          // A Wrap, so the button goes to a line of its own at a large
+          // text size instead of squeezing the field off the screen.
+          Wrap(
+            spacing: GerfautSpacing.sm,
+            runSpacing: GerfautSpacing.sm,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SizedBox(
+                width: 128,
+                child: _CodeField(
+                  controller: _controller,
+                  enabled: !_busy,
+                  onChanged: () => setState(() => _error = null),
+                  onSubmitted: ready ? _confirm : null,
+                ),
+              ),
+              PrimaryButton(
+                label: _busy ? 'Confirming…' : 'Confirm',
+                onPressed: ready ? _confirm : null,
+              ),
+            ],
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: GerfautSpacing.sm),
+            GerfautNotice(
+              tone: NoticeTone.info,
+              message: _problem.$1,
+              detail: _problem.$2,
+              liveRegion: true,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Six digits and nothing else: the number keyboard, no suggestions,
+/// mono at the body size so the phone never zooms.
+class _CodeField extends StatelessWidget {
+  const _CodeField({
+    required this.controller,
+    required this.enabled,
+    required this.onChanged,
+    this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final bool enabled;
+  final VoidCallback onChanged;
+  final VoidCallback? onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    return TextField(
+      controller: controller,
+      enabled: enabled,
+      autocorrect: false,
+      enableSuggestions: false,
+      keyboardType: TextInputType.number,
+      inputFormatters: [
+        FilteringTextInputFormatter.digitsOnly,
+        LengthLimitingTextInputFormatter(confirmationCodeLength),
+      ],
+      style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
+      onChanged: (_) => onChanged(),
+      onSubmitted: onSubmitted == null ? null : (_) => onSubmitted!(),
+      decoration: InputDecoration(
+        hintText: '000000',
+        hintStyle: tokens.data.copyWith(
+          fontSize: tokens.body.fontSize,
+          color: tokens.textMuted,
+        ),
+        filled: true,
+        fillColor: tokens.surfaceSunken,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: GerfautSpacing.md,
+          vertical: GerfautSpacing.sm,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(GerfautRadius.sm),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(GerfautRadius.sm),
+          borderSide: BorderSide(color: tokens.primary, width: 2),
+        ),
       ),
     );
   }

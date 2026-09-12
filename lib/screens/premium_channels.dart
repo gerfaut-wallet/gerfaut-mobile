@@ -485,7 +485,7 @@ class EmailChannelScreen extends ConsumerStatefulWidget {
 class _EmailChannelScreenState extends ConsumerState<EmailChannelScreen> {
   final _controller = TextEditingController();
   bool _busy = false;
-  String? _error;
+  BridgeException? _error;
 
   @override
   void dispose() {
@@ -516,10 +516,30 @@ class _EmailChannelScreenState extends ConsumerState<EmailChannelScreen> {
       if (mounted) {
         setState(() {
           _busy = false;
-          _error = error.message;
+          _error = error;
         });
       }
     }
+  }
+
+  /// What went wrong, in words fit for this page.
+  ///
+  /// Adding an address makes the server send one e-mail to it, and a
+  /// mail that does not go out reaches the core as the server being
+  /// out of reach — it is not, it answered to say the mail failed, and
+  /// the status it carries is the only sign of the difference. Saying
+  /// "the server did not take this address" of an address the server
+  /// did take sends the person to correct what is already right.
+  (String, String?) get _problem {
+    final error = _error!;
+    final words = error.message;
+    if (error.kind == 'premium_unreachable' && words.startsWith('HTTP ')) {
+      return ('The confirmation e-mail could not be sent.', words);
+    }
+    return switch (error.kind) {
+      'premium_unreachable' => ('Could not reach the Gerfaut server.', null),
+      _ => ('The server did not take this address.', words),
+    };
   }
 
   @override
@@ -557,8 +577,8 @@ class _EmailChannelScreenState extends ConsumerState<EmailChannelScreen> {
                 const SizedBox(height: GerfautSpacing.md),
                 GerfautNotice(
                   tone: NoticeTone.info,
-                  message: 'The server did not take this address.',
-                  detail: _error,
+                  message: _problem.$1,
+                  detail: _problem.$2,
                   liveRegion: true,
                 ),
               ],

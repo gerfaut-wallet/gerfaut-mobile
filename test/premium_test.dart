@@ -794,10 +794,13 @@ void main() {
       await tester.tap(add);
       await tester.pumpAndSettle();
       expect(bridge.premiumCalls, contains('create:email:me@example.org'));
-      expect(find.text('m***@example.org'), findsOneWidget);
-      // The first channel is tried at once, and quietly: no toast over
-      // the next page's pinned action.
-      expect(bridge.premiumCalls, contains('test:ch1'));
+      expect(
+        find.text('Confirmation sent to m***@example.org'),
+        findsOneWidget,
+      );
+      // Nothing is sent to an address that has not answered yet, not
+      // even the test the first channel usually gets.
+      expect(bridge.premiumCalls.where((c) => c.startsWith('test:')), isEmpty);
       expect(find.byType(SnackBar), findsNothing);
 
       await tester.tap(find.text('Add a channel'));
@@ -809,18 +812,18 @@ void main() {
         findsOneWidget,
       );
       final hook = find.widgetWithText(PrimaryButton, 'Add webhook');
-      await tester.enterText(
-        find.byType(TextField).first,
-        'http://example.org/hook',
+      // The page under this one keeps its own fields: the finders stay
+      // inside the form on top.
+      final hookFields = find.descendant(
+        of: find.byType(WebhookChannelScreen),
+        matching: find.byType(TextField),
       );
+      await tester.enterText(hookFields.first, 'http://example.org/hook');
       await tester.pumpAndSettle();
       // Only https will do.
       expect(tester.widget<PrimaryButton>(hook).onPressed, isNull);
-      await tester.enterText(
-        find.byType(TextField).first,
-        'https://example.org/hook',
-      );
-      await tester.enterText(find.byType(TextField).last, 'shh');
+      await tester.enterText(hookFields.first, 'https://example.org/hook');
+      await tester.enterText(hookFields.last, 'shh');
       await tester.pumpAndSettle();
       await tester.tap(hook);
       await tester.pumpAndSettle();
@@ -829,6 +832,147 @@ void main() {
         contains('create:webhook:https://example.org/hook'),
       );
       expect(find.text('https://example.org/hook'), findsOneWidget);
+    });
+
+    /// An account with one e-mail channel the address has not answered
+    /// for yet: the state the server leaves a new one in.
+    FakeBridge waitingForCode() {
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumChannelList.add(
+        const PremiumChannel(
+          id: 'ch4',
+          kind: ChannelKind.email,
+          target: 'm***@example.org',
+          linked: false,
+          createdAt: 1,
+        ),
+      );
+      return bridge;
+    }
+
+    testWidgets('e-mail: the code links the channel from its row', (
+      tester,
+    ) async {
+      // The width of a small phone, and height enough to lay the whole
+      // section out: the field, the button and the row they sit under
+      // have to hold at 411dp.
+      tester.view.physicalSize = const Size(411, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final bridge = waitingForCode();
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Waiting for the code'), findsOneWidget);
+      expect(
+        find.text('Confirmation sent to m***@example.org'),
+        findsOneWidget,
+      );
+      // Nothing reaches an address that has not answered: no test to
+      // offer until it has.
+      await tester.tap(find.byTooltip('More for E-mail'));
+      await tester.pumpAndSettle();
+      expect(find.text('Send a test'), findsNothing);
+      expect(find.text('Remove'), findsOneWidget);
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+
+      final confirm = find.widgetWithText(PrimaryButton, 'Confirm');
+      expect(tester.widget<PrimaryButton>(confirm).onPressed, isNull);
+      // Six digits and nothing else.
+      await tester.enterText(find.byType(TextField), 'abc12');
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '12',
+      );
+      expect(tester.widget<PrimaryButton>(confirm).onPressed, isNull);
+
+      await tester.enterText(find.byType(TextField), '482913');
+      await tester.pumpAndSettle();
+      await tester.tap(confirm);
+      await tester.pumpAndSettle();
+
+      expect(bridge.premiumCalls, contains('confirm:ch4:482913'));
+      expect(find.text('Waiting for the code'), findsNothing);
+      expect(find.textContaining('Confirmation sent to'), findsNothing);
+      expect(find.text('m***@example.org'), findsOneWidget);
+      expect(find.byType(TextField), findsNothing);
+    });
+
+    testWidgets('e-mail: a refused code says so beside the field', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = waitingForCode();
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      // 400: the server's own words say which of the two it is.
+      await tester.enterText(find.byType(TextField), '111111');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirm'));
+      await tester.pumpAndSettle();
+      expect(find.text('The code was not accepted.'), findsOneWidget);
+      expect(find.text('that code is wrong or has expired'), findsOneWidget);
+      expect(find.text('Waiting for the code'), findsOneWidget);
+
+      // 429: the same sentence, the server's own reason under it.
+      bridge.onPremiumConfirmChannel = (_, _) => throw const BridgeException(
+        'premium_rejected',
+        'too many wrong codes; add the channel again for a new one',
+      );
+      await tester.enterText(find.byType(TextField), '222222');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirm'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('too many wrong codes; add the channel again for a new one'),
+        findsOneWidget,
+      );
+      expect(find.text('that code is wrong or has expired'), findsNothing);
+
+      // A server out of reach is not a code that was refused.
+      bridge.onPremiumConfirmChannel = (_, _) =>
+          throw const BridgeException('premium_unreachable', 'timed out');
+      await tester.enterText(find.byType(TextField), '333333');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirm'));
+      await tester.pumpAndSettle();
+      expect(find.text('Could not reach the Gerfaut server.'), findsOneWidget);
+      expect(find.text('The code was not accepted.'), findsNothing);
+    });
+
+    testWidgets('e-mail: a confirmation that never left says so', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      // The server answered, and the mail behind it did not go out:
+      // 502, which the core reads as the server being out of reach.
+      bridge.onPremiumCreateChannel = (_, _, _) => throw const BridgeException(
+        'premium_unreachable',
+        'HTTP 502: the confirmation e-mail could not be sent; try again later',
+      );
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Add a channel'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('E-mail'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'me@example.org');
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(PrimaryButton, 'Add e-mail'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('The confirmation e-mail could not be sent.'),
+        findsOneWidget,
+      );
+      expect(find.text('The server did not take this address.'), findsNothing);
+      // The address is still there to try again with.
+      expect(find.byType(EmailChannelScreen), findsOneWidget);
     });
 
     testWidgets('the menu sends a test or removes the channel', (tester) async {
