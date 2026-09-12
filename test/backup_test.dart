@@ -868,6 +868,54 @@ void main() {
       expect(bridge.importCalls.single.applySettings, isTrue);
     });
 
+    testWidgets('the node settings say what they would put in place', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge();
+      bridge.onPreviewBackup = (_, _) => BackupPreview(
+        createdAt: 1755000000,
+        hasSettings: true,
+        wallets: preview().wallets,
+        backends: const [
+          BackupBackend(network: Network.mainnet, backend: 'node.example.org'),
+          BackupBackend(network: Network.signet, backend: 'signet.example.org'),
+        ],
+        electrumHosts: const ['node.example.org:50002'],
+      );
+      await openBackup(tester, bridge);
+
+      expect(
+        find.text(
+          'Replaces your backend choice, accepted certificates and gap '
+          "limit with the backup's.",
+        ),
+        findsOneWidget,
+      );
+      // What would take their place, named: the machine every address
+      // is asked for, and the certificate this phone would then trust
+      // without asking again.
+      expect(find.text('NODES'), findsOneWidget);
+      expect(find.text('Mainnet'), findsOneWidget);
+      expect(find.text('node.example.org'), findsOneWidget);
+      expect(find.text('Signet'), findsOneWidget);
+      expect(find.text('signet.example.org'), findsOneWidget);
+      expect(find.text('PINNED CERTIFICATES'), findsOneWidget);
+      expect(find.text('node.example.org:50002'), findsOneWidget);
+    });
+
+    testWidgets('a backup that names no node lists nothing', (tester) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge();
+      bridge.onPreviewBackup = (_, _) => preview(settings: true);
+      await openBackup(tester, bridge);
+
+      // The toggle stands; there is simply nothing to list under it.
+      expect(find.text('Apply node settings'), findsOneWidget);
+      expect(find.text('NODES'), findsNothing);
+      expect(find.text('PINNED CERTIFICATES'), findsNothing);
+    });
+
     testWidgets('a restore states what it added', (tester) async {
       useTallSurface(tester);
       final bridge = FakeBridge();

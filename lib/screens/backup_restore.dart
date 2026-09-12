@@ -411,8 +411,8 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
                       ),
                     ),
                     Text(
-                      "Replaces your backend choice and gap limit with the "
-                      "backup's.",
+                      'Replaces your backend choice, accepted certificates '
+                      "and gap limit with the backup's.",
                       style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                     ),
                   ],
@@ -429,6 +429,14 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
               ),
             ],
           ),
+          if (preview.backends.isNotEmpty ||
+              preview.electrumHosts.isNotEmpty) ...[
+            const SizedBox(height: GerfautSpacing.sm),
+            _SettingsPanel(
+              backends: preview.backends,
+              hosts: preview.electrumHosts,
+            ),
+          ],
         ],
         if (_error != null) ...[
           const SizedBox(height: GerfautSpacing.md),
@@ -483,6 +491,91 @@ class _ReadPanel extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// What the node settings of a backup would put in place, named.
+///
+/// The toggle above says what is replaced; a person deciding has to
+/// know what with. A backend is the machine every address of every
+/// wallet is asked for, and a pinned certificate is one this phone
+/// will then trust without asking again — neither is a thing to take
+/// from a file sight unseen. A backup that carries no settings shows
+/// nothing here at all.
+class _SettingsPanel extends StatelessWidget {
+  const _SettingsPanel({required this.backends, required this.hosts});
+
+  /// One node per network the backup names.
+  final List<BackupBackend> backends;
+
+  /// `host:port` of every Electrum certificate it would pin.
+  final List<String> hosts;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final label = tokens.label.copyWith(color: tokens.textMuted);
+    final value = tokens.data.copyWith(fontSize: 12);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(GerfautSpacing.sm + GerfautSpacing.xs),
+      decoration: BoxDecoration(
+        color: tokens.surfaceSunken,
+        borderRadius: BorderRadius.circular(GerfautRadius.md),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (backends.isNotEmpty) ...[
+            Text('NODES', style: label),
+            for (final backend in backends)
+              MergeSemantics(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: GerfautSpacing.xs),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        backend.network.label,
+                        style: tokens.bodySmall.copyWith(
+                          color: tokens.textMuted,
+                        ),
+                      ),
+                      const SizedBox(width: GerfautSpacing.sm),
+                      // A host is long and the screen is narrow: it
+                      // takes what is left and ends in an ellipsis
+                      // rather than pushing the network off the row.
+                      Expanded(
+                        child: Text(
+                          backend.backend,
+                          style: value,
+                          textAlign: TextAlign.end,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+          if (hosts.isNotEmpty) ...[
+            if (backends.isNotEmpty) const SizedBox(height: GerfautSpacing.sm),
+            Text('PINNED CERTIFICATES', style: label),
+            for (final host in hosts)
+              Padding(
+                padding: const EdgeInsets.only(top: GerfautSpacing.xs),
+                child: Text(
+                  host,
+                  style: value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+        ],
       ),
     );
   }
