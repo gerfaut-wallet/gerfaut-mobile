@@ -455,7 +455,8 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
 
 /// A call that failed, in an amber note under the card it concerns.
 /// The words follow the kind: the server out of reach gets a retry, a
-/// key the server refuses gets the reason.
+/// key the server refuses gets the reason. Which sentence each kind
+/// gets lives in [premiumFailure], with the pages that add a channel.
 class _ErrorNote extends StatelessWidget {
   const _ErrorNote({required this.error, this.onRetry});
 
@@ -464,59 +465,16 @@ class _ErrorNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (
-      String message,
-      String? hint,
-      String? detail,
-      bool retry,
-    ) = switch (error.kind) {
-      'premium_unreachable' => (
-        'Could not reach the Gerfaut server.',
-        null,
-        null,
-        true,
-      ),
-      'premium_unknown_key' => (
-        'Unknown key.',
-        'Check it against the key shown at purchase.',
-        null,
-        false,
-      ),
-      'premium_no_paid_time' => (
-        'This key has no paid time.',
-        'Add time on gerfaut-wallet.com, then try again.',
-        null,
-        false,
-      ),
-      'premium_rejected' => (
-        'The Gerfaut server refused.',
-        null,
-        error.message,
-        false,
-      ),
-      // The call goes through Tor whenever the backend of the active
-      // network does, and nothing falls back to the clear: a Tor that
-      // cannot be reached is a call that never happened. The core's own
-      // sentence names the proxy it wanted, which is not what a person
-      // reading this card can act on.
-      'tor' => (
-        'Tor is not available on this phone.',
-        'These calls go through Tor and never around it. The Tor card '
-            'is under Network.',
-        null,
-        true,
-      ),
-      _ => (error.message, null, null, true),
-    };
+    final failure = premiumFailure(error);
     return Padding(
       padding: const EdgeInsets.only(bottom: GerfautSpacing.gutter),
       child: GerfautNotice(
         tone: NoticeTone.info,
-        message: message,
-        hint: hint,
-        detail: detail,
+        message: failure.message,
+        hint: failure.hint,
+        detail: failure.detail,
         liveRegion: true,
-        action: retry && onRetry != null
+        action: failure.retry && onRetry != null
             ? GhostButton(label: 'Retry', onPressed: onRetry)
             : null,
       ),
@@ -1312,22 +1270,19 @@ class _ConfirmCodeRowState extends ConsumerState<_ConfirmCodeRow> {
   ///
   /// The server answers in plain English and those words are the ones
   /// that name the case — a code that is wrong, one that expired, one
-  /// tried too many times, an e-mail that never left. They are kept
-  /// verbatim; what is added is the line that says which step failed,
-  /// since the words alone do not say they are about a code.
-  (String, String?) get _problem {
-    final error = _error!;
-    return switch (error.kind) {
-      'premium_rejected' => ('The code was not accepted.', error.message),
-      'premium_unreachable' => ('Could not reach the Gerfaut server.', null),
-      _ => (error.message, null),
-    };
-  }
+  /// tried too many times. They are kept verbatim, the bridge having
+  /// dropped the prefix the core wraps them in; what is added is the
+  /// line that says which step failed, since the words alone do not say
+  /// they are about a code.
 
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final ready = _complete && !_busy;
+    final error = _error;
+    final problem = error == null
+        ? null
+        : premiumFailure(error, refusal: 'The code was not accepted.');
     return Padding(
       // Under the row's words, not under its glyph: the block belongs
       // to the channel above it and reads as its continuation.
@@ -1362,12 +1317,13 @@ class _ConfirmCodeRowState extends ConsumerState<_ConfirmCodeRow> {
               ),
             ],
           ),
-          if (_error != null) ...[
+          if (problem != null) ...[
             const SizedBox(height: GerfautSpacing.sm),
             GerfautNotice(
               tone: NoticeTone.info,
-              message: _problem.$1,
-              detail: _problem.$2,
+              message: problem.message,
+              hint: problem.hint,
+              detail: problem.detail,
               liveRegion: true,
             ),
           ],

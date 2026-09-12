@@ -536,22 +536,19 @@ class _EmailChannelScreenState extends ConsumerState<EmailChannelScreen> {
   /// out of reach — it is not, it answered to say the mail failed, and
   /// the status it carries is the only sign of the difference. Saying
   /// "the server did not take this address" of an address the server
-  /// did take sends the person to correct what is already right.
-  (String, String?) get _problem {
-    final error = _error!;
-    final words = error.message;
-    if (error.kind == 'premium_unreachable' && words.startsWith('HTTP ')) {
-      return ('The confirmation e-mail could not be sent.', words);
-    }
-    return switch (error.kind) {
-      'premium_unreachable' => ('Could not reach the Gerfaut server.', null),
-      _ => ('The server did not take this address.', words),
-    };
-  }
+  /// did take sends the person to correct what is already right, so
+  /// that line is kept for a refusal and nothing else.
 
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final error = _error;
+    final problem = error == null
+        ? null
+        : premiumFailure(
+            error,
+            refusal: 'The server did not take this address.',
+          );
     return Scaffold(
       appBar: GerfautAppBar.text('E-mail'),
       body: SafeArea(
@@ -580,12 +577,13 @@ class _EmailChannelScreenState extends ConsumerState<EmailChannelScreen> {
                 'Alerts say which wallet moved, never an address or an amount.',
                 style: tokens.bodySmall.copyWith(color: tokens.textMuted),
               ),
-              if (_error != null) ...[
+              if (problem != null) ...[
                 const SizedBox(height: GerfautSpacing.md),
                 GerfautNotice(
                   tone: NoticeTone.info,
-                  message: _problem.$1,
-                  detail: _problem.$2,
+                  message: problem.message,
+                  hint: problem.hint,
+                  detail: problem.detail,
                   liveRegion: true,
                 ),
               ],
@@ -662,7 +660,7 @@ class _WebhookChannelScreenState extends ConsumerState<WebhookChannelScreen> {
   final _urlController = TextEditingController();
   final _secretController = TextEditingController();
   bool _busy = false;
-  String? _error;
+  BridgeException? _error;
 
   @override
   void dispose() {
@@ -695,7 +693,7 @@ class _WebhookChannelScreenState extends ConsumerState<WebhookChannelScreen> {
       if (mounted) {
         setState(() {
           _busy = false;
-          _error = error.message;
+          _error = error;
         });
       }
     }
@@ -704,6 +702,13 @@ class _WebhookChannelScreenState extends ConsumerState<WebhookChannelScreen> {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final error = _error;
+    final problem = error == null
+        ? null
+        : premiumFailure(
+            error,
+            refusal: 'The server did not take this webhook.',
+          );
     return Scaffold(
       appBar: GerfautAppBar.text('Webhook'),
       body: SafeArea(
@@ -738,12 +743,13 @@ class _WebhookChannelScreenState extends ConsumerState<WebhookChannelScreen> {
                 'Signed with HMAC-SHA256. See the docs.',
                 style: tokens.bodySmall.copyWith(color: tokens.textMuted),
               ),
-              if (_error != null) ...[
+              if (problem != null) ...[
                 const SizedBox(height: GerfautSpacing.md),
                 GerfautNotice(
                   tone: NoticeTone.info,
-                  message: 'The server did not take this webhook.',
-                  detail: _error,
+                  message: problem.message,
+                  hint: problem.hint,
+                  detail: problem.detail,
                   liveRegion: true,
                 ),
               ],

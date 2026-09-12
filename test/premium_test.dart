@@ -167,6 +167,144 @@ void main() {
     });
   });
 
+  group('what a failure says', () {
+    /// The first line of the note, for a failure carrying [message] —
+    /// which is what the bridge sends, wrapper and all: the core writes
+    /// the layer's name in front of its own errors.
+    String said(String kind, [String message = 'the machine words']) =>
+        premiumFailure(BridgeException(kind, message)).message;
+
+    test('every kind the bridge can send has a sentence of its own', () {
+      expect(said('premium_no_key'), 'Enter an account key first.');
+      expect(said('premium_unknown_key'), 'Unknown key.');
+      expect(said('premium_no_paid_time'), 'This key has no paid time.');
+      expect(said('premium_rejected'), 'The Gerfaut server refused.');
+      expect(said('premium_unreachable'), 'Could not reach the Gerfaut server.');
+      expect(said('premium_invalid'), "The server's answer did not check out.");
+      for (final kind in premiumErrorKinds) {
+        expect(said(kind), isNot(contains('the machine words')), reason: kind);
+      }
+    });
+
+    test('the kinds and the cases that answer them line up', () {
+      final answered = <PremiumFailureKind>{};
+      for (final kind in premiumErrorKinds) {
+        final answer = premiumFailureKind(kind);
+        expect(
+          answer,
+          isNot(PremiumFailureKind.other),
+          reason: '$kind has no case of its own',
+        );
+        expect(answered.add(answer), isTrue, reason: '$kind shares a case');
+      }
+    });
+
+    test('a 5xx reads as the sentence the server sent with it', () {
+      final failure = premiumFailure(
+        const BridgeException(
+          'premium_unreachable',
+          'the premium server is unreachable: HTTP 502: the confirmation '
+              'e-mail could not be sent; try again later',
+        ),
+      );
+      expect(
+        failure.message,
+        'The confirmation e-mail could not be sent; try again later.',
+      );
+      expect(failure.retry, isTrue);
+    });
+
+    test('an outage and a captive portal both read as out of reach', () {
+      const messages = [
+        'the premium server is unreachable: could not connect',
+        'the premium server is unreachable: HTTP 500',
+        'unexpected answer from the premium server: expected value at '
+            'line 1 column 1',
+      ];
+      for (final message in messages) {
+        final failure = premiumFailure(
+          BridgeException('premium_unreachable', message),
+        );
+        expect(failure.message, 'Could not reach the Gerfaut server.');
+        expect(failure.retry, isTrue);
+      }
+    });
+
+    test('a kind from elsewhere still gets plain words', () {
+      const raw = 'vault decryption failed: wrong key or corrupted file';
+      final failure = premiumFailure(const BridgeException('vault', raw));
+      expect(failure.message, 'That did not go through.');
+      expect(failure.detail, raw);
+    });
+
+    test('a refusal names the step and keeps the words under it', () {
+      final failure = premiumFailure(
+        const BridgeException('premium_rejected', 'wrong or expired code'),
+        refusal: 'The code was not accepted.',
+      );
+      expect(failure.message, 'The code was not accepted.');
+      expect(failure.detail, 'wrong or expired code');
+      expect(failure.retry, isFalse);
+      // A refusal is the only thing that line is about: an outage in
+      // the middle of the same step is still an outage.
+      expect(
+        premiumFailure(
+          const BridgeException(
+            'premium_unreachable',
+            'the premium server is unreachable: could not connect',
+          ),
+          refusal: 'The code was not accepted.',
+        ).message,
+        'Could not reach the Gerfaut server.',
+      );
+    });
+
+    testWidgets('every sentence fits a small phone at twice the size', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      for (final kind in [...premiumErrorKinds, 'tor', 'internal']) {
+        final failure = premiumFailure(
+          BridgeException(kind, 'the machine words, at some length'),
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: themeFrom(GerfautTokens.light, Brightness.light),
+            home: Builder(
+              builder: (context) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: const TextScaler.linear(2)),
+                child: Scaffold(
+                  body: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.all(GerfautSpacing.md),
+                      child: GerfautNotice(
+                        tone: NoticeTone.info,
+                        message: failure.message,
+                        hint: failure.hint,
+                        detail: failure.detail,
+                        liveRegion: true,
+                        actionsBelow: true,
+                        action: failure.retry
+                            ? GhostButton(label: 'Retry', onPressed: () {})
+                            : null,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text(failure.message), findsOneWidget, reason: kind);
+      }
+    });
+  });
+
   group('the root row', () {
     testWidgets('is the eighth, with the gem in Bruyère', (tester) async {
       useTallSurface(tester);
@@ -308,7 +446,10 @@ void main() {
       bridge.onPremiumActivate = (key) {
         attempts++;
         if (attempts == 1) {
-          throw const BridgeException('premium_unreachable', 'timed out');
+          throw const BridgeException(
+            'premium_unreachable',
+            'the premium server is unreachable: could not connect',
+          );
         }
         return PremiumLicence(
           certificate: 'c',
@@ -335,6 +476,57 @@ void main() {
       await tester.pumpAndSettle();
       expect(attempts, 2);
       expect(find.textContaining('Active until'), findsOneWidget);
+    });
+
+    testWidgets('a captive portal is the server out of reach', (tester) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge();
+      // A hotel wifi answering its own login page where JSON was
+      // promised: on a phone, the likeliest of these by far.
+      bridge.onPremiumActivate = (_) => throw const BridgeException(
+        'premium_unreachable',
+        'unexpected answer from the premium server: expected value at '
+            'line 1 column 1',
+      );
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), knownKey);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Activate'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Could not reach the Gerfaut server.'), findsOneWidget);
+      expect(find.textContaining('expected value'), findsNothing);
+      expect(find.text('Retry'), findsOneWidget);
+    });
+
+    testWidgets('a certificate that does not verify names the clock', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge();
+      bridge.onPremiumActivate = (_) => throw const BridgeException(
+        'premium_invalid',
+        'invalid licence certificate: signature does not verify',
+      );
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), knownKey);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Activate'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text("The server's answer did not check out."),
+        findsOneWidget,
+      );
+      expect(
+        find.text("Check this phone's date and time, then try again."),
+        findsOneWidget,
+      );
+      expect(find.textContaining('signature does not verify'), findsNothing);
     });
 
     testWidgets('forgetting the key asks first, then clears it here only', (
@@ -429,8 +621,10 @@ void main() {
     ) async {
       useTallSurface(tester);
       final bridge = premiumBridge(activated: true);
-      bridge.onPremiumDeleteAccount = () =>
-          throw const BridgeException('premium_unreachable', 'timed out');
+      bridge.onPremiumDeleteAccount = () => throw const BridgeException(
+        'premium_unreachable',
+        'the premium server is unreachable: could not connect',
+      );
       await tester.pumpWidget(premiumApp(bridge));
       await tester.pumpAndSettle();
 
@@ -459,7 +653,10 @@ void main() {
       );
       // The refresh on opening would restore the fake's paid time.
       bridge.onPremiumActivate = (_) =>
-          throw const BridgeException('premium_unreachable', 'offline');
+          throw const BridgeException(
+            'premium_unreachable',
+            'the premium server is unreachable: could not connect',
+          );
       await tester.pumpWidget(premiumApp(bridge));
       await tester.pumpAndSettle();
 
@@ -1039,7 +1236,10 @@ void main() {
 
       // A server out of reach is not a code that was refused.
       bridge.onPremiumConfirmChannel = (_, _) =>
-          throw const BridgeException('premium_unreachable', 'timed out');
+          throw const BridgeException(
+            'premium_unreachable',
+            'the premium server is unreachable: could not connect',
+          );
       await tester.enterText(find.byType(TextField), '333333');
       await tester.pumpAndSettle();
       await tester.tap(find.text('Confirm'));
@@ -1057,7 +1257,8 @@ void main() {
       // 502, which the core reads as the server being out of reach.
       bridge.onPremiumCreateChannel = (_, _, _) => throw const BridgeException(
         'premium_unreachable',
-        'HTTP 502: the confirmation e-mail could not be sent; try again later',
+        'the premium server is unreachable: HTTP 502: the confirmation '
+            'e-mail could not be sent; try again later',
       );
       await tester.pumpWidget(premiumApp(bridge));
       await tester.pumpAndSettle();
@@ -1072,10 +1273,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text('The confirmation e-mail could not be sent.'),
+        find.text('The confirmation e-mail could not be sent; try again later.'),
         findsOneWidget,
       );
       expect(find.text('The server did not take this address.'), findsNothing);
+      expect(find.text('Could not reach the Gerfaut server.'), findsNothing);
       // The address is still there to try again with.
       expect(find.byType(EmailChannelScreen), findsOneWidget);
     });
@@ -1195,7 +1397,10 @@ void main() {
     ) async {
       final bridge = watching();
       bridge.onPremiumHeartbeat = () =>
-          throw const BridgeException('premium_unreachable', 'timed out');
+          throw const BridgeException(
+            'premium_unreachable',
+            'the premium server is unreachable: could not connect',
+          );
       await tester.pumpWidget(wholeApp(bridge));
       await tester.pumpAndSettle();
 

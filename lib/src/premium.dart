@@ -11,6 +11,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'bridge.dart';
 import 'models.dart';
 import 'state.dart';
 
@@ -227,6 +228,140 @@ String alertPhrase(PremiumEvent event) {
     AlertKind.walletRegistered => 'now watched by the server',
     AlertKind.other => 'something happened',
   };
+}
+
+// --- what a failure says --------------------------------------------------
+
+/// The cases a premium card knows how to talk about.
+///
+/// One per sentence worth writing, and [other] for everything else that
+/// can reach a premium card — the vault, a wallet that moved, a bridge
+/// that was never started. Nothing falls through: [other] has a
+/// sentence of its own, and the machine's words go under it rather than
+/// in front of the person reading.
+enum PremiumFailureKind {
+  unreachable,
+  refused,
+  unknownKey,
+  noPaidTime,
+  noKey,
+  invalid,
+  tor,
+  other,
+}
+
+/// Which case a bridge failure falls in. The kinds are [premiumErrorKinds]
+/// plus `tor`, which reaches these calls because they take the same route
+/// the backend does.
+PremiumFailureKind premiumFailureKind(String kind) => switch (kind) {
+  'premium_unreachable' => PremiumFailureKind.unreachable,
+  'premium_rejected' => PremiumFailureKind.refused,
+  'premium_unknown_key' => PremiumFailureKind.unknownKey,
+  'premium_no_paid_time' => PremiumFailureKind.noPaidTime,
+  'premium_no_key' => PremiumFailureKind.noKey,
+  'premium_invalid' => PremiumFailureKind.invalid,
+  'tor' => PremiumFailureKind.tor,
+  _ => PremiumFailureKind.other,
+};
+
+/// What a failed premium call reads as under the card it concerns.
+class PremiumFailure {
+  const PremiumFailure(
+    this.message, {
+    this.hint,
+    this.detail,
+    this.retry = false,
+  });
+
+  /// The first line, and always the app's own words: never a status
+  /// code, never a parser's complaint.
+  final String message;
+
+  /// What to do about it, quieter under the message.
+  final String? hint;
+
+  /// The other side's own sentence, verbatim. Takes the place of [hint].
+  final String? detail;
+
+  /// Whether asking the same thing again could work.
+  final bool retry;
+}
+
+/// A 5xx carries the server's own sentence: it answered, it just could
+/// not do the thing — the confirmation e-mail that would not send, say.
+/// The core wraps its errors ("the premium server is unreachable: HTTP
+/// 502: ..."), so this is not anchored to the start of the message; an
+/// anchored match never fires and quietly turns every such answer into
+/// an outage.
+final RegExp _statusWords = RegExp(r'HTTP \d{3}: (.+)$');
+
+/// What went wrong, in words fit for a card: one sentence, a quieter
+/// second line when there is something to do about it or something the
+/// other side said, and whether offering "Retry" makes sense.
+///
+/// [refusal] takes the place of the first line when the server refused
+/// what this screen asked. The server's words name the case — a code
+/// that is wrong, an address it already has — but not the step they are
+/// about, and a page that asked for one thing should say which.
+PremiumFailure premiumFailure(BridgeException error, {String? refusal}) {
+  return switch (premiumFailureKind(error.kind)) {
+    PremiumFailureKind.unreachable => PremiumFailure(
+      _serverSentence(error.message) ?? 'Could not reach the Gerfaut server.',
+      retry: true,
+    ),
+    PremiumFailureKind.refused => PremiumFailure(
+      refusal ?? 'The Gerfaut server refused.',
+      detail: error.message,
+    ),
+    PremiumFailureKind.unknownKey => const PremiumFailure(
+      'Unknown key.',
+      hint: 'Check it against the key shown at purchase.',
+    ),
+    PremiumFailureKind.noPaidTime => const PremiumFailure(
+      'This key has no paid time.',
+      hint: 'Add time on gerfaut-wallet.com, then try again.',
+    ),
+    PremiumFailureKind.noKey => const PremiumFailure(
+      'Enter an account key first.',
+    ),
+    // A certificate, a heartbeat, a clock too far off: this device
+    // cannot trust what it was handed. The clock is the one of the
+    // three a person can do anything about.
+    PremiumFailureKind.invalid => const PremiumFailure(
+      "The server's answer did not check out.",
+      hint: "Check this phone's date and time, then try again.",
+      retry: true,
+    ),
+    // The call goes through Tor whenever the backend of the active
+    // network does, and nothing falls back to the clear: a Tor that
+    // cannot be reached is a call that never happened. The core's own
+    // sentence names the proxy it wanted, which is not what a person
+    // reading this card can act on.
+    PremiumFailureKind.tor => const PremiumFailure(
+      'Tor is not available on this phone.',
+      hint:
+          'These calls go through Tor and never around it. The Tor card '
+          'is under Network.',
+      retry: true,
+    ),
+    PremiumFailureKind.other => PremiumFailure(
+      'That did not go through.',
+      detail: error.message,
+      retry: true,
+    ),
+  };
+}
+
+/// The sentence a failing status carried, capitalized and stopped, or
+/// null when the answer held none — then the server is simply out of
+/// reach, and saying more would be inventing it.
+String? _serverSentence(String message) {
+  final match = _statusWords.firstMatch(message);
+  if (match == null) return null;
+  final words = match.group(1)!.trim();
+  if (words.isEmpty) return null;
+  final capital = words[0].toUpperCase() + words.substring(1);
+  return RegExp(r'[.!?]$').hasMatch(capital) ? capital : '$capital.';
 }
 
 // --- the heartbeat -------------------------------------------------------
