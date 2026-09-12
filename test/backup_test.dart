@@ -850,6 +850,28 @@ void main() {
       );
     });
 
+    testWidgets('a file from a newer Gerfaut is refused in the core words', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge();
+      // The core opens the file — so the password was right — and
+      // refuses the schema by name. That sentence is the whole answer,
+      // and reading it as a wrong password would send the person back
+      // to retype what they got right.
+      bridge.onPreviewBackup = (_, _) => throw const BridgeException(
+        'invalid_input',
+        'invalid backup: backup version 3 needs a newer Gerfaut',
+      );
+      await openBackup(tester, bridge);
+
+      expect(
+        find.text('invalid backup: backup version 3 needs a newer Gerfaut'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Wrong password'), findsNothing);
+    });
+
     testWidgets('a watched wallet is listed but cannot be chosen', (
       tester,
     ) async {
