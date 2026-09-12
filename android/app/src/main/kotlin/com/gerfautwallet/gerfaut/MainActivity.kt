@@ -98,6 +98,15 @@ class MainActivity : FlutterFragmentActivity() {
                         result.success(null)
                     }
                 }
+                "openInApp" -> {
+                    val target = call.argument<String>("package")
+                    val url = call.argument<String>("url")
+                    if (target == null || url == null) {
+                        result.error("bad_argument", "openInApp takes package and url", null)
+                    } else {
+                        result.success(openInApp(target, url))
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
@@ -185,6 +194,28 @@ class MainActivity : FlutterFragmentActivity() {
             }
         }
         clipboard.setPrimaryClip(clip)
+    }
+
+    // Hands a URL to one named app, and to no other. Answers false when
+    // that app is not installed.
+    //
+    // An intent without a package is offered to every app that declared
+    // the scheme, and the system asks the user to pick one. The links
+    // that come through here carry an ntfy topic, which is the whole
+    // secret of a channel: a chooser listing whatever app declared
+    // `ntfy://` is a chooser for who reads the alerts of this account.
+    // Naming the package is what keeps the topic between Gerfaut and
+    // ntfy. It needs the <queries> entry in the manifest: without it
+    // the package is invisible to this app and an installed ntfy looks
+    // exactly like an absent one.
+    private fun openInApp(target: String, url: String): Boolean {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).setPackage(target)
+        return try {
+            startActivity(intent)
+            true
+        } catch (_: ActivityNotFoundException) {
+            false
+        }
     }
 
     // Opens the system's save dialog on a new document and writes the

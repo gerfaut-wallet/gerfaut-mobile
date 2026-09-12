@@ -6,6 +6,7 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 
+import 'package:gerfaut/src/apps.dart';
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/clipboard.dart';
 import 'package:gerfaut/src/disguise.dart';
@@ -147,6 +148,25 @@ class FakeSensitiveClipboard implements SensitiveClipboard {
 
   @override
   Future<void> copy(String text) async => copied.add(text);
+}
+
+/// Records which app a link was handed to instead of starting an
+/// intent.
+class FakeAppOpener implements AppOpener {
+  FakeAppOpener({this.installed = true});
+
+  /// Whether the named app is on the phone. False is the platform's own
+  /// answer when no activity of that package can take the intent.
+  bool installed;
+
+  /// Every attempt, as `package url`.
+  final List<String> opened = [];
+
+  @override
+  Future<bool> openIn({required String package, required String url}) async {
+    opened.add('$package $url');
+    return installed;
+  }
 }
 
 class FakeDocumentSaver implements DocumentSaver {

@@ -8,6 +8,7 @@ import 'package:gerfaut/screens/premium_consent.dart';
 import 'package:gerfaut/screens/settings.dart';
 import 'package:gerfaut/screens/settings/premium_section.dart';
 import 'package:gerfaut/screens/wallet_home.dart';
+import 'package:gerfaut/src/apps.dart';
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/clipboard.dart';
 import 'package:gerfaut/src/disguise.dart';
@@ -66,6 +67,7 @@ Widget premiumApp(
   FakeBridge bridge, {
   bool root = false,
   FakeSensitiveClipboard? clipboard,
+  FakeAppOpener? appOpener,
 }) {
   return ProviderScope(
     overrides: [
@@ -73,6 +75,7 @@ Widget premiumApp(
       disguiseServiceProvider.overrideWithValue(FakeDisguise()),
       if (clipboard != null)
         sensitiveClipboardProvider.overrideWithValue(clipboard),
+      if (appOpener != null) appOpenerProvider.overrideWithValue(appOpener),
     ],
     child: MaterialApp(
       theme: themeFrom(GerfautTokens.light, Brightness.light),
@@ -566,8 +569,9 @@ void main() {
       useTallSurface(tester);
       final launcher = FakeUrlLauncher();
       UrlLauncherPlatform.instance = launcher;
+      final opener = FakeAppOpener();
       final bridge = premiumBridge(activated: true);
-      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpWidget(premiumApp(bridge, appOpener: opener));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Add a channel'));
@@ -593,9 +597,16 @@ void main() {
       // The first channel is tried at once.
       expect(bridge.premiumCalls, contains('test:ch1'));
 
+      // To ntfy by name, never to whoever declared the scheme: the
+      // chooser an implicit intent raises would be a chooser for who
+      // reads the alerts of this account.
       await tester.tap(find.text('Open in ntfy'));
       await tester.pumpAndSettle();
-      expect(launcher.launched, ['ntfy://ntfy.gerfaut-wallet.com/$topic']);
+      expect(opener.opened, [
+        'io.heckel.ntfy ntfy://ntfy.gerfaut-wallet.com/$topic',
+      ]);
+      expect(launcher.launched, isEmpty);
+      expect(find.textContaining('not installed'), findsNothing);
 
       // The topic stays reachable from the row.
       await tester.pageBack();
@@ -606,6 +617,32 @@ void main() {
       expect(find.text('Subscribe link'), findsOneWidget);
       expect(find.text('Send a test'), findsOneWidget);
       expect(find.text('Remove'), findsOneWidget);
+    });
+
+    testWidgets('ntfy: a phone without the app is told so', (tester) async {
+      useTallSurface(tester);
+      UrlLauncherPlatform.instance = FakeUrlLauncher();
+      final opener = FakeAppOpener(installed: false);
+      final bridge = premiumBridge(activated: true);
+      await tester.pumpWidget(premiumApp(bridge, appOpener: opener));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Add a channel'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ntfy'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Open in ntfy'));
+      await tester.pumpAndSettle();
+      // Nothing started, so the sentence is exact: no other app was
+      // offered the topic on the way.
+      expect(opener.opened, hasLength(1));
+      expect(
+        find.text('The ntfy app is not installed on this phone.'),
+        findsOneWidget,
+      );
+      // The topic is still there to copy into it once installed.
+      expect(find.text('Copy'), findsOneWidget);
     });
 
     testWidgets('ntfy: the topic is copied as a secret', (tester) async {

@@ -160,5 +160,12 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- The one app a subscribe link is handed to. A topic is the
+             whole secret of an alert channel, so the intent that carries
+             it names its package instead of being offered to whatever
+             app declared the ntfy scheme. From Android 11 a package this
+             app never asks about is invisible to it, and an installed
+             ntfy would look exactly like an absent one. -->
+        <package android:name="io.heckel.ntfy" />
     </queries>
 </manifest>

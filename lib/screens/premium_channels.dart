@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../src/apps.dart';
 import '../src/bridge.dart';
 import '../src/clipboard.dart';
 import '../src/models.dart';
@@ -40,6 +40,10 @@ String channelHint(ChannelKind kind) => switch (kind) {
 /// the topic, subscription offered.
 String ntfyAppUrl(String subscribeUrl) =>
     subscribeUrl.replaceFirst(RegExp(r'^https?://'), 'ntfy://');
+
+/// The app a subscribe link is handed to, and no other. The scheme is
+/// anyone's to declare; the package is one app.
+const String ntfyPackage = 'io.heckel.ntfy';
 
 /// Opens a link in the app that claims it, or the browser.
 Future<bool> openExternal(String url) {
@@ -194,12 +198,13 @@ class _NtfyChannelScreenState extends ConsumerState<NtfyChannelScreen> {
   }
 
   Future<void> _openApp() async {
-    var opened = false;
-    try {
-      opened = await openExternal(ntfyAppUrl(widget.subscribeUrl));
-    } on PlatformException {
-      opened = false;
-    }
+    // To ntfy by name. Opened the ordinary way the link would be
+    // offered to every app that declared the scheme, and the topic in
+    // it is the whole secret of this channel. Nothing opened means the
+    // app is not on this phone, which is what the note below says.
+    final opened = await ref
+        .read(appOpenerProvider)
+        .openIn(package: ntfyPackage, url: ntfyAppUrl(widget.subscribeUrl));
     if (!opened && mounted) setState(() => _noApp = true);
   }
 
