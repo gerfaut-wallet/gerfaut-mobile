@@ -1497,7 +1497,11 @@ class _ConfirmCodeRowState extends ConsumerState<_ConfirmCodeRow> {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               SizedBox(
-                width: 128,
+                // Six mono digits and their padding at the body size,
+                // and as much again as the text is scaled: a fixed
+                // width held four of them at twice the size. The Wrap
+                // still caps it at the row's width.
+                width: MediaQuery.textScalerOf(context).scale(128),
                 child: _CodeField(
                   controller: _controller,
                   enabled: !_busy,
@@ -1528,7 +1532,8 @@ class _ConfirmCodeRowState extends ConsumerState<_ConfirmCodeRow> {
 }
 
 /// Six digits and nothing else: the number keyboard, no suggestions,
-/// mono at the body size so the phone never zooms.
+/// mono at the body size so the phone never zooms, and never under the
+/// 44px a thumb needs.
 class _CodeField extends StatelessWidget {
   const _CodeField({
     required this.controller,
@@ -1556,6 +1561,7 @@ class _CodeField extends StatelessWidget {
         LengthLimitingTextInputFormatter(confirmationCodeLength),
       ],
       style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
+      textAlignVertical: TextAlignVertical.center,
       onChanged: (_) => onChanged(),
       onSubmitted: onSubmitted == null ? null : (_) => onSubmitted!(),
       decoration: InputDecoration(
@@ -1566,6 +1572,10 @@ class _CodeField extends StatelessWidget {
         ),
         filled: true,
         fillColor: tokens.surfaceSunken,
+        // The line and its padding come to 42px at the body size: the
+        // floor is what makes the field a target, the text centred in
+        // whatever the floor leaves.
+        constraints: const BoxConstraints(minHeight: 44),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: GerfautSpacing.md,
           vertical: GerfautSpacing.sm,

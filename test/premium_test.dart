@@ -1421,6 +1421,41 @@ void main() {
       expect(find.text('The code was not accepted.'), findsNothing);
     });
 
+    testWidgets('e-mail: the code field is a target, and holds six digits '
+        'at twice the text size', (tester) async {
+      tester.view.physicalSize = const Size(411, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(premiumApp(waitingForCode()));
+      await tester.pumpAndSettle();
+
+      // 44px tall at the body size, where the line and its padding
+      // alone came to 42.
+      final field = find.byType(TextField);
+      expect(tester.getSize(field).height, greaterThanOrEqualTo(44));
+      final atOne = tester.getSize(field).width;
+
+      // Doubled, the field grows with its digits instead of showing
+      // four of the six, and nothing runs past the row.
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.platformDispatcher.clearAllTestValues);
+      await tester.pumpAndSettle();
+      await tester.enterText(field, '482913');
+      await tester.pumpAndSettle();
+      expect(tester.getSize(field).width, closeTo(atOne * 2, 1));
+      expect(tester.getSize(field).height, greaterThanOrEqualTo(44));
+      final digits = tester.getSize(find.text('482913'));
+      expect(digits.width + 2 * GerfautSpacing.md, lessThan(atOne * 2));
+      expect(
+        tester
+            .widget<PrimaryButton>(
+              find.widgetWithText(PrimaryButton, 'Confirm'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+    });
+
     testWidgets('e-mail: a confirmation that never left says so', (
       tester,
     ) async {
