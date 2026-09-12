@@ -12,9 +12,9 @@ import 'rust/api.dart' as rust;
 ///
 /// Kinds match the desktop app: unrecognized_input, private_material,
 /// invalid_input, network_mismatch, wallet_not_found, duplicate_wallet,
-/// vault, sync, backend_unavailable, broadcast, descriptor, internal —
-/// plus the bridge-level not_initialized, bad_key, bad_json, and the
-/// premium server's: premium_no_key, premium_unknown_key,
+/// vault, sync, backend_unavailable, broadcast, descriptor, tor,
+/// internal — plus the bridge-level not_initialized, bad_key, bad_json,
+/// and the premium server's: premium_no_key, premium_unknown_key,
 /// premium_no_paid_time, premium_rejected, premium_unreachable,
 /// premium_unexpected_response, premium_invalid_certificate,
 /// premium_invalid_heartbeat, premium_stale_heartbeat.

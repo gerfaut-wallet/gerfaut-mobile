@@ -635,6 +635,32 @@ void main() {
       expect(find.byType(WatchedPill), findsOneWidget);
     });
 
+    testWidgets('a Tor that cannot be reached says so in words', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      // What the core answers when the call would have gone through
+      // Tor and no Tor answered. Nothing falls back to the clear.
+      bridge.onPremiumWallets = () => throw const BridgeException(
+        'tor',
+        'tor: no Tor proxy to reach gerfaut.onion through',
+      );
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tor is not available on this phone.'), findsOneWidget);
+      expect(
+        find.text(
+          'These calls go through Tor and never around it. The Tor card '
+          'is under Network.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('no Tor proxy to reach'), findsNothing);
+      expect(find.text('Retry'), findsOneWidget);
+    });
+
     testWidgets('a refusal lands under the card, in amber', (tester) async {
       useTallSurface(tester);
       final bridge = premiumBridge(activated: true);

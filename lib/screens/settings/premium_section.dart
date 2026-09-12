@@ -494,6 +494,18 @@ class _ErrorNote extends StatelessWidget {
         error.message,
         false,
       ),
+      // The call goes through Tor whenever the backend of the active
+      // network does, and nothing falls back to the clear: a Tor that
+      // cannot be reached is a call that never happened. The core's own
+      // sentence names the proxy it wanted, which is not what a person
+      // reading this card can act on.
+      'tor' => (
+        'Tor is not available on this phone.',
+        'These calls go through Tor and never around it. The Tor card '
+            'is under Network.',
+        null,
+        true,
+      ),
       _ => (error.message, null, null, true),
     };
     return Padding(
