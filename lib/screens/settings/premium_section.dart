@@ -1055,7 +1055,14 @@ class _ChannelsCard extends ConsumerWidget {
             // it belongs to: an address is written to only once its
             // owner has proved they read it.
             if (channel.kind == ChannelKind.email && !channel.linked)
-              _ConfirmCodeRow(channel: channel, onConfirmed: onConfirmed),
+              // Keyed by the channel: the field holds what was typed,
+              // and a list that reorders under it must not hand that
+              // to another channel's row.
+              _ConfirmCodeRow(
+                key: ValueKey(channel.id),
+                channel: channel,
+                onConfirmed: onConfirmed,
+              ),
           ],
           const SizedBox(height: GerfautSpacing.sm),
           Align(
@@ -1254,7 +1261,11 @@ class _ChannelRow extends StatelessWidget {
 /// last step of making it — and what the server says about a code
 /// lands beside the field that was typed into, not under the card.
 class _ConfirmCodeRow extends ConsumerStatefulWidget {
-  const _ConfirmCodeRow({required this.channel, required this.onConfirmed});
+  const _ConfirmCodeRow({
+    super.key,
+    required this.channel,
+    required this.onConfirmed,
+  });
 
   final PremiumChannel channel;
 

@@ -544,16 +544,16 @@ class _SettingsPanel extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: GerfautSpacing.sm),
-                      // A host is long and the screen is narrow: it
-                      // takes what is left and ends in an ellipsis
-                      // rather than pushing the network off the row.
+                      // A host is long and the screen is narrow, so it
+                      // takes what is left and wraps. It is not cut
+                      // short: this panel exists to be read before it
+                      // is accepted, and a name ending in an ellipsis
+                      // is a name whose end nobody checked.
                       Expanded(
                         child: Text(
                           backend.backend,
                           style: value,
                           textAlign: TextAlign.end,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -567,12 +567,7 @@ class _SettingsPanel extends StatelessWidget {
             for (final host in hosts)
               Padding(
                 padding: const EdgeInsets.only(top: GerfautSpacing.xs),
-                child: Text(
-                  host,
-                  style: value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                child: Text(host, style: value),
               ),
           ],
         ],

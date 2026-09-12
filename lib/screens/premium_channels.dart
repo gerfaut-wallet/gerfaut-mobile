@@ -202,9 +202,16 @@ class _NtfyChannelScreenState extends ConsumerState<NtfyChannelScreen> {
     // offered to every app that declared the scheme, and the topic in
     // it is the whole secret of this channel. Nothing opened means the
     // app is not on this phone, which is what the note below says.
-    final opened = await ref
-        .read(appOpenerProvider)
-        .openIn(package: ntfyPackage, url: ntfyAppUrl(widget.subscribeUrl));
+    //
+    // And only ever an ntfy link: the URL comes from the server, and a
+    // scheme this page did not build has no business being started by
+    // name, whatever the package.
+    final url = ntfyAppUrl(widget.subscribeUrl);
+    final opened =
+        url.startsWith('ntfy://') &&
+        await ref
+            .read(appOpenerProvider)
+            .openIn(package: ntfyPackage, url: url);
     if (!opened && mounted) setState(() => _noApp = true);
   }
 
