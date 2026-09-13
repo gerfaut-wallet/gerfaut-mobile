@@ -343,17 +343,18 @@ class _WalletListState extends ConsumerState<_WalletList> {
     }
   }
 
-  /// The refused drop, once more. A list that changed underneath —
-  /// a wallet added or removed meanwhile — makes the drop meaningless,
-  /// and the note simply goes.
+  /// Whether [ids] are exactly the wallets on screen. A list that
+  /// changed underneath — a wallet added or removed meanwhile — leaves
+  /// a refused drop nothing to try again.
+  bool _covers(List<String> ids) {
+    final current = {for (final wallet in widget.wallets) wallet.id};
+    return ids.length == current.length && ids.every(current.contains);
+  }
+
+  /// The refused drop, once more.
   void _retry() {
     final refused = _refused;
-    if (refused == null) return;
-    final ids = {for (final wallet in widget.wallets) wallet.id};
-    if (refused.ids.length != ids.length || !refused.ids.every(ids.contains)) {
-      setState(() => _refused = null);
-      return;
-    }
+    if (refused == null || !_covers(refused.ids)) return;
     _apply(refused.ids);
   }
 
@@ -364,6 +365,10 @@ class _WalletListState extends ConsumerState<_WalletList> {
     final shown = _inOrder();
     final errors = ref.watch(syncErrorsProvider);
     final refused = _refused;
+    // A refused drop whose list has changed since says so, and keeps
+    // the way out alone: a "Try again" with nothing left to try would
+    // do nothing, and a note that simply vanished would say less.
+    final stale = refused != null && !_covers(refused.ids);
     return RefreshIndicator(
       onRefresh: widget.onRefresh,
       child: ReorderableListView.builder(
@@ -384,12 +389,21 @@ class _WalletListState extends ConsumerState<_WalletList> {
                   // on the screen says the order went back.
                   liveRegion: true,
                   message: 'The new order could not be saved.',
-                  detail: refused.reason,
+                  hint: stale ? 'The list changed. Drag again.' : null,
+                  detail: stale ? null : refused.reason,
                   actionsBelow: true,
-                  action: ConfirmActions(
-                    cancel: GhostButton(label: 'Dismiss', onPressed: _dismiss),
-                    confirm: GhostButton(label: 'Try again', onPressed: _retry),
-                  ),
+                  action: stale
+                      ? GhostButton(label: 'Dismiss', onPressed: _dismiss)
+                      : ConfirmActions(
+                          cancel: GhostButton(
+                            label: 'Dismiss',
+                            onPressed: _dismiss,
+                          ),
+                          confirm: GhostButton(
+                            label: 'Try again',
+                            onPressed: _retry,
+                          ),
+                        ),
                 ),
               ),
         itemCount: shown.length,

@@ -310,6 +310,52 @@ void main() {
       expect(find.text('Try again'), findsOneWidget);
       expect(top('Cold storage'), lessThan(top('Spending')));
     });
+
+    testWidgets('a note whose list changed says so, with nothing to retry', (
+      tester,
+    ) async {
+      final bridge = returning(
+        wallets: [
+          makeMeta(id: 'w1', name: 'Cold storage'),
+          makeMeta(id: 'w2', name: 'Spending'),
+        ],
+      );
+      bridge.onReorderWallets = (_) {
+        throw const BridgeException('vault_locked', 'the vault is locked');
+      };
+      await tester.pumpWidget(app(bridge));
+      await tester.pumpAndSettle();
+
+      double top(String name) => tester.getTopLeft(find.text(name)).dy;
+      final pitch = top('Spending') - top('Cold storage');
+      await dragDown(
+        tester,
+        tester.getCenter(find.text('Cold storage')),
+        pitch * 0.75,
+        hold: kLongPressTimeout + kPressTimeout,
+      );
+      expect(find.text('Try again'), findsOneWidget);
+
+      // A wallet added meanwhile — the list is read again on the next
+      // sync — leaves the refused drop nothing to try: the note says
+      // what to do instead of offering a try that would do nothing,
+      // and keeps only the way out.
+      bridge.wallets = [...bridge.wallets, makeMeta(id: 'w3', name: 'Savings')];
+      await tester.fling(find.text('Spending'), const Offset(0, 300), 1000);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(find.text('Savings'), findsOneWidget);
+      expect(find.text('The new order could not be saved.'), findsOneWidget);
+      expect(find.text('The list changed. Drag again.'), findsOneWidget);
+      expect(find.text('the vault is locked'), findsNothing);
+      expect(find.text('Try again'), findsNothing);
+      expect(bridge.reorderCalls, hasLength(1));
+
+      await tester.tap(find.text('Dismiss'));
+      await tester.pumpAndSettle();
+      expect(find.byType(GerfautNotice), findsNothing);
+    });
   });
 
   testWidgets('empty state shows the guidance and its single action', (
