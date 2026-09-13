@@ -654,7 +654,9 @@ class _WarningRow extends StatelessWidget {
 }
 
 /// A fact value with [_claimedMark] under it when [claimed], the value
-/// alone otherwise. Right-aligned, like every value of the card.
+/// alone otherwise. Right-aligned, like every value of the card, and
+/// amber: the mark is a caution about the figure, not a footnote to
+/// it, and the desktop paints it in the same tone.
 class _Claimed extends StatelessWidget {
   const _Claimed({
     required this.claimed,
@@ -678,7 +680,7 @@ class _Claimed extends StatelessWidget {
           _claimedMark,
           style: tokens.label.copyWith(
             letterSpacing: 0,
-            color: tokens.textMuted,
+            color: tokens.pending,
           ),
           textAlign: TextAlign.right,
         ),

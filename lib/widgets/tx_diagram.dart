@@ -139,7 +139,7 @@ class TxDiagram extends ConsumerStatefulWidget {
 
   /// A line under the fee's figure when the fee is not the chain's
   /// word — the broadcast preview marks a fee the PSBT states and no
-  /// backend confirmed. Nothing when null.
+  /// backend confirmed. Amber, the tone of a caution. Nothing when null.
   final String? feeNote;
 
   /// Boxes kept per side before the rest folds into "+N more".
@@ -483,7 +483,7 @@ class _FeeBox extends StatelessWidget {
                 fontSize: _boxText,
                 height: _boxLine / _boxText,
                 letterSpacing: 0,
-                color: tokens.textMuted,
+                color: tokens.pending,
               ),
             ),
         ],

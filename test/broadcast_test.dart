@@ -312,8 +312,15 @@ void main() {
       findsOneWidget,
     );
     // The fee under the diagram, the inputs total, the fee and its rate
-    // among the facts: four figures, four marks, in the desktop's words.
+    // among the facts: four figures, four marks, in the desktop's words
+    // and its tone — amber, a caution, not a muted footnote.
     expect(find.text('as the PSBT claims'), findsNWidgets(4));
+    for (final element in find.text('as the PSBT claims').evaluate()) {
+      expect(
+        (element.widget as Text).style?.color,
+        GerfautTokens.light.pending,
+      );
+    }
 
     // The last word before the send says it too.
     await tester.tap(find.widgetWithText(FilledButton, 'Broadcast'));

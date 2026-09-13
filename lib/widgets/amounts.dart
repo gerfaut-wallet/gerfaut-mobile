@@ -245,7 +245,7 @@ class IoListHeading extends ConsumerWidget {
 
   /// A line under the heading when the total is not the chain's word —
   /// the broadcast preview marks a sum the PSBT states and no backend
-  /// confirmed. Nothing when null.
+  /// confirmed. Amber, the tone of a caution. Nothing when null.
   final String? note;
 
   @override
@@ -288,7 +288,7 @@ class IoListHeading extends ConsumerWidget {
           note,
           style: tokens.label.copyWith(
             letterSpacing: 0,
-            color: tokens.textMuted,
+            color: tokens.pending,
           ),
         ),
       ],
