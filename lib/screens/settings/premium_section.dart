@@ -196,30 +196,40 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   /// a consent for.
   void _unwatchOrphan(String id) => setState(() => _confirmUnwatchId = id);
 
-  /// The yes: the question goes, and the call is made.
-  Future<void> _unwatch(String id) {
-    setState(() => _confirmUnwatchId = null);
-    return _askForWallet(id, () => _bridge.premiumUnwatchWallet(id));
+  /// The yes: the call is made with the question still up, its buttons
+  /// held meanwhile, and the question goes only once the server has
+  /// said yes. On a refusal it stays, the failure under the card, so
+  /// the next try is one tap away rather than a switch and a question.
+  Future<void> _unwatch(String id) async {
+    final done = await _askForWallet(
+      id,
+      () => _bridge.premiumUnwatchWallet(id),
+    );
+    if (done && mounted && _confirmUnwatchId == id) {
+      setState(() => _confirmUnwatchId = null);
+    }
   }
 
   void _cancelUnwatch() => setState(() => _confirmUnwatchId = null);
 
   /// One call about one wallet: its row is busy while it runs, a
   /// failure lands under the card, and what the server holds is read
-  /// again afterwards.
-  Future<void> _askForWallet(String id, Future<void> Function() call) async {
+  /// again afterwards. True once the server has said yes.
+  Future<bool> _askForWallet(String id, Future<void> Function() call) async {
     setState(() {
       _busyWalletId = id;
       _walletsError = null;
     });
     try {
       await call();
-      if (!mounted) return;
+      if (!mounted) return true;
       ref.invalidate(premiumStateProvider);
       ref.invalidate(premiumWalletsProvider);
       ref.invalidate(premiumEventsProvider);
+      return true;
     } on BridgeException catch (error) {
       if (mounted) setState(() => _walletsError = error);
+      return false;
     } finally {
       if (mounted) setState(() => _busyWalletId = null);
     }
@@ -928,6 +938,7 @@ class _WatchedWalletsCard extends ConsumerWidget {
           row,
           _UnwatchQuestion(
             name: name,
+            busy: busyWalletId == id,
             onConfirm: () => onUnwatchConfirm(id),
             onCancel: onUnwatchCancel,
           ),
@@ -1080,15 +1091,21 @@ class _WalletRow extends StatelessWidget {
 /// alert history there too, and that does not come back with the
 /// switch. Amber, since nothing is at stake but a log; the button that
 /// does it is the destructive one, as for every deletion that cannot
-/// be undone. Never a single tap.
+/// be undone. Never a single tap, and never two: the question stays up
+/// while the server answers, its buttons held, so a second press has
+/// nothing to land on.
 class _UnwatchQuestion extends StatelessWidget {
   const _UnwatchQuestion({
     required this.name,
+    required this.busy,
     required this.onConfirm,
     required this.onCancel,
   });
 
   final String name;
+
+  /// The call is with the server: neither answer can be given again.
+  final bool busy;
   final VoidCallback onConfirm;
   final VoidCallback onCancel;
 
@@ -1108,8 +1125,14 @@ class _UnwatchQuestion extends StatelessWidget {
         // row of their own under it, the way out first.
         actionsBelow: true,
         action: ConfirmActions(
-          cancel: GhostButton(label: 'Cancel', onPressed: onCancel),
-          confirm: DangerButton(label: 'Unwatch wallet', onPressed: onConfirm),
+          cancel: GhostButton(
+            label: 'Cancel',
+            onPressed: busy ? null : onCancel,
+          ),
+          confirm: DangerButton(
+            label: busy ? 'Unwatching…' : 'Unwatch wallet',
+            onPressed: busy ? null : onConfirm,
+          ),
         ),
       ),
     );

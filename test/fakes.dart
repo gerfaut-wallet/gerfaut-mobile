@@ -1535,10 +1535,19 @@ class FakeBridge implements GerfautBridge {
     }
   }
 
+  /// Unwatch hook; throw a [BridgeException] to simulate a refusal.
+  /// The default takes the wallet off.
+  FutureOr<void> Function(String id)? onPremiumUnwatch;
+
   @override
   Future<void> premiumUnwatchWallet(String id) async {
     premiumCalls.add('unwatch:$id');
     _needKey();
+    final hook = onPremiumUnwatch;
+    if (hook != null) {
+      await hook(id);
+      return;
+    }
     premiumWatched.removeWhere((w) => w.id == id);
   }
 

@@ -883,6 +883,93 @@ void main() {
       expect(switchOf(tester, 'Cold storage').value, isTrue);
     });
 
+    testWidgets('a refused unwatch keeps the question up for the next try', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumConsents.add(
+        const WatchConsent(walletId: 'w1', consentedAt: 1),
+      );
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+      await toggle(tester, 'Cold storage');
+      expect(switchOf(tester, 'Cold storage').value, isTrue);
+
+      bridge.onPremiumUnwatch = (_) {
+        throw const BridgeException('premium_unreachable', 'timed out');
+      };
+      await toggle(tester, 'Cold storage');
+      await tester.tap(find.widgetWithText(DangerButton, 'Unwatch wallet'));
+      await tester.pumpAndSettle();
+
+      // The server did not answer: the question is still there, the
+      // switch still on, and the failure said under the card — the
+      // next try is one tap, not a switch and a question over again.
+      expect(bridge.premiumCalls.where((c) => c == 'unwatch:w1'), hasLength(1));
+      expect(
+        find.text(
+          'Unwatching "Cold storage" also deletes its alert history on the '
+          'server.',
+        ),
+        findsOneWidget,
+      );
+      expect(switchOf(tester, 'Cold storage').value, isTrue);
+      expect(find.text('Could not reach the Gerfaut server.'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Could not reach the Gerfaut server.')).dy,
+        greaterThan(
+          tester.getBottomLeft(find.textContaining('Unwatching "Cold')).dy,
+        ),
+      );
+
+      bridge.onPremiumUnwatch = null;
+      await tester.tap(find.widgetWithText(DangerButton, 'Unwatch wallet'));
+      await tester.pumpAndSettle();
+      expect(bridge.premiumCalls.where((c) => c == 'unwatch:w1'), hasLength(2));
+      expect(find.byType(GerfautNotice), findsNothing);
+      expect(switchOf(tester, 'Cold storage').value, isFalse);
+    });
+
+    testWidgets('the question is held while the server answers', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumConsents.add(
+        const WatchConsent(walletId: 'w1', consentedAt: 1),
+      );
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+      await toggle(tester, 'Cold storage');
+
+      final gate = Completer<void>();
+      bridge.onPremiumUnwatch = (id) async {
+        await gate.future;
+        bridge.premiumWatched.removeWhere((w) => w.id == id);
+      };
+      await toggle(tester, 'Cold storage');
+      await tester.tap(find.widgetWithText(DangerButton, 'Unwatch wallet'));
+      await tester.pump();
+
+      // Neither answer can be given again while the call is out: a
+      // second press on the deletion has nothing to land on.
+      final deed = tester.widget<DangerButton>(find.byType(DangerButton));
+      expect(deed.label, 'Unwatching…');
+      expect(deed.onPressed, isNull);
+      final wayOut = tester.widget<GhostButton>(
+        find.widgetWithText(GhostButton, 'Cancel'),
+      );
+      expect(wayOut.onPressed, isNull);
+      expect(find.text('Removing…'), findsOneWidget);
+
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(bridge.premiumCalls.where((c) => c == 'unwatch:w1'), hasLength(1));
+      expect(find.byType(GerfautNotice), findsNothing);
+      expect(switchOf(tester, 'Cold storage').value, isFalse);
+    });
+
     testWidgets('says Scanning until the first scan ends, then the coins', (
       tester,
     ) async {
