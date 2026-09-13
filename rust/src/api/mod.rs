@@ -889,12 +889,12 @@ pub async fn premium_watch_wallet(id: String) -> String {
     }
 }
 
-/// Tells the server to stop watching a wallet. The consent stays: the
-/// switch can go back on without the question being asked again.
+/// Tells the server to stop watching a wallet and withdraws the consent
+/// given for it: the switch going back on asks the question again, and
+/// removing the wallet later queues nothing for a server that forgot it.
 pub async fn premium_unwatch_wallet(id: String) -> String {
     let manager = try_json!(manager());
-    let client = try_json!(premium_client(manager).await);
-    match client.delete_wallet(&id).await {
+    match manager.premium_unwatch_wallet(PREMIUM_BASE_URL, &id).await {
         Ok(()) => ok_json(),
         Err(e) => core_error_json(&e),
     }
