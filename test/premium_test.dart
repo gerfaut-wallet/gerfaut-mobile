@@ -970,6 +970,46 @@ void main() {
       expect(switchOf(tester, 'Cold storage').value, isFalse);
     });
 
+    testWidgets('each row is held until its own answer, not the first one', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(
+        wallets: [
+          makeMeta(id: 'w1', name: 'Cold storage'),
+          makeMeta(id: 'w4', name: 'Savings'),
+        ],
+        activated: true,
+      );
+      bridge.premiumConsents.addAll(const [
+        WatchConsent(walletId: 'w1', consentedAt: 1),
+        WatchConsent(walletId: 'w4', consentedAt: 1),
+      ]);
+      final gates = {'w1': Completer<void>(), 'w4': Completer<void>()};
+      bridge.onPremiumWatch = (id) => gates[id]!.future;
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      // Two calls out at once: both rows held.
+      await toggle(tester, 'Cold storage');
+      await toggle(tester, 'Savings');
+      expect(switchOf(tester, 'Cold storage').onChanged, isNull);
+      expect(switchOf(tester, 'Savings').onChanged, isNull);
+      expect(find.text('Registering…'), findsNWidgets(2));
+
+      // The first answer frees its own row, and no other.
+      gates['w1']!.complete();
+      await tester.pumpAndSettle();
+      expect(switchOf(tester, 'Cold storage').onChanged, isNotNull);
+      expect(switchOf(tester, 'Savings').onChanged, isNull);
+      expect(find.text('Registering…'), findsOneWidget);
+
+      gates['w4']!.complete();
+      await tester.pumpAndSettle();
+      expect(switchOf(tester, 'Savings').onChanged, isNotNull);
+      expect(find.text('Registering…'), findsNothing);
+    });
+
     testWidgets('says Scanning until the first scan ends, then the coins', (
       tester,
     ) async {

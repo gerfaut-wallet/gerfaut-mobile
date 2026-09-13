@@ -57,7 +57,11 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   bool _refreshedLicence = false;
 
   // The watched wallets.
-  String? _busyWalletId;
+
+  /// The wallets a call is out about, each held until its own answer
+  /// comes back: one slot for all of them would let the first answer
+  /// free every row at once, a call still out included.
+  final Set<String> _busyWalletIds = {};
   BridgeException? _walletsError;
 
   /// The wallet whose unwatch is being asked about, under its row.
@@ -217,7 +221,7 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   /// again afterwards. True once the server has said yes.
   Future<bool> _askForWallet(String id, Future<void> Function() call) async {
     setState(() {
-      _busyWalletId = id;
+      _busyWalletIds.add(id);
       _walletsError = null;
     });
     try {
@@ -231,7 +235,7 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
       if (mounted) setState(() => _walletsError = error);
       return false;
     } finally {
-      if (mounted) setState(() => _busyWalletId = null);
+      if (mounted) setState(() => _busyWalletIds.remove(id));
     }
   }
 
@@ -467,7 +471,7 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
           ),
         _WatchedWalletsCard(
           view: view,
-          busyWalletId: _busyWalletId,
+          busyWalletIds: _busyWalletIds,
           confirmingUnwatchId: _confirmUnwatchId,
           onToggle: (wallet, on) => _setWatched(wallet, on, view),
           onUnwatchOrphan: _unwatchOrphan,
@@ -846,7 +850,7 @@ class _DeleteAccountBox extends StatelessWidget {
 class _WatchedWalletsCard extends ConsumerWidget {
   const _WatchedWalletsCard({
     required this.view,
-    required this.busyWalletId,
+    required this.busyWalletIds,
     required this.confirmingUnwatchId,
     required this.onToggle,
     required this.onUnwatchOrphan,
@@ -855,7 +859,9 @@ class _WatchedWalletsCard extends ConsumerWidget {
   });
 
   final PremiumView view;
-  final String? busyWalletId;
+
+  /// The wallets a call is out about; their rows are held.
+  final Set<String> busyWalletIds;
 
   /// The wallet whose row carries the unwatch question, if any.
   final String? confirmingUnwatchId;
@@ -939,7 +945,7 @@ class _WatchedWalletsCard extends ConsumerWidget {
           _UnwatchQuestion(
             name: name,
             local: local,
-            busy: busyWalletId == id,
+            busy: busyWalletIds.contains(id),
             onConfirm: () => onUnwatchConfirm(id),
             onCancel: onUnwatchCancel,
           ),
@@ -953,7 +959,7 @@ class _WatchedWalletsCard extends ConsumerWidget {
           _WalletRow(
             wallet: wallet,
             watch: byId[wallet.id],
-            busy: busyWalletId == wallet.id,
+            busy: busyWalletIds.contains(wallet.id),
             onChanged: (on) => onToggle(wallet, on),
           ),
           wallet.id,
@@ -964,7 +970,7 @@ class _WatchedWalletsCard extends ConsumerWidget {
         asked(
           _OrphanRow(
             watch: orphan,
-            busy: busyWalletId == orphan.id,
+            busy: busyWalletIds.contains(orphan.id),
             onUnwatch: () => onUnwatchOrphan(orphan.id),
           ),
           orphan.id,
