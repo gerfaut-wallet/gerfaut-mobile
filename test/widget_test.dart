@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -257,6 +259,55 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(GerfautNotice), findsNothing);
       expect(bridge.reorderCalls, hasLength(1));
+      expect(top('Cold storage'), lessThan(top('Spending')));
+    });
+
+    testWidgets('the note outlives the wallets being listed again', (
+      tester,
+    ) async {
+      final bridge = _GatedVault(
+        wallets: [
+          makeMeta(id: 'w1', name: 'Cold storage'),
+          makeMeta(id: 'w2', name: 'Spending'),
+        ],
+      );
+      bridge.onReorderWallets = (_) {
+        throw const BridgeException('vault_locked', 'the vault is locked');
+      };
+      await tester.pumpWidget(app(bridge));
+      await tester.pumpAndSettle();
+
+      double top(String name) => tester.getTopLeft(find.text(name)).dy;
+      final pitch = top('Spending') - top('Cold storage');
+      await dragDown(
+        tester,
+        tester.getCenter(find.text('Cold storage')),
+        pitch * 0.75,
+        hold: kLongPressTimeout + kPressTimeout,
+      );
+      expect(find.text('The new order could not be saved.'), findsOneWidget);
+
+      // A settings change — the gap limit, the network, a saved
+      // backend — reloads the list behind the note, and a vault slow
+      // to answer leaves the screen a frame with no list to show but
+      // the last one. The cards and the note stay through it.
+      final listed = bridge.listed;
+      final gate = bridge.gate = Completer<void>();
+      ProviderScope.containerOf(
+        tester.element(find.text('Cold storage')),
+      ).invalidate(settingsProvider);
+      await tester.pumpAndSettle();
+      expect(bridge.listed, greaterThan(listed));
+      expect(find.text('Opening the vault…'), findsNothing);
+      expect(find.text('The new order could not be saved.'), findsOneWidget);
+      expect(find.text('Cold storage'), findsOneWidget);
+
+      // And once the vault has answered, they are still there.
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('The new order could not be saved.'), findsOneWidget);
+      expect(find.text('the vault is locked'), findsOneWidget);
+      expect(find.text('Try again'), findsOneWidget);
       expect(top('Cold storage'), lessThan(top('Spending')));
     });
   });
@@ -570,6 +621,32 @@ void main() {
 
 /// A bridge that refuses every call until the vault is open, the way the
 /// real one does before the Rust bridge has been initialized.
+/// A vault whose wallet list can be held back: while [gate] is set and
+/// pending, a re-read of the list waits on it, so the screen gets to
+/// build with the loading state in between.
+class _GatedVault extends FakeBridge {
+  _GatedVault({required super.wallets})
+    : super(
+        settings: const Settings(
+          activeNetwork: Network.mainnet,
+          backends: {},
+          appPrefs: {'onboarding.seen': '1'},
+        ),
+      );
+
+  Completer<void>? gate;
+
+  /// How many times the wallets were listed.
+  int listed = 0;
+
+  @override
+  Future<List<WalletMeta>> listWallets([Network? network]) async {
+    listed++;
+    await gate?.future;
+    return super.listWallets(network);
+  }
+}
+
 class _ClosedUntilOpen extends FakeBridge {
   _ClosedUntilOpen()
     : super(

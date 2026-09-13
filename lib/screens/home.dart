@@ -152,7 +152,13 @@ class HomeScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
-                (_, AsyncData(:final value)) when value.isEmpty => EmptyState(
+                // A value, the current one or the last while the vault
+                // is read again — refreshed after a drop, or reloaded
+                // behind a settings change: the list stays mounted
+                // through it, and what it holds — a drop on its way,
+                // the note of a refused one — survives, instead of
+                // giving way to the opening line and coming back blank.
+                (_, AsyncValue(:final value?)) when value.isEmpty => EmptyState(
                   // The first screen of the app: the full logo, once,
                   // where every other empty state gets a watermark.
                   art: GerfautLockup(
@@ -165,7 +171,7 @@ class HomeScreen extends ConsumerWidget {
                       'Import a descriptor, xpub, or address to start '
                       'watching it.',
                 ),
-                (_, AsyncData(:final value)) => _WalletList(
+                (_, AsyncValue(:final value?)) => _WalletList(
                   wallets: value,
                   onRefresh: () async {
                     if (network == null) return;
