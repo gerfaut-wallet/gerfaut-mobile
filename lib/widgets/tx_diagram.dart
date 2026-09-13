@@ -138,7 +138,7 @@ class TxDiagram extends ConsumerStatefulWidget {
   final int? feeSats;
 
   /// A line under the fee's figure when the fee is not the chain's
-  /// word — the broadcast preview marks a fee the file states and no
+  /// word — the broadcast preview marks a fee the PSBT states and no
   /// backend confirmed. Nothing when null.
   final String? feeNote;
 

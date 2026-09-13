@@ -506,8 +506,9 @@ void main() {
     expect(notice.tone, NoticeTone.info);
     expect(
       find.text(
-        'You are removing "Cold storage" from Gerfaut and from the server, '
-        'which also deletes its alert history there. Nothing moves on chain.',
+        'You are removing "Cold storage" from Gerfaut. The server stops '
+        'watching it too, and deletes its alert history. Nothing moves on '
+        'chain.',
       ),
       findsOneWidget,
     );

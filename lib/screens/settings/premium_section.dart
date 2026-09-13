@@ -929,7 +929,7 @@ class _WatchedWalletsCard extends ConsumerWidget {
     ];
     // The question sits under the row it is about, inside the same
     // slot between two dividers: it is that row's, not the card's.
-    Widget asked(Widget row, String id, String name) {
+    Widget asked(Widget row, String id, String name, {required bool local}) {
       if (confirmingUnwatchId != id) return row;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -938,6 +938,7 @@ class _WatchedWalletsCard extends ConsumerWidget {
           row,
           _UnwatchQuestion(
             name: name,
+            local: local,
             busy: busyWalletId == id,
             onConfirm: () => onUnwatchConfirm(id),
             onCancel: onUnwatchCancel,
@@ -957,6 +958,7 @@ class _WatchedWalletsCard extends ConsumerWidget {
           ),
           wallet.id,
           wallet.name,
+          local: true,
         ),
       for (final orphan in orphans)
         asked(
@@ -967,6 +969,7 @@ class _WatchedWalletsCard extends ConsumerWidget {
           ),
           orphan.id,
           orphan.name,
+          local: false,
         ),
     ];
     return [
@@ -1097,12 +1100,17 @@ class _WalletRow extends StatelessWidget {
 class _UnwatchQuestion extends StatelessWidget {
   const _UnwatchQuestion({
     required this.name,
+    required this.local,
     required this.busy,
     required this.onConfirm,
     required this.onCancel,
   });
 
   final String name;
+
+  /// This phone still holds the wallet, and says so: unwatching is
+  /// not removing. A wallet the server alone has gets no such clause.
+  final bool local;
 
   /// The call is with the server: neither answer can be given again.
   final bool busy;
@@ -1120,7 +1128,8 @@ class _UnwatchQuestion extends StatelessWidget {
         tone: NoticeTone.info,
         liveRegion: true,
         message:
-            'Unwatching "$name" also deletes its alert history on the server.',
+            'Unwatching "$name" also deletes its alert history on the server'
+            '${local ? '; the wallet stays on this device.' : '.'}',
         // The sentence takes the whole width; the two answers share a
         // row of their own under it, the way out first.
         actionsBelow: true,
@@ -1130,7 +1139,7 @@ class _UnwatchQuestion extends StatelessWidget {
             onPressed: busy ? null : onCancel,
           ),
           confirm: DangerButton(
-            label: busy ? 'Unwatching…' : 'Unwatch wallet',
+            label: busy ? 'Unwatching…' : 'Unwatch',
             onPressed: busy ? null : onConfirm,
           ),
         ),

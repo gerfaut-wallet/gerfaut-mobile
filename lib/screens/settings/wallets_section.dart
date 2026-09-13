@@ -581,14 +581,15 @@ class _WalletRow extends StatelessWidget {
             // watching, nothing moves on chain. Nothing is at stake but
             // a row in a list, and the coins are exactly where they
             // were — red belongs to what costs funds or privacy. A
-            // wallet the server watches loses its alert history there
-            // as well, and that is said here, where the decision is.
+            // wallet the server watches is taken off it as well, alert
+            // history included, and that is said here, where the
+            // decision is, in the desktop's words.
             GerfautNotice(
               tone: NoticeTone.info,
               message: watchedByServer
-                  ? 'You are removing "${wallet.name}" from Gerfaut and '
-                        'from the server, which also deletes its alert '
-                        'history there. Nothing moves on chain.'
+                  ? 'You are removing "${wallet.name}" from Gerfaut. The '
+                        'server stops watching it too, and deletes its '
+                        'alert history. Nothing moves on chain.'
                   : 'You are removing "${wallet.name}" from Gerfaut. '
                         'This only stops watching. Nothing moves on chain.',
               // The sentence gets the whole width, the buttons a row of

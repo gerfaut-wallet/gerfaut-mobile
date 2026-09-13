@@ -312,16 +312,16 @@ void main() {
       findsOneWidget,
     );
     // The fee under the diagram, the inputs total, the fee and its rate
-    // among the facts: four figures, four marks.
-    expect(find.text('as claimed by the file'), findsNWidgets(4));
+    // among the facts: four figures, four marks, in the desktop's words.
+    expect(find.text('as the PSBT claims'), findsNWidgets(4));
 
     // The last word before the send says it too.
     await tester.tap(find.widgetWithText(FilledButton, 'Broadcast'));
     await tester.pumpAndSettle();
     expect(
       find.text(
-        'It pays a fee of 0.00001000 BTC (7.1 sat/vB), as claimed by the '
-        'file: no backend confirmed what its inputs are worth.',
+        'It pays a fee of 0.00001000 BTC (7.1 sat/vB), as the PSBT claims: '
+        'no backend confirmed what its inputs are worth.',
       ),
       findsOneWidget,
     );
@@ -336,7 +336,7 @@ void main() {
     await tester.pumpAndSettle();
     await preview(tester);
 
-    expect(find.text('as claimed by the file'), findsNothing);
+    expect(find.text('as the PSBT claims'), findsNothing);
     expect(
       find.textContaining('Compare them with what your signer shows'),
       findsNothing,

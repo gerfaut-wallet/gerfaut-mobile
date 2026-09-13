@@ -855,7 +855,7 @@ void main() {
       expect(
         find.text(
           'Unwatching "Cold storage" also deletes its alert history on the '
-          'server.',
+          'server; the wallet stays on this device.',
         ),
         findsOneWidget,
       );
@@ -871,7 +871,7 @@ void main() {
 
       // The yes: one call, the question gone, the switch off.
       await toggle(tester, 'Cold storage');
-      await tester.tap(find.widgetWithText(DangerButton, 'Unwatch wallet'));
+      await tester.tap(find.widgetWithText(DangerButton, 'Unwatch'));
       await tester.pumpAndSettle();
       expect(bridge.premiumCalls, contains('unwatch:w1'));
       expect(find.byType(GerfautNotice), findsNothing);
@@ -900,7 +900,7 @@ void main() {
         throw const BridgeException('premium_unreachable', 'timed out');
       };
       await toggle(tester, 'Cold storage');
-      await tester.tap(find.widgetWithText(DangerButton, 'Unwatch wallet'));
+      await tester.tap(find.widgetWithText(DangerButton, 'Unwatch'));
       await tester.pumpAndSettle();
 
       // The server did not answer: the question is still there, the
@@ -910,7 +910,7 @@ void main() {
       expect(
         find.text(
           'Unwatching "Cold storage" also deletes its alert history on the '
-          'server.',
+          'server; the wallet stays on this device.',
         ),
         findsOneWidget,
       );
@@ -924,7 +924,7 @@ void main() {
       );
 
       bridge.onPremiumUnwatch = null;
-      await tester.tap(find.widgetWithText(DangerButton, 'Unwatch wallet'));
+      await tester.tap(find.widgetWithText(DangerButton, 'Unwatch'));
       await tester.pumpAndSettle();
       expect(bridge.premiumCalls.where((c) => c == 'unwatch:w1'), hasLength(2));
       expect(find.byType(GerfautNotice), findsNothing);
@@ -949,7 +949,7 @@ void main() {
         bridge.premiumWatched.removeWhere((w) => w.id == id);
       };
       await toggle(tester, 'Cold storage');
-      await tester.tap(find.widgetWithText(DangerButton, 'Unwatch wallet'));
+      await tester.tap(find.widgetWithText(DangerButton, 'Unwatch'));
       await tester.pump();
 
       // Neither answer can be given again while the call is out: a
@@ -1128,7 +1128,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      await tester.tap(find.widgetWithText(DangerButton, 'Unwatch wallet'));
+      await tester.tap(find.widgetWithText(DangerButton, 'Unwatch'));
       await tester.pumpAndSettle();
       expect(bridge.premiumCalls, contains('unwatch:w9'));
       expect(find.text('Old laptop'), findsNothing);
@@ -1154,7 +1154,7 @@ void main() {
       expect(find.byType(WatchedPill), findsNWidgets(2));
 
       await toggle(tester, 'Cold storage');
-      await tester.tap(find.widgetWithText(DangerButton, 'Unwatch wallet'));
+      await tester.tap(find.widgetWithText(DangerButton, 'Unwatch'));
       await tester.pumpAndSettle();
       expect(bridge.premiumCalls, contains('unwatch:w1'));
       expect(bridge.premiumCalls, isNot(contains('unwatch:w9')));

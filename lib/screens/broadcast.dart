@@ -33,18 +33,18 @@ const int _settledConfirmations = 6;
 /// the host that accepted it.
 typedef _Sent = ({RecentBroadcast record, String backend});
 
-/// The mark under a figure the file states and nobody confirmed: the
+/// The mark under a figure the PSBT states and nobody confirmed: the
 /// inputs total, the fee, its rate. Outputs need none — they are the
-/// transaction's own, not a claim about the chain.
-const String _claimedMark = 'as claimed by the file';
+/// transaction's own, not a claim about the chain. The desktop's words.
+const String _claimedMark = 'as the PSBT claims';
 
-/// Under the core's line about a coin no backend confirmed: what that
-/// leaves unverified on this page, and what to do about it. The core
-/// names the coin; the page says what it shows in its place.
+/// Under the core's line about a coin no backend confirmed: what to do
+/// about it, and nothing else. The core names the coin and says its
+/// value and the fee are the transaction's own claim; the page does
+/// not say it twice.
 const String _unconfirmedHint =
-    'The amount shown for it, and the fee, come from the file rather than '
-    'the chain. Compare them with what your signer shows before sending, or '
-    'preview again with a backend that knows this coin.';
+    'Compare them with what your signer shows before sending, or preview '
+    'again with a backend that knows this coin.';
 
 /// Broadcast a transaction somebody else signed: paste, import or scan
 /// it, read what it does, then hand it to the network of the workspace.
@@ -326,7 +326,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
   Widget _buildPreviewStep(GerfautTokens tokens, TxPreview preview) {
     final sent = _sent;
     // A coin nobody confirmed leaves every figure resting on it the
-    // file's word: the inputs total and the fee wear the mark, so the
+    // PSBT's word: the inputs total and the fee wear the mark, so the
     // number is never read as the chain's.
     final claimed = preview.inputsUnconfirmed;
     final inputsTotal = sideTotal(preview.inputs.map((i) => i.valueSats));

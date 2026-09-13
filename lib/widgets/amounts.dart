@@ -244,7 +244,7 @@ class IoListHeading extends ConsumerWidget {
   final int? totalSats;
 
   /// A line under the heading when the total is not the chain's word —
-  /// the broadcast preview marks a sum the file states and no backend
+  /// the broadcast preview marks a sum the PSBT states and no backend
   /// confirmed. Nothing when null.
   final String? note;
 
