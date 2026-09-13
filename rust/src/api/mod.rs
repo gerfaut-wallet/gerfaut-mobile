@@ -72,7 +72,9 @@ fn core_error_kind(error: &CoreError) -> &'static str {
 /// is a captive portal's login page where JSON was promised, which is
 /// the server out of reach and nothing else. A certificate and a
 /// heartbeat that do not check out are one case too — whichever of the
-/// two it was, this device cannot trust what it was handed.
+/// two it was, this device cannot trust what it was handed. An id the
+/// server has nothing under is a refusal like any other: the screens
+/// show it in the server's words, and read what it holds again.
 ///
 /// The match is exhaustive on purpose: a variant added to the core
 /// stops the build here until somebody says which of the six it is.
@@ -81,7 +83,7 @@ fn premium_error_kind(error: &PremiumError) -> &'static str {
         PremiumError::NoKey => "premium_no_key",
         PremiumError::UnknownKey => "premium_unknown_key",
         PremiumError::NoPaidTime => "premium_no_paid_time",
-        PremiumError::Rejected(_) => "premium_rejected",
+        PremiumError::Rejected(_) | PremiumError::NotFound => "premium_rejected",
         PremiumError::Unreachable(_) | PremiumError::UnexpectedResponse(_) => "premium_unreachable",
         PremiumError::InvalidCertificate(_)
         | PremiumError::InvalidHeartbeat(_)
