@@ -472,6 +472,10 @@ class _FeeBox extends StatelessWidget {
             muted: false,
             tokens: tokens,
           ),
+          // Words, not a figure: at a large text size on a narrow
+          // phone the mark wraps and the box grows down a line, rather
+          // than shrinking the caption or cutting the one word that
+          // says what it is.
           if (note != null)
             Text(
               note!,
@@ -481,8 +485,6 @@ class _FeeBox extends StatelessWidget {
                 letterSpacing: 0,
                 color: tokens.textMuted,
               ),
-              maxLines: 1,
-              softWrap: false,
             ),
         ],
       ),

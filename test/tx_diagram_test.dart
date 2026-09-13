@@ -26,6 +26,7 @@ Widget diagramApp({
   required List<TxBranch> inputs,
   required List<TxBranch> outputs,
   int? feeSats,
+  String? feeNote,
   Brightness brightness = Brightness.light,
   TextScaler textScaler = TextScaler.noScaling,
 }) {
@@ -48,6 +49,7 @@ Widget diagramApp({
                   inputs: inputs,
                   outputs: outputs,
                   feeSats: feeSats,
+                  feeNote: feeNote,
                 ),
               ),
             ),
@@ -582,6 +584,46 @@ void main() {
     // The boxes grew instead: two lines of twice the text.
     expect(find.text('+8 more inputs'), findsOneWidget);
     _labelsFitTheirColumn(tester);
+  });
+
+  testWidgets('the fee mark wraps at twice the text size, never clips', (
+    tester,
+  ) async {
+    useWidth(tester, 320);
+    await tester.pumpWidget(
+      diagramApp(
+        inputs: _sendInputs,
+        outputs: _sendOutputs,
+        feeSats: 1000,
+        feeNote: 'as the PSBT claims',
+        textScaler: const TextScaler.linear(2),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.getSize(find.byType(TxDiagram)).width,
+      lessThanOrEqualTo(320 - 2 * GerfautSpacing.md),
+    );
+    // Every glyph is drawn: what the paragraph laid out fits the box
+    // it was given, across and down. A caption cut short would lose
+    // the one word that says what the figure above it is.
+    final mark = tester.renderObject<RenderParagraph>(
+      find.text('as the PSBT claims'),
+    );
+    expect(mark.textSize.width, lessThanOrEqualTo(mark.size.width + 0.5));
+    expect(mark.textSize.height, lessThanOrEqualTo(mark.size.height + 0.5));
+    // It wrapped rather than shrank: two lines of the reader's size.
+    final style = mark.text.style!;
+    final line = mark.textScaler.scale(style.fontSize!) * style.height!;
+    expect(mark.textSize.height, greaterThanOrEqualTo(2 * line - 0.5));
+    // And the box grew down to hold it, within the page.
+    final fee = tester.getRect(boxAround('FEE'));
+    final drawn = tester.getRect(find.text('as the PSBT claims'));
+    expect(fee.width, lessThanOrEqualTo(320 - 2 * GerfautSpacing.md));
+    expect(drawn.right, lessThanOrEqualTo(fee.right));
+    expect(drawn.bottom, lessThanOrEqualTo(fee.bottom));
   });
 
   testWidgets('the diagram reads in the dark theme too', (tester) async {
