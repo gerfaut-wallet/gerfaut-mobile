@@ -286,8 +286,8 @@ class _SectionRow extends StatelessWidget {
           ),
           child: Row(
             children: [
-              // Bruyère on the gem alone: the premium colour marks the
-              // premium row and nothing else on this list.
+              // Bruyère on the gem: the premium colour marks the premium
+              // row, and nothing else on this list.
               Icon(
                 section.icon,
                 size: 20,

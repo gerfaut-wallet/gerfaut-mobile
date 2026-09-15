@@ -396,8 +396,8 @@ void main() {
       await tester.pumpWidget(premiumApp(bridge));
       await tester.pumpAndSettle();
 
-      final activate = find.widgetWithText(PrimaryButton, 'Activate');
-      expect(tester.widget<PrimaryButton>(activate).onPressed, isNull);
+      final activate = find.widgetWithText(PremiumButton, 'Activate');
+      expect(tester.widget<PremiumButton>(activate).onPressed, isNull);
 
       await tester.enterText(find.byType(TextField), 'ABCDEFGHIJKM');
       await tester.pumpAndSettle();
@@ -405,11 +405,11 @@ void main() {
         tester.widget<TextField>(find.byType(TextField)).controller!.text,
         'abcd-efgh-ijkm',
       );
-      expect(tester.widget<PrimaryButton>(activate).onPressed, isNull);
+      expect(tester.widget<PremiumButton>(activate).onPressed, isNull);
 
       await tester.enterText(find.byType(TextField), knownKey);
       await tester.pumpAndSettle();
-      expect(tester.widget<PrimaryButton>(activate).onPressed, isNotNull);
+      expect(tester.widget<PremiumButton>(activate).onPressed, isNotNull);
       await tester.tap(activate);
       await tester.pumpAndSettle();
 
@@ -804,6 +804,11 @@ void main() {
       );
       expect(switchOf(tester, 'Cold storage').onChanged, isNotNull);
       expect(switchOf(tester, 'Cold storage').value, isFalse);
+      // On, the switch is Bruyère: the server's watch reads as premium.
+      expect(
+        switchOf(tester, 'Cold storage').activeTrackColor,
+        GerfautTokens.light.premium,
+      );
     });
 
     testWidgets('the first switch-on asks for consent, in red, once', (
@@ -1506,8 +1511,8 @@ void main() {
         ),
         findsOneWidget,
       );
-      final add = find.widgetWithText(PrimaryButton, 'Add e-mail');
-      expect(tester.widget<PrimaryButton>(add).onPressed, isNull);
+      final add = find.widgetWithText(PremiumButton, 'Add e-mail');
+      expect(tester.widget<PremiumButton>(add).onPressed, isNull);
       await tester.enterText(find.byType(TextField), 'me@example.org');
       await tester.pumpAndSettle();
       await tester.tap(add);
@@ -1530,7 +1535,7 @@ void main() {
         find.text('Signed with HMAC-SHA256. See the docs.'),
         findsOneWidget,
       );
-      final hook = find.widgetWithText(PrimaryButton, 'Add webhook');
+      final hook = find.widgetWithText(PremiumButton, 'Add webhook');
       // The page under this one keeps its own fields: the finders stay
       // inside the form on top.
       final hookFields = find.descendant(
@@ -1540,7 +1545,7 @@ void main() {
       await tester.enterText(hookFields.first, 'http://example.org/hook');
       await tester.pumpAndSettle();
       // Only https will do.
-      expect(tester.widget<PrimaryButton>(hook).onPressed, isNull);
+      expect(tester.widget<PremiumButton>(hook).onPressed, isNull);
       await tester.enterText(hookFields.first, 'https://example.org/hook');
       await tester.enterText(hookFields.last, 'shh');
       await tester.pumpAndSettle();
@@ -1596,8 +1601,8 @@ void main() {
       await tester.tapAt(const Offset(10, 10));
       await tester.pumpAndSettle();
 
-      final confirm = find.widgetWithText(PrimaryButton, 'Confirm');
-      expect(tester.widget<PrimaryButton>(confirm).onPressed, isNull);
+      final confirm = find.widgetWithText(PremiumButton, 'Confirm');
+      expect(tester.widget<PremiumButton>(confirm).onPressed, isNull);
       // Six digits and nothing else.
       await tester.enterText(find.byType(TextField), 'abc12');
       await tester.pumpAndSettle();
@@ -1605,7 +1610,7 @@ void main() {
         tester.widget<TextField>(find.byType(TextField)).controller!.text,
         '12',
       );
-      expect(tester.widget<PrimaryButton>(confirm).onPressed, isNull);
+      expect(tester.widget<PremiumButton>(confirm).onPressed, isNull);
 
       await tester.enterText(find.byType(TextField), '482913');
       await tester.pumpAndSettle();
@@ -1691,8 +1696,8 @@ void main() {
       expect(digits.width + 2 * GerfautSpacing.md, lessThan(atOne * 2));
       expect(
         tester
-            .widget<PrimaryButton>(
-              find.widgetWithText(PrimaryButton, 'Confirm'),
+            .widget<PremiumButton>(
+              find.widgetWithText(PremiumButton, 'Confirm'),
             )
             .onPressed,
         isNotNull,
@@ -1720,7 +1725,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), 'me@example.org');
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(PrimaryButton, 'Add e-mail'));
+      await tester.tap(find.widgetWithText(PremiumButton, 'Add e-mail'));
       await tester.pumpAndSettle();
 
       expect(

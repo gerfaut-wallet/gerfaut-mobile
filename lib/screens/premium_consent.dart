@@ -132,7 +132,7 @@ class PremiumConsentScreen extends StatelessWidget {
                           ),
                           const SizedBox(width: GerfautSpacing.sm),
                           Expanded(
-                            child: PrimaryButton(
+                            child: PremiumButton(
                               label: 'Watch this wallet',
                               expand: true,
                               onPressed: () => Navigator.of(context).pop(true),

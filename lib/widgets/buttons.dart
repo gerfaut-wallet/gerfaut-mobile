@@ -22,13 +22,81 @@ class PrimaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final button = SizedBox(
+    return _FilledAction(
+      label: label,
+      onPressed: onPressed,
+      icon: icon,
+      expand: expand,
+      background: tokens.primary,
+      foreground: tokens.onPrimary,
+    );
+  }
+}
+
+/// The primary action of a premium screen: the same button in Bruyère,
+/// so what the paid service does reads as its own at a glance —
+/// activating a key, handing a wallet to the server, adding a channel.
+/// Never a destructive step, which stays a [DangerButton] whatever the
+/// screen.
+class PremiumButton extends StatelessWidget {
+  const PremiumButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.icon,
+    this.expand = false,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final IconData? icon;
+
+  /// Fills the available width: the thumb-reachable bottom action.
+  final bool expand;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    return _FilledAction(
+      label: label,
+      onPressed: onPressed,
+      icon: icon,
+      expand: expand,
+      background: tokens.premium,
+      foreground: tokens.onPremium,
+    );
+  }
+}
+
+/// The filled 44px button behind [PrimaryButton] and [PremiumButton]:
+/// one shape, one type style, one disabled state, only the ink differs.
+class _FilledAction extends StatelessWidget {
+  const _FilledAction({
+    required this.label,
+    required this.onPressed,
+    required this.icon,
+    required this.expand,
+    required this.background,
+    required this.foreground,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final IconData? icon;
+  final bool expand;
+  final Color background;
+  final Color foreground;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    return SizedBox(
       height: 44,
       width: expand ? double.infinity : null,
       child: FilledButton(
         style: FilledButton.styleFrom(
-          backgroundColor: tokens.primary,
-          foregroundColor: tokens.onPrimary,
+          backgroundColor: background,
+          foregroundColor: foreground,
           disabledBackgroundColor: tokens.surfaceSunken,
           disabledForegroundColor: tokens.textMuted,
           elevation: 0,
@@ -64,7 +132,6 @@ class PrimaryButton extends StatelessWidget {
               ),
       ),
     );
-    return button;
   }
 }
 

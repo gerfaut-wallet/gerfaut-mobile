@@ -81,3 +81,10 @@ The first release: Gerfaut for Android.
   version is pinned, so the same commit always produces the same bytes.
   Rebuild them yourself and compare; only the signature should differ.
   See `docs/REPRODUCIBLE-BUILDS.md`.
+
+### Changed
+
+- Premium controls and the Premium settings row now use the Premium colour,
+  so what belongs to the paid service reads as such at a glance: the card
+  icons, the switch that hands a wallet to the server, and the buttons that
+  activate a key, confirm the watch or add a channel.

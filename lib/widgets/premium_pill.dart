@@ -7,9 +7,9 @@ import '../theme/tokens.dart';
 ///
 /// One colour and one glyph, reserved for this: the `gem` at 12px and
 /// the word in 10px uppercase semibold on the premium surface, with the
-/// 25% border every pill of the system wears. Nothing else in the app
-/// is Bruyère, so the badge is found at a glance and never mistaken for
-/// a chain state.
+/// 25% border every pill of the system wears. Bruyère marks the premium
+/// service and nothing else in the app, so the badge is found at a
+/// glance and never mistaken for a chain state.
 class PremiumPill extends StatelessWidget {
   const PremiumPill({super.key});
 

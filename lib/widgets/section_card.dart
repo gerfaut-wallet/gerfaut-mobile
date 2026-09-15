@@ -11,6 +11,7 @@ class SectionCard extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.children,
+    this.iconColor,
   }) : glyph = null;
 
   /// The same card with a glyph of our own — an [OnionIcon] — for the
@@ -22,6 +23,7 @@ class SectionCard extends StatelessWidget {
     required Widget this.glyph,
     required this.title,
     required this.children,
+    this.iconColor,
   }) : icon = null;
 
   /// The Lucide glyph of the section; null when [glyph] draws it.
@@ -32,6 +34,11 @@ class SectionCard extends StatelessWidget {
 
   final String title;
   final List<Widget> children;
+
+  /// The ink of the icon; the muted text colour when null. The premium
+  /// cards set Bruyère here, so the section reads as the paid service's
+  /// from its glyph on.
+  final Color? iconColor;
 
   /// The frame every section card wears: card surface, hairline, the
   /// large radius.
@@ -53,7 +60,11 @@ class SectionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SectionTitle(glyph: glyph ?? Icon(icon), title: title),
+          _SectionTitle(
+            glyph: glyph ?? Icon(icon),
+            title: title,
+            color: iconColor,
+          ),
           ...children,
         ],
       ),
@@ -105,13 +116,16 @@ class SliverSectionCard extends StatelessWidget {
 /// An icon, a title in the display face, and the gap before the
 /// controls.
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.glyph, required this.title});
+  const _SectionTitle({required this.glyph, required this.title, this.color});
 
   /// A Lucide [Icon] or a glyph of ours; either way it is the card
   /// that says how big and what colour, never the caller.
   final Widget glyph;
 
   final String title;
+
+  /// The icon's ink when a card has one of its own.
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -121,7 +135,7 @@ class _SectionTitle extends StatelessWidget {
       child: Row(
         children: [
           IconTheme.merge(
-            data: IconThemeData(size: 18, color: tokens.textMuted),
+            data: IconThemeData(size: 18, color: color ?? tokens.textMuted),
             child: glyph,
           ),
           const SizedBox(width: GerfautSpacing.sm),

@@ -224,7 +224,7 @@ class _NtfyChannelScreenState extends ConsumerState<NtfyChannelScreen> {
         child: Padding(
           padding: const EdgeInsets.all(GerfautSpacing.md),
           child: PinnedActionForm(
-            action: PrimaryButton(
+            action: PremiumButton(
               label: 'Open in ntfy',
               icon: LucideIcons.externalLink,
               expand: true,
@@ -405,12 +405,12 @@ class _TelegramChannelScreenState extends ConsumerState<TelegramChannelScreen> {
           padding: const EdgeInsets.all(GerfautSpacing.md),
           child: PinnedActionForm(
             action: _linked
-                ? PrimaryButton(
+                ? PremiumButton(
                     label: 'Done',
                     expand: true,
                     onPressed: () => Navigator.of(context).pop(),
                   )
-                : PrimaryButton(
+                : PremiumButton(
                     label: 'Open Telegram',
                     icon: LucideIcons.externalLink,
                     expand: true,
@@ -619,7 +619,7 @@ class _EmailChannelScreenState extends ConsumerState<EmailChannelScreen> {
         child: Padding(
           padding: const EdgeInsets.all(GerfautSpacing.md),
           child: PinnedActionForm(
-            action: PrimaryButton(
+            action: PremiumButton(
               label: _busy ? 'Adding…' : 'Add e-mail',
               expand: true,
               onPressed: _wellFormed && !_busy ? _add : null,
@@ -703,7 +703,7 @@ class _EmailField extends StatelessWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(GerfautRadius.sm),
-          borderSide: BorderSide(color: tokens.primary, width: 2),
+          borderSide: BorderSide(color: tokens.premium, width: 2),
         ),
       ),
     );
@@ -779,7 +779,7 @@ class _WebhookChannelScreenState extends ConsumerState<WebhookChannelScreen> {
         child: Padding(
           padding: const EdgeInsets.all(GerfautSpacing.md),
           child: PinnedActionForm(
-            action: PrimaryButton(
+            action: PremiumButton(
               label: _busy ? 'Adding…' : 'Add webhook',
               expand: true,
               onPressed: _wellFormed && !_busy ? _add : null,

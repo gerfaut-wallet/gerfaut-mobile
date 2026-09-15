@@ -16,6 +16,29 @@ void main() {
     expect(light.alert, isNot(dark.alert));
     expect(light.confirmed, isNot(dark.confirmed));
     expect(light.pending, isNot(dark.pending));
+    expect(light.premium, isNot(dark.premium));
+    expect(light.onPremium, isNot(dark.onPremium));
+  });
+
+  test('the premium ink reads on its own surfaces in both themes', () {
+    // WCAG 2.x: 4.5:1 for text, 3:1 for a control's edge.
+    double ratio(Color a, Color b) {
+      final la = a.computeLuminance();
+      final lb = b.computeLuminance();
+      final (hi, lo) = la > lb ? (la, lb) : (lb, la);
+      return (hi + 0.05) / (lo + 0.05);
+    }
+
+    for (final tokens in [GerfautTokens.light, GerfautTokens.dark]) {
+      // The filled button's label.
+      expect(ratio(tokens.premium, tokens.onPremium), greaterThan(4.5));
+      // A card icon, a focus ring, a switch track, on what they sit on.
+      expect(ratio(tokens.premium, tokens.surface), greaterThan(3));
+      expect(ratio(tokens.premium, tokens.surfaceSunken), greaterThan(3));
+      expect(ratio(tokens.premium, tokens.background), greaterThan(3));
+      // The pill's word on its own surface.
+      expect(ratio(tokens.premium, tokens.premiumSurface), greaterThan(4.5));
+    }
   });
 
   test('type roles keep their families and tabular figures', () {

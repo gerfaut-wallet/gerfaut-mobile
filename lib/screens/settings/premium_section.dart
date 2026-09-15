@@ -597,6 +597,7 @@ class _LicenceCard extends ConsumerWidget {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     return SectionCard(
       icon: LucideIcons.keyRound,
+      iconColor: tokens.premium,
       title: 'Licence',
       children: switch (status) {
         LicenceStatus.none => _withoutKey(tokens),
@@ -645,7 +646,7 @@ class _LicenceCard extends ConsumerWidget {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(GerfautRadius.sm),
-            borderSide: BorderSide(color: tokens.primary, width: 2),
+            borderSide: BorderSide(color: tokens.premium, width: 2),
           ),
         ),
       ),
@@ -671,7 +672,7 @@ class _LicenceCard extends ConsumerWidget {
         runSpacing: GerfautSpacing.sm,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          PrimaryButton(
+          PremiumButton(
             label: activating ? 'Activating…' : 'Activate',
             onPressed: wellFormed && !activating ? onActivate : null,
           ),
@@ -817,9 +818,10 @@ class _DeleteAccountBox extends StatelessWidget {
             children: [
               Checkbox(
                 value: value,
-                // Glacier: a selection, which is what the accent is
-                // for. The consequence is said in the note above, not
-                // painted on the box.
+                // Glacier, not Bruyère: the box arms a deletion, which
+                // is no premium action, and a selection is what the
+                // accent is for. The consequence is said in the note
+                // above, not painted on the box.
                 activeColor: tokens.primary,
                 checkColor: tokens.onPrimary,
                 side: BorderSide(color: tokens.border, width: 2),
@@ -880,6 +882,7 @@ class _WatchedWalletsCard extends ConsumerWidget {
     final muted = tokens.bodySmall.copyWith(color: tokens.textMuted);
     return SectionCard(
       icon: LucideIcons.radar,
+      iconColor: tokens.premium,
       title: 'Watched wallets',
       children: [
         if (!view.hasKey)
@@ -1080,6 +1083,12 @@ class _WalletRow extends StatelessWidget {
             label: 'Watch ${wallet.name} from the server',
             child: Switch(
               value: watch != null,
+              // On is Bruyère: the wallet is the server's to watch, and
+              // the switch says so in the premium colour.
+              activeThumbColor: tokens.onPremium,
+              activeTrackColor: tokens.premium,
+              inactiveThumbColor: tokens.textMuted,
+              inactiveTrackColor: tokens.surfaceSunken,
               onChanged: single || busy ? null : onChanged,
             ),
           ),
@@ -1270,6 +1279,7 @@ class _ChannelsCard extends ConsumerWidget {
     final list = channels?.valueOrNull;
     return SectionCard(
       icon: LucideIcons.bellRing,
+      iconColor: tokens.premium,
       title: 'Channels',
       children: [
         if (!view.hasKey)
@@ -1639,7 +1649,7 @@ class _ConfirmCodeRowState extends ConsumerState<_ConfirmCodeRow> {
                   onSubmitted: ready ? _confirm : null,
                 ),
               ),
-              PrimaryButton(
+              PremiumButton(
                 label: _busy ? 'Confirming…' : 'Confirm',
                 onPressed: ready ? _confirm : null,
               ),
@@ -1716,7 +1726,7 @@ class _CodeField extends StatelessWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(GerfautRadius.sm),
-          borderSide: BorderSide(color: tokens.primary, width: 2),
+          borderSide: BorderSide(color: tokens.premium, width: 2),
         ),
       ),
     );
@@ -1740,6 +1750,7 @@ class _RecentAlertsCard extends ConsumerWidget {
     final known = {for (final w in wallets) w.id};
     return SectionCard(
       icon: LucideIcons.history,
+      iconColor: tokens.premium,
       title: 'Recent alerts',
       children: [
         if (events != null && events.hasError)
