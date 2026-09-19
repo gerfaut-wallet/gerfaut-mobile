@@ -306,7 +306,9 @@ class _AddressBlock extends StatelessWidget {
           tone: NoticeTone.alert,
           message:
               'Verify this address on your signing device before sharing it.',
-          hint: 'Gerfaut only watches: it never holds the keys behind it.',
+          hint:
+              'Gerfaut only watches: it never holds the private keys behind '
+              'it.',
         ),
       ],
     );

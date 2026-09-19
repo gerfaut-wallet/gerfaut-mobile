@@ -24,7 +24,7 @@ class BackupSection extends StatelessWidget {
           'Every wallet you watch, encrypted with a password you choose. '
           'Restore it on another device: the same file or QR code moves '
           'your wallets between the desktop and the phone. A backup holds '
-          'descriptors and addresses, never a key.',
+          'descriptors and addresses, never a private key or seed.',
           style: tokens.bodySmall.copyWith(color: tokens.textMuted),
         ),
         const SizedBox(height: GerfautSpacing.md),

@@ -252,7 +252,8 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
       ),
       children: [
         Text(
-          'Descriptors and addresses, sealed under a password. Never a key.',
+          'Descriptors and addresses, sealed under a password. Never a private '
+          'key or seed.',
           style: tokens.bodySmall.copyWith(color: tokens.textMuted),
         ),
         const SizedBox(height: GerfautSpacing.md),
