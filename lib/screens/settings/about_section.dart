@@ -6,16 +6,16 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../src/models.dart';
 import '../../src/onboarding.dart';
 import '../../src/state.dart';
+import '../../src/updates.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/section_card.dart';
 import '../welcome.dart';
 
-/// Application version shown in About. Kept in step with pubspec.yaml.
-const String appVersion = '0.1.0';
+export '../../src/updates.dart' show appVersion;
 
-/// The About card: the version, a release check, and the way back to
-/// the welcome tour.
+/// The About card: the version, a release check on demand and the
+/// switch of the automatic one, and the way back to the welcome tour.
 class AboutSection extends ConsumerStatefulWidget {
   const AboutSection({super.key});
 
@@ -36,7 +36,9 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
     });
     try {
       final result = await ref.read(bridgeProvider).checkUpdate(appVersion);
-      if (mounted) setState(() => _updateResult = result);
+      if (!mounted) return;
+      ref.read(updateProvider.notifier).record(result);
+      setState(() => _updateResult = result);
     } catch (_) {
       if (mounted) setState(() => _updateFailed = true);
     } finally {
@@ -48,6 +50,10 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final result = _updateResult;
+    // The tag is the network's word: only a version that parses is
+    // named, and the page it opens is ours to choose, not the answer's.
+    final newer = announcedVersion(result?.latest);
+    final automatic = ref.watch(updateProvider).automatic;
     return SectionCard(
       icon: LucideIcons.info,
       title: 'About',
@@ -73,7 +79,7 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
               style: tokens.bodySmall.copyWith(color: tokens.textMuted),
             ),
           ),
-        if (result != null && !result.updateAvailable)
+        if (result != null && newer == null)
           Padding(
             padding: const EdgeInsets.only(bottom: GerfautSpacing.sm),
             child: Text(
@@ -83,11 +89,11 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
           ),
         Row(
           children: [
-            if (result != null && result.updateAvailable) ...[
+            if (newer != null) ...[
               PrimaryButton(
-                label: 'Get ${result.latest}',
+                label: 'Get $newer',
                 onPressed: () => launchUrl(
-                  Uri.parse(result.url),
+                  Uri.parse(releasePageUrl),
                   mode: LaunchMode.externalApplication,
                 ),
               ),
@@ -99,6 +105,44 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
               onPressed: _checkingUpdate ? null : _checkForUpdates,
             ),
           ],
+        ),
+        const SizedBox(height: GerfautSpacing.md),
+        // One node for a screen reader: the switch is read with its name.
+        MergeSemantics(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Check automatically',
+                      style: tokens.bodySmall.copyWith(
+                        fontWeight: FontWeight.w500,
+                        fontVariations: const [FontVariation('wght', 500)],
+                      ),
+                    ),
+                    Text(
+                      'Once a day at most, when you open Gerfaut, it asks '
+                      'GitHub for the latest release. GitHub sees your IP '
+                      'address and nothing about your wallets. The request '
+                      'does not go through Tor, so it is skipped while your '
+                      'node is a .onion address, and while the app is '
+                      'disguised.',
+                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: GerfautSpacing.sm),
+              Switch(
+                value: automatic,
+                onChanged: (on) =>
+                    ref.read(updateProvider.notifier).setAutomatic(on),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: GerfautSpacing.sm),
         Align(

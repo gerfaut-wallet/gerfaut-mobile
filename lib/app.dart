@@ -17,6 +17,7 @@ import 'src/notifications.dart';
 import 'src/onboarding.dart';
 import 'src/premium.dart';
 import 'src/state.dart';
+import 'src/updates.dart';
 import 'src/vault_key.dart';
 import 'theme/tokens.dart';
 import 'widgets/buttons.dart';
@@ -149,6 +150,7 @@ class _Hydrated extends ConsumerWidget {
         ref
             .read(widgetBalancesProvider.notifier)
             .hydrate(prefs['widgets.balances']);
+        ref.read(updateProvider.notifier).hydrate(prefs);
         // The widgets follow from here: everything they show is
         // hydrated now, so the first thing they get is the right thing.
         ref.read(widgetFeedProvider);
@@ -160,15 +162,25 @@ class _Hydrated extends ConsumerWidget {
       // The vault says whether a lock exists, every time it is read:
       // the first reading with one in it is what puts the screen up.
       if (settings != null) {
+        final first = !ref.read(lockProvider).loaded;
         ref.read(lockProvider.notifier).syncFromSettings(settings.appLock);
         _dropOrphanDisguise(ref, settings);
+        // A vault without a lock opens on the wallets: that is a
+        // session starting, as an unlock is with one.
+        if (first) _startUpdateSession(ref);
       }
     });
     // The platform may answer about the disguise after the vault has
     // answered about the lock: the same check, from the other side.
-    ref.listen(disguiseProvider, (_, _) {
+    ref.listen(disguiseProvider, (previous, next) {
       final settings = ref.read(settingsProvider).valueOrNull;
       if (settings != null) _dropOrphanDisguise(ref, settings);
+      // The session waits for this answer when the vault gave its own
+      // first: nothing about a release is said before the app knows
+      // which face it wears.
+      if (next.loaded && !(previous?.loaded ?? false)) {
+        _startUpdateSession(ref);
+      }
     });
     return child;
   }
@@ -192,6 +204,15 @@ class _Hydrated extends ConsumerWidget {
       ref.read(disguiseProvider.notifier).set(false).catchError((_) {}),
     );
   }
+}
+
+/// Tells the update notice that the wallets just came on screen. Only
+/// once the preferences are in and the vault is unlocked: a release is
+/// never announced, nor asked about, from behind the lock.
+void _startUpdateSession(WidgetRef ref) {
+  final lock = ref.read(lockProvider);
+  if (!ref.read(prefsHydratedProvider) || !lock.loaded || lock.locked) return;
+  unawaited(ref.read(updateProvider.notifier).sessionStarted());
 }
 
 /// What the app shows once the vault is open: the lock while it is
@@ -248,6 +269,7 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
           // Timers sleep with the app: a beat older than the period is
           // asked for again on the way back.
           ref.read(watchMonitorProvider.notifier).resume();
+          _startUpdateSession(ref);
         }
       case AppLifecycleState.inactive:
         break;
@@ -265,6 +287,9 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
         if (navigator.canPop()) {
           navigator.popUntil((route) => route.isFirst);
         }
+      }
+      if (!next.locked && (previous?.locked ?? false)) {
+        _startUpdateSession(ref);
       }
     });
     // Watching the settings is what asks the core for them, and their

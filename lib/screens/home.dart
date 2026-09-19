@@ -17,6 +17,7 @@ import '../widgets/notice.dart';
 import '../widgets/overflow_menu.dart';
 import '../widgets/reorder.dart';
 import '../widgets/sync_button.dart';
+import '../widgets/update_notice.dart';
 import '../widgets/wallet_icon.dart';
 import 'add_wallet.dart';
 import 'broadcast.dart';
@@ -136,6 +137,7 @@ class HomeScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const WatchOfflineBanner(),
+            const UpdateNotice(),
             Expanded(
               child: switch ((settings, wallets)) {
                 (AsyncError(), _) || (_, AsyncError()) => Center(

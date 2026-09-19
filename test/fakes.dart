@@ -971,8 +971,12 @@ class FakeBridge implements GerfautBridge {
   /// Update hook; the default reports the running version as current.
   UpdateCheck Function(String currentVersion)? onCheckUpdate;
 
+  /// How many times a release check was asked for.
+  int checkUpdateCalls = 0;
+
   @override
   Future<UpdateCheck> checkUpdate(String currentVersion) async {
+    checkUpdateCalls++;
     final check = onCheckUpdate;
     if (check != null) return check(currentVersion);
     return UpdateCheck(
