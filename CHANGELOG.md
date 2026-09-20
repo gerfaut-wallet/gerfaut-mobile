@@ -84,9 +84,10 @@ The first release: Gerfaut for Android.
 - A notice on the home screen when a newer release is out, with a button to
   the release page and a Later button that closes it for that release. To
   know, Gerfaut asks GitHub for the latest release once a day at most, when
-  you open it. The request does not go through Tor, so it is skipped while
-  your node is a .onion address, and while the app is disguised. The About
-  settings turn it off, and keep the check on demand.
+  you open it. When one of your nodes is a .onion address the request goes
+  through Tor, or not at all if Tor cannot be reached. Nothing is asked
+  while the app is disguised. The About settings turn it off, and keep the
+  check on demand.
 
 ### Changed
 

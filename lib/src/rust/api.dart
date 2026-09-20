@@ -8,6 +8,7 @@ import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `channel_view`, `core_error_json`, `core_error_kind`, `decode_key`, `error_json`, `from_json`, `manager`, `now_unix`, `ok_json`, `parse_network_opt`, `parse_network`, `parse_variant`, `premium_client`, `premium_error_kind`, `premium_view`, `store_premium`, `to_json`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Findings`
 
 /// Opens (or creates) the vault under `data_dir` with a 32-byte key given
 /// as 64 hex characters. Idempotent: once initialized, later calls (hot
@@ -65,6 +66,10 @@ Future<String> addWallet({
 Future<String> listWallets({String? network}) =>
     RustLib.instance.api.crateApiListWallets(network: network);
 
+/// Removes a wallet from this device. One the server watched is taken
+/// off it too, after the answer: the core queues the message in the
+/// same write as the removal, and a server out of reach hears it at
+/// the next heartbeat instead.
 Future<String> removeWallet({required String id}) =>
     RustLib.instance.api.crateApiRemoveWallet(id: id);
 
@@ -346,8 +351,9 @@ Future<String> premiumWallets() =>
 Future<String> premiumWatchWallet({required String id}) =>
     RustLib.instance.api.crateApiPremiumWatchWallet(id: id);
 
-/// Tells the server to stop watching a wallet. The consent stays: the
-/// switch can go back on without the question being asked again.
+/// Tells the server to stop watching a wallet and withdraws the consent
+/// given for it: the switch going back on asks the question again, and
+/// removing the wallet later queues nothing for a server that forgot it.
 Future<String> premiumUnwatchWallet({required String id}) =>
     RustLib.instance.api.crateApiPremiumUnwatchWallet(id: id);
 
@@ -409,6 +415,41 @@ Future<String> premiumRecentEvents() =>
 Future<String> premiumHeartbeat() =>
     RustLib.instance.api.crateApiPremiumHeartbeat();
 
+/// Starts the live watch of the active network. Idempotent: with a
+/// watch already running, from this isolate or another, nothing is
+/// restarted. Returns the serialized `WatchStatus`.
+Future<String> liveStart() => RustLib.instance.api.crateApiLiveStart();
+
+/// Stops the live watch and closes its connection. Idempotent.
+Future<String> liveStop() => RustLib.instance.api.crateApiLiveStop();
+
+/// Checks the connection now: the call an alarm makes every few
+/// minutes, and a change of network makes at once, because the timers
+/// of a sleeping phone do not run. Cheap, and nothing with no watch.
+Future<String> liveTick() => RustLib.instance.api.crateApiLiveTick();
+
+/// Where the watch stands. Returns a serialized `WatchStatus`, whose
+/// state is `off` when none runs.
+Future<String> liveStatus() => RustLib.instance.api.crateApiLiveStatus();
+
+/// Subscribes this isolate to the live events, each a serialized
+/// `LiveEvent`, plus `{"type":"stopped"}` when the watch ends. Returns
+/// once the listener is gone. A listener that lags loses the oldest
+/// events, never the watch: what was missed is on disk after the sync
+/// that caused it.
+Stream<String> liveEvents() => RustLib.instance.api.crateApiLiveEvents();
+
+/// Of what a sync found (`{wallet_id, new_txs, confirmed_txs}`), what
+/// nobody has announced yet, now recorded as announced in the vault.
+/// Every path that notifies from a sync of its own goes through here
+/// first, so a transaction is said once whoever saw it first. Returns a
+/// serialized `Vec<LiveTx>`.
+Future<String> claimAnnouncements({required String findingsJson}) =>
+    RustLib.instance.api.crateApiClaimAnnouncements(findingsJson: findingsJson);
+
+/// Whether anything this app sends has to go through Tor.
+Future<String> usesTor() => RustLib.instance.api.crateApiUsesTor();
+
 /// Fetches the current BTC price. `source` is one of `coingecko`,
 /// `kraken`, `mempool_space`; `currency` is one of the `FiatCurrency`
 /// identifiers. The source must quote the currency: only CoinGecko
@@ -418,5 +459,9 @@ Future<String> fetchPrice({required String source, required String currency}) =>
 
 /// Checks the latest published release against the running version.
 /// Returns a serialized `UpdateCheck`.
+///
+/// Through the manager, so the request takes the route the syncs take:
+/// with an onion backend it goes through Tor, and with Tor out of reach
+/// it does not go at all and comes back as `tor`.
 Future<String> checkUpdate({required String currentVersion}) =>
     RustLib.instance.api.crateApiCheckUpdate(currentVersion: currentVersion);

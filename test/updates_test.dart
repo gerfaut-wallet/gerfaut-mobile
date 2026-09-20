@@ -182,40 +182,6 @@ void main() {
       // Someone on a release candidate hears about the release.
       expect('${announcedVersion('0.2.0', current: '0.2.0-rc.1')}', '0.2.0');
     });
-
-    test('a node behind Tor is recognized, widely', () {
-      Settings on(BackendConfig backend) => Settings(
-        activeNetwork: Network.mainnet,
-        backends: {Network.mainnet: backend},
-        appPrefs: const {},
-      );
-      expect(nodeThroughTor(on(const PublicEsplora())), isFalse);
-      expect(
-        nodeThroughTor(on(const CustomEsplora(url: 'https://node.example'))),
-        isFalse,
-      );
-      expect(
-        nodeThroughTor(on(const CustomEsplora(url: 'http://abc.ONION/api'))),
-        isTrue,
-      );
-      expect(
-        nodeThroughTor(on(const CustomElectrum(url: 'tcp://abc.onion:50001'))),
-        isTrue,
-      );
-      // Another network's onion does not count: it is not the one in use.
-      expect(
-        nodeThroughTor(
-          const Settings(
-            activeNetwork: Network.mainnet,
-            backends: {
-              Network.signet: CustomElectrum(url: 'tcp://abc.onion:50001'),
-            },
-            appPrefs: {},
-          ),
-        ),
-        isFalse,
-      );
-    });
   });
 
   group('the update notice', () {
@@ -511,14 +477,30 @@ void main() {
       expect(bridge.checkUpdateCalls, 0);
     });
 
-    testWidgets('asks nothing while the node is an onion', (tester) async {
+    testWidgets('still asks while the node is an onion: the core routes it', (
+      tester,
+    ) async {
       final bridge = _bridge(
         backends: {
           Network.mainnet: const CustomElectrum(url: 'tcp://abc.onion:50001'),
         },
       );
       await _launch(tester, bridge);
-      expect(bridge.checkUpdateCalls, 0);
+      expect(bridge.checkUpdateCalls, 1);
+    });
+
+    testWidgets('a Tor that is down says nothing and waits for tomorrow', (
+      tester,
+    ) async {
+      final clock = _Clock();
+      final bridge = _bridge()
+        ..onCheckUpdate = (_) =>
+            throw const BridgeException('tor', 'Tor is not reachable');
+      await _launch(tester, bridge, clock: clock);
+      expect(bridge.checkUpdateCalls, 1);
+      expect(bridge.appPrefs['updates.latest'], isNull);
+      await _launch(tester, bridge, clock: clock);
+      expect(bridge.checkUpdateCalls, 1);
     });
   });
 
@@ -549,7 +531,8 @@ void main() {
       await open(tester, bridge);
       expect(find.text('Check automatically'), findsOneWidget);
       expect(find.textContaining('GitHub sees your IP address'), findsOne);
-      expect(find.textContaining('does not go through Tor'), findsOne);
+      expect(find.textContaining('goes through Tor instead'), findsOne);
+      expect(find.textContaining('or not at all if Tor'), findsOne);
       expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
 
       await tester.tap(find.byType(Switch));
@@ -573,6 +556,19 @@ void main() {
       expect(launcher.launched, [_releases]);
       // What an asked-for check finds is kept for the notice too.
       expect(bridge.appPrefs['updates.latest'], '0.2.0');
+    });
+
+    testWidgets('a Tor that is down is said as such, not as an outage', (
+      tester,
+    ) async {
+      final bridge = _bridge()
+        ..onCheckUpdate = (_) =>
+            throw const BridgeException('tor', 'Tor is not reachable');
+      await open(tester, bridge);
+      await tester.tap(find.text('Check for updates'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Tor could not be reached'), findsOne);
+      expect(find.textContaining('Could not reach the release'), findsNothing);
     });
 
     testWidgets('a tag that is not a version reads as up to date', (

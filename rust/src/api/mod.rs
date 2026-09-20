@@ -25,9 +25,13 @@ use gerfaut_core::price::{FiatCurrency, PriceSource};
 use gerfaut_core::store::VaultKey;
 use gerfaut_core::wallet::meta::{WalletIcon, WalletKind};
 use gerfaut_core::{CoreError, Network, WalletManager};
+use crate::frb_generated::StreamSink;
+use gerfaut_core::wallet::snapshot::{NewTx, SyncReport};
 use serde_json::json;
+use std::sync::LazyLock;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::sync::OnceCell;
+use tokio::sync::{Mutex, OnceCell, broadcast};
+use tokio::task::JoinHandle;
 
 /// The process-wide manager, set once by [`init_manager`].
 static MANAGER: OnceCell<WalletManager> = OnceCell::const_new();
@@ -66,7 +70,7 @@ fn core_error_kind(error: &CoreError) -> &'static str {
 /// the user back to the field, a key with no paid time to the renewal
 /// page, an unreachable server to the "watch is offline" banner.
 ///
-/// Six, the same six the desktop app answers with. A kind the screens
+/// Seven, the same the desktop app answers with. A kind the screens
 /// act on the same way is a kind they can only print, and what they
 /// would print is a parser's complaint: an answer that does not decode
 /// is a captive portal's login page where JSON was promised, which is
@@ -77,13 +81,14 @@ fn core_error_kind(error: &CoreError) -> &'static str {
 /// show it in the server's words, and read what it holds again.
 ///
 /// The match is exhaustive on purpose: a variant added to the core
-/// stops the build here until somebody says which of the six it is.
+/// stops the build here until somebody says which of them it is.
 fn premium_error_kind(error: &PremiumError) -> &'static str {
     match error {
         PremiumError::NoKey => "premium_no_key",
         PremiumError::UnknownKey => "premium_unknown_key",
         PremiumError::NoPaidTime => "premium_no_paid_time",
         PremiumError::Rejected(_) | PremiumError::NotFound => "premium_rejected",
+        PremiumError::RateLimited { .. } => "premium_rate_limited",
         PremiumError::Unreachable(_) | PremiumError::UnexpectedResponse(_) => "premium_unreachable",
         PremiumError::InvalidCertificate(_)
         | PremiumError::InvalidHeartbeat(_)
@@ -106,6 +111,16 @@ fn core_error_json(error: &CoreError) -> String {
     // answered to say it could not do the thing.
     if let CoreError::Premium(PremiumError::Rejected(words)) = error {
         return error_json("premium_rejected", words);
+    }
+    // A request to slow down carries the wait, in seconds, for the
+    // screen to count from; `null` when the server named none.
+    if let CoreError::Premium(PremiumError::RateLimited { retry_after }) = error {
+        return json!({ "error": {
+            "kind": "premium_rate_limited",
+            "message": error.to_string(),
+            "retry_after": retry_after,
+        } })
+        .to_string();
     }
     error_json(core_error_kind(error), error)
 }
@@ -1054,6 +1069,135 @@ pub async fn premium_heartbeat() -> String {
     }
 }
 
+// --- live watch --------------------------------------------------------
+
+/// Live events as JSON, for every isolate that listens. The core hands
+/// its events to one consumer; that consumer is the task [`live_start`]
+/// spawns here, in Rust, and it fans them out. An isolate that comes or
+/// goes (the screens, the engine the foreground service hosts) never
+/// takes the receiver from another, and never restarts the watch.
+static LIVE_EVENTS: LazyLock<broadcast::Sender<String>> =
+    LazyLock::new(|| broadcast::channel(256).0);
+
+/// The task that consumes the events of the running watch. Behind an
+/// async lock so a start that follows a stop waits for the old task to
+/// be gone instead of mistaking it for a live one.
+static LIVE_TASK: Mutex<Option<JoinHandle<()>>> = Mutex::const_new(None);
+
+/// Starts the live watch of the active network. Idempotent: with a
+/// watch already running, from this isolate or another, nothing is
+/// restarted. Returns the serialized `WatchStatus`.
+pub async fn live_start() -> String {
+    let manager = try_json!(manager());
+    let mut task = LIVE_TASK.lock().await;
+    if task.as_ref().is_some_and(|running| !running.is_finished()) {
+        return to_json(&manager.live_status().await);
+    }
+    let mut events = match manager.live_start().await {
+        Ok(events) => events,
+        Err(e) => return core_error_json(&e),
+    };
+    *task = Some(flutter_rust_bridge::spawn(async move {
+        while let Some(event) = events.next().await {
+            // Nobody listening is not an error: the watch still syncs,
+            // and what it found is in the vault for whoever looks next.
+            let _ = LIVE_EVENTS.send(to_json(&event));
+        }
+        let _ = LIVE_EVENTS.send(json!({ "type": "stopped" }).to_string());
+    }));
+    to_json(&manager.live_status().await)
+}
+
+/// Stops the live watch and closes its connection. Idempotent.
+pub async fn live_stop() -> String {
+    let manager = try_json!(manager());
+    let mut task = LIVE_TASK.lock().await;
+    manager.live_stop().await;
+    if let Some(running) = task.take() {
+        let _ = running.await;
+    }
+    ok_json()
+}
+
+/// Checks the connection now: the call an alarm makes every few
+/// minutes, and a change of network makes at once, because the timers
+/// of a sleeping phone do not run. Cheap, and nothing with no watch.
+pub async fn live_tick() -> String {
+    let manager = try_json!(manager());
+    manager.live_tick().await;
+    ok_json()
+}
+
+/// Where the watch stands. Returns a serialized `WatchStatus`, whose
+/// state is `off` when none runs.
+pub async fn live_status() -> String {
+    let manager = try_json!(manager());
+    to_json(&manager.live_status().await)
+}
+
+/// Subscribes this isolate to the live events, each a serialized
+/// `LiveEvent`, plus `{"type":"stopped"}` when the watch ends. Returns
+/// once the listener is gone. A listener that lags loses the oldest
+/// events, never the watch: what was missed is on disk after the sync
+/// that caused it.
+pub async fn live_events(sink: StreamSink<String>) {
+    let mut events = LIVE_EVENTS.subscribe();
+    loop {
+        match events.recv().await {
+            Ok(event) => {
+                if sink.add(event).is_err() {
+                    return;
+                }
+            }
+            Err(broadcast::error::RecvError::Lagged(_)) => continue,
+            Err(broadcast::error::RecvError::Closed) => return,
+        }
+    }
+}
+
+/// What a sync found worth saying, as the Dart side hands it back: the
+/// part of a `SyncReport` an announcement is made of.
+#[derive(serde::Deserialize)]
+struct Findings {
+    wallet_id: String,
+    #[serde(default)]
+    new_txs: Vec<NewTx>,
+    #[serde(default)]
+    confirmed_txs: Vec<NewTx>,
+}
+
+/// Of what a sync found (`{wallet_id, new_txs, confirmed_txs}`), what
+/// nobody has announced yet, now recorded as announced in the vault.
+/// Every path that notifies from a sync of its own goes through here
+/// first, so a transaction is said once whoever saw it first. Returns a
+/// serialized `Vec<LiveTx>`.
+pub async fn claim_announcements(findings_json: String) -> String {
+    let manager = try_json!(manager());
+    let findings: Findings = try_json!(from_json(&findings_json, "findings"));
+    // The claim reads the wallet and the two lists; the rest of the
+    // report is not its business and stays empty.
+    let report = SyncReport {
+        wallet_id: findings.wallet_id,
+        new_tx_count: findings.new_txs.len() as u32,
+        new_txs: findings.new_txs,
+        confirmed_txs: findings.confirmed_txs,
+        balance: Default::default(),
+        tip_height: 0,
+        took_ms: 0,
+        backend: String::new(),
+    };
+    match manager.claim_announcements(&report).await {
+        Ok(claimed) => to_json(&claimed),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Whether anything this app sends has to go through Tor.
+pub async fn uses_tor() -> String {
+    let manager = try_json!(manager());
+    to_json(&manager.uses_tor().await)
+}
+
 // --- price and updates -------------------------------------------------
 
 /// Parses one serde snake_case enum value from its string spelling.
@@ -1083,8 +1227,13 @@ const UPDATE_REPO: &str = "gerfaut-wallet/gerfaut-mobile";
 
 /// Checks the latest published release against the running version.
 /// Returns a serialized `UpdateCheck`.
+///
+/// Through the manager, so the request takes the route the syncs take:
+/// with an onion backend it goes through Tor, and with Tor out of reach
+/// it does not go at all and comes back as `tor`.
 pub async fn check_update(current_version: String) -> String {
-    match gerfaut_core::updates::check_update(UPDATE_REPO, &current_version).await {
+    let manager = try_json!(manager());
+    match manager.check_update(UPDATE_REPO, &current_version).await {
         Ok(check) => to_json(&check),
         Err(e) => core_error_json(&e),
     }

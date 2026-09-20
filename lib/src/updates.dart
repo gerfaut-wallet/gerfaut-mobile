@@ -1,12 +1,11 @@
 // Release updates: what the app knows about a newer version, when it
 // asks, and whether it says so.
 //
-// The core asks GitHub for the latest release. That request does not go
-// through Tor, so the automatic check only runs when nothing else about
-// the setup says the network should not see this phone: never while the
-// node of the active network is a .onion address, never while the app
-// is disguised, not on the day of the first launch, and at most once a
-// day after that. The About card can still ask on demand.
+// The core asks GitHub for the latest release, by the route the syncs
+// take: with a .onion node configured the request goes through Tor, and
+// with Tor out of reach it does not go at all. The automatic check runs
+// at most once a day, not on the day of the first launch, and never
+// while the app is disguised. The About card can still ask on demand.
 //
 // What comes back is text from the network. Only a version that parses
 // as strict semver is ever kept or shown, rebuilt from its numbers, and
@@ -150,19 +149,6 @@ ReleaseVersion? announcedVersion(
   return version;
 }
 
-/// Whether the node of the active network is reached through Tor. Reads
-/// wide on purpose: any custom address that mentions `.onion` counts,
-/// because a wrong yes only skips a check and a wrong no would show
-/// this phone to GitHub.
-bool nodeThroughTor(Settings settings) {
-  final url = switch (settings.backendFor(settings.activeNetwork)) {
-    CustomEsplora(:final url) => url,
-    CustomElectrum(:final url) => url,
-    PublicEsplora() => null,
-  };
-  return url != null && url.toLowerCase().contains('.onion');
-}
-
 class UpdateState {
   const UpdateState({
     this.automatic = true,
@@ -278,8 +264,6 @@ class UpdateController extends Notifier<UpdateState> {
       return;
     }
     if (_checking || !state.automatic) return;
-    final settings = ref.read(settingsProvider).valueOrNull;
-    if (settings == null || nodeThroughTor(settings)) return;
     final now = ref.read(updateClockProvider)();
     final last = state.checkedAt;
     // A stamp from the future is a clock that was moved: check again.
@@ -294,8 +278,8 @@ class UpdateController extends Notifier<UpdateState> {
     try {
       record(await ref.read(bridgeProvider).checkUpdate(appVersion));
     } catch (_) {
-      // Offline, rate-limited, unreadable: nothing to say, and the next
-      // check is tomorrow's.
+      // Offline, rate-limited, unreadable, or Tor needed and not to be
+      // had: nothing to say, and the next check is tomorrow's.
     } finally {
       _checking = false;
     }

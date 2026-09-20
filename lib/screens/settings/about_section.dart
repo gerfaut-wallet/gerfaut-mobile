@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../src/bridge.dart';
 import '../../src/models.dart';
 import '../../src/onboarding.dart';
 import '../../src/state.dart';
@@ -27,11 +28,13 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
   bool _checkingUpdate = false;
   UpdateCheck? _updateResult;
   bool _updateFailed = false;
+  bool _torDown = false;
 
   Future<void> _checkForUpdates() async {
     setState(() {
       _checkingUpdate = true;
       _updateFailed = false;
+      _torDown = false;
       _updateResult = null;
     });
     try {
@@ -39,6 +42,13 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
       if (!mounted) return;
       ref.read(updateProvider.notifier).record(result);
       setState(() => _updateResult = result);
+    } on BridgeException catch (error) {
+      if (!mounted) return;
+      // With a .onion node the request only ever leaves through Tor.
+      setState(() {
+        _torDown = error.kind == 'tor';
+        _updateFailed = !_torDown;
+      });
     } catch (_) {
       if (mounted) setState(() => _updateFailed = true);
     } finally {
@@ -76,6 +86,15 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
             padding: const EdgeInsets.only(bottom: GerfautSpacing.sm),
             child: Text(
               'Could not reach the release page. Try again later.',
+              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+            ),
+          ),
+        if (_torDown)
+          Padding(
+            padding: const EdgeInsets.only(bottom: GerfautSpacing.sm),
+            child: Text(
+              'Tor could not be reached, so nothing was asked. Your node is '
+              'a .onion address, and this request only goes through Tor.',
               style: tokens.bodySmall.copyWith(color: tokens.textMuted),
             ),
           ),
@@ -126,10 +145,10 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
                     Text(
                       'Once a day at most, when you open Gerfaut, it asks '
                       'GitHub for the latest release. GitHub sees your IP '
-                      'address and nothing about your wallets. The request '
-                      'does not go through Tor, so it is skipped while your '
-                      'node is a .onion address, and while the app is '
-                      'disguised.',
+                      'address and nothing about your wallets. When one of '
+                      'your nodes is a .onion address, the request goes '
+                      'through Tor instead, or not at all if Tor cannot be '
+                      'reached. Nothing is asked while the app is disguised.',
                       style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                     ),
                   ],
