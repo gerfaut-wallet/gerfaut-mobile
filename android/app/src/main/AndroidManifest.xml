@@ -5,6 +5,26 @@
     <!-- Android 13+ asks before an app may post a notification. Gerfaut
          only asks once the user turns on the new-transaction notice. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Live watch, off until the user turns it on in Settings: a
+         foreground service keeps one connection open to the server the
+         user chose, so a transaction is told within seconds. Its type is
+         "special use" because no other type describes it: nothing is
+         transferred, no device is connected, no message is relayed. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Live watch comes back by itself after a restart of the phone. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Held for a few seconds at a time, while the connection is
+         checked from the heartbeat alarm. Never while merely waiting. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Lets Live watch put Android's own yes-or-no question about
+         battery optimisation. Without the exemption Android 12 and later
+         will not let a service it killed start again by itself. Asked
+         when the user turns Live on, explained first, and refusable. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- To be told when the network changes, so the connection is
+         opened again at once instead of at the next heartbeat. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- The app lock may be opened by the phone's own prompt when the
          user turns that on; Gerfaut never sees the biometric itself. -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
@@ -143,6 +163,32 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_network_info" />
+        </receiver>
+        <!-- Live watch. Not exported: only this app and the system can
+             start it. It runs in the app's own process and must stay
+             there: the vault has one owner per process, and a second
+             process would overwrite it. stopWithTask is false so that
+             swiping the app away does not end the watch. -->
+        <service
+            android:name=".LiveService"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps one connection open to the Bitcoin server the user chose, so the user is told the moment a transaction touching a watched wallet is broadcast or confirmed. The user turns it on in Settings, a notification shows it is running, and it stops when the user turns it off. The app has no vendor server and no Firebase: only the device knows which addresses are watched." />
+        </service>
+        <!-- Brings Live watch back after a restart of the phone or an
+             update of the app, and receives its heartbeat alarm. Not
+             exported: the system reaches it all the same, other apps
+             cannot. -->
+        <receiver
+            android:name=".LiveReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
         </receiver>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

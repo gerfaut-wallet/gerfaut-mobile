@@ -53,6 +53,20 @@ The first release: Gerfaut for Android.
   block height.
 - Local notifications when a sync finds something new. Nothing leaves the
   phone for them.
+- Live watch, a new choice under Settings, Notifications. Gerfaut keeps a
+  connection open to your own server and tells you within seconds when a
+  transaction reaches the mempool, and again at its first confirmation. It
+  runs with the app closed and comes back after a restart of the phone.
+  Android requires a small permanent notification for it, which has a Stop
+  button. A sheet explains all this before anything is turned on, then asks
+  for the battery exemption, which you can refuse. Your server learns what a
+  sync already tells it, plus the fact that your phone stays connected. A
+  check every 15 minutes stays scheduled for whenever Android stops Live.
+  Force-stopping the app ends Live until you open Gerfaut again, and the
+  calculator disguise turns it off. Battery use has not been measured yet.
+- A transaction is announced once when it appears and once when it
+  confirms, whichever part of the app saw it first. While an app lock is
+  set, notifications carry no amounts.
 - Signet, testnet4 and regtest alongside mainnet.
 - Gerfaut Premium, as an eighth section of the settings. Enter the account
   key bought on gerfaut-wallet.com, switch a wallet on, and the server
@@ -63,7 +77,9 @@ The first release: Gerfaut for Android.
   still watches that this phone no longer has is listed with a way off.
   Taking a wallet off the server also deletes its alert history there, so
   Gerfaut says so and asks before doing it, whether from the switch or when
-  the wallet is removed from the phone.
+  the wallet is removed from the phone. A wallet made of a single address
+  can be watched too: only that address is sent. When the server refuses a
+  wallet, its row says why in the words of the server.
 - Alerts reach the ntfy app, Telegram, an e-mail address or a webhook of
   yours, and the last 20 are listed in the app. An e-mail address receives a
   6-digit code first, typed back under its row, and nothing is sent to it

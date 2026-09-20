@@ -678,10 +678,7 @@ class _Claimed extends StatelessWidget {
         child,
         Text(
           _claimedMark,
-          style: tokens.label.copyWith(
-            letterSpacing: 0,
-            color: tokens.pending,
-          ),
+          style: tokens.label.copyWith(letterSpacing: 0, color: tokens.pending),
           textAlign: TextAlign.right,
         ),
       ],

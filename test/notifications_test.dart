@@ -5,10 +5,12 @@ import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/settings.dart';
 import 'package:gerfaut/screens/settings/notifications_section.dart';
 import 'package:gerfaut/src/format.dart';
+import 'package:gerfaut/src/live.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/notifications.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/select_field.dart';
 
 import 'fakes.dart';
 
@@ -40,6 +42,19 @@ class FakeNotifications implements NotificationService {
 NewTx tx(int sats, {String txid = 'a', bool confirmed = true}) =>
     NewTx(txid: txid, netSats: sats, confirmed: confirmed);
 
+/// What the core hands out for the new transactions of these reports,
+/// with nothing announced before.
+List<LiveTx> claimed(List<SyncReport> reports) => [
+  for (final report in reports)
+    for (final tx in report.newTxs)
+      LiveTx(
+        walletId: report.walletId,
+        txid: tx.txid,
+        netSats: tx.netSats,
+        stage: tx.confirmed ? TxStage.confirmed : TxStage.mempool,
+      ),
+];
+
 SyncReport report(List<NewTx> txs, {String id = 'w1'}) => SyncReport(
   walletId: id,
   newTxCount: txs.length,
@@ -57,7 +72,7 @@ List<String> bodies(
   Map<String, String> names = const {'w1': 'Cold storage'},
 }) {
   return NewTxAnnouncer.compose(
-    reports,
+    claimed(reports),
     walletNames: names,
     unit: unit,
     masked: masked,
@@ -70,6 +85,7 @@ Widget settingsApp(FakeBridge bridge, FakeNotifications service) {
       bridgeProvider.overrideWithValue(bridge),
       notificationServiceProvider.overrideWithValue(service),
       backgroundSchedulerProvider.overrideWithValue((seconds) async {}),
+      livePlatformProvider.overrideWithValue(FakeLivePlatform()),
     ],
     child: MaterialApp(
       theme: themeFrom(GerfautTokens.light, Brightness.light),
@@ -85,13 +101,16 @@ void main() {
         bodies([
           report([tx(1000000)]),
         ]),
-        ['Received ${formatAmount(1000000, AmountUnit.btc)}'],
+        ['Received ${formatAmount(1000000, AmountUnit.btc)} · confirmed'],
       );
       expect(
         bodies([
           report([tx(-200000)]),
         ]),
-        ['${formatAmount(200000, AmountUnit.btc)} left this wallet'],
+        [
+          '${formatAmount(200000, AmountUnit.btc)} left this wallet · '
+              'confirmed',
+        ],
       );
     });
 
@@ -109,7 +128,7 @@ void main() {
         bodies([
           report([tx(1000000)]),
         ], unit: AmountUnit.sats),
-        ['Received ${formatAmount(1000000, AmountUnit.sats)}'],
+        ['Received ${formatAmount(1000000, AmountUnit.sats)} · confirmed'],
       );
     });
 
@@ -118,13 +137,13 @@ void main() {
         bodies([
           report([tx(1000000)]),
         ], masked: true),
-        ['New transaction'],
+        ['New transaction · confirmed'],
       );
       expect(
         bodies([
           report([tx(-1000000)]),
         ], masked: true),
-        ['New outgoing transaction'],
+        ['New outgoing transaction · confirmed'],
       );
     });
 
@@ -139,10 +158,10 @@ void main() {
 
     test('the wallet name is the title, its id the fallback', () {
       final notices = NewTxAnnouncer.compose(
-        [
+        claimed([
           report([tx(1000)]),
-          report([tx(2000)], id: 'w2'),
-        ],
+          report([tx(2000, txid: 'b')], id: 'w2'),
+        ]),
         walletNames: const {'w1': 'Cold storage'},
         unit: AmountUnit.btc,
         masked: false,
@@ -164,6 +183,7 @@ void main() {
           bridgeProvider.overrideWithValue(bridge),
           notificationServiceProvider.overrideWithValue(service),
           backgroundSchedulerProvider.overrideWithValue((seconds) async {}),
+          livePlatformProvider.overrideWithValue(FakeLivePlatform()),
         ],
       );
       addTearDown(made.dispose);
@@ -198,7 +218,9 @@ void main() {
     test('with the notice on, one line per transaction', () async {
       final service = FakeNotifications();
       final bridge = FakeBridge(wallets: [makeMeta()]);
-      bridge.onSyncWallet = (id) => report([tx(1000)], id: id);
+      var round = 0;
+      bridge.onSyncWallet = (id) =>
+          report([tx(1000, txid: 'tx${round++}')], id: id);
       final made = container(bridge, service);
       await made.read(notifyNewTxProvider.notifier).set(true);
 
@@ -210,7 +232,7 @@ void main() {
       expect(service.posted.single.title, 'Cold storage');
       expect(
         service.posted.single.body,
-        'Received ${formatAmount(1000, AmountUnit.btc)}',
+        'Received ${formatAmount(1000, AmountUnit.btc)} · confirmed',
       );
     });
 
@@ -249,11 +271,19 @@ void main() {
       await tester.pumpWidget(settingsApp(bridge, service));
       await tester.pumpAndSettle();
 
-      // The cadence means nothing until something is said.
-      expect(find.text('Every 15 min'), findsOneWidget);
-      await tester.tap(find.text('Every 15 min'));
-      await tester.pumpAndSettle();
+      Future<void> pickQuarterHour() async {
+        await tester.tap(find.byType(GerfautSelect<BackgroundCheck>));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Every 15 min').last);
+        await tester.pumpAndSettle();
+      }
+
+      // The cadence means nothing until something is said: the option
+      // is there, and does not take the tap.
+      await pickQuarterHour();
       expect(bridge.appPrefs['notify.background'], isNull);
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
 
       await tester.tap(
         find.descendant(
@@ -266,8 +296,7 @@ void main() {
       expect(service.permissionAsks, 1);
       expect(bridge.appPrefs['notify.new_tx'], '1');
 
-      await tester.tap(find.text('Every 15 min'));
-      await tester.pumpAndSettle();
+      await pickQuarterHour();
       expect(bridge.appPrefs['notify.background'], '900');
     });
 

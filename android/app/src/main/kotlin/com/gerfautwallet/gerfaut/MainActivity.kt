@@ -19,7 +19,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PersistableBundle
+import android.os.PowerManager
 import android.provider.DocumentsContract
+import android.provider.Settings
 import android.view.WindowManager
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -66,6 +68,17 @@ class MainActivity : FlutterFragmentActivity() {
                 discardDocument(uri)
                 save.result.error("write_failed", error.message, null)
             }
+        }
+
+    // The call waiting for the battery question to be answered.
+    private var pendingExemption: MethodChannel.Result? = null
+
+    private val exemptionDialog: ActivityResultLauncher<Intent> =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            // The result code says nothing here; the power manager does.
+            val waiting = pendingExemption
+            pendingExemption = null
+            waiting?.success(isBatteryExempt())
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -129,6 +142,30 @@ class MainActivity : FlutterFragmentActivity() {
                 else -> result.notImplemented()
             }
         }
+        MethodChannel(messenger, LIVE_CHANNEL).setMethodCallHandler { call, result ->
+            try {
+                when (call.method) {
+                    // Called from a visible app, which is what lets a
+                    // foreground service start at all.
+                    "start" -> {
+                        LiveService.setWanted(this, true)
+                        result.success(LiveService.start(this))
+                    }
+                    "stop" -> {
+                        LiveService.stop(this)
+                        result.success(null)
+                    }
+                    "isRunning" -> result.success(LiveService.isRunning)
+                    "isWanted" -> result.success(LiveService.isWanted(this))
+                    "isBatteryExempt" -> result.success(isBatteryExempt())
+                    "requestBatteryExemption" -> requestBatteryExemption(result)
+                    "manufacturer" -> result.success(Build.MANUFACTURER ?: "")
+                    else -> result.notImplemented()
+                }
+            } catch (error: Exception) {
+                result.error("failed", error.message, null)
+            }
+        }
         MethodChannel(messenger, DISGUISE_CHANNEL).setMethodCallHandler { call, result ->
             try {
                 when (call.method) {
@@ -157,6 +194,43 @@ class MainActivity : FlutterFragmentActivity() {
                 result.error("failed", error.message, null)
             }
         }
+    }
+
+    // --- live watch -----------------------------------------------------
+
+    private fun isBatteryExempt(): Boolean =
+        (getSystemService(Context.POWER_SERVICE) as PowerManager)
+            .isIgnoringBatteryOptimizations(packageName)
+
+    // Puts Android's own yes-or-no question to the user. Without the
+    // exemption Android 12 and later will not let a killed service come
+    // back by itself, which is the whole reason for asking. Where the
+    // direct question is not to be had, the list it stands for opens
+    // instead. Answers whether the app is exempt once the user is back.
+    private fun requestBatteryExemption(result: MethodChannel.Result) {
+        if (isBatteryExempt()) {
+            result.success(true)
+            return
+        }
+        if (pendingExemption != null) {
+            result.error("busy", "the question is already on screen", null)
+            return
+        }
+        val direct = Intent(
+            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+            Uri.parse("package:$packageName"),
+        )
+        val list = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+        for (intent in listOf(direct, list)) {
+            pendingExemption = result
+            try {
+                exemptionDialog.launch(intent)
+                return
+            } catch (_: Exception) {
+                pendingExemption = null
+            }
+        }
+        result.success(false)
     }
 
     // FLAG_SECURE blanks this window in screenshots, in screen
@@ -326,6 +400,10 @@ class MainActivity : FlutterFragmentActivity() {
             PackageManager.DONT_KILL_APP,
         )
         writeMarker(disguised)
+        // A permanent notification headed "Gerfaut" is the opposite of a
+        // disguise. The Dart side turns Live off before it asks for the
+        // calculator; this says the same thing a second time, on purpose.
+        if (disguised) LiveService.stop(this)
         applyTaskDescription(disguised)
     }
 
@@ -448,6 +526,7 @@ class MainActivity : FlutterFragmentActivity() {
         const val WINDOW_CHANNEL = "gerfaut/window"
         const val FILES_CHANNEL = "gerfaut/files"
         const val DISGUISE_CHANNEL = "gerfaut/disguise"
+        const val LIVE_CHANNEL = "gerfaut/live"
         const val DISGUISE_MARKER = "disguised"
         const val CALCULATOR_LIGHT = 0xFFF5F5F5.toInt()
         const val CALCULATOR_DARK = 0xFF121212.toInt()

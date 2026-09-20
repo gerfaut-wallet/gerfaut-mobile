@@ -7,6 +7,7 @@ import '../../src/bridge.dart';
 import '../../src/disguise.dart';
 import '../../src/lock.dart';
 import '../../src/models.dart';
+import '../../src/notifications.dart';
 import '../../src/state.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/buttons.dart';
@@ -93,7 +94,9 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
     final confirmed = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => const _DisguiseSheet(),
+      builder: (_) => _DisguiseSheet(
+        liveOn: ref.read(backgroundCheckProvider) == BackgroundCheck.live,
+      ),
     );
     if (confirmed != true) return;
     await _swapFace(true);
@@ -517,7 +520,17 @@ class _ConfirmSecretSheetState extends State<_ConfirmSecretSheet> {
 /// in a note of its own. Five amber panels in a row read as a wall of
 /// warnings, and a wall is skipped; one panel is read.
 class _DisguiseSheet extends StatelessWidget {
-  const _DisguiseSheet();
+  const _DisguiseSheet({this.liveOn = false});
+
+  /// Live watch is what looks for transactions right now: the sheet
+  /// says it is about to stop.
+  final bool liveOn;
+
+  /// What stops with the disguise when Live is on. Its permanent
+  /// notification is headed with the app's name, so it cannot stay.
+  static const String liveFact =
+      'Live watch is turned off, and the check for transactions goes back '
+      'to every 15 minutes.';
 
   static const List<String> facts = [
     'The launcher will show a calculator named "Calculator".',
@@ -551,7 +564,7 @@ class _DisguiseSheet extends StatelessWidget {
               style: tokens.body,
             ),
             const SizedBox(height: GerfautSpacing.sm),
-            for (final fact in facts)
+            for (final fact in [...facts, if (liveOn) liveFact])
               Padding(
                 padding: const EdgeInsets.only(bottom: GerfautSpacing.xs),
                 child: Row(

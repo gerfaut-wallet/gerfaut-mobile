@@ -203,6 +203,32 @@ void main() {
       }
     });
 
+    test('a request to slow down is calm, and counts the wait', () {
+      final named = premiumFailure(
+        const BridgeException(
+          'premium_rate_limited',
+          'the premium server asks to wait before trying again',
+          retryAfter: 42,
+        ),
+      );
+      expect(
+        named.message,
+        'The Gerfaut server asks for a pause. Try again in 42 s.',
+      );
+      expect(named.retry, isTrue);
+      expect(named.detail, isNull);
+
+      final long = premiumFailure(
+        const BridgeException('premium_rate_limited', 'x', retryAfter: 600),
+      );
+      expect(long.message, contains('Try again in 10 min.'));
+
+      final unnamed = premiumFailure(
+        const BridgeException('premium_rate_limited', 'x'),
+      );
+      expect(unnamed.message, contains('Try again in a moment.'));
+    });
+
     test('the kinds and the cases that answer them line up', () {
       final answered = <PremiumFailureKind>{};
       for (final kind in premiumErrorKinds) {
@@ -796,12 +822,9 @@ void main() {
       expect(find.text('Cold storage'), findsOneWidget);
       expect(find.text('Donations'), findsOneWidget);
       expect(find.text('Signet tests'), findsNothing);
-      // A single address is greyed and says why.
-      expect(switchOf(tester, 'Donations').onChanged, isNull);
-      expect(
-        find.text('Single addresses cannot be watched yet.'),
-        findsOneWidget,
-      );
+      // A single address is a wallet like another: it can be watched.
+      expect(switchOf(tester, 'Donations').onChanged, isNotNull);
+      expect(find.textContaining('cannot be watched yet'), findsNothing);
       expect(switchOf(tester, 'Cold storage').onChanged, isNotNull);
       expect(switchOf(tester, 'Cold storage').value, isFalse);
       // On, the switch is Bruyère: the server's watch reads as premium.
@@ -809,6 +832,99 @@ void main() {
         switchOf(tester, 'Cold storage').activeTrackColor,
         GerfautTokens.light.premium,
       );
+    });
+
+    testWidgets('a single address is asked about as what it is, then sent', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      await toggle(tester, 'Donations');
+      expect(find.byType(PremiumConsentScreen), findsOneWidget);
+      final note = tester.widget<GerfautNotice>(find.byType(GerfautNotice));
+      expect(note.tone, NoticeTone.alert);
+      expect(
+        note.message,
+        startsWith("Gerfaut's server will learn the address of this wallet"),
+      );
+      expect(find.text('The address'), findsOneWidget);
+      expect(find.text('The descriptor'), findsNothing);
+      expect(find.text('The name you gave the wallet'), findsOneWidget);
+
+      await tester.tap(find.text('Watch this wallet'));
+      await tester.pumpAndSettle();
+      expect(bridge.premiumCalls, contains('watch:w2'));
+      expect(switchOf(tester, 'Donations').value, isTrue);
+    });
+
+    testWidgets('a wallet the server refused says why, in its words', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumWatched.add(
+        const WalletWatch(
+          id: 'w1',
+          name: 'Cold storage',
+          scriptKind: 'segwit',
+          watchedSince: 1755000000,
+          baselineAt: null,
+          baselineHeight: null,
+          coins: 0,
+          valueSats: 0,
+          watching: false,
+          refusal: WalletRefusal(
+            code: 'too_many_coins',
+            message: 'This wallet holds more than 5,000 coins.',
+          ),
+        ),
+      );
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      final words = tester.widget<Text>(
+        find.text('This wallet holds more than 5,000 coins.'),
+      );
+      expect(words.style!.color, GerfautTokens.light.pending);
+      // Not watched, so not badged as watched, and not "scanning".
+      expect(find.byType(WatchedPill), findsNothing);
+      expect(find.text('Scanning…'), findsNothing);
+      // The server holds the row: the switch is on, and takes it off.
+      expect(switchOf(tester, 'Cold storage').value, isTrue);
+      expect(switchOf(tester, 'Cold storage').onChanged, isNotNull);
+    });
+
+    test('a refusal reads from the server, and its absence means watched', () {
+      final refused = WalletWatch.fromJson({
+        'id': 'w1',
+        'name': 'Cold storage',
+        'script_kind': 'segwit',
+        'watched_since': 1,
+        'baseline_at': null,
+        'baseline_height': null,
+        'coins': 0,
+        'value_sats': 0,
+        'watching': false,
+        'refusal': {'code': 'new_code', 'message': 'Not this one.'},
+      });
+      expect(refused.refused, isTrue);
+      expect(refused.refusal!.message, 'Not this one.');
+      // A server that predates the flag refuses no wallet.
+      final older = WalletWatch.fromJson({
+        'id': 'w1',
+        'name': 'Cold storage',
+        'script_kind': 'segwit',
+        'watched_since': 1,
+        'baseline_at': 2,
+        'baseline_height': 3,
+        'coins': 0,
+        'value_sats': 0,
+      });
+      expect(older.refused, isFalse);
+      expect(older.refusal, isNull);
     });
 
     testWidgets('the first switch-on asks for consent, in red, once', (
@@ -852,9 +968,7 @@ void main() {
       await toggle(tester, 'Cold storage');
       expect(bridge.premiumCalls, isNot(contains('unwatch:w1')));
       expect(switchOf(tester, 'Cold storage').value, isTrue);
-      final question = tester.widget<GerfautNotice>(
-        find.byType(GerfautNotice),
-      );
+      final question = tester.widget<GerfautNotice>(find.byType(GerfautNotice));
       expect(question.tone, NoticeTone.info);
       expect(question.actionsBelow, isTrue);
       expect(
@@ -1923,12 +2037,30 @@ void main() {
           walletName: 'Removed',
           at: now - 7200,
         ),
+        PremiumEvent(
+          id: -1,
+          kind: AlertKind.fromId('wallet_refused'),
+          wallet: 'w1',
+          walletName: 'Cold storage',
+          at: now - 10800,
+          data: const {
+            'code': 'too_many_coins',
+            'limit': 5000,
+            'message': 'This wallet holds more than 5,000 coins.',
+          },
+        ),
       ];
       await tester.pumpWidget(premiumApp(bridge));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('coins are moving'), findsOneWidget);
       expect(find.textContaining('now watched by the server'), findsOneWidget);
+      expect(
+        find.textContaining(
+          'refused by the server: This wallet holds more than 5,000 coins.',
+        ),
+        findsOneWidget,
+      );
       expect(find.text('2 min ago'), findsOneWidget);
       expect(find.text('1 h ago'), findsOneWidget);
       // A wallet this vault no longer has opens nothing.

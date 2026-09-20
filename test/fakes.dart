@@ -13,6 +13,7 @@ import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/src/documents.dart';
 import 'package:gerfaut/src/electrum.dart';
 import 'package:gerfaut/src/home_widgets.dart';
+import 'package:gerfaut/src/live.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/screen.dart';
 import 'package:gerfaut/src/window.dart';
@@ -57,6 +58,64 @@ class FakeWindowGuard implements WindowGuard {
 
 /// Remembers which face the launcher shows instead of touching the
 /// package manager.
+/// Android's side of Live watch, as a test wants it: a service that
+/// starts or refuses to, a battery question answered yes or no, and a
+/// phone of any maker.
+class FakeLivePlatform implements LivePlatform {
+  FakeLivePlatform({
+    this.running = false,
+    this.wanted = false,
+    this.batteryExempt = false,
+    this.grantsExemption = true,
+    this.startSucceeds = true,
+    this.maker = 'Google',
+  });
+
+  bool running;
+  bool wanted;
+  bool batteryExempt;
+  bool grantsExemption;
+  bool startSucceeds;
+  String maker;
+
+  /// Every call, in order, for assertions.
+  final List<String> calls = [];
+
+  @override
+  Future<bool> start() async {
+    calls.add('start');
+    wanted = true;
+    running = startSucceeds;
+    return startSucceeds;
+  }
+
+  @override
+  Future<void> stop() async {
+    calls.add('stop');
+    wanted = false;
+    running = false;
+  }
+
+  @override
+  Future<bool> isRunning() async => running;
+
+  @override
+  Future<bool> isWanted() async => wanted;
+
+  @override
+  Future<bool> isBatteryExempt() async => batteryExempt;
+
+  @override
+  Future<bool> requestBatteryExemption() async {
+    calls.add('askBattery');
+    if (grantsExemption) batteryExempt = true;
+    return batteryExempt;
+  }
+
+  @override
+  Future<String> manufacturer() async => maker;
+}
+
 class FakeDisguise implements Disguise {
   FakeDisguise({this.disguised = false});
 
@@ -586,16 +645,46 @@ class FakeBridge implements GerfautBridge {
 
   @override
   Future<List<WalletMeta>> listWallets([Network? network]) async {
-    if (network == null) return wallets;
-    return wallets.where((w) => w.network == network).toList();
+    final listed = [for (final wallet in wallets) _stamped(wallet)];
+    if (network == null) return listed;
+    return listed.where((w) => w.network == network).toList();
+  }
+
+  /// Wallets a sync has completed for, the way the core stamps them.
+  final Set<String> syncedIds = {};
+
+  WalletMeta _stamped(WalletMeta meta) {
+    if (meta.lastSync != null || !syncedIds.contains(meta.id)) return meta;
+    return WalletMeta(
+      id: meta.id,
+      name: meta.name,
+      icon: meta.icon,
+      network: meta.network,
+      kind: meta.kind,
+      recognizedAs: meta.recognizedAs,
+      createdAt: meta.createdAt,
+      gapLimit: meta.gapLimit,
+      scanGap: meta.scanGap,
+      lastSync: const SyncStamp(
+        at: 1755000000,
+        tipHeight: 100,
+        backend: 'mempool.space',
+      ),
+      cachedBalance: meta.cachedBalance,
+      cachedTxCount: meta.cachedTxCount,
+    );
   }
 
   /// Holds a snapshot in flight, for a test that looks at a wallet page
   /// whose name is not known yet. Completed, the page loads.
   Completer<void>? snapshotGate;
 
+  /// How many times a snapshot was read, for refresh assertions.
+  int snapshotCalls = 0;
+
   @override
   Future<WalletSnapshot> walletSnapshot(String id) async {
+    snapshotCalls++;
     await snapshotGate?.future;
     final snapshot = snapshots[id];
     if (snapshot == null) {
@@ -721,7 +810,12 @@ class FakeBridge implements GerfautBridge {
     syncWalletCalls += 1;
     await syncGate?.future;
     final sync = onSyncWallet;
-    if (sync != null) return sync(id);
+    if (sync != null) {
+      final report = sync(id);
+      syncedIds.add(id);
+      return report;
+    }
+    syncedIds.add(id);
     return SyncReport(
       walletId: id,
       newTxCount: 0,
@@ -743,8 +837,10 @@ class FakeBridge implements GerfautBridge {
   Future<SyncAllReport> syncAll([Network? network]) async {
     syncAllCalls += 1;
     final sync = onSyncAll;
-    if (sync != null) return sync(network);
-    return const SyncAllReport(reports: [], failures: []);
+    if (sync == null) return const SyncAllReport(reports: [], failures: []);
+    final report = sync(network);
+    syncedIds.addAll(report.reports.map((r) => r.walletId));
+    return report;
   }
 
   /// Held open by a test that wants the screen to go away while a
@@ -967,6 +1063,82 @@ class FakeBridge implements GerfautBridge {
       at: 1755000000,
     );
   }
+
+  // --- live watch ------------------------------------------------------
+
+  /// What the watch says it is; tests move it and push a status event.
+  LiveWatchStatus watchStatus = const LiveWatchStatus();
+  int liveStartCalls = 0;
+  int liveStopCalls = 0;
+  int liveTickCalls = 0;
+  bool usesTorValue = false;
+
+  /// The fan-out of the fake: every listener gets every event.
+  final StreamController<LiveEvent> liveController =
+      StreamController<LiveEvent>.broadcast();
+
+  /// The record the core keeps in the vault: `txid:stage` already
+  /// handed out. A confirmed entry covers the mempool stage too.
+  final Set<String> announced = {};
+
+  @override
+  Future<LiveWatchStatus> liveStart() async {
+    liveStartCalls++;
+    if (watchStatus.state == WatchState.off) {
+      watchStatus = const LiveWatchStatus(
+        state: WatchState.connected,
+        transport: WatchTransport.electrum,
+        server: 'electrum.example',
+      );
+    }
+    return watchStatus;
+  }
+
+  @override
+  Future<void> liveStop() async {
+    liveStopCalls++;
+    watchStatus = const LiveWatchStatus();
+    liveController.add(const LiveStopped());
+  }
+
+  @override
+  Future<void> liveTick() async => liveTickCalls++;
+
+  @override
+  Future<LiveWatchStatus> liveStatus() async => watchStatus;
+
+  @override
+  Stream<LiveEvent> liveEvents() => liveController.stream;
+
+  @override
+  Future<List<LiveTx>> claimAnnouncements(SyncReport report) async {
+    final claimed = <LiveTx>[];
+    void claim(NewTx tx, TxStage stage) {
+      if (announced.contains('${tx.txid}:confirmed') ||
+          !announced.add('${tx.txid}:${stage.id}')) {
+        return;
+      }
+      claimed.add(
+        LiveTx(
+          walletId: report.walletId,
+          txid: tx.txid,
+          netSats: tx.netSats,
+          stage: stage,
+        ),
+      );
+    }
+
+    for (final tx in report.newTxs) {
+      claim(tx, tx.confirmed ? TxStage.confirmed : TxStage.mempool);
+    }
+    for (final tx in report.confirmedTxs) {
+      claim(tx, TxStage.confirmed);
+    }
+    return claimed;
+  }
+
+  @override
+  Future<bool> usesTor() async => usesTorValue;
 
   /// Update hook; the default reports the running version as current.
   UpdateCheck Function(String currentVersion)? onCheckUpdate;
@@ -1488,12 +1660,6 @@ class FakeBridge implements GerfautBridge {
     final meta = wallets.where((w) => w.id == id).firstOrNull;
     if (meta == null) {
       throw BridgeException('wallet_not_found', 'wallet not found: $id');
-    }
-    if (meta.isSingleAddress) {
-      throw const BridgeException(
-        'premium_rejected',
-        'single addresses cannot be watched yet',
-      );
     }
     // The yes is recorded first, dated now, and only once.
     if (!premiumConsents.any((c) => c.walletId == id)) {

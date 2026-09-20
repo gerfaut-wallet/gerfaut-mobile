@@ -6,8 +6,10 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'background.dart';
+import 'bridge.dart';
 import 'disguise.dart';
 import 'format.dart';
+import 'live.dart';
 import 'models.dart';
 import 'state.dart';
 
@@ -124,39 +126,37 @@ int noticeId(String key) {
   return hash & 0x7FFFFFFF;
 }
 
-/// Composes and posts what a batch of sync reports amounts to.
+/// Composes and posts what a batch of announcements amounts to.
+///
+/// What it is handed are [LiveTx]: transactions the core gave out once,
+/// at one stage, to whoever asked first. The live watch hands them as
+/// events; a sync of the app's own gets them from
+/// [GerfautBridge.claimAnnouncements]. Either way nothing is said twice.
 class NewTxAnnouncer {
   const NewTxAnnouncer(this.service);
 
   final NotificationService service;
 
-  /// What the reports amount to: one notice per transaction up to
-  /// [noticesPerWallet] a wallet, then one line counting the rest.
-  /// Pure: the same reports, names, unit and mask always say the same.
+  /// One notice per transaction up to [noticesPerWallet] a wallet, then
+  /// one line counting the rest. Pure: the same transactions, names,
+  /// unit and mask always say the same.
+  ///
+  /// A confirmation carries the id of the arrival it follows, so it
+  /// takes that notification's place instead of stacking under it.
   static List<TxNotice> compose(
-    List<SyncReport> reports, {
+    List<LiveTx> txs, {
     required Map<String, String> walletNames,
     required AmountUnit unit,
     required bool masked,
   }) {
+    final byWallet = <String, List<LiveTx>>{};
+    for (final tx in txs) {
+      byWallet.putIfAbsent(tx.walletId, () => []).add(tx);
+    }
     final notices = <TxNotice>[];
-    for (final report in reports) {
-      final title = walletNames[report.walletId] ?? report.walletId;
-      final txs = report.newTxs;
-      if (txs.isEmpty) {
-        // A core that counts without listing still gets its line.
-        if (report.newTxCount > 0) {
-          notices.add(
-            TxNotice(
-              id: noticeId('count:${report.walletId}'),
-              title: title,
-              body: _plural(report.newTxCount, 'new transaction'),
-            ),
-          );
-        }
-        continue;
-      }
-      for (final tx in txs.take(noticesPerWallet)) {
+    for (final MapEntry(key: walletId, value: mine) in byWallet.entries) {
+      final title = walletNames[walletId] ?? walletId;
+      for (final tx in mine.take(noticesPerWallet)) {
         notices.add(
           TxNotice(
             id: noticeId(tx.txid),
@@ -165,11 +165,11 @@ class NewTxAnnouncer {
           ),
         );
       }
-      final rest = txs.length - noticesPerWallet;
+      final rest = mine.length - noticesPerWallet;
       if (rest > 0) {
         notices.add(
           TxNotice(
-            id: noticeId('more:${report.walletId}'),
+            id: noticeId('more:$walletId'),
             title: title,
             body: _plural(rest, 'more new transaction'),
           ),
@@ -179,15 +179,15 @@ class NewTxAnnouncer {
     return notices;
   }
 
-  /// Posts what [compose] says about the reports.
+  /// Posts what [compose] says about the transactions.
   Future<void> announce(
-    List<SyncReport> reports, {
+    List<LiveTx> txs, {
     required Map<String, String> walletNames,
     required AmountUnit unit,
     required bool masked,
   }) async {
     final notices = compose(
-      reports,
+      txs,
       walletNames: walletNames,
       unit: unit,
       masked: masked,
@@ -200,7 +200,7 @@ class NewTxAnnouncer {
 
 /// A balance change is stated, never celebrated: an amount, a
 /// direction, and whether the chain has it yet.
-String _describe(NewTx tx, {required AmountUnit unit, required bool masked}) {
+String _describe(LiveTx tx, {required AmountUnit unit, required bool masked}) {
   final sats = tx.netSats;
   final what = switch ((masked, sats)) {
     (_, 0) => 'New transaction',
@@ -209,52 +209,87 @@ String _describe(NewTx tx, {required AmountUnit unit, required bool masked}) {
     (false, > 0) => 'Received ${formatAmount(sats, unit)}',
     (false, _) => '${formatAmount(-sats, unit)} left this wallet',
   };
-  return tx.confirmed ? what : '$what · pending';
+  return switch (tx.stage) {
+    TxStage.mempool => '$what · pending',
+    TxStage.confirmed => '$what · confirmed',
+  };
 }
 
 String _plural(int count, String noun) =>
     '$count $noun${count == 1 ? '' : 's'}';
+
+/// Whether a notification may carry an amount: never while balances are
+/// masked, and never while an app lock exists. A notification is read
+/// from outside the lock, by whoever holds the phone.
+bool amountsHidden(Settings settings) =>
+    settings.appPrefs['mobile.masked'] == '1' || settings.appLock != null;
+
+/// What the reports hold that nobody has announced yet, in order. Every
+/// report goes to the core, including those with nothing to say aloud,
+/// so what one caller keeps quiet about is not said later by another.
+Future<List<LiveTx>> claimAll(
+  GerfautBridge bridge,
+  Iterable<SyncReport> reports,
+) async {
+  final claimed = <LiveTx>[];
+  for (final report in reports) {
+    if (report.newTxs.isEmpty && report.confirmedTxs.isEmpty) continue;
+    claimed.addAll(await bridge.claimAnnouncements(report));
+  }
+  return claimed;
+}
 
 final newTxAnnouncerProvider = Provider<NewTxAnnouncer>(
   (ref) => NewTxAnnouncer(ref.watch(notificationServiceProvider)),
 );
 
 /// The open app's side of it: nothing unless the preference is on, then
-/// the names, unit and mask the screen shows go with the reports.
+/// the names, unit and mask the screen shows go with what was claimed.
 class SyncAnnouncer {
   const SyncAnnouncer(this._ref);
 
   final Ref _ref;
 
-  Future<void> announce(List<SyncReport> reports) async {
+  /// [firstSyncs] names the wallets that had never been synced before
+  /// these reports: what they hold is an import, not news.
+  Future<void> announce(
+    List<SyncReport> reports, {
+    Set<String> firstSyncs = const {},
+  }) async {
     if (!_ref.read(notifyNewTxProvider)) return;
     // Nothing is posted while disguised: a notification's header carries
     // the app's name, and a "Gerfaut" line over a calculator would tell
     // everything the disguise hides.
     if (_ref.read(disguiseProvider).disguised) return;
-    if (reports.every((r) => r.newTxs.isEmpty && r.newTxCount == 0)) return;
-    // A wallet seen for the first time hands over its whole history as
-    // "new". Telling someone about a payment from three years ago is
-    // noise, and the first sync of a restore would be a burst of it.
-    final known = _ref.read(announcedWalletsProvider.notifier);
-    final firstTime = <SyncReport>[];
-    for (final report in reports) {
-      if (!known.remembers(report.walletId)) firstTime.add(report);
+    if (reports.every((r) => r.newTxs.isEmpty && r.confirmedTxs.isEmpty)) {
+      return;
     }
-    known.remember(reports.map((r) => r.walletId));
-    reports = reports.where((r) => !firstTime.contains(r)).toList();
-    if (reports.isEmpty) return;
     try {
+      // Claimed before anything is left out, so that what this sync
+      // keeps quiet about is on record and no other path says it.
+      var claimed = await claimAll(_ref.read(bridgeProvider), reports);
+      // A wallet synced for the first time hands over its whole history
+      // as "new". Telling someone about a payment from three years ago
+      // is noise, and the first sync of a restore would be a burst of
+      // it. Every later sync is news, the first one after a restart
+      // included: what arrived while nothing ran is what most needs
+      // saying, and the record in the vault keeps it from being said
+      // twice.
+      claimed = claimed
+          .where((tx) => !firstSyncs.contains(tx.walletId))
+          .toList();
+      if (claimed.isEmpty) return;
       final wallets =
           _ref.read(walletsProvider).valueOrNull ??
           await _ref.read(bridgeProvider).listWallets();
+      final lock = _ref.read(settingsProvider).valueOrNull?.appLock;
       await _ref
           .read(newTxAnnouncerProvider)
           .announce(
-            reports,
+            claimed,
             walletNames: {for (final w in wallets) w.id: w.name},
             unit: _ref.read(unitProvider),
-            masked: _ref.read(maskedProvider),
+            masked: _ref.read(maskedProvider) || lock != null,
           );
     } catch (_) {
       // A notification that cannot be posted is not a failed sync.
@@ -292,11 +327,17 @@ class NotifyNewTxNotifier extends Notifier<bool> {
         .read(bridgeProvider)
         .setAppPref('notify.new_tx', on ? '1' : '0')
         .catchError((_) {});
+    final cadence = ref.read(backgroundCheckProvider);
     await rescheduleBackgroundCheck(
       ref,
       notifying: on,
-      seconds: ref.read(backgroundCheckProvider).seconds,
+      seconds: cadence.seconds,
     );
+    // With nothing to say there is nothing to watch for: Live follows
+    // the notice off, and back on.
+    await ref
+        .read(liveProvider.notifier)
+        .apply(wanted: on && cadence == BackgroundCheck.live);
   }
 }
 
@@ -309,39 +350,31 @@ final notifyNewTxProvider = NotifierProvider<NotifyNewTxNotifier, bool>(
 /// The system refused notifications the last time the toggle asked.
 final notificationsRefusedProvider = StateProvider<bool>((ref) => false);
 
-/// Wallets this run has already synced once, so their history is not
-/// announced as new. Kept in memory: a restart syncing them again is
-/// the same "first sync of this run", and a wallet whose whole history
-/// is already on screen does not need to be told twice.
-class AnnouncedWallets extends Notifier<Set<String>> {
-  @override
-  Set<String> build() => const {};
-
-  bool remembers(String walletId) => state.contains(walletId);
-
-  void remember(Iterable<String> ids) => state = {...state, ...ids};
-}
-
-final announcedWalletsProvider =
-    NotifierProvider<AnnouncedWallets, Set<String>>(AnnouncedWallets.new);
-
-/// How often the background check runs; the seconds are what the
-/// preference stores.
+/// How Gerfaut looks for transactions while it is off screen. What the
+/// preference stores is [stored]: the seconds of a periodic check, or
+/// `live`.
 enum BackgroundCheck {
-  off(0, 'Off'),
-  quarterHour(900, 'Every 15 min'),
-  hour(3600, 'Every hour'),
-  sixHours(21600, 'Every 6 hours');
+  off('0', 0, 'Off'),
 
-  const BackgroundCheck(this.seconds, this.label);
+  /// A connection kept open by a foreground service. The periodic check
+  /// stays scheduled under it, at the shortest cadence Android grants:
+  /// whenever Live cannot run, that is what is left.
+  live('live', 900, 'Live'),
+  quarterHour('900', 900, 'Every 15 min'),
+  hour('3600', 3600, 'Every hour'),
+  sixHours('21600', 21600, 'Every 6 hours');
 
+  const BackgroundCheck(this.stored, this.seconds, this.label);
+
+  final String stored;
+
+  /// The cadence of the periodic task, zero for none.
   final int seconds;
   final String label;
 
-  static BackgroundCheck? fromSeconds(String? stored) {
-    final seconds = int.tryParse(stored ?? '');
+  static BackgroundCheck? fromStored(String? stored) {
     for (final check in BackgroundCheck.values) {
-      if (check.seconds == seconds) return check;
+      if (check.stored == stored) return check;
     }
     return null;
   }
@@ -352,21 +385,29 @@ class BackgroundCheckNotifier extends Notifier<BackgroundCheck> {
   BackgroundCheck build() => BackgroundCheck.off;
 
   void hydrate(String? stored) {
-    final check = BackgroundCheck.fromSeconds(stored);
+    final check = BackgroundCheck.fromStored(stored);
     if (check != null) state = check;
   }
 
+  /// Persists the choice, brings the periodic task in line, and starts
+  /// or stops the Live service to match. Choosing Live from the settings
+  /// goes through the explanation sheet first; this is what the sheet
+  /// calls once the user has said yes.
   Future<void> set(BackgroundCheck check) async {
     state = check;
     ref
         .read(bridgeProvider)
-        .setAppPref('notify.background', '${check.seconds}')
+        .setAppPref('notify.background', check.stored)
         .catchError((_) {});
+    final notifying = ref.read(notifyNewTxProvider);
     await rescheduleBackgroundCheck(
       ref,
-      notifying: ref.read(notifyNewTxProvider),
+      notifying: notifying,
       seconds: check.seconds,
     );
+    await ref
+        .read(liveProvider.notifier)
+        .apply(wanted: notifying && check == BackgroundCheck.live);
   }
 }
 

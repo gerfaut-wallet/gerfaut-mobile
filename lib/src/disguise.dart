@@ -16,6 +16,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'notifications.dart';
+
 /// What the platform does for the disguise. Behind an interface so no
 /// test ever reaches the activity.
 abstract class Disguise {
@@ -123,6 +125,14 @@ class DisguiseController extends Notifier<DisguiseState> {
   Future<void> set(bool disguised) async {
     final service = ref.read(disguiseServiceProvider);
     if (disguised) {
+      // Live watch cannot hide: its permanent notification is headed
+      // with the app's name. It goes first, and the setting goes back
+      // to a periodic check, which stays silent while disguised.
+      if (ref.read(backgroundCheckProvider) == BackgroundCheck.live) {
+        await ref
+            .read(backgroundCheckProvider.notifier)
+            .set(BackgroundCheck.quarterHour);
+      }
       await service.setWidgetsEnabled(false);
       await service.setDisguised(true);
     } else {

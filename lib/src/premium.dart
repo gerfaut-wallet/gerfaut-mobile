@@ -243,6 +243,12 @@ String alertPhrase(PremiumEvent event) {
       _ => 'a timelock opens within a month',
     },
     AlertKind.walletRegistered => 'now watched by the server',
+    // The server's own sentence when the event carries one.
+    AlertKind.walletRefused => switch (event.data['message']) {
+      final String words when words.trim().isNotEmpty =>
+        'refused by the server: ${words.trim()}',
+      _ => 'refused by the server',
+    },
     AlertKind.other => 'something happened',
   };
 }
@@ -259,6 +265,7 @@ String alertPhrase(PremiumEvent event) {
 enum PremiumFailureKind {
   unreachable,
   refused,
+  rateLimited,
   unknownKey,
   noPaidTime,
   noKey,
@@ -273,6 +280,7 @@ enum PremiumFailureKind {
 PremiumFailureKind premiumFailureKind(String kind) => switch (kind) {
   'premium_unreachable' => PremiumFailureKind.unreachable,
   'premium_rejected' => PremiumFailureKind.refused,
+  'premium_rate_limited' => PremiumFailureKind.rateLimited,
   'premium_unknown_key' => PremiumFailureKind.unknownKey,
   'premium_no_paid_time' => PremiumFailureKind.noPaidTime,
   'premium_no_key' => PremiumFailureKind.noKey,
@@ -330,6 +338,14 @@ PremiumFailure premiumFailure(BridgeException error, {String? refusal}) {
       refusal ?? 'The Gerfaut server refused.',
       detail: error.message,
     ),
+    // Nothing is wrong with what was asked: the server wants a pause,
+    // and says how long when it knows.
+    PremiumFailureKind.rateLimited => PremiumFailure(switch (error.retryAfter) {
+      final int seconds when seconds > 0 =>
+        'The Gerfaut server asks for a pause. Try again in '
+            '${_waitWords(seconds)}.',
+      _ => 'The Gerfaut server asks for a pause. Try again in a moment.',
+    }, retry: true),
     PremiumFailureKind.unknownKey => const PremiumFailure(
       'Unknown key.',
       hint: 'Check it against the key shown at purchase.',
@@ -367,6 +383,12 @@ PremiumFailure premiumFailure(BridgeException error, {String? refusal}) {
       retry: true,
     ),
   };
+}
+
+/// A wait in the unit a person counts it in.
+String _waitWords(int seconds) {
+  if (seconds < 90) return '$seconds s';
+  return '${(seconds / 60).ceil()} min';
 }
 
 /// The sentence a failing status carried, capitalized and stopped, or

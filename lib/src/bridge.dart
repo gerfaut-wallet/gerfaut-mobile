@@ -16,10 +16,14 @@ import 'rust/api.dart' as rust;
 /// internal — plus the bridge-level not_initialized, bad_key, bad_json,
 /// and the premium server's, which are [premiumErrorKinds].
 class BridgeException implements Exception {
-  const BridgeException(this.kind, this.message);
+  const BridgeException(this.kind, this.message, {this.retryAfter});
 
   final String kind;
   final String message;
+
+  /// Seconds the premium server asked to wait, with
+  /// `premium_rate_limited` when it named a wait.
+  final int? retryAfter;
 
   @override
   String toString() => message;
@@ -27,7 +31,7 @@ class BridgeException implements Exception {
 
 /// Every kind a premium call can fail with, and the whole of it.
 ///
-/// Six, where the core has nine: the bridge folds what a screen cannot
+/// Seven, where the core has ten: the bridge folds what a screen cannot
 /// act on differently, the way the desktop app does. An answer that
 /// does not decode goes under `premium_unreachable` — on a phone that
 /// is a hotel's login page, not something to read out — and a
@@ -41,6 +45,7 @@ const List<String> premiumErrorKinds = [
   'premium_unknown_key',
   'premium_no_paid_time',
   'premium_rejected',
+  'premium_rate_limited',
   'premium_unreachable',
   'premium_invalid',
 ];
@@ -185,6 +190,36 @@ abstract class GerfautBridge {
   /// is the path. Up to a minute and a half on a first run.
   Future<TorRoute> torConnect();
 
+  // --- live watch --------------------------------------------------------
+
+  /// Starts the live watch of the active network. Idempotent across
+  /// isolates: a watch already running is left as it is.
+  Future<LiveWatchStatus> liveStart();
+
+  /// Stops the live watch and closes its connection. Idempotent.
+  Future<void> liveStop();
+
+  /// Checks the connection now. The timers of a sleeping phone do not
+  /// run, so an alarm and every change of network call this.
+  Future<void> liveTick();
+
+  /// Where the watch stands; off when none runs.
+  Future<LiveWatchStatus> liveStatus();
+
+  /// What the running watch says, for this isolate. Any number of
+  /// isolates may listen; the core's single receiver is consumed in
+  /// Rust and fanned out from there.
+  Stream<LiveEvent> liveEvents();
+
+  /// Of what a sync found, what nobody has announced yet, recorded as
+  /// announced from now on. Every path that notifies from a sync of its
+  /// own asks here first, so a transaction is said once per stage
+  /// whoever saw it first.
+  Future<List<LiveTx>> claimAnnouncements(SyncReport report);
+
+  /// Whether anything this app sends has to go through Tor.
+  Future<bool> usesTor();
+
   // --- premium -----------------------------------------------------------
 
   /// The premium account as the vault keeps it, the certificate's
@@ -214,9 +249,9 @@ abstract class GerfautBridge {
   /// The wallets the server watches for this key.
   Future<List<WalletWatch>> premiumWallets();
 
-  /// Records the user's yes for [id] and hands the wallet to the server
-  /// with its descriptors as the vault holds them. A single address is
-  /// refused before anything leaves the device.
+  /// Records the user's yes for [id] and hands the wallet to the server:
+  /// its descriptors as the vault holds them, or its address when the
+  /// wallet is a single address.
   Future<void> premiumWatchWallet(String id);
 
   /// Tells the server to stop watching [id]. The consent stays.
@@ -231,6 +266,7 @@ abstract class GerfautBridge {
     String? target,
     String? secret,
   });
+
   /// Confirms a channel with the code the server sent to it. Answers
   /// the channel, linked. A code that is wrong, expired or tried too
   /// often comes back as premium_rejected, in the server's words.
@@ -269,6 +305,7 @@ class RustBridge implements GerfautBridge {
       throw BridgeException(
         error['kind'] as String? ?? 'internal',
         error['message'] as String? ?? 'unknown error',
+        retryAfter: error['retry_after'] as int?,
       );
     }
     return decoded;
@@ -586,6 +623,53 @@ class RustBridge implements GerfautBridge {
   @override
   Future<TorRoute> torConnect() async {
     return TorRoute.fromJson(_object(await rust.torConnect()));
+  }
+
+  @override
+  Future<LiveWatchStatus> liveStart() async {
+    return LiveWatchStatus.fromJson(_object(await rust.liveStart()));
+  }
+
+  @override
+  Future<void> liveStop() async {
+    _ok(await rust.liveStop());
+  }
+
+  @override
+  Future<void> liveTick() async {
+    _ok(await rust.liveTick());
+  }
+
+  @override
+  Future<LiveWatchStatus> liveStatus() async {
+    return LiveWatchStatus.fromJson(_object(await rust.liveStatus()));
+  }
+
+  @override
+  Stream<LiveEvent> liveEvents() async* {
+    await for (final raw in rust.liveEvents()) {
+      final LiveEvent? event;
+      try {
+        event = LiveEvent.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+      } catch (_) {
+        // One event that does not read must not end the stream.
+        continue;
+      }
+      if (event != null) yield event;
+    }
+  }
+
+  @override
+  Future<List<LiveTx>> claimAnnouncements(SyncReport report) async {
+    final raw = await rust.claimAnnouncements(
+      findingsJson: jsonEncode(report.toFindingsJson()),
+    );
+    return _list(raw).map(LiveTx.fromJson).toList();
+  }
+
+  @override
+  Future<bool> usesTor() async {
+    return _decode(await rust.usesTor()) as bool;
   }
 
   @override

@@ -873,9 +873,9 @@ pub async fn premium_wallets() -> String {
 /// Hands one wallet to the server, under the app's own id and name,
 /// with its descriptors as the vault holds them: both chains on two
 /// lines when the wallet has a change descriptor, the external one
-/// alone otherwise. The user's yes is recorded first, dated now; a
-/// second yes keeps the first date. A single address is refused here,
-/// before anything leaves the device.
+/// alone otherwise, and the address itself for a wallet that is one
+/// address. The user's yes is recorded first, dated now; a second yes
+/// keeps the first date.
 pub async fn premium_watch_wallet(id: String) -> String {
     let manager = try_json!(manager());
     let Some(meta) = manager
@@ -893,9 +893,7 @@ pub async fn premium_watch_wallet(id: String) -> String {
             ..
         } => format!("{external}\n{internal}"),
         WalletKind::Descriptors { external, .. } => external.clone(),
-        WalletKind::SingleAddress { .. } => {
-            return error_json("premium_rejected", "single addresses cannot be watched yet");
-        }
+        WalletKind::SingleAddress { address } => address.clone(),
     };
     let now = now_unix();
     try_json!(store_premium(manager, |state| state.consent(&id, now)).await);

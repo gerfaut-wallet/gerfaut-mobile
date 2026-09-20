@@ -6,6 +6,7 @@ import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/settings/security_section.dart';
 import 'package:gerfaut/src/background.dart';
 import 'package:gerfaut/src/disguise.dart';
+import 'package:gerfaut/src/live.dart';
 import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/notifications.dart';
@@ -127,6 +128,60 @@ void main() {
         ),
         findsOneWidget,
       );
+    });
+
+    testWidgets('with Live on, the sheet says it stops, and it does', (
+      tester,
+    ) async {
+      final disguise = FakeDisguise();
+      final platform = FakeLivePlatform(running: true, wanted: true);
+      final bridge = _locked();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            bridgeProvider.overrideWithValue(bridge),
+            disguiseServiceProvider.overrideWithValue(disguise),
+            biometricGateProvider.overrideWithValue(_NoBiometrics()),
+            livePlatformProvider.overrideWithValue(platform),
+            backgroundSchedulerProvider.overrideWithValue((seconds) async {}),
+          ],
+          child: MaterialApp(
+            theme: themeFrom(GerfautTokens.light, Brightness.light),
+            home: Scaffold(
+              body: Consumer(
+                builder: (context, ref, _) {
+                  ref.read(notifyNewTxProvider.notifier);
+                  return const SingleChildScrollView(child: SecuritySection());
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(SecuritySection)),
+      );
+      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      container.read(backgroundCheckProvider.notifier).hydrate('live');
+      await tester.pumpAndSettle();
+
+      await tester.tap(_disguiseSwitch());
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Live watch is turned off'), findsOneWidget);
+
+      await tester.tap(find.text('Turn on the disguise'));
+      await tester.pumpAndSettle();
+      expect(platform.calls, ['stop']);
+      expect(bridge.appPrefs['notify.background'], '900');
+      expect(disguise.disguised, isTrue);
+    });
+
+    testWidgets('without Live, the sheet does not mention it', (tester) async {
+      await tester.pumpWidget(_securityApp(_locked(), FakeDisguise()));
+      await tester.pumpAndSettle();
+      await tester.tap(_disguiseSwitch());
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Live watch'), findsNothing);
     });
 
     testWidgets('confirming enables the disguise and turns widgets off', (

@@ -999,8 +999,10 @@ class _WatchedWalletsCard extends ConsumerWidget {
 }
 
 /// One wallet of the server's network: its glyph and name, the Watched
-/// pill once the server has it, the line under the name, and the
-/// switch. A single address is greyed and says why.
+/// pill once the server watches it, the line under the name, and the
+/// switch. A wallet the server refused keeps its row: the switch is on,
+/// since the server holds it, and the server's own sentence says in
+/// amber why nothing is watched under it.
 class _WalletRow extends StatelessWidget {
   const _WalletRow({
     required this.wallet,
@@ -1019,11 +1021,16 @@ class _WalletRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final single = wallet.isSingleAddress;
     final watch = this.watch;
+    final refusal = watch != null && watch.refused;
     final String? line;
     if (busy) {
       line = watch == null ? 'Registering…' : 'Removing…';
+    } else if (refusal) {
+      // Shown as the server wrote it: it knows the ceiling the wallet
+      // went past, the app does not.
+      final words = watch.refusal?.message.trim() ?? '';
+      line = words.isEmpty ? 'The server does not watch this wallet.' : words;
     } else if (watch != null) {
       // The server states the pending scan when it can, and then the
       // row says what it is: a scan queued behind others, which is not
@@ -1037,13 +1044,11 @@ class _WalletRow extends StatelessWidget {
           'Watched since ${formatDate(watch.watchedSince)} · '
               '${_coins(watch.coins)}',
       };
-    } else if (single) {
-      line = 'Single addresses cannot be watched yet.';
     } else {
       line = null;
     }
     final nameStyle = tokens.bodySmall.copyWith(
-      color: single ? tokens.textMuted : tokens.text,
+      color: tokens.text,
       fontWeight: FontWeight.w500,
       fontVariations: const [FontVariation('wght', 500)],
     );
@@ -1064,7 +1069,8 @@ class _WalletRow extends StatelessWidget {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text(wallet.name, style: nameStyle),
-                    if (watch != null && !watch.scanning) const WatchedPill(),
+                    if (watch != null && !watch.scanning && !refusal)
+                      const WatchedPill(),
                   ],
                 ),
                 if (line != null)
@@ -1072,7 +1078,9 @@ class _WalletRow extends StatelessWidget {
                     line,
                     style: tokens.label.copyWith(
                       letterSpacing: 0,
-                      color: tokens.textMuted,
+                      color: refusal && !busy
+                          ? tokens.pending
+                          : tokens.textMuted,
                     ),
                   ),
               ],
@@ -1089,7 +1097,7 @@ class _WalletRow extends StatelessWidget {
               activeTrackColor: tokens.premium,
               inactiveThumbColor: tokens.textMuted,
               inactiveTrackColor: tokens.surfaceSunken,
-              onChanged: single || busy ? null : onChanged,
+              onChanged: busy ? null : onChanged,
             ),
           ),
         ],
@@ -1826,6 +1834,12 @@ class _AlertRow extends StatelessWidget {
         LucideIcons.radar,
         tokens.textMuted,
         tokens.surfaceSunken,
+      ),
+      // Nothing is lost, and something is not watched: worth reading.
+      AlertKind.walletRefused => (
+        LucideIcons.circleSlash,
+        tokens.pending,
+        tokens.pendingSurface,
       ),
       AlertKind.other => (
         LucideIcons.circleAlert,

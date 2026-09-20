@@ -99,18 +99,28 @@ Future<bool> runBackgroundCheck({
     // the activity, so it reads the marker the activity keeps on disk.
     if (await isDisguised()) return true;
 
+    // A wallet never synced before hands over its history as new: that
+    // is an import, and it is recorded without being said.
+    final before = await bridge.listWallets(settings.activeNetwork);
+    final firstSyncs = {
+      for (final wallet in before)
+        if (wallet.lastSync == null) wallet.id,
+    };
     final report = await bridge.syncAll(settings.activeNetwork);
-    final reports = report.reports;
-    if (reports.every((r) => r.newTxs.isEmpty && r.newTxCount == 0)) {
-      return true;
-    }
+    // Only what nobody has said yet: under Live this task is the safety
+    // net, and the service has usually been there first.
+    final claimed = (await claimAll(
+      bridge,
+      report.reports,
+    )).where((tx) => !firstSyncs.contains(tx.walletId)).toList();
+    if (claimed.isEmpty) return true;
     final wallets = await bridge.listWallets(settings.activeNetwork);
     final announcer = NewTxAnnouncer(service ?? LocalNotificationService());
     await announcer.announce(
-      reports,
+      claimed,
       walletNames: {for (final wallet in wallets) wallet.id: wallet.name},
       unit: AmountUnit.fromId(prefs['display.unit']) ?? AmountUnit.btc,
-      masked: prefs['mobile.masked'] == '1',
+      masked: amountsHidden(settings),
     );
     return true;
   } catch (_) {

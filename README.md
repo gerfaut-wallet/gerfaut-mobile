@@ -12,7 +12,7 @@ Watch your coins without ever exposing them: Gerfaut holds no private keys. It w
 
 - Flutter app, Android first. An iOS version is planned for a later stage, and the codebase stays portable by construction.
 - Wallet logic delegated to [`gerfaut-core`](https://github.com/gerfaut-wallet/gerfaut-core) (Rust) via `flutter_rust_bridge`
-- Native code kept to what must be native: home-screen widgets, push notifications, biometric unlock
+- Native code kept to what must be native: home-screen widgets, notifications, biometric unlock, and the foreground service behind Live watch, which keeps a connection open to your own server so a transaction is announced within seconds. No Gerfaut server and no Firebase are involved.
 
 ## Watch-only, by design
 

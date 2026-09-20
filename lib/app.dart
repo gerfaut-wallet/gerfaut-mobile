@@ -11,6 +11,7 @@ import 'screens/lock_screen.dart';
 import 'screens/welcome.dart';
 import 'src/disguise.dart';
 import 'src/home_widgets.dart';
+import 'src/live.dart';
 import 'src/lock.dart';
 import 'src/models.dart';
 import 'src/notifications.dart';
@@ -158,6 +159,10 @@ class _Hydrated extends ConsumerWidget {
         // server at once when a wallet is watched, then every quarter
         // hour, from wherever the app is.
         ref.read(watchMonitorProvider);
+        // Live watch: listen to the core, and see that the service runs
+        // if the setting asks for it. The app is on screen, which is
+        // when Android lets it start.
+        unawaited(ref.read(liveProvider.notifier).resume());
       }
       // The vault says whether a lock exists, every time it is read:
       // the first reading with one in it is what puts the screen up.
@@ -269,6 +274,7 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
           // Timers sleep with the app: a beat older than the period is
           // asked for again on the way back.
           ref.read(watchMonitorProvider.notifier).resume();
+          unawaited(ref.read(liveProvider.notifier).resume());
           _startUpdateSession(ref);
         }
       case AppLifecycleState.inactive:

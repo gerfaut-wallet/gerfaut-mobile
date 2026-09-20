@@ -389,6 +389,25 @@ class SyncController extends Notifier<Set<String>> {
     ref.invalidate(txDetailProvider);
   }
 
+  /// A sync that did not start here changed this wallet: the live
+  /// watch saw it move and synced it in the core.
+  void refreshed(String walletId) => _invalidateWallet(walletId);
+
+  /// The wallets no sync has ever completed for, read before one runs.
+  /// A list that cannot be read names none: a missed first sync says
+  /// too much once, a wrongly assumed one would say nothing.
+  Future<Set<String>> _neverSynced() async {
+    try {
+      final wallets = await ref.read(bridgeProvider).listWallets();
+      return {
+        for (final wallet in wallets)
+          if (wallet.lastSync == null) wallet.id,
+      };
+    } catch (_) {
+      return const {};
+    }
+  }
+
   /// Runs one wallet operation with the sync bookkeeping: the wallet is
   /// marked in flight, its last failure is recorded or cleared, and
   /// what the operation changed is refreshed. Null when one is already
@@ -400,11 +419,14 @@ class SyncController extends Notifier<Set<String>> {
     if (state.contains(id)) return null;
     state = {...state, id};
     try {
+      final firstSyncs = await _neverSynced();
       final report = await operation(ref.read(bridgeProvider));
       ref.read(syncErrorsProvider.notifier).clear(id);
       // Said after the fact, never in place of it: a notification that
       // cannot be posted must not look like a failed sync.
-      await ref.read(syncAnnouncerProvider).announce([report]);
+      await ref.read(syncAnnouncerProvider).announce([
+        report,
+      ], firstSyncs: firstSyncs);
       return report;
     } catch (error) {
       ref.read(syncErrorsProvider.notifier).set(id, '$error');
@@ -431,6 +453,7 @@ class SyncController extends Notifier<Set<String>> {
     if (state.contains(syncAllId)) return null;
     state = {...state, syncAllId};
     try {
+      final firstSyncs = await _neverSynced();
       final report = await ref.read(bridgeProvider).syncAll(network);
       final errors = ref.read(syncErrorsProvider.notifier);
       for (final sync in report.reports) {
@@ -439,7 +462,9 @@ class SyncController extends Notifier<Set<String>> {
       for (final failure in report.failures) {
         errors.set(failure.walletId, failure.message);
       }
-      await ref.read(syncAnnouncerProvider).announce(report.reports);
+      await ref
+          .read(syncAnnouncerProvider)
+          .announce(report.reports, firstSyncs: firstSyncs);
       return report;
     } finally {
       state = {...state}..remove(syncAllId);

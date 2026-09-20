@@ -936,11 +936,191 @@ class NewTx {
     );
   }
 
+  Map<String, dynamic> toJson() => {
+    'txid': txid,
+    'net_sats': netSats,
+    'confirmed': confirmed,
+  };
+
   final String txid;
 
   /// Net effect on the wallet, in sats, signed like a summary.
   final int netSats;
   final bool confirmed;
+}
+
+/// How far a transaction had come when it was announced.
+enum TxStage {
+  mempool('mempool'),
+  confirmed('confirmed');
+
+  const TxStage(this.id);
+
+  final String id;
+
+  static TxStage fromId(String? id) =>
+      id == 'confirmed' ? TxStage.confirmed : TxStage.mempool;
+}
+
+/// One transaction to announce, handed out once per stage by the core.
+class LiveTx {
+  const LiveTx({
+    required this.walletId,
+    required this.txid,
+    required this.netSats,
+    required this.stage,
+  });
+
+  factory LiveTx.fromJson(Map<String, dynamic> json) {
+    return LiveTx(
+      walletId: json['wallet_id'] as String,
+      txid: json['txid'] as String,
+      netSats: json['net_sats'] as int,
+      stage: TxStage.fromId(json['stage'] as String?),
+    );
+  }
+
+  final String walletId;
+  final String txid;
+  final int netSats;
+  final TxStage stage;
+}
+
+/// Where the live watch stands.
+enum WatchState {
+  off('off'),
+  connecting('connecting'),
+  connected('connected'),
+  reconnecting('reconnecting'),
+  polling('polling');
+
+  const WatchState(this.id);
+
+  final String id;
+
+  static WatchState fromId(String? id) {
+    for (final state in WatchState.values) {
+      if (state.id == id) return state;
+    }
+    return WatchState.off;
+  }
+}
+
+/// How changes reach the watch.
+enum WatchTransport {
+  electrum('electrum', 'Electrum'),
+  mempoolWebsocket('mempool_websocket', 'mempool'),
+  esploraPolling('esplora_polling', 'Esplora');
+
+  const WatchTransport(this.id, this.label);
+
+  final String id;
+  final String label;
+
+  static WatchTransport? fromId(String? id) {
+    for (final transport in WatchTransport.values) {
+      if (transport.id == id) return transport;
+    }
+    return null;
+  }
+}
+
+/// What a screen, or the permanent notification, shows about the live
+/// watch. Not the premium server's watch: that one is in premium.dart.
+class LiveWatchStatus {
+  const LiveWatchStatus({
+    this.state = WatchState.off,
+    this.transport,
+    this.server,
+    this.detail,
+    this.watchedScripts = 0,
+    this.pushedScripts = 0,
+  });
+
+  factory LiveWatchStatus.fromJson(Map<String, dynamic> json) {
+    return LiveWatchStatus(
+      state: WatchState.fromId(json['state'] as String?),
+      transport: WatchTransport.fromId(json['transport'] as String?),
+      server: json['server'] as String?,
+      detail: json['detail'] as String?,
+      watchedScripts: json['watched_scripts'] as int? ?? 0,
+      pushedScripts: json['pushed_scripts'] as int? ?? 0,
+    );
+  }
+
+  final WatchState state;
+  final WatchTransport? transport;
+
+  /// The host in use or being tried, never a full address.
+  final String? server;
+
+  /// Why the last connection failed, while reconnecting.
+  final String? detail;
+  final int watchedScripts;
+  final int pushedScripts;
+}
+
+/// What a running live watch says.
+sealed class LiveEvent {
+  const LiveEvent();
+
+  /// Null for an event this build does not know: a newer core may say
+  /// more, and what is not understood is not acted on.
+  static LiveEvent? fromJson(Map<String, dynamic> json) {
+    switch (json['type']) {
+      case 'transaction':
+        return LiveTransaction(LiveTx.fromJson(json));
+      case 'wallet_synced':
+        return LiveWalletSynced(
+          SyncReport.fromJson(json['report'] as Map<String, dynamic>),
+        );
+      case 'sync_failed':
+        return LiveSyncFailed(
+          walletId: json['wallet_id'] as String,
+          message: json['message'] as String? ?? '',
+        );
+      case 'new_block':
+        return LiveNewBlock(json['height'] as int);
+      case 'status':
+        return LiveStatusChanged(LiveWatchStatus.fromJson(json));
+      case 'stopped':
+        return const LiveStopped();
+    }
+    return null;
+  }
+}
+
+/// Announce this. Handed out once per transaction and stage.
+class LiveTransaction extends LiveEvent {
+  const LiveTransaction(this.tx);
+  final LiveTx tx;
+}
+
+/// A wallet was synced because it moved: refresh what shows it.
+class LiveWalletSynced extends LiveEvent {
+  const LiveWalletSynced(this.report);
+  final SyncReport report;
+}
+
+class LiveSyncFailed extends LiveEvent {
+  const LiveSyncFailed({required this.walletId, required this.message});
+  final String walletId;
+  final String message;
+}
+
+class LiveNewBlock extends LiveEvent {
+  const LiveNewBlock(this.height);
+  final int height;
+}
+
+class LiveStatusChanged extends LiveEvent {
+  const LiveStatusChanged(this.status);
+  final LiveWatchStatus status;
+}
+
+/// The watch ended: stopped by the app, or by the vault locking.
+class LiveStopped extends LiveEvent {
+  const LiveStopped();
 }
 
 class SyncReport {
@@ -952,6 +1132,7 @@ class SyncReport {
     required this.tookMs,
     required this.backend,
     this.newTxs = const [],
+    this.confirmedTxs = const [],
   });
 
   factory SyncReport.fromJson(Map<String, dynamic> json) {
@@ -959,6 +1140,9 @@ class SyncReport {
       walletId: json['wallet_id'] as String,
       newTxCount: json['new_tx_count'] as int,
       newTxs: ((json['new_txs'] as List?) ?? const [])
+          .map((e) => NewTx.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      confirmedTxs: ((json['confirmed_txs'] as List?) ?? const [])
           .map((e) => NewTx.fromJson(e as Map<String, dynamic>))
           .toList(),
       balance: BalanceSnapshot.fromJson(
@@ -975,6 +1159,23 @@ class SyncReport {
 
   /// The same transactions, one line each: what a notification says.
   final List<NewTx> newTxs;
+
+  /// Transactions the wallet already held unconfirmed and that this
+  /// sync found in a block. One first seen already confirmed is in
+  /// [newTxs] only.
+  final List<NewTx> confirmedTxs;
+
+  /// Whether this sync found anything worth saying.
+  bool get hasNews =>
+      newTxs.isNotEmpty || confirmedTxs.isNotEmpty || newTxCount > 0;
+
+  /// What the core needs to decide which of these nobody has announced
+  /// yet: the wallet and the two lists.
+  Map<String, dynamic> toFindingsJson() => {
+    'wallet_id': walletId,
+    'new_txs': [for (final tx in newTxs) tx.toJson()],
+    'confirmed_txs': [for (final tx in confirmedTxs) tx.toJson()],
+  };
   final BalanceSnapshot balance;
   final int tipHeight;
   final int tookMs;
@@ -2933,6 +3134,8 @@ class WalletWatch {
     required this.coins,
     required this.valueSats,
     this.baselinePending,
+    this.watching = true,
+    this.refusal,
   });
 
   factory WalletWatch.fromJson(Map<String, dynamic> json) {
@@ -2946,6 +3149,12 @@ class WalletWatch {
       baselinePending: json['baseline_pending'] as bool?,
       coins: json['coins'] as int,
       valueSats: json['value_sats'] as int,
+      // A server that predates the flag refuses no wallet.
+      watching: json['watching'] as bool? ?? true,
+      refusal: switch (json['refusal']) {
+        final Map<String, dynamic> refusal => WalletRefusal.fromJson(refusal),
+        _ => null,
+      },
     );
   }
 
@@ -2953,6 +3162,16 @@ class WalletWatch {
   final String id;
   final String name;
   final String scriptKind;
+
+  /// False once the server has refused the wallet: it keeps the row to
+  /// say why, and watches nothing under it.
+  final bool watching;
+
+  /// Why the server does not watch this wallet, when it does not.
+  final WalletRefusal? refusal;
+
+  /// The server holds the wallet and does not watch it.
+  bool get refused => !watching;
 
   /// Unix seconds.
   final int watchedSince;
@@ -2974,6 +3193,24 @@ class WalletWatch {
   /// The server states it; a server that does not is read by the date
   /// it stamps when the scan ends, which says the same thing.
   bool get scanning => baselinePending ?? (baselineAt == null);
+}
+
+/// Why the server stopped watching a wallet, or never started.
+class WalletRefusal {
+  const WalletRefusal({required this.code, required this.message});
+
+  factory WalletRefusal.fromJson(Map<String, dynamic> json) {
+    return WalletRefusal(
+      code: json['code'] as String? ?? '',
+      message: json['message'] as String? ?? '',
+    );
+  }
+
+  /// For the app; `too_many_coins` is the only one today.
+  final String code;
+
+  /// For the person who owns the wallet, to show as it is.
+  final String message;
 }
 
 /// Where an account wants to be told.
@@ -3080,6 +3317,7 @@ enum AlertKind {
   receiveConfirmed('receive_confirmed'),
   timelockDue('timelock_due'),
   walletRegistered('wallet_registered'),
+  walletRefused('wallet_refused'),
   other('other');
 
   const AlertKind(this.id);

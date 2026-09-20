@@ -8,7 +8,8 @@ import '../widgets/buttons.dart';
 import '../widgets/notice.dart';
 import '../widgets/wallet_icon.dart';
 
-/// The one question asked before a descriptor leaves the device: a
+/// The one question asked before a descriptor, or the address of a
+/// single-address wallet, leaves the device: a
 /// whole page, once per wallet, never replayed.
 ///
 /// The note is red because privacy is what is at stake (D-20): the
@@ -34,6 +35,7 @@ class PremiumConsentScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final single = wallet.isSingleAddress;
     return Scaffold(
       appBar: GerfautAppBar.text('Watch this wallet from the server'),
       body: SafeArea(
@@ -70,14 +72,19 @@ class PremiumConsentScreen extends StatelessWidget {
                       // Red: what is at stake is privacy, and the note says
                       // so on its own, in words, before anyone reads the
                       // colour.
-                      const GerfautNotice(
+                      GerfautNotice(
                         tone: NoticeTone.alert,
-                        message:
-                            "Gerfaut's server will learn every address of "
-                            'this wallet, present and future, and see when '
-                            'coins move. It keeps nothing else: no name, no '
-                            'e-mail unless you add one as a channel, no IP '
-                            'address.',
+                        message: single
+                            ? "Gerfaut's server will learn the address of "
+                                  'this wallet and see when coins move on '
+                                  'it. It keeps nothing else: no name, no '
+                                  'e-mail unless you add one as a channel, '
+                                  'no IP address.'
+                            : "Gerfaut's server will learn every address "
+                                  'of this wallet, present and future, and '
+                                  'see when coins move. It keeps nothing '
+                                  'else: no name, no e-mail unless you add '
+                                  'one as a channel, no IP address.',
                       ),
                       const SizedBox(height: GerfautSpacing.lg),
                       Text(
@@ -93,13 +100,23 @@ class PremiumConsentScreen extends StatelessWidget {
                         ),
                         child: Column(
                           children: [
-                            _SentRow(
-                              icon: LucideIcons.fileKey,
-                              label: 'The descriptor',
-                              detail:
-                                  'Public keys and script: enough to derive '
-                                  'the addresses, never to spend.',
-                            ),
+                            if (single)
+                              const _SentRow(
+                                icon: LucideIcons.mapPin,
+                                label: 'The address',
+                                detail:
+                                    'The one address this wallet watches: '
+                                    'enough to see its coins, never to '
+                                    'spend them.',
+                              )
+                            else
+                              const _SentRow(
+                                icon: LucideIcons.fileKey,
+                                label: 'The descriptor',
+                                detail:
+                                    'Public keys and script: enough to '
+                                    'derive the addresses, never to spend.',
+                              ),
                             Divider(
                               height: 1,
                               thickness: 1,
