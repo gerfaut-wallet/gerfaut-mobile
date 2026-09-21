@@ -71,6 +71,7 @@ class _Service {
     bool disguised = false,
     Future<void> Function()? bootstrap,
     Duration flushAfter = const Duration(seconds: 3),
+    Duration restartAfter = const Duration(seconds: 2),
   }) {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_serviceChannel, (call) async {
@@ -85,6 +86,7 @@ class _Service {
       isDisguised: () async => disguised,
       schedule: (seconds) async => scheduled.add(seconds),
       flushAfter: flushAfter,
+      restartAfter: restartAfter,
     );
   }
 
@@ -385,6 +387,41 @@ void main() {
       expect(service.bridge.liveStopCalls, 1);
       expect(service.bridge.appPrefs['notify.background'], '900');
       expect(service.scheduled, [900]);
+    });
+
+    test('what the watch still held when stopped is said, once', () async {
+      final service = _Service(_bridge());
+      await service.runner.run();
+      service.bridge.drainedOnStop.addAll([
+        LiveTransaction(_live('last', 3000)),
+        LiveWalletSynced(_report()),
+      ]);
+      await service.send('stop', false);
+      await service.settle();
+      expect(service.notifications.posted.single.body, contains('pending'));
+    });
+
+    test('a watch that ended on its own starts again', () async {
+      final service = _Service(
+        _bridge(),
+        restartAfter: const Duration(milliseconds: 20),
+      );
+      await service.runner.run();
+      expect(service.bridge.liveStartCalls, 1);
+      service.bridge.liveController.add(const LiveStopped());
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      expect(service.bridge.liveStartCalls, 2);
+    });
+
+    test('a watch stopped on purpose stays stopped', () async {
+      final service = _Service(
+        _bridge(),
+        restartAfter: const Duration(milliseconds: 20),
+      );
+      await service.runner.run();
+      await service.send('stop', false);
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      expect(service.bridge.liveStartCalls, 1);
     });
 
     test('a stop asked by the app leaves the setting to the app', () async {

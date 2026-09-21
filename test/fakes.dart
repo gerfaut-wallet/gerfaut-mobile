@@ -1137,8 +1137,14 @@ class FakeBridge implements GerfautBridge {
   Future<void> liveStop() async {
     liveStopCalls++;
     watchStatus = const LiveWatchStatus();
+    // What the watch still held when it was told to stop, then its end.
+    drainedOnStop.forEach(liveController.add);
+    drainedOnStop.clear();
     liveController.add(const LiveStopped());
   }
+
+  /// Events the watch hands out between a stop and its end.
+  final List<LiveEvent> drainedOnStop = [];
 
   @override
   Future<void> liveTick() async => liveTickCalls++;

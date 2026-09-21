@@ -365,6 +365,12 @@ final liveProvider = NotifierProvider<LiveController, LiveState>(
 /// closes it, before being said anyway.
 const Duration _flushAfter = Duration(seconds: 3);
 
+/// How long a stop waits for the watch to say it has ended.
+const Duration _endWait = Duration(seconds: 3);
+
+/// How long a watch that ended on its own is left before it starts again.
+const Duration _restartAfter = Duration(seconds: 2);
+
 /// What runs inside the engine the Android service hosts: opens the
 /// vault, starts the watch, says what it finds, and answers the
 /// service's heartbeat.
@@ -377,6 +383,7 @@ class LiveRunner {
     this.isDisguised = isDisguisedFromDisk,
     this.schedule = registerBackgroundCheck,
     this.flushAfter = _flushAfter,
+    this.restartAfter = _restartAfter,
   });
 
   final GerfautBridge bridge;
@@ -386,10 +393,12 @@ class LiveRunner {
   final Future<bool> Function() isDisguised;
   final BackgroundScheduler schedule;
   final Duration flushAfter;
+  final Duration restartAfter;
 
   StreamSubscription<LiveEvent>? _events;
   bool _started = false;
   bool _stopping = false;
+  Completer<void>? _ended;
   final Map<String, List<LiveTx>> _pending = {};
   final Map<String, Timer> _timers = {};
 
@@ -449,11 +458,27 @@ class LiveRunner {
   /// Stops the watch. With [revert], the user pressed "Stop" on the
   /// notification: the setting goes back to a check every 15 minutes,
   /// written where the screens will read it.
+  ///
+  /// The watch stops while this isolate still listens: what the core
+  /// had already handed out reaches it before the end is said, and is
+  /// announced here. Nothing handed out is ever handed out again.
   Future<void> stop({required bool revert}) async {
     _stopping = true;
+    final running = _started;
+    final ended = _ended = Completer<void>();
+    try {
+      await bridge.liveStop();
+    } catch (_) {
+      // Nothing left to stop.
+    }
+    if (running) {
+      await ended.future.timeout(_endWait, onTimeout: () {});
+    }
+    _ended = null;
     await _flushAll();
     await _events?.cancel();
     _events = null;
+    _started = false;
     try {
       if (revert) {
         await bridge.setAppPref(
@@ -466,12 +491,6 @@ class LiveRunner {
       // The platform flag is cleared already; the app reads it at its
       // next start and writes the setting then.
     }
-    try {
-      await bridge.liveStop();
-    } catch (_) {
-      // Nothing left to stop.
-    }
-    _started = false;
   }
 
   void _onEvent(LiveEvent event) {
@@ -490,6 +509,13 @@ class LiveRunner {
         unawaited(_tell('status', liveNotificationText(status)));
       case LiveStopped():
         _started = false;
+        final ended = _ended;
+        if (ended != null && !ended.isCompleted) ended.complete();
+        // Not asked for here: the watch is started again, and catches
+        // up on what it missed.
+        if (!_stopping) {
+          Timer(restartAfter, () => unawaited(_ensureStarted()));
+        }
       case LiveSyncFailed():
       case LiveNewBlock():
         break;

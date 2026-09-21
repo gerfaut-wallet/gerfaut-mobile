@@ -99,12 +99,16 @@ class LiveService : Service() {
 
     override fun onDestroy() {
         if (instance === this) instance = null
+        // A start still waiting for an engine to retire starts nothing
+        // now: this service is gone.
+        main.removeCallbacksAndMessages(null)
         releaseTickLock()
         unwatchNetwork()
-        channel?.setMethodCallHandler(null)
+        val live = channel
+        val hosted = engine
         channel = null
-        engine?.destroy()
         engine = null
+        if (live != null && hosted != null) retire(live, hosted)
         // Destroyed without having been asked to leave: the system took
         // the service. The heartbeat stays armed and tries to bring it
         // back.
@@ -191,7 +195,13 @@ class LiveService : Service() {
     // --- the engine -----------------------------------------------------
 
     private fun ensureEngine() {
-        if (engine != null) return
+        if (engine != null || leaving) return
+        // The engine of a service that just went is still saying what
+        // its watch held: two of them would say it twice.
+        if (retiring > 0) {
+            main.postDelayed({ ensureEngine() }, RETIRE_POLL_MS)
+            return
+        }
         val loader = FlutterInjector.instance().flutterLoader()
         loader.startInitialization(applicationContext)
         loader.ensureInitializationComplete(applicationContext, null)
@@ -359,6 +369,43 @@ class LiveService : Service() {
         )
     }
 
+    // The watch lives in the process, not in this service. A service the
+    // system destroyed would leave it running with nobody to say what it
+    // finds, and what the core hands out is never handed out again. So
+    // the watch is stopped first; the engine goes once the Dart side has
+    // said everything it held, or after STOP_TIMEOUT_MS. The next start
+    // begins a watch of its own, which catches up on the gap.
+    private fun retire(live: MethodChannel, hosted: FlutterEngine) {
+        retiring++
+        var done = false
+        val finish = Runnable {
+            if (!done) {
+                done = true
+                live.setMethodCallHandler(null)
+                hosted.destroy()
+                retiring--
+            }
+        }
+        main.postDelayed(finish, STOP_TIMEOUT_MS)
+        live.invokeMethod(
+            "stop",
+            false,
+            object : MethodChannel.Result {
+                override fun success(result: Any?) {
+                    main.post(finish)
+                }
+
+                override fun error(code: String, message: String?, details: Any?) {
+                    main.post(finish)
+                }
+
+                override fun notImplemented() {
+                    main.post(finish)
+                }
+            },
+        )
+    }
+
     private fun shutdown() {
         leaving = true
         cancelHeartbeat(this)
@@ -391,6 +438,10 @@ class LiveService : Service() {
         private const val RESTART_MS = 2_000L
         private const val TICK_LOCK_MS = 30_000L
         private const val STOP_TIMEOUT_MS = 8_000L
+        private const val RETIRE_POLL_MS = 250L
+
+        // Engines of destroyed services still finishing. Main thread only.
+        private var retiring = 0
 
         // The running service, for the heartbeat receiver of this same
         // process. Main thread only.
