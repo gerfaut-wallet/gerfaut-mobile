@@ -474,6 +474,36 @@ void main() {
     });
   });
 
+  group('the periodic task under Live', () {
+    Future<bool> check(FakeBridge bridge) => runBackgroundCheck(
+      bridge: bridge,
+      service: FakeNotifications(),
+      bootstrap: () async {},
+      isDisguised: () async => false,
+    );
+
+    test('leaves a running watch alone', () async {
+      final bridge = _bridge()
+        ..watchStatus = const LiveWatchStatus(state: WatchState.connected);
+      await check(bridge);
+      expect(bridge.syncAllCalls, 0);
+    });
+
+    test('syncs when the watch is not running', () async {
+      final bridge = _bridge();
+      await check(bridge);
+      expect(bridge.syncAllCalls, 1);
+    });
+
+    test('syncs as before at a periodic cadence', () async {
+      final bridge = _bridge(
+        prefs: {'notify.new_tx': '1', 'notify.background': '900'},
+      )..watchStatus = const LiveWatchStatus(state: WatchState.connected);
+      await check(bridge);
+      expect(bridge.syncAllCalls, 1);
+    });
+  });
+
   group('a transaction is said once', () {
     ProviderContainer screens(
       FakeBridge bridge,

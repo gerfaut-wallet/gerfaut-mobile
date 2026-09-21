@@ -11,6 +11,7 @@ import 'bridge.dart';
 import 'disguise.dart';
 import 'format.dart';
 import 'home_widgets.dart';
+import 'models.dart';
 import 'notifications.dart';
 import 'vault_key.dart';
 
@@ -98,11 +99,18 @@ Future<bool> runBackgroundCheck({
     // Nothing is posted while disguised. The isolate has no channel to
     // the activity, so it reads the marker the activity keeps on disk.
     if (await isDisguised()) return true;
+    // Under Live this task is the safety net, for when Android stopped
+    // the service. While the watch runs it has everything covered, and
+    // a full sync every quarter hour would only cost data and battery.
+    // The watch lives in this same process, so the core can say.
+    if (prefs['notify.background'] == BackgroundCheck.live.stored &&
+        (await bridge.liveStatus()).state != WatchState.off) {
+      return true;
+    }
 
     final report = await bridge.syncAll(settings.activeNetwork);
-    // Only what nobody has said yet: under Live this task is the safety
-    // net, and the service has usually been there first. A wallet's
-    // first sync is an import, and the core keeps none of it as news.
+    // Only what nobody has said yet. A wallet's first sync is an
+    // import, and the core keeps none of it as news.
     final claimed = await claimAll(bridge, report.reports);
     if (claimed.isEmpty) return true;
     final wallets = await bridge.listWallets(settings.activeNetwork);
