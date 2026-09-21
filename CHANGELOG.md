@@ -62,11 +62,14 @@ The first release: Gerfaut for Android.
   for the battery exemption, which you can refuse. Your server learns what a
   sync already tells it, plus the fact that your phone stays connected. A
   check every 15 minutes stays scheduled for whenever Android stops Live.
-  Force-stopping the app ends Live until you open Gerfaut again, and the
-  calculator disguise turns it off. Battery use has not been measured yet.
+  Force-stopping the app ends Live until you open Gerfaut again, and what
+  arrived meanwhile is announced then. The calculator disguise turns Live
+  off. Battery use has not been measured on a phone yet.
 - A transaction is announced once when it appears and once when it
-  confirms, whichever part of the app saw it first. While an app lock is
-  set, notifications carry no amounts.
+  confirms, whichever part of the app saw it first. A fee bump brings no
+  second notice. An incoming payment that is replaced or dropped before it
+  confirms gets one more, saying it is no longer coming. While an app lock
+  is set, notifications carry no amounts.
 - Signet, testnet4 and regtest alongside mainnet.
 - Gerfaut Premium, as an eighth section of the settings. Enter the account
   key bought on gerfaut-wallet.com, switch a wallet on, and the server
