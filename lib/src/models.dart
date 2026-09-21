@@ -936,12 +936,6 @@ class NewTx {
     );
   }
 
-  Map<String, dynamic> toJson() => {
-    'txid': txid,
-    'net_sats': netSats,
-    'confirmed': confirmed,
-  };
-
   final String txid;
 
   /// Net effect on the wallet, in sats, signed like a summary.
@@ -952,14 +946,22 @@ class NewTx {
 /// How far a transaction had come when it was announced.
 enum TxStage {
   mempool('mempool'),
-  confirmed('confirmed');
+  confirmed('confirmed'),
+
+  /// An incoming payment announced as pending left the mempool, and
+  /// nothing the wallet holds pays it instead: it is not coming.
+  dropped('dropped');
 
   const TxStage(this.id);
 
   final String id;
 
-  static TxStage fromId(String? id) =>
-      id == 'confirmed' ? TxStage.confirmed : TxStage.mempool;
+  static TxStage fromId(String? id) {
+    for (final stage in TxStage.values) {
+      if (stage.id == id) return stage;
+    }
+    return TxStage.mempool;
+  }
 }
 
 /// One transaction to announce, handed out once per stage by the core.
@@ -1165,17 +1167,6 @@ class SyncReport {
   /// [newTxs] only.
   final List<NewTx> confirmedTxs;
 
-  /// Whether this sync found anything worth saying.
-  bool get hasNews =>
-      newTxs.isNotEmpty || confirmedTxs.isNotEmpty || newTxCount > 0;
-
-  /// What the core needs to decide which of these nobody has announced
-  /// yet: the wallet and the two lists.
-  Map<String, dynamic> toFindingsJson() => {
-    'wallet_id': walletId,
-    'new_txs': [for (final tx in newTxs) tx.toJson()],
-    'confirmed_txs': [for (final tx in confirmedTxs) tx.toJson()],
-  };
   final BalanceSnapshot balance;
   final int tipHeight;
   final int tookMs;

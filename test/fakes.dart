@@ -810,20 +810,18 @@ class FakeBridge implements GerfautBridge {
     syncWalletCalls += 1;
     await syncGate?.future;
     final sync = onSyncWallet;
-    if (sync != null) {
-      final report = sync(id);
-      syncedIds.add(id);
-      return report;
-    }
-    syncedIds.add(id);
-    return SyncReport(
-      walletId: id,
-      newTxCount: 0,
-      balance: snapshots[id]?.balance ?? makeBalance(0),
-      tipHeight: 100,
-      tookMs: 1,
-      backend: 'mempool.space',
-    );
+    final report = sync != null
+        ? sync(id)
+        : SyncReport(
+            walletId: id,
+            newTxCount: 0,
+            balance: snapshots[id]?.balance ?? makeBalance(0),
+            tipHeight: 100,
+            tookMs: 1,
+            backend: 'mempool.space',
+          );
+    recordNews(report);
+    return report;
   }
 
   @override
@@ -839,7 +837,7 @@ class FakeBridge implements GerfautBridge {
     final sync = onSyncAll;
     if (sync == null) return const SyncAllReport(reports: [], failures: []);
     final report = sync(network);
-    syncedIds.addAll(report.reports.map((r) => r.walletId));
+    report.reports.forEach(recordNews);
     return report;
   }
 
@@ -1078,8 +1076,49 @@ class FakeBridge implements GerfautBridge {
       StreamController<LiveEvent>.broadcast();
 
   /// The record the core keeps in the vault: `txid:stage` already
-  /// handed out. A confirmed entry covers the mempool stage too.
+  /// recorded as news. A confirmed entry covers the mempool stage too.
   final Set<String> announced = {};
+
+  /// News a sync recorded and nobody has claimed yet, by wallet.
+  final Map<String, List<LiveTx>> news = {};
+
+  /// What the core does after every sync, whoever ran it: a wallet's
+  /// first sync is an import and records nothing; later ones record
+  /// each transaction and stage once.
+  void recordNews(SyncReport report) {
+    final id = report.walletId;
+    final first =
+        !syncedIds.contains(id) &&
+        !wallets.any((w) => w.id == id && w.lastSync != null);
+    syncedIds.add(id);
+    if (first) return;
+    void record(NewTx tx, TxStage stage) {
+      if (announced.contains('${tx.txid}:confirmed') ||
+          !announced.add('${tx.txid}:${stage.id}')) {
+        return;
+      }
+      news
+          .putIfAbsent(id, () => [])
+          .add(
+            LiveTx(
+              walletId: id,
+              txid: tx.txid,
+              netSats: tx.netSats,
+              stage: stage,
+            ),
+          );
+    }
+
+    for (final tx in report.newTxs) {
+      record(tx, tx.confirmed ? TxStage.confirmed : TxStage.mempool);
+    }
+    for (final tx in report.confirmedTxs) {
+      record(tx, TxStage.confirmed);
+    }
+  }
+
+  /// Every claim, by wallet id, in order.
+  final List<String> claims = [];
 
   @override
   Future<LiveWatchStatus> liveStart() async {
@@ -1111,30 +1150,9 @@ class FakeBridge implements GerfautBridge {
   Stream<LiveEvent> liveEvents() => liveController.stream;
 
   @override
-  Future<List<LiveTx>> claimAnnouncements(SyncReport report) async {
-    final claimed = <LiveTx>[];
-    void claim(NewTx tx, TxStage stage) {
-      if (announced.contains('${tx.txid}:confirmed') ||
-          !announced.add('${tx.txid}:${stage.id}')) {
-        return;
-      }
-      claimed.add(
-        LiveTx(
-          walletId: report.walletId,
-          txid: tx.txid,
-          netSats: tx.netSats,
-          stage: stage,
-        ),
-      );
-    }
-
-    for (final tx in report.newTxs) {
-      claim(tx, tx.confirmed ? TxStage.confirmed : TxStage.mempool);
-    }
-    for (final tx in report.confirmedTxs) {
-      claim(tx, TxStage.confirmed);
-    }
-    return claimed;
+  Future<List<LiveTx>> claimAnnouncements(String walletId) async {
+    claims.add(walletId);
+    return news.remove(walletId) ?? const [];
   }
 
   @override
@@ -1251,8 +1269,10 @@ class FakeBridge implements GerfautBridge {
   Future<SyncReport> rescanWallet(String id) async {
     rescanCalls += 1;
     final rescan = onRescan;
-    if (rescan != null) return rescan(id);
-    return syncWallet(id);
+    if (rescan == null) return syncWallet(id);
+    final report = await rescan(id);
+    recordNews(report);
+    return report;
   }
 
   /// The lock in place; null when none. Tests set it directly.

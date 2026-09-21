@@ -26,7 +26,7 @@ use gerfaut_core::store::VaultKey;
 use gerfaut_core::wallet::meta::{WalletIcon, WalletKind};
 use gerfaut_core::{CoreError, Network, WalletManager};
 use crate::frb_generated::StreamSink;
-use gerfaut_core::wallet::snapshot::{NewTx, SyncReport};
+use gerfaut_core::wallet::snapshot::SyncReport;
 use serde_json::json;
 use std::sync::LazyLock;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -1153,32 +1153,21 @@ pub async fn live_events(sink: StreamSink<String>) {
     }
 }
 
-/// What a sync found worth saying, as the Dart side hands it back: the
-/// part of a `SyncReport` an announcement is made of.
-#[derive(serde::Deserialize)]
-struct Findings {
-    wallet_id: String,
-    #[serde(default)]
-    new_txs: Vec<NewTx>,
-    #[serde(default)]
-    confirmed_txs: Vec<NewTx>,
-}
-
-/// Of what a sync found (`{wallet_id, new_txs, confirmed_txs}`), what
-/// nobody has announced yet, now recorded as announced in the vault.
-/// Every path that notifies from a sync of its own goes through here
-/// first, so a transaction is said once whoever saw it first. Returns a
-/// serialized `Vec<LiveTx>`.
-pub async fn claim_announcements(findings_json: String) -> String {
+/// What the syncs of one wallet found that nobody has announced yet,
+/// taken off the record in the vault: call it after every sync this
+/// app runs of that wallet, whatever the report lists, and announce
+/// everything it returns, or drop it on purpose (notices off, the app
+/// disguised). Nothing it returns is ever returned again, to this
+/// caller or to the live watch. Returns a serialized `Vec<LiveTx>`.
+pub async fn claim_announcements(wallet_id: String) -> String {
     let manager = try_json!(manager());
-    let findings: Findings = try_json!(from_json(&findings_json, "findings"));
-    // The claim reads the wallet and the two lists; the rest of the
-    // report is not its business and stays empty.
+    // The claim reads the wallet of the report and nothing else: what
+    // the sync found is already in the vault.
     let report = SyncReport {
-        wallet_id: findings.wallet_id,
-        new_tx_count: findings.new_txs.len() as u32,
-        new_txs: findings.new_txs,
-        confirmed_txs: findings.confirmed_txs,
+        wallet_id,
+        new_tx_count: 0,
+        new_txs: Vec::new(),
+        confirmed_txs: Vec::new(),
         balance: Default::default(),
         tip_height: 0,
         took_ms: 0,

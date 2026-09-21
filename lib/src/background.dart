@@ -99,20 +99,11 @@ Future<bool> runBackgroundCheck({
     // the activity, so it reads the marker the activity keeps on disk.
     if (await isDisguised()) return true;
 
-    // A wallet never synced before hands over its history as new: that
-    // is an import, and it is recorded without being said.
-    final before = await bridge.listWallets(settings.activeNetwork);
-    final firstSyncs = {
-      for (final wallet in before)
-        if (wallet.lastSync == null) wallet.id,
-    };
     final report = await bridge.syncAll(settings.activeNetwork);
     // Only what nobody has said yet: under Live this task is the safety
-    // net, and the service has usually been there first.
-    final claimed = (await claimAll(
-      bridge,
-      report.reports,
-    )).where((tx) => !firstSyncs.contains(tx.walletId)).toList();
+    // net, and the service has usually been there first. A wallet's
+    // first sync is an import, and the core keeps none of it as news.
+    final claimed = await claimAll(bridge, report.reports);
     if (claimed.isEmpty) return true;
     final wallets = await bridge.listWallets(settings.activeNetwork);
     final announcer = NewTxAnnouncer(service ?? LocalNotificationService());

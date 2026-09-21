@@ -211,11 +211,12 @@ abstract class GerfautBridge {
   /// Rust and fanned out from there.
   Stream<LiveEvent> liveEvents();
 
-  /// Of what a sync found, what nobody has announced yet, recorded as
-  /// announced from now on. Every path that notifies from a sync of its
-  /// own asks here first, so a transaction is said once per stage
-  /// whoever saw it first.
-  Future<List<LiveTx>> claimAnnouncements(SyncReport report);
+  /// What the syncs of [walletId] found that nobody has announced yet,
+  /// taken off the core's record. Called after every sync the app runs
+  /// of that wallet, whatever its report lists; whoever calls it says
+  /// what it returns or drops it on purpose, since nothing returned is
+  /// ever returned again.
+  Future<List<LiveTx>> claimAnnouncements(String walletId);
 
   /// Whether anything this app sends has to go through Tor.
   Future<bool> usesTor();
@@ -660,10 +661,8 @@ class RustBridge implements GerfautBridge {
   }
 
   @override
-  Future<List<LiveTx>> claimAnnouncements(SyncReport report) async {
-    final raw = await rust.claimAnnouncements(
-      findingsJson: jsonEncode(report.toFindingsJson()),
-    );
+  Future<List<LiveTx>> claimAnnouncements(String walletId) async {
+    final raw = await rust.claimAnnouncements(walletId: walletId);
     return _list(raw).map(LiveTx.fromJson).toList();
   }
 

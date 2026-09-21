@@ -354,9 +354,10 @@ void main() {
   group('notifications while disguised', () {
     test('the open app posts nothing when disguised', () async {
       final service = _RecordingNotifications();
+      final bridge = FakeBridge(wallets: [makeMeta()])..syncedIds.add('w1');
       final container = ProviderContainer(
         overrides: [
-          bridgeProvider.overrideWithValue(FakeBridge(wallets: [makeMeta()])),
+          bridgeProvider.overrideWithValue(bridge),
           disguiseServiceProvider.overrideWithValue(
             FakeDisguise(disguised: true),
           ),
@@ -370,26 +371,28 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(container.read(disguiseProvider).disguised, isTrue);
 
-      await container.read(syncAnnouncerProvider).announce([
-        SyncReport(
-          walletId: 'w1',
-          newTxCount: 1,
-          newTxs: [NewTx(txid: 'a', netSats: 1000, confirmed: true)],
-          balance: makeBalance(0),
-          tipHeight: 1,
-          tookMs: 1,
-          backend: 'x',
-        ),
-      ]);
+      final synced = SyncReport(
+        walletId: 'w1',
+        newTxCount: 1,
+        newTxs: [NewTx(txid: 'a', netSats: 1000, confirmed: true)],
+        balance: makeBalance(0),
+        tipHeight: 1,
+        tookMs: 1,
+        backend: 'x',
+      );
+      // What the core does after the sync: the news waits for a claim.
+      bridge.recordNews(synced);
+      await container.read(syncAnnouncerProvider).announce([synced]);
 
       expect(service.posted, isEmpty);
     });
 
     test('the open app posts when not disguised', () async {
       final service = _RecordingNotifications();
+      final bridge = FakeBridge(wallets: [makeMeta()])..syncedIds.add('w1');
       final container = ProviderContainer(
         overrides: [
-          bridgeProvider.overrideWithValue(FakeBridge(wallets: [makeMeta()])),
+          bridgeProvider.overrideWithValue(bridge),
           disguiseServiceProvider.overrideWithValue(FakeDisguise()),
           notificationServiceProvider.overrideWithValue(service),
         ],
@@ -399,17 +402,18 @@ void main() {
       container.read(disguiseProvider);
       await Future<void>.delayed(Duration.zero);
 
-      await container.read(syncAnnouncerProvider).announce([
-        SyncReport(
-          walletId: 'w1',
-          newTxCount: 1,
-          newTxs: [NewTx(txid: 'a', netSats: 1000, confirmed: true)],
-          balance: makeBalance(0),
-          tipHeight: 1,
-          tookMs: 1,
-          backend: 'x',
-        ),
-      ]);
+      final synced = SyncReport(
+        walletId: 'w1',
+        newTxCount: 1,
+        newTxs: [NewTx(txid: 'a', netSats: 1000, confirmed: true)],
+        balance: makeBalance(0),
+        tipHeight: 1,
+        tookMs: 1,
+        backend: 'x',
+      );
+      // What the core does after the sync: the news waits for a claim.
+      bridge.recordNews(synced);
+      await container.read(syncAnnouncerProvider).announce([synced]);
 
       // A wallet seen for the first time this run hands over its whole
       // history, which the announcer holds back; a second sync speaks.

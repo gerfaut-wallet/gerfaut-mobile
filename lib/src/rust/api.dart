@@ -8,7 +8,6 @@ import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `channel_view`, `core_error_json`, `core_error_kind`, `decode_key`, `error_json`, `from_json`, `manager`, `now_unix`, `ok_json`, `parse_network_opt`, `parse_network`, `parse_variant`, `premium_client`, `premium_error_kind`, `premium_view`, `store_premium`, `to_json`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Findings`
 
 /// Opens (or creates) the vault under `data_dir` with a 32-byte key given
 /// as 64 hex characters. Idempotent: once initialized, later calls (hot
@@ -345,9 +344,9 @@ Future<String> premiumWallets() =>
 /// Hands one wallet to the server, under the app's own id and name,
 /// with its descriptors as the vault holds them: both chains on two
 /// lines when the wallet has a change descriptor, the external one
-/// alone otherwise. The user's yes is recorded first, dated now; a
-/// second yes keeps the first date. A single address is refused here,
-/// before anything leaves the device.
+/// alone otherwise, and the address itself for a wallet that is one
+/// address. The user's yes is recorded first, dated now; a second yes
+/// keeps the first date.
 Future<String> premiumWatchWallet({required String id}) =>
     RustLib.instance.api.crateApiPremiumWatchWallet(id: id);
 
@@ -439,13 +438,14 @@ Future<String> liveStatus() => RustLib.instance.api.crateApiLiveStatus();
 /// that caused it.
 Stream<String> liveEvents() => RustLib.instance.api.crateApiLiveEvents();
 
-/// Of what a sync found (`{wallet_id, new_txs, confirmed_txs}`), what
-/// nobody has announced yet, now recorded as announced in the vault.
-/// Every path that notifies from a sync of its own goes through here
-/// first, so a transaction is said once whoever saw it first. Returns a
-/// serialized `Vec<LiveTx>`.
-Future<String> claimAnnouncements({required String findingsJson}) =>
-    RustLib.instance.api.crateApiClaimAnnouncements(findingsJson: findingsJson);
+/// What the syncs of one wallet found that nobody has announced yet,
+/// taken off the record in the vault: call it after every sync this
+/// app runs of that wallet, whatever the report lists, and announce
+/// everything it returns, or drop it on purpose (notices off, the app
+/// disguised). Nothing it returns is ever returned again, to this
+/// caller or to the live watch. Returns a serialized `Vec<LiveTx>`.
+Future<String> claimAnnouncements({required String walletId}) =>
+    RustLib.instance.api.crateApiClaimAnnouncements(walletId: walletId);
 
 /// Whether anything this app sends has to go through Tor.
 Future<String> usesTor() => RustLib.instance.api.crateApiUsesTor();

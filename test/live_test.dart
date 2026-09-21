@@ -398,24 +398,50 @@ void main() {
   });
 
   group('a transaction is said once', () {
+    ProviderContainer screens(
+      FakeBridge bridge,
+      FakeNotifications notifications, {
+      bool notify = true,
+      bool disguised = false,
+    }) {
+      final container = ProviderContainer(
+        overrides: [
+          bridgeProvider.overrideWithValue(bridge),
+          notificationServiceProvider.overrideWithValue(notifications),
+          backgroundSchedulerProvider.overrideWithValue((seconds) async {}),
+          livePlatformProvider.overrideWithValue(FakeLivePlatform()),
+          disguiseServiceProvider.overrideWithValue(
+            FakeDisguise(disguised: disguised),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.read(notifyNewTxProvider.notifier).hydrate(notify ? '1' : '0');
+      return container;
+    }
+
+    /// What the core does for its own watch: the sync records, the
+    /// watch claims, and each claimed transaction goes out as an event.
+    Future<void> watchSaw(FakeBridge bridge, SyncReport report) async {
+      bridge.recordNews(report);
+      for (final tx in await bridge.claimAnnouncements(report.walletId)) {
+        bridge.liveController.add(LiveTransaction(tx));
+      }
+      bridge.liveController.add(LiveWalletSynced(report));
+    }
+
     test('by the service, then not by the periodic task', () async {
-      final bridge = _bridge();
+      final bridge = _bridge()..syncedIds.add('w1');
       final service = _Service(bridge);
       await service.runner.run();
-
-      // The core claims before it hands an event out.
       final seen = _report(
         fresh: [const NewTx(txid: 'aa', netSats: 5000, confirmed: false)],
       );
-      for (final tx in await bridge.claimAnnouncements(seen)) {
-        bridge.liveController.add(LiveTransaction(tx));
-      }
-      bridge.liveController.add(LiveWalletSynced(seen));
+      await watchSaw(bridge, seen);
       await service.settle();
       expect(service.notifications.posted, hasLength(1));
 
       // The safety net syncs on its own and finds the same transaction.
-      bridge.syncedIds.add('w1');
       bridge.onSyncAll = (_) => SyncAllReport(reports: [seen], failures: []);
       final net = FakeNotifications();
       await runBackgroundCheck(
@@ -428,7 +454,7 @@ void main() {
     });
 
     test('by the periodic task, then its confirmation once more', () async {
-      final bridge = _bridge();
+      final bridge = _bridge()..syncedIds.add('w1');
       final pending = _report(
         fresh: [const NewTx(txid: 'aa', netSats: 5000, confirmed: false)],
       );
@@ -436,7 +462,6 @@ void main() {
         confirmed: [const NewTx(txid: 'aa', netSats: 5000, confirmed: true)],
       );
       final net = FakeNotifications();
-      bridge.syncedIds.add('w1');
       Future<void> check(SyncReport report) {
         bridge.onSyncAll = (_) =>
             SyncAllReport(reports: [report], failures: []);
@@ -458,23 +483,10 @@ void main() {
       ]);
     });
 
-    test('by a pull to refresh, then not by the service', () async {
-      final bridge = _bridge();
+    test('by a pull to refresh, then not by the watch', () async {
+      final bridge = _bridge()..syncedIds.add('w1');
       final notifications = FakeNotifications();
-      final container = ProviderContainer(
-        overrides: [
-          bridgeProvider.overrideWithValue(bridge),
-          notificationServiceProvider.overrideWithValue(notifications),
-          backgroundSchedulerProvider.overrideWithValue((seconds) async {}),
-          livePlatformProvider.overrideWithValue(FakeLivePlatform()),
-          disguiseServiceProvider.overrideWithValue(FakeDisguise()),
-        ],
-      );
-      addTearDown(container.dispose);
-      container.read(notifyNewTxProvider.notifier).hydrate('1');
-      // A wallet synced before: what a sync finds now is news.
-      bridge.syncedIds.add('w1');
-
+      final container = screens(bridge, notifications);
       final seen = _report(
         fresh: [const NewTx(txid: 'zz', netSats: 800, confirmed: false)],
       );
@@ -484,31 +496,191 @@ void main() {
 
       // The watch syncs the same wallet a moment later: the core has
       // nothing left to hand out for that transaction.
-      expect(await bridge.claimAnnouncements(seen), isEmpty);
+      bridge.recordNews(seen);
+      expect(await bridge.claimAnnouncements('w1'), isEmpty);
     });
 
-    test('a first sync is kept quiet, and stays said', () async {
+    test('a sync whose report lists nothing still claims', () async {
+      // The watch's sync of the same wallet ran at the same moment and
+      // left its news with the core; the screen's own report is empty.
+      final bridge = _bridge()..syncedIds.add('w1');
+      final notifications = FakeNotifications();
+      final container = screens(bridge, notifications);
+      bridge.recordNews(
+        _report(
+          fresh: [const NewTx(txid: 'raced', netSats: 90, confirmed: false)],
+        ),
+      );
+      bridge.onSyncWallet = (_) => _report();
+      await container.read(syncProvider.notifier).syncWallet('w1');
+      expect(bridge.claims, ['w1']);
+      expect(notifications.posted.single.body, contains('pending'));
+    });
+
+    test('every wallet of a sync-all is claimed, once each', () async {
+      final bridge = FakeBridge(
+        wallets: [
+          makeMeta(),
+          makeMeta(id: 'w2', name: 'Spending'),
+        ],
+        settings: const Settings(
+          activeNetwork: Network.mainnet,
+          backends: {},
+          appPrefs: {},
+        ),
+      );
+      final container = screens(bridge, FakeNotifications());
+      bridge.onSyncAll = (_) => SyncAllReport(
+        reports: [
+          _report(),
+          _report(id: 'w2'),
+          _report(),
+        ],
+        failures: [],
+      );
+      await container.read(syncProvider.notifier).syncAll(Network.mainnet);
+      expect(bridge.claims, ['w1', 'w2']);
+    });
+
+    test('with the notice off, a sync claims and says nothing', () async {
+      final bridge = _bridge()..syncedIds.add('w1');
+      final notifications = FakeNotifications();
+      final container = screens(bridge, notifications, notify: false);
+      bridge.onSyncWallet = (_) => _report(
+        fresh: [const NewTx(txid: 'quiet', netSats: 5, confirmed: false)],
+      );
+      await container.read(syncProvider.notifier).syncWallet('w1');
+      expect(bridge.claims, ['w1']);
+      expect(notifications.posted, isEmpty);
+      // Taken, so not said later when the notice comes back on.
+      expect(bridge.news['w1'], isNull);
+    });
+
+    test('while disguised, a sync claims and says nothing', () async {
+      final bridge = _bridge()..syncedIds.add('w1');
+      final notifications = FakeNotifications();
+      final container = screens(bridge, notifications, disguised: true);
+      await container.read(disguiseProvider.notifier).set(true);
+      bridge.onSyncWallet = (_) => _report(
+        fresh: [const NewTx(txid: 'hidden', netSats: 5, confirmed: false)],
+      );
+      await container.read(syncProvider.notifier).syncWallet('w1');
+      expect(bridge.claims, ['w1']);
+      expect(notifications.posted, isEmpty);
+    });
+
+    test('a first sync is an import: nothing to say, nothing kept', () async {
       final bridge = _bridge();
       final notifications = FakeNotifications();
-      final container = ProviderContainer(
-        overrides: [
-          bridgeProvider.overrideWithValue(bridge),
-          notificationServiceProvider.overrideWithValue(notifications),
-          backgroundSchedulerProvider.overrideWithValue((seconds) async {}),
-          livePlatformProvider.overrideWithValue(FakeLivePlatform()),
-          disguiseServiceProvider.overrideWithValue(FakeDisguise()),
-        ],
-      );
-      addTearDown(container.dispose);
-      container.read(notifyNewTxProvider.notifier).hydrate('1');
-      final history = _report(
+      final container = screens(bridge, notifications);
+      bridge.onSyncWallet = (_) => _report(
         fresh: [const NewTx(txid: 'old', netSats: 1, confirmed: true)],
       );
-      bridge.onSyncWallet = (_) => history;
       await container.read(syncProvider.notifier).syncWallet('w1');
       expect(notifications.posted, isEmpty);
-      expect(await bridge.claimAnnouncements(history), isEmpty);
+      expect(await bridge.claimAnnouncements('w1'), isEmpty);
     });
+
+    test('the first sync after a restart is news all the same', () async {
+      // A wallet synced in an earlier run: what the screens find at
+      // start is what arrived while nothing ran.
+      final bridge = FakeBridge(
+        wallets: [
+          makeMeta(
+            lastSync: const SyncStamp(
+              at: 1755000000,
+              tipHeight: 99,
+              backend: 'electrum.example',
+            ),
+          ),
+        ],
+      );
+      final notifications = FakeNotifications();
+      final container = screens(bridge, notifications);
+      bridge.onSyncAll = (_) => SyncAllReport(
+        reports: [
+          _report(
+            fresh: [const NewTx(txid: 'night', netSats: 7, confirmed: true)],
+          ),
+        ],
+        failures: [],
+      );
+      await container.read(syncProvider.notifier).syncAll(Network.mainnet);
+      expect(notifications.posted.single.body, contains('confirmed'));
+    });
+  });
+
+  group('a payment that is no longer coming', () {
+    List<String> said(
+      List<LiveTx> txs, {
+      bool masked = false,
+      AmountUnit unit = AmountUnit.btc,
+    }) => NewTxAnnouncer.compose(
+      txs,
+      walletNames: const {'w1': 'Cold storage'},
+      unit: unit,
+      masked: masked,
+    ).map((notice) => notice.body).toList();
+
+    test('names the amount, in the unit on screen', () {
+      final gone = _live('gone', 150000, stage: TxStage.dropped);
+      expect(said([gone]), [
+        'A pending payment of ${formatAmount(150000, AmountUnit.btc)} is no '
+            'longer coming',
+      ]);
+      expect(said([gone]).single, contains('0.00150000 BTC'));
+      expect(
+        said([gone], unit: AmountUnit.sats).single,
+        isNot(contains('BTC')),
+      );
+    });
+
+    test('says no amount while hidden', () {
+      expect(
+        said([_live('gone', 150000, stage: TxStage.dropped)], masked: true),
+        ['A pending payment is no longer coming'],
+      );
+    });
+
+    test('takes the place of the arrival it takes back', () {
+      final notices = NewTxAnnouncer.compose(
+        [_live('aa', 150000), _live('aa', 150000, stage: TxStage.dropped)],
+        walletNames: const {'w1': 'Cold storage'},
+        unit: AmountUnit.btc,
+        masked: false,
+      );
+      expect(notices.map((n) => n.id).toSet(), hasLength(1));
+      expect(notices.map((n) => n.title).toSet(), {'Cold storage'});
+    });
+
+    test('is never folded into the count of the rest', () {
+      final bodies = said([
+        for (var i = 0; i < 6; i++) _live('tx$i', 1000),
+        _live('gone', 150000, stage: TxStage.dropped),
+      ]);
+      expect(bodies, hasLength(noticesPerWallet + 2));
+      expect(bodies[noticesPerWallet], '3 more new transactions');
+      expect(bodies.last, contains('is no longer coming'));
+    });
+
+    test(
+      'the service says it while the app is locked, without the amount',
+      () async {
+        final service = _Service(
+          _bridge(lock: const AppLock(kind: LockKind.pin, biometric: false)),
+        );
+        await service.runner.run();
+        service.bridge.liveController
+          ..add(LiveTransaction(_live('gone', 150000, stage: TxStage.dropped)))
+          ..add(LiveWalletSynced(_report()));
+        await service.settle();
+        expect(
+          service.notifications.posted.single.body,
+          'A pending payment is no longer coming',
+        );
+        expect(service.notifications.posted.single.title, 'Cold storage');
+      },
+    );
   });
 
   group('the status line', () {
@@ -989,23 +1161,21 @@ void main() {
         isA<LiveNewBlock>(),
       );
       expect(LiveEvent.fromJson({'type': 'stopped'}), isA<LiveStopped>());
-      expect(LiveEvent.fromJson({'type': 'something_newer'}), isNull);
-    });
-
-    test('a report hands back what a claim needs, and nothing else', () {
-      final report = _report(
-        fresh: [const NewTx(txid: 'aa', netSats: 1, confirmed: false)],
-        confirmed: [const NewTx(txid: 'bb', netSats: -2, confirmed: true)],
+      expect(
+        LiveEvent.fromJson({
+          'type': 'transaction',
+          'wallet_id': 'w1',
+          'txid': 'aa',
+          'net_sats': 150000,
+          'stage': 'dropped',
+        }),
+        isA<LiveTransaction>().having(
+          (e) => e.tx.stage,
+          'stage',
+          TxStage.dropped,
+        ),
       );
-      expect(report.toFindingsJson(), {
-        'wallet_id': 'w1',
-        'new_txs': [
-          {'txid': 'aa', 'net_sats': 1, 'confirmed': false},
-        ],
-        'confirmed_txs': [
-          {'txid': 'bb', 'net_sats': -2, 'confirmed': true},
-        ],
-      });
+      expect(LiveEvent.fromJson({'type': 'something_newer'}), isNull);
     });
   });
 }

@@ -138,11 +138,14 @@ class NewTxAnnouncer {
   final NotificationService service;
 
   /// One notice per transaction up to [noticesPerWallet] a wallet, then
-  /// one line counting the rest. Pure: the same transactions, names,
-  /// unit and mask always say the same.
+  /// one line counting the rest. A payment that is no longer coming is
+  /// always said on its own, never folded into the count: it takes back
+  /// what an earlier notice promised. Pure: the same transactions,
+  /// names, unit and mask always say the same.
   ///
-  /// A confirmation carries the id of the arrival it follows, so it
-  /// takes that notification's place instead of stacking under it.
+  /// Every notice about one transaction carries its id, so the
+  /// confirmation, or the news that it is not coming, takes the place
+  /// of the arrival instead of stacking under it.
   static List<TxNotice> compose(
     List<LiveTx> txs, {
     required Map<String, String> walletNames,
@@ -156,16 +159,17 @@ class NewTxAnnouncer {
     final notices = <TxNotice>[];
     for (final MapEntry(key: walletId, value: mine) in byWallet.entries) {
       final title = walletNames[walletId] ?? walletId;
-      for (final tx in mine.take(noticesPerWallet)) {
-        notices.add(
-          TxNotice(
-            id: noticeId(tx.txid),
-            title: title,
-            body: _describe(tx, unit: unit, masked: masked),
-          ),
-        );
-      }
-      final rest = mine.length - noticesPerWallet;
+      TxNotice notice(LiveTx tx) => TxNotice(
+        id: noticeId(tx.txid),
+        title: title,
+        body: _describe(tx, unit: unit, masked: masked),
+      );
+      final moved = [
+        for (final tx in mine)
+          if (tx.stage != TxStage.dropped) tx,
+      ];
+      notices.addAll(moved.take(noticesPerWallet).map(notice));
+      final rest = moved.length - noticesPerWallet;
       if (rest > 0) {
         notices.add(
           TxNotice(
@@ -175,6 +179,10 @@ class NewTxAnnouncer {
           ),
         );
       }
+      notices.addAll([
+        for (final tx in mine)
+          if (tx.stage == TxStage.dropped) notice(tx),
+      ]);
     }
     return notices;
   }
@@ -202,6 +210,12 @@ class NewTxAnnouncer {
 /// direction, and whether the chain has it yet.
 String _describe(LiveTx tx, {required AmountUnit unit, required bool masked}) {
   final sats = tx.netSats;
+  if (tx.stage == TxStage.dropped) {
+    return masked
+        ? 'A pending payment is no longer coming'
+        : 'A pending payment of ${formatAmount(sats.abs(), unit)} is no '
+              'longer coming';
+  }
   final what = switch ((masked, sats)) {
     (_, 0) => 'New transaction',
     (true, > 0) => 'New transaction',
@@ -209,10 +223,9 @@ String _describe(LiveTx tx, {required AmountUnit unit, required bool masked}) {
     (false, > 0) => 'Received ${formatAmount(sats, unit)}',
     (false, _) => '${formatAmount(-sats, unit)} left this wallet',
   };
-  return switch (tx.stage) {
-    TxStage.mempool => '$what · pending',
-    TxStage.confirmed => '$what · confirmed',
-  };
+  return tx.stage == TxStage.confirmed
+      ? '$what · confirmed'
+      : '$what · pending';
 }
 
 String _plural(int count, String noun) =>
@@ -224,17 +237,21 @@ String _plural(int count, String noun) =>
 bool amountsHidden(Settings settings) =>
     settings.appPrefs['mobile.masked'] == '1' || settings.appLock != null;
 
-/// What the reports hold that nobody has announced yet, in order. Every
-/// report goes to the core, including those with nothing to say aloud,
-/// so what one caller keeps quiet about is not said later by another.
+/// What the syncs behind these reports found that nobody has announced
+/// yet, in order, taken off the core's record. Every wallet is asked,
+/// the reports that list nothing included: a sync that ran for another
+/// caller at the same moment may have left its news under this one.
+/// Whoever calls this announces what it returns, or drops it on
+/// purpose; nothing returned here is ever returned again.
 Future<List<LiveTx>> claimAll(
   GerfautBridge bridge,
   Iterable<SyncReport> reports,
 ) async {
   final claimed = <LiveTx>[];
+  final asked = <String>{};
   for (final report in reports) {
-    if (report.newTxs.isEmpty && report.confirmedTxs.isEmpty) continue;
-    claimed.addAll(await bridge.claimAnnouncements(report));
+    if (!asked.add(report.walletId)) continue;
+    claimed.addAll(await bridge.claimAnnouncements(report.walletId));
   }
   return claimed;
 }
@@ -243,42 +260,34 @@ final newTxAnnouncerProvider = Provider<NewTxAnnouncer>(
   (ref) => NewTxAnnouncer(ref.watch(notificationServiceProvider)),
 );
 
-/// The open app's side of it: nothing unless the preference is on, then
-/// the names, unit and mask the screen shows go with what was claimed.
+/// The open app's side of it. Every sync the screens run is claimed,
+/// then said with the names, unit and mask the screen shows, or
+/// dropped when nothing may be said: the notice is off, or the app is
+/// disguised.
+///
+/// A wallet's first sync says nothing: the core records none of an
+/// import's history as news, so there is nothing to leave out here.
 class SyncAnnouncer {
   const SyncAnnouncer(this._ref);
 
   final Ref _ref;
 
-  /// [firstSyncs] names the wallets that had never been synced before
-  /// these reports: what they hold is an import, not news.
-  Future<void> announce(
-    List<SyncReport> reports, {
-    Set<String> firstSyncs = const {},
-  }) async {
+  Future<void> announce(List<SyncReport> reports) async {
+    if (reports.isEmpty) return;
+    final List<LiveTx> claimed;
+    try {
+      claimed = await claimAll(_ref.read(bridgeProvider), reports);
+    } catch (_) {
+      // A claim that failed took nothing: the next one gets it.
+      return;
+    }
+    if (claimed.isEmpty) return;
     if (!_ref.read(notifyNewTxProvider)) return;
     // Nothing is posted while disguised: a notification's header carries
     // the app's name, and a "Gerfaut" line over a calculator would tell
     // everything the disguise hides.
     if (_ref.read(disguiseProvider).disguised) return;
-    if (reports.every((r) => r.newTxs.isEmpty && r.confirmedTxs.isEmpty)) {
-      return;
-    }
     try {
-      // Claimed before anything is left out, so that what this sync
-      // keeps quiet about is on record and no other path says it.
-      var claimed = await claimAll(_ref.read(bridgeProvider), reports);
-      // A wallet synced for the first time hands over its whole history
-      // as "new". Telling someone about a payment from three years ago
-      // is noise, and the first sync of a restore would be a burst of
-      // it. Every later sync is news, the first one after a restart
-      // included: what arrived while nothing ran is what most needs
-      // saying, and the record in the vault keeps it from being said
-      // twice.
-      claimed = claimed
-          .where((tx) => !firstSyncs.contains(tx.walletId))
-          .toList();
-      if (claimed.isEmpty) return;
       final wallets =
           _ref.read(walletsProvider).valueOrNull ??
           await _ref.read(bridgeProvider).listWallets();

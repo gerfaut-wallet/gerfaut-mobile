@@ -100,7 +100,7 @@ abstract class RustLibApi extends BaseApi {
 
   Future<String> crateApiCheckUpdate({required String currentVersion});
 
-  Future<String> crateApiClaimAnnouncements({required String findingsJson});
+  Future<String> crateApiClaimAnnouncements({required String walletId});
 
   Future<String> crateApiClearAppLock({required String current});
 
@@ -486,12 +486,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
-  Future<String> crateApiClaimAnnouncements({required String findingsJson}) {
+  Future<String> crateApiClaimAnnouncements({required String walletId}) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_String(findingsJson, serializer);
+          sse_encode_String(walletId, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -504,7 +504,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: null,
         ),
         constMeta: kCrateApiClaimAnnouncementsConstMeta,
-        argValues: [findingsJson],
+        argValues: [walletId],
         apiImpl: this,
       ),
     );
@@ -512,7 +512,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   TaskConstMeta get kCrateApiClaimAnnouncementsConstMeta => const TaskConstMeta(
     debugName: "claim_announcements",
-    argNames: ["findingsJson"],
+    argNames: ["walletId"],
   );
 
   @override

@@ -294,13 +294,13 @@ fn wire__crate__api__claim_announcements_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_findings_json = <String>::sse_decode(&mut deserializer);
+            let api_wallet_id = <String>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, ()>(
                     (move || async move {
                         let output_ok = Result::<_, ()>::Ok(
-                            crate::api::claim_announcements(api_findings_json).await,
+                            crate::api::claim_announcements(api_wallet_id).await,
                         )?;
                         Ok(output_ok)
                     })()
