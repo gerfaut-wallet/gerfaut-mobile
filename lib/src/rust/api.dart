@@ -414,12 +414,22 @@ Future<String> premiumRecentEvents() =>
 Future<String> premiumHeartbeat() =>
     RustLib.instance.api.crateApiPremiumHeartbeat();
 
-/// Starts the live watch of the active network. Idempotent: with a
-/// watch already running, from this isolate or another, nothing is
-/// restarted. Returns the serialized `WatchStatus`.
-Future<String> liveStart() => RustLib.instance.api.crateApiLiveStart();
+/// Starts the live watch of the active network and hands everything it
+/// says to this one caller, each a serialized `LiveEvent`, then
+/// `{"type":"stopped"}` once the watch has ended. The caller announces
+/// every transaction it gets: the core hands each one out once, and has
+/// already taken it off its record.
+///
+/// One caller at a time: with a watch already held, the stream carries
+/// a `{"error":{"kind":"live_running"}}` payload and ends. A caller
+/// that goes away without [`live_stop`] stops the watch at the next
+/// event, so nothing more is taken for nobody; the event in hand then
+/// is lost with it, which is why the host stops the watch first.
+Stream<String> liveRun() => RustLib.instance.api.crateApiLiveRun();
 
-/// Stops the live watch and closes its connection. Idempotent.
+/// Stops the live watch and closes its connection. Returns at once; the
+/// stream of [`live_run`] ends right after what the watch still held.
+/// Idempotent.
 Future<String> liveStop() => RustLib.instance.api.crateApiLiveStop();
 
 /// Checks the connection now: the call an alarm makes every few
@@ -431,11 +441,12 @@ Future<String> liveTick() => RustLib.instance.api.crateApiLiveTick();
 /// state is `off` when none runs.
 Future<String> liveStatus() => RustLib.instance.api.crateApiLiveStatus();
 
-/// Subscribes this isolate to the live events, each a serialized
-/// `LiveEvent`, plus `{"type":"stopped"}` when the watch ends. Returns
-/// once the listener is gone. A listener that lags loses the oldest
-/// events, never the watch: what was missed is on disk after the sync
-/// that caused it.
+/// Subscribes this isolate to what the running watch says for the
+/// screens (its status, the wallets it synced, blocks), each a
+/// serialized `LiveEvent`, plus
+/// `{"type":"stopped"}` when the watch ends. Returns once the listener
+/// is gone. A listener that lags loses the oldest events, never the
+/// watch, and never a transaction to announce.
 Stream<String> liveEvents() => RustLib.instance.api.crateApiLiveEvents();
 
 /// What the syncs of one wallet found that nobody has announced yet,

@@ -192,9 +192,12 @@ abstract class GerfautBridge {
 
   // --- live watch --------------------------------------------------------
 
-  /// Starts the live watch of the active network. Idempotent across
-  /// isolates: a watch already running is left as it is.
-  Future<LiveWatchStatus> liveStart();
+  /// Starts the live watch of the active network and yields everything
+  /// it says to this one caller, until [LiveStopped]. Each
+  /// [LiveTransaction] has been taken off the core's record: the caller
+  /// announces it, or it is never said. One caller at a time; another
+  /// one gets a `live_running` error and nothing else.
+  Stream<LiveEvent> liveRun();
 
   /// Stops the live watch and closes its connection. Idempotent.
   Future<void> liveStop();
@@ -206,9 +209,10 @@ abstract class GerfautBridge {
   /// Where the watch stands; off when none runs.
   Future<LiveWatchStatus> liveStatus();
 
-  /// What the running watch says, for this isolate. Any number of
-  /// isolates may listen; the core's single receiver is consumed in
-  /// Rust and fanned out from there.
+  /// What the running watch says for the screens: its status, the
+  /// wallets it synced, blocks, its end. Never a transaction to
+  /// announce: those go to the caller of [liveRun] alone. Any number of
+  /// isolates may listen.
   Stream<LiveEvent> liveEvents();
 
   /// What the syncs of [walletId] found that nobody has announced yet,
@@ -627,8 +631,21 @@ class RustBridge implements GerfautBridge {
   }
 
   @override
-  Future<LiveWatchStatus> liveStart() async {
-    return LiveWatchStatus.fromJson(_object(await rust.liveStart()));
+  Stream<LiveEvent> liveRun() async* {
+    await for (final raw in rust.liveRun()) {
+      final Object? decoded;
+      try {
+        decoded = jsonDecode(raw);
+      } on FormatException {
+        // One event that does not read must not end the stream.
+        continue;
+      }
+      if (decoded is! Map<String, dynamic>) continue;
+      // A refusal to start comes as the only payload: it ends the run.
+      if (decoded['error'] is Map<String, dynamic>) _decode(raw);
+      final event = LiveEvent.fromJson(decoded);
+      if (event != null) yield event;
+    }
   }
 
   @override

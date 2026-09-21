@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/settings.dart';
 import 'package:gerfaut/src/background.dart';
+import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/live.dart';
@@ -188,6 +189,11 @@ void main() {
       final service = _Service(_bridge());
       await service.runner.run();
       expect(service.bridge.liveStartCalls, 1);
+      expect(service.told.last, ('status', 'Connecting'));
+      service.bridge.liveController.add(
+        const LiveStatusChanged(LiveWatchStatus(state: WatchState.connected)),
+      );
+      await service.settle();
       expect(service.told.last, ('status', 'Connected to your server'));
 
       service.bridge.liveController
@@ -411,6 +417,27 @@ void main() {
       service.bridge.liveController.add(const LiveStopped());
       await Future<void>.delayed(const Duration(milliseconds: 80));
       expect(service.bridge.liveStartCalls, 2);
+    });
+
+    test('a run refused, the watch held elsewhere, is tried again', () async {
+      final bridge = _bridge()
+        ..runRefusal = const BridgeException(
+          'live_running',
+          'the live watch is held already',
+        );
+      final service = _Service(
+        bridge,
+        restartAfter: const Duration(milliseconds: 20),
+      );
+      await service.runner.run();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      bridge.runRefusal = null;
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      expect(bridge.liveStartCalls, 2);
+      service.bridge.liveController.add(LiveTransaction(_live('after', 1)));
+      service.bridge.liveController.add(LiveWalletSynced(_report()));
+      await service.settle();
+      expect(service.notifications.posted, hasLength(1));
     });
 
     test('a watch stopped on purpose stays stopped', () async {

@@ -1120,9 +1120,15 @@ class FakeBridge implements GerfautBridge {
   /// Every claim, by wallet id, in order.
   final List<String> claims = [];
 
+  /// Set, the next run is refused with it, as the core refuses one
+  /// while another caller holds the watch.
+  BridgeException? runRefusal;
+
   @override
-  Future<LiveWatchStatus> liveStart() async {
+  Stream<LiveEvent> liveRun() async* {
     liveStartCalls++;
+    final refusal = runRefusal;
+    if (refusal != null) throw refusal;
     if (watchStatus.state == WatchState.off) {
       watchStatus = const LiveWatchStatus(
         state: WatchState.connected,
@@ -1130,7 +1136,10 @@ class FakeBridge implements GerfautBridge {
         server: 'electrum.example',
       );
     }
-    return watchStatus;
+    await for (final event in liveController.stream) {
+      yield event;
+      if (event is LiveStopped) return;
+    }
   }
 
   @override

@@ -4,7 +4,7 @@
 // Who owns what. The core owns the watch: one wallet manager per
 // process, one watch in it, one consumer of its events, in Rust. The
 // Android service owns its lifetime: the Dart entry point it hosts
-// ([runLiveService]) is the only caller of `liveStart` and `liveStop`,
+// ([runLiveService]) is the only caller of `liveRun` and `liveStop`,
 // and the only one that turns a live event into a notification. The
 // screens never start, stop or announce: they ask the platform for the
 // service ([LivePlatform]) and listen to the same events to refresh what
@@ -444,10 +444,14 @@ class LiveRunner {
         await _tell('standDown');
         return false;
       }
-      _events ??= bridge.liveEvents().listen(_onEvent, onError: (_) {});
-      final status = await bridge.liveStart();
       _started = true;
-      await _tell('status', liveNotificationText(status));
+      _events = bridge.liveRun().listen(
+        _onEvent,
+        // A run that could not start ends right after: see onDone.
+        onError: (Object _) {},
+        onDone: _runEnded,
+      );
+      await _tell('status', liveNotificationText(const LiveWatchStatus()));
       return true;
     } catch (_) {
       await _tell('status', 'Waiting to start');
@@ -508,17 +512,24 @@ class LiveRunner {
       case LiveStatusChanged(:final status):
         unawaited(_tell('status', liveNotificationText(status)));
       case LiveStopped():
-        _started = false;
-        final ended = _ended;
-        if (ended != null && !ended.isCompleted) ended.complete();
-        // Not asked for here: the watch is started again, and catches
-        // up on what it missed.
-        if (!_stopping) {
-          Timer(restartAfter, () => unawaited(_ensureStarted()));
-        }
+        // The run ends right after: see [_runEnded].
+        break;
       case LiveSyncFailed():
       case LiveNewBlock():
         break;
+    }
+  }
+
+  /// The run is over: the watch stopped, on purpose or not, or it could
+  /// not start. Not asked for here, it is started again, and catches up
+  /// on what it missed.
+  void _runEnded() {
+    _started = false;
+    _events = null;
+    final ended = _ended;
+    if (ended != null && !ended.isCompleted) ended.complete();
+    if (!_stopping) {
+      Timer(restartAfter, () => unawaited(_ensureStarted()));
     }
   }
 

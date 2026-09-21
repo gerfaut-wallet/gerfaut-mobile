@@ -26,12 +26,12 @@ use gerfaut_core::store::VaultKey;
 use gerfaut_core::wallet::meta::{WalletIcon, WalletKind};
 use gerfaut_core::{CoreError, Network, WalletManager};
 use crate::frb_generated::StreamSink;
+use gerfaut_core::live::LiveEvent;
 use gerfaut_core::wallet::snapshot::SyncReport;
 use serde_json::json;
 use std::sync::LazyLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::{Mutex, OnceCell, broadcast};
-use tokio::task::JoinHandle;
 
 /// The process-wide manager, set once by [`init_manager`].
 static MANAGER: OnceCell<WalletManager> = OnceCell::const_new();
@@ -1069,51 +1069,76 @@ pub async fn premium_heartbeat() -> String {
 
 // --- live watch --------------------------------------------------------
 
-/// Live events as JSON, for every isolate that listens. The core hands
-/// its events to one consumer; that consumer is the task [`live_start`]
-/// spawns here, in Rust, and it fans them out. An isolate that comes or
-/// goes (the screens, the engine the foreground service hosts) never
-/// takes the receiver from another, and never restarts the watch.
+/// What the running watch says, as JSON, for the screens: its status,
+/// the wallets it synced, blocks, and `{"type":"stopped"}` at its end.
+/// Never a transaction to announce: those go to the one caller of
+/// [`live_run`] alone, since the core hands each of them out once.
 static LIVE_EVENTS: LazyLock<broadcast::Sender<String>> =
     LazyLock::new(|| broadcast::channel(256).0);
 
-/// The task that consumes the events of the running watch. Behind an
-/// async lock so a start that follows a stop waits for the old task to
-/// be gone instead of mistaking it for a live one.
-static LIVE_TASK: Mutex<Option<JoinHandle<()>>> = Mutex::const_new(None);
+/// A [`live_run`] holds the watch. Behind an async lock so that a run
+/// asked for while another is still ending waits for it to be gone.
+static LIVE_RUNNING: Mutex<bool> = Mutex::const_new(false);
 
-/// Starts the live watch of the active network. Idempotent: with a
-/// watch already running, from this isolate or another, nothing is
-/// restarted. Returns the serialized `WatchStatus`.
-pub async fn live_start() -> String {
-    let manager = try_json!(manager());
-    let mut task = LIVE_TASK.lock().await;
-    if task.as_ref().is_some_and(|running| !running.is_finished()) {
-        return to_json(&manager.live_status().await);
-    }
-    let mut events = match manager.live_start().await {
-        Ok(events) => events,
-        Err(e) => return core_error_json(&e),
-    };
-    *task = Some(flutter_rust_bridge::spawn(async move {
-        while let Some(event) = events.next().await {
-            // Nobody listening is not an error: the watch still syncs,
-            // and what it found is in the vault for whoever looks next.
-            let _ = LIVE_EVENTS.send(to_json(&event));
+/// Starts the live watch of the active network and hands everything it
+/// says to this one caller, each a serialized `LiveEvent`, then
+/// `{"type":"stopped"}` once the watch has ended. The caller announces
+/// every transaction it gets: the core hands each one out once, and has
+/// already taken it off its record.
+///
+/// One caller at a time: with a watch already held, the stream carries
+/// a `{"error":{"kind":"live_running"}}` payload and ends. A caller
+/// that goes away without [`live_stop`] stops the watch at the next
+/// event, so nothing more is taken for nobody; the event in hand then
+/// is lost with it, which is why the host stops the watch first.
+pub async fn live_run(sink: StreamSink<String>) {
+    let manager = match manager() {
+        Ok(manager) => manager,
+        Err(payload) => {
+            let _ = sink.add(payload);
+            return;
         }
-        let _ = LIVE_EVENTS.send(json!({ "type": "stopped" }).to_string());
-    }));
-    to_json(&manager.live_status().await)
+    };
+    let mut events = {
+        let mut running = LIVE_RUNNING.lock().await;
+        if *running {
+            let _ = sink.add(error_json("live_running", "the live watch is held already"));
+            return;
+        }
+        match manager.live_start().await {
+            Ok(events) => {
+                *running = true;
+                events
+            }
+            Err(e) => {
+                let _ = sink.add(core_error_json(&e));
+                return;
+            }
+        }
+    };
+    while let Some(event) = events.next().await {
+        let payload = to_json(&event);
+        if !matches!(event, LiveEvent::Transaction(_)) {
+            // The screens may not be listening; nothing is lost then.
+            let _ = LIVE_EVENTS.send(payload.clone());
+        }
+        if sink.add(payload).is_err() {
+            manager.live_stop().await;
+            break;
+        }
+    }
+    *LIVE_RUNNING.lock().await = false;
+    let stopped = json!({ "type": "stopped" }).to_string();
+    let _ = LIVE_EVENTS.send(stopped.clone());
+    let _ = sink.add(stopped);
 }
 
-/// Stops the live watch and closes its connection. Idempotent.
+/// Stops the live watch and closes its connection. Returns at once; the
+/// stream of [`live_run`] ends right after what the watch still held.
+/// Idempotent.
 pub async fn live_stop() -> String {
     let manager = try_json!(manager());
-    let mut task = LIVE_TASK.lock().await;
     manager.live_stop().await;
-    if let Some(running) = task.take() {
-        let _ = running.await;
-    }
     ok_json()
 }
 
@@ -1133,11 +1158,12 @@ pub async fn live_status() -> String {
     to_json(&manager.live_status().await)
 }
 
-/// Subscribes this isolate to the live events, each a serialized
-/// `LiveEvent`, plus `{"type":"stopped"}` when the watch ends. Returns
-/// once the listener is gone. A listener that lags loses the oldest
-/// events, never the watch: what was missed is on disk after the sync
-/// that caused it.
+/// Subscribes this isolate to what the running watch says for the
+/// screens (its status, the wallets it synced, blocks), each a
+/// serialized `LiveEvent`, plus
+/// `{"type":"stopped"}` when the watch ends. Returns once the listener
+/// is gone. A listener that lags loses the oldest events, never the
+/// watch, and never a transaction to announce.
 pub async fn live_events(sink: StreamSink<String>) {
     let mut events = LIVE_EVENTS.subscribe();
     loop {

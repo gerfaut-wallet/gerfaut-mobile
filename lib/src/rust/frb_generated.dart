@@ -69,7 +69,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 1043722216;
+  int get rustContentHash => 990427774;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -142,7 +142,7 @@ abstract class RustLibApi extends BaseApi {
 
   Stream<String> crateApiLiveEvents();
 
-  Future<String> crateApiLiveStart();
+  Stream<String> crateApiLiveRun();
 
   Future<String> crateApiLiveStatus();
 
@@ -886,31 +886,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "live_events", argNames: ["sink"]);
 
   @override
-  Future<String> crateApiLiveStart() {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 20,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
-          decodeErrorData: null,
+  Stream<String> crateApiLiveRun() {
+    final sink = RustStreamSink<String>();
+    unawaited(
+      handler.executeNormal(
+        NormalTask(
+          callFfi: (port_) {
+            final serializer = SseSerializer(generalizedFrbRustBinding);
+            sse_encode_StreamSink_String_Sse(sink, serializer);
+            pdeCallFfi(
+              generalizedFrbRustBinding,
+              serializer,
+              funcId: 20,
+              port: port_,
+            );
+          },
+          codec: SseCodec(
+            decodeSuccessData: sse_decode_unit,
+            decodeErrorData: null,
+          ),
+          constMeta: kCrateApiLiveRunConstMeta,
+          argValues: [sink],
+          apiImpl: this,
         ),
-        constMeta: kCrateApiLiveStartConstMeta,
-        argValues: [],
-        apiImpl: this,
       ),
     );
+    return sink.stream;
   }
 
-  TaskConstMeta get kCrateApiLiveStartConstMeta =>
-      const TaskConstMeta(debugName: "live_start", argNames: []);
+  TaskConstMeta get kCrateApiLiveRunConstMeta =>
+      const TaskConstMeta(debugName: "live_run", argNames: ["sink"]);
 
   @override
   Future<String> crateApiLiveStatus() {

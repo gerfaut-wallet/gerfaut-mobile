@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1043722216;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 990427774;
 
 // Section: executor
 
@@ -765,7 +765,7 @@ fn wire__crate__api__live_events_impl(
         },
     )
 }
-fn wire__crate__api__live_start_impl(
+fn wire__crate__api__live_run_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -773,7 +773,7 @@ fn wire__crate__api__live_start_impl(
 ) {
     FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "live_start",
+            debug_name: "live_run",
             port: Some(port_),
             mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
         },
@@ -787,11 +787,17 @@ fn wire__crate__api__live_start_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_sink =
+                <StreamSink<String, flutter_rust_bridge::for_generated::SseCodec>>::sse_decode(
+                    &mut deserializer,
+                );
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, ()>(
                     (move || async move {
-                        let output_ok = Result::<_, ()>::Ok(crate::api::live_start().await)?;
+                        let output_ok = Result::<_, ()>::Ok({
+                            crate::api::live_run(api_sink).await;
+                        })?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -2872,7 +2878,7 @@ fn pde_ffi_dispatcher_primary_impl(
         17 => wire__crate__api__inspect_certificate_impl(port, ptr, rust_vec_len, data_len),
         18 => wire__crate__api__list_wallets_impl(port, ptr, rust_vec_len, data_len),
         19 => wire__crate__api__live_events_impl(port, ptr, rust_vec_len, data_len),
-        20 => wire__crate__api__live_start_impl(port, ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__live_run_impl(port, ptr, rust_vec_len, data_len),
         21 => wire__crate__api__live_status_impl(port, ptr, rust_vec_len, data_len),
         22 => wire__crate__api__live_stop_impl(port, ptr, rust_vec_len, data_len),
         23 => wire__crate__api__live_tick_impl(port, ptr, rust_vec_len, data_len),
