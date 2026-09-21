@@ -440,6 +440,19 @@ void main() {
       expect(service.notifications.posted, hasLength(1));
     });
 
+    test('a heartbeat during the start makes no second run', () async {
+      final service = _Service(
+        _bridge(),
+        bootstrap: () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      final first = service.runner.run();
+      await service.send('tick');
+      await first;
+      await service.settle();
+      expect(service.bridge.liveStartCalls, 1);
+      expect(service.told.where((t) => t.$1 == 'status'), hasLength(1));
+    });
+
     test('a watch stopped on purpose stays stopped', () async {
       final service = _Service(
         _bridge(),

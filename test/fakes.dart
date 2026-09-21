@@ -1125,21 +1125,39 @@ class FakeBridge implements GerfautBridge {
   BridgeException? runRefusal;
 
   @override
-  Stream<LiveEvent> liveRun() async* {
-    liveStartCalls++;
-    final refusal = runRefusal;
-    if (refusal != null) throw refusal;
-    if (watchStatus.state == WatchState.off) {
-      watchStatus = const LiveWatchStatus(
-        state: WatchState.connected,
-        transport: WatchTransport.electrum,
-        server: 'electrum.example',
-      );
-    }
-    await for (final event in liveController.stream) {
-      yield event;
-      if (event is LiveStopped) return;
-    }
+  Stream<LiveEvent> liveRun() {
+    // Attached to the fake watch the moment the run is listened to, as
+    // the core holds its events for the one caller.
+    StreamSubscription<LiveEvent>? inner;
+    late final StreamController<LiveEvent> out;
+    out = StreamController<LiveEvent>(
+      onListen: () {
+        liveStartCalls++;
+        final refusal = runRefusal;
+        if (refusal != null) {
+          out
+            ..addError(refusal)
+            ..close();
+          return;
+        }
+        if (watchStatus.state == WatchState.off) {
+          watchStatus = const LiveWatchStatus(
+            state: WatchState.connected,
+            transport: WatchTransport.electrum,
+            server: 'electrum.example',
+          );
+        }
+        inner = liveController.stream.listen((event) {
+          out.add(event);
+          if (event is LiveStopped) {
+            inner?.cancel();
+            out.close();
+          }
+        });
+      },
+      onCancel: () => inner?.cancel(),
+    );
+    return out.stream;
   }
 
   @override

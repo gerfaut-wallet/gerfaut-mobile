@@ -397,6 +397,14 @@ class LiveRunner {
 
   StreamSubscription<LiveEvent>? _events;
   bool _started = false;
+
+  /// The start under way: the heartbeat and a change of network may ask
+  /// for one while the first is still opening the vault.
+  Future<bool>? _starting;
+
+  /// Which run the subscription belongs to: the end of an older one
+  /// must not be taken for the end of the current.
+  int _run = 0;
   bool _stopping = false;
   Completer<void>? _ended;
   final Map<String, List<LiveTx>> _pending = {};
@@ -429,8 +437,13 @@ class LiveRunner {
   }
 
   /// True once the watch runs. Stands the service down when the
-  /// settings do not ask for Live, or the app is disguised.
-  Future<bool> _ensureStarted() async {
+  /// settings do not ask for Live, or the app is disguised. One start at
+  /// a time: a caller that comes during one waits for its answer.
+  Future<bool> _ensureStarted() {
+    return _starting ??= _start().whenComplete(() => _starting = null);
+  }
+
+  Future<bool> _start() async {
     if (_started) return true;
     if (_stopping) return false;
     try {
@@ -444,14 +457,16 @@ class LiveRunner {
         await _tell('standDown');
         return false;
       }
+      // Said before the run begins, so what the run says comes after.
+      await _tell('status', liveNotificationText(const LiveWatchStatus()));
+      final run = ++_run;
       _started = true;
       _events = bridge.liveRun().listen(
         _onEvent,
         // A run that could not start ends right after: see onDone.
         onError: (Object _) {},
-        onDone: _runEnded,
+        onDone: () => _runEnded(run),
       );
-      await _tell('status', liveNotificationText(const LiveWatchStatus()));
       return true;
     } catch (_) {
       await _tell('status', 'Waiting to start');
@@ -523,7 +538,8 @@ class LiveRunner {
   /// The run is over: the watch stopped, on purpose or not, or it could
   /// not start. Not asked for here, it is started again, and catches up
   /// on what it missed.
-  void _runEnded() {
+  void _runEnded(int run) {
+    if (run != _run) return;
     _started = false;
     _events = null;
     final ended = _ended;
