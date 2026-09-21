@@ -339,12 +339,11 @@ PremiumFailure premiumFailure(BridgeException error, {String? refusal}) {
       detail: error.message,
     ),
     // Nothing is wrong with what was asked: the server wants a pause,
-    // and says how long when it knows.
+    // and says how long when it knows. Word for word what the desktop
+    // app says.
     PremiumFailureKind.rateLimited => PremiumFailure(switch (error.retryAfter) {
-      final int seconds when seconds > 0 =>
-        'The Gerfaut server asks for a pause. Try again in '
-            '${_waitWords(seconds)}.',
-      _ => 'The Gerfaut server asks for a pause. Try again in a moment.',
+      final int seconds => 'The server asks to wait. Try again in $seconds s.',
+      null => 'The server asks to wait. Try again in a moment.',
     }, retry: true),
     PremiumFailureKind.unknownKey => const PremiumFailure(
       'Unknown key.',
@@ -383,12 +382,6 @@ PremiumFailure premiumFailure(BridgeException error, {String? refusal}) {
       retry: true,
     ),
   };
-}
-
-/// A wait in the unit a person counts it in.
-String _waitWords(int seconds) {
-  if (seconds < 90) return '$seconds s';
-  return '${(seconds / 60).ceil()} min';
 }
 
 /// The sentence a failing status carried, capitalized and stopped, or

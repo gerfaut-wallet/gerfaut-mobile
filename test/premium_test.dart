@@ -211,22 +211,23 @@ void main() {
           retryAfter: 42,
         ),
       );
-      expect(
-        named.message,
-        'The Gerfaut server asks for a pause. Try again in 42 s.',
-      );
+      // Word for word what the desktop app says.
+      expect(named.message, 'The server asks to wait. Try again in 42 s.');
       expect(named.retry, isTrue);
       expect(named.detail, isNull);
 
       final long = premiumFailure(
         const BridgeException('premium_rate_limited', 'x', retryAfter: 600),
       );
-      expect(long.message, contains('Try again in 10 min.'));
+      expect(long.message, 'The server asks to wait. Try again in 600 s.');
 
       final unnamed = premiumFailure(
         const BridgeException('premium_rate_limited', 'x'),
       );
-      expect(unnamed.message, contains('Try again in a moment.'));
+      expect(
+        unnamed.message,
+        'The server asks to wait. Try again in a moment.',
+      );
     });
 
     test('the kinds and the cases that answer them line up', () {
