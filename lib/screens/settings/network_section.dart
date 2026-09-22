@@ -505,7 +505,7 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
               // The card below is the one that knows which Tor is used
               // and can test it; this line only says a .onion will take
               // that route. Naming a port and asking for Orbot outlived
-              // the built-in client (D-19).
+              // the built-in client.
               Text(
                 'An address ending in .onion goes through Tor; the Tor '
                 'card below says which one and lets you test it.',

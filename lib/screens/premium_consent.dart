@@ -12,7 +12,7 @@ import '../widgets/wallet_icon.dart';
 /// single-address wallet, leaves the device: a
 /// whole page, once per wallet, never replayed.
 ///
-/// The note is red because privacy is what is at stake (D-20): the
+/// The note is red because privacy is what is at stake: the
 /// server will derive every address of the wallet, present and future,
 /// and see when coins move. The page says so in plain words, lists
 /// exactly what is sent, and puts the yes where a thumb finds it.

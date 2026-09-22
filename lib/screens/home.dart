@@ -226,7 +226,7 @@ class HomeScreen extends ConsumerWidget {
 }
 
 /// The red banner at the head of the home screen when the server has
-/// missed two heartbeats in a row (B-60): the wallets handed to it are
+/// missed two heartbeats in a row: the wallets handed to it are
 /// not being watched, and the app says so until acknowledged or until a
 /// beat verifies again. The app's own sync goes on underneath as before.
 /// Nothing at all while the server answers, or while no wallet is
