@@ -284,24 +284,28 @@ const int notificationTitleMax = 64;
 String notificationTitle(String name) {
   final plain = StringBuffer();
   for (final rune in name.runes) {
-    if (_bidiControls.contains(rune)) continue;
+    if (_invisible.contains(rune)) continue;
     // A control character, a line break among them, is a space here.
     final control = rune < 0x20 || (rune >= 0x7F && rune <= 0x9F);
     plain.writeCharCode(control ? 0x20 : rune);
   }
   final flat = plain.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
-  if (flat.isEmpty) return 'Wallet';
+  if (flat.isEmpty) return lockedTitle;
   final runes = flat.runes.toList();
   if (runes.length <= notificationTitleMax) return flat;
   final cut = String.fromCharCodes(runes.take(notificationTitleMax - 1));
   return '${cut.trimRight()}…';
 }
 
-/// The marks that change the direction text is laid out in: the Arabic
-/// letter mark, the left-to-right and right-to-left marks, the
-/// embeddings and overrides, and the isolates.
-const Set<int> _bidiControls = {
+/// Characters that draw nothing yet reorder or hide what is around
+/// them, the set the desktop app strips: the Arabic letter mark, the
+/// left-to-right and right-to-left marks, the embeddings, overrides and
+/// isolates, the zero-width space, the word joiner and the byte order
+/// mark. The two zero-width joiners stay: some scripts and emoji need
+/// them.
+const Set<int> _invisible = {
   0x061C,
+  0x200B,
   0x200E,
   0x200F,
   0x202A,
@@ -313,6 +317,8 @@ const Set<int> _bidiControls = {
   0x2067,
   0x2068,
   0x2069,
+  0x2060,
+  0xFEFF,
 };
 
 /// Whether notifications are said as [NewTxAnnouncer.compose] says

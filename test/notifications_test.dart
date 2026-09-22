@@ -268,12 +268,17 @@ void main() {
       expect(notices.single.title, 'gnivas Cold storage');
     });
 
-    test('a long name is cut, and a name of marks alone says wallet', () {
+    test('a long name is cut, and a name of marks alone says Gerfaut', () {
       final long = notificationTitle('x' * 200);
       expect(long.runes.length, notificationTitleMax);
       expect(long, endsWith('…'));
       expect(notificationTitle('Cold storage'), 'Cold storage');
-      expect(notificationTitle('\u200E\u202E\u0000 '), 'Wallet');
+      expect(notificationTitle('\u200E\u202E\u0000 '), 'Gerfaut');
+      // As on the desktop: what hides between letters goes, the joiners
+      // an emoji needs stay.
+      expect(notificationTitle('Cold\u200B\u2060\uFEFFstorage'), 'Coldstorage');
+      const coder = '\u{1F468}\u200D\u{1F4BB}';
+      expect(notificationTitle(coder), coder);
       // Letters outside the basic plane are counted, and kept, whole.
       expect(notificationTitle('₿ 🦅 Vault'), '₿ 🦅 Vault');
     });
