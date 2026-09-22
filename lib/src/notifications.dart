@@ -150,7 +150,13 @@ class NewTxAnnouncer {
   /// one line counting the rest. A payment that is no longer coming is
   /// always said on its own, never folded into the count: it takes back
   /// what an earlier notice promised. Pure: the same transactions,
-  /// names, unit and mask always say the same.
+  /// names, unit, mask and lock always say the same.
+  ///
+  /// While balances are masked, no amount. While an app lock is set, no
+  /// amount and no wallet name either: the title is the app's, the body
+  /// says what happened and nothing more, word for word as the desktop
+  /// app says it. A notification is read on a phone whose app is locked
+  /// the moment it leaves the screen, by whoever holds it.
   ///
   /// Every notice about one payment carries its id, the txid it was
   /// first announced under, so the confirmation, a fee bump's included,
@@ -161,6 +167,7 @@ class NewTxAnnouncer {
     required Map<String, String> walletNames,
     required AmountUnit unit,
     required bool masked,
+    required bool locked,
   }) {
     final byWallet = <String, List<LiveTx>>{};
     for (final tx in txs) {
@@ -168,14 +175,16 @@ class NewTxAnnouncer {
     }
     final notices = <TxNotice>[];
     for (final MapEntry(key: walletId, value: mine) in byWallet.entries) {
-      final title = notificationTitle(walletNames[walletId] ?? walletId);
+      final title = locked
+          ? lockedTitle
+          : notificationTitle(walletNames[walletId] ?? walletId);
       TxNotice notice(LiveTx tx) => TxNotice(
         // The wallet is part of it: a payment from one watched wallet to
         // another is announced for each, and neither takes the other's
         // place.
         id: noticeId('${tx.walletId}:${tx.payment}'),
         title: title,
-        body: _describe(tx, unit: unit, masked: masked),
+        body: locked ? _generic(tx) : _describe(tx, unit: unit, masked: masked),
       );
       final moved = [
         for (final tx in mine)
@@ -206,12 +215,14 @@ class NewTxAnnouncer {
     required Map<String, String> walletNames,
     required AmountUnit unit,
     required bool masked,
+    required bool locked,
   }) async {
     final notices = compose(
       txs,
       walletNames: walletNames,
       unit: unit,
       masked: masked,
+      locked: locked,
     );
     for (final notice in notices) {
       await service.show(notice.id, notice.title, notice.body);
@@ -239,6 +250,24 @@ String _describe(LiveTx tx, {required AmountUnit unit, required bool masked}) {
   return tx.stage == TxStage.confirmed
       ? '$what · confirmed'
       : '$what · pending';
+}
+
+/// The title of every notification while an app lock is set.
+const String lockedTitle = 'Gerfaut';
+
+/// What a notification says while an app lock is set: what happened,
+/// and nothing of the wallet or the amount. The desktop app's words.
+String _generic(LiveTx tx) {
+  final outgoing = tx.netSats < 0;
+  return switch (tx.stage) {
+    TxStage.mempool =>
+      outgoing
+          ? 'New outgoing transaction · pending'
+          : 'New transaction · pending',
+    TxStage.confirmed =>
+      outgoing ? 'Outgoing transaction confirmed' : 'Transaction confirmed',
+    TxStage.dropped => 'A pending payment is no longer coming',
+  };
 }
 
 String _plural(int count, String noun) =>
@@ -286,11 +315,14 @@ const Set<int> _bidiControls = {
   0x2069,
 };
 
-/// Whether a notification may carry an amount: never while balances are
-/// masked, and never while an app lock exists. A notification is read
-/// from outside the lock, by whoever holds the phone.
-bool amountsHidden(Settings settings) =>
-    settings.appPrefs['mobile.masked'] == '1' || settings.appLock != null;
+/// Whether notifications are said as [NewTxAnnouncer.compose] says
+/// them under a lock: while an app lock is set.
+bool notifiesLocked(Settings settings) => settings.appLock != null;
+
+/// Whether notifications leave the amounts out: while balances are
+/// masked.
+bool notifiesMasked(Settings settings) =>
+    settings.appPrefs['mobile.masked'] == '1';
 
 /// What the syncs behind these reports found that nobody has announced
 /// yet, in order, taken off the core's record. Every wallet is asked,
@@ -346,14 +378,17 @@ class SyncAnnouncer {
       final wallets =
           _ref.read(walletsProvider).valueOrNull ??
           await _ref.read(bridgeProvider).listWallets();
-      final lock = _ref.read(settingsProvider).valueOrNull?.appLock;
+      // Settings not read yet say nothing of a lock: said as if there
+      // were one, rather than a name and an amount a lock would hide.
+      final settings = _ref.read(settingsProvider).valueOrNull;
       await _ref
           .read(newTxAnnouncerProvider)
           .announce(
             claimed,
             walletNames: {for (final w in wallets) w.id: w.name},
             unit: _ref.read(unitProvider),
-            masked: _ref.read(maskedProvider) || lock != null,
+            masked: _ref.read(maskedProvider),
+            locked: settings == null || notifiesLocked(settings),
           );
     } catch (_) {
       // A notification that cannot be posted is not a failed sync.

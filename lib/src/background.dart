@@ -119,7 +119,8 @@ Future<bool> runBackgroundCheck({
       claimed,
       walletNames: {for (final wallet in wallets) wallet.id: wallet.name},
       unit: AmountUnit.fromId(prefs['display.unit']) ?? AmountUnit.btc,
-      masked: amountsHidden(settings),
+      masked: notifiesMasked(settings),
+      locked: notifiesLocked(settings),
     );
     return true;
   } catch (_) {

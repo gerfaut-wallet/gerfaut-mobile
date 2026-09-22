@@ -571,7 +571,8 @@ class LiveRunner {
         txs,
         walletNames: {for (final wallet in wallets) wallet.id: wallet.name},
         unit: AmountUnit.fromId(prefs['display.unit']) ?? AmountUnit.btc,
-        masked: amountsHidden(settings),
+        masked: notifiesMasked(settings),
+        locked: notifiesLocked(settings),
       );
     } catch (_) {
       // A notification that cannot be posted ends nothing: the

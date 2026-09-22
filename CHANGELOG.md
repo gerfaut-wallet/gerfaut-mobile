@@ -75,7 +75,10 @@ The first release: Gerfaut for Android.
   notice, and its confirmation takes the place of the pending one. An
   incoming payment that leaves the mempool before it confirms, with nothing
   in its place that pays the wallet, gets one more notice saying it is no
-  longer coming. While an app lock is set, notifications carry no amounts.
+  longer coming. While an app lock is set, a notification names no wallet
+  and no amount: it is titled Gerfaut and only says what happened, as in
+  "New transaction · pending". Without a lock it is titled with the wallet's
+  name, and hiding the balances keeps the amount out of it.
 - Signet, testnet4 and regtest alongside mainnet.
 - Gerfaut Premium, as an eighth section of the settings. Enter the account
   key bought on gerfaut-wallet.com, switch a wallet on, and the server

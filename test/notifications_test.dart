@@ -72,6 +72,7 @@ List<String> bodies(
   List<SyncReport> reports, {
   AmountUnit unit = AmountUnit.btc,
   bool masked = false,
+  bool locked = false,
   Map<String, String> names = const {'w1': 'Cold storage'},
 }) {
   return NewTxAnnouncer.compose(
@@ -79,6 +80,7 @@ List<String> bodies(
     walletNames: names,
     unit: unit,
     masked: masked,
+    locked: locked,
   ).map((notice) => notice.body).toList();
 }
 
@@ -150,6 +152,82 @@ void main() {
       );
     });
 
+    test('under an app lock, no wallet and no amount: the desktop words', () {
+      List<TxNotice> said(List<LiveTx> txs) => NewTxAnnouncer.compose(
+        txs,
+        walletNames: const {'w1': 'Cold storage', 'w2': 'Spending'},
+        unit: AmountUnit.btc,
+        masked: false,
+        locked: true,
+      );
+      final notices = said(const [
+        LiveTx(
+          walletId: 'w1',
+          txid: 'a',
+          netSats: 5000,
+          stage: TxStage.mempool,
+        ),
+        LiveTx(
+          walletId: 'w1',
+          txid: 'b',
+          netSats: -700,
+          stage: TxStage.mempool,
+        ),
+        LiveTx(
+          walletId: 'w1',
+          txid: 'c',
+          netSats: 5000,
+          stage: TxStage.confirmed,
+        ),
+        LiveTx(
+          walletId: 'w2',
+          txid: 'd',
+          netSats: -700,
+          stage: TxStage.confirmed,
+        ),
+        LiveTx(walletId: 'w2', txid: 'e', netSats: 900, stage: TxStage.dropped),
+      ]);
+      expect(notices.map((n) => n.title).toSet(), {'Gerfaut'});
+      expect(notices.map((n) => n.body), [
+        'New transaction · pending',
+        'New outgoing transaction · pending',
+        'Transaction confirmed',
+        'Outgoing transaction confirmed',
+        'A pending payment is no longer coming',
+      ]);
+      // Masked or not, the lock says the same.
+      expect(
+        bodies(
+          [
+            report([tx(-1000000)]),
+          ],
+          masked: true,
+          locked: true,
+        ),
+        ['Outgoing transaction confirmed'],
+      );
+      // Nothing of a name reaches the notification, not even a stripped
+      // piece of it.
+      for (final notice in notices) {
+        expect(notice.title + notice.body, isNot(contains('Cold')));
+        expect(notice.title + notice.body, isNot(contains('BTC')));
+      }
+    });
+
+    test('without a lock, the name stays and a mask hides the amount', () {
+      final notices = NewTxAnnouncer.compose(
+        claimed([
+          report([tx(1000000, confirmed: false)]),
+        ]),
+        walletNames: const {'w1': 'Cold storage'},
+        unit: AmountUnit.btc,
+        masked: true,
+        locked: false,
+      );
+      expect(notices.single.title, 'Cold storage');
+      expect(notices.single.body, 'New transaction · pending');
+    });
+
     test('past three, the rest are counted in one line', () {
       final many = [
         for (var i = 0; i < 5; i++) tx(1000 * (i + 1), txid: 'tx$i'),
@@ -168,6 +246,7 @@ void main() {
         walletNames: const {'w1': 'Cold storage'},
         unit: AmountUnit.btc,
         masked: false,
+        locked: false,
       );
       expect(notices.map((n) => n.title), ['Cold storage', 'w2']);
     });
@@ -184,6 +263,7 @@ void main() {
         },
         unit: AmountUnit.btc,
         masked: false,
+        locked: false,
       );
       expect(notices.single.title, 'gnivas Cold storage');
     });
@@ -204,6 +284,7 @@ void main() {
         walletNames: const {'w1': 'Cold storage'},
         unit: AmountUnit.btc,
         masked: false,
+        locked: false,
       );
       final pending = say(
         const LiveTx(
@@ -255,6 +336,7 @@ void main() {
         walletNames: const {'w1': 'Spending', 'w2': 'Cold storage'},
         unit: AmountUnit.btc,
         masked: false,
+        locked: false,
       );
       expect(notices.map((n) => n.title), ['Spending', 'Cold storage']);
       expect(notices.map((n) => n.id).toSet(), hasLength(2));
@@ -344,6 +426,23 @@ void main() {
         service.posted.single.body,
         'Received ${formatAmount(1000, AmountUnit.btc)} · confirmed',
       );
+    });
+
+    test('under an app lock, the open app names no wallet either', () async {
+      final service = FakeNotifications();
+      final bridge = FakeBridge(wallets: [makeMeta()])
+        ..lock = const AppLock(kind: LockKind.pin, biometric: false);
+      var round = 0;
+      bridge.onSyncWallet = (id) =>
+          report([tx(1000, txid: 'tx${round++}')], id: id);
+      final made = container(bridge, service);
+      await made.read(settingsProvider.future);
+      await made.read(notifyNewTxProvider.notifier).set(true);
+
+      await made.read(syncProvider.notifier).syncWallet('w1');
+      await made.read(syncProvider.notifier).syncWallet('w1');
+      expect(service.posted.single.title, 'Gerfaut');
+      expect(service.posted.single.body, 'Transaction confirmed');
     });
 
     test('a sync that found nothing says nothing', () async {

@@ -267,7 +267,7 @@ void main() {
       );
     });
 
-    test('no amount while an app lock exists', () async {
+    test('no wallet and no amount while an app lock exists', () async {
       final service = _Service(
         _bridge(lock: const AppLock(kind: LockKind.pin, biometric: false)),
       );
@@ -276,10 +276,9 @@ void main() {
         ..add(LiveTransaction(_live('ee', -9000)))
         ..add(LiveWalletSynced(_report()));
       await service.settle();
-      expect(
-        service.notifications.posted.single.body,
-        'New outgoing transaction · pending',
-      );
+      final posted = service.notifications.posted.single;
+      expect(posted.title, 'Gerfaut');
+      expect(posted.body, 'New outgoing transaction · pending');
     });
 
     test('the unit is the one on screen', () async {
@@ -493,6 +492,27 @@ void main() {
       final bridge = _bridge();
       await check(bridge);
       expect(bridge.syncAllCalls, 1);
+    });
+
+    test('says nothing of the wallet under an app lock', () async {
+      final bridge = _bridge(
+        prefs: {'notify.new_tx': '1', 'notify.background': '900'},
+        lock: const AppLock(kind: LockKind.pin, biometric: false),
+      )..syncedIds.add('w1');
+      final pending = _report(
+        fresh: [const NewTx(txid: 'aa', netSats: 5000, confirmed: false)],
+      );
+      bridge.onSyncAll = (_) => SyncAllReport(reports: [pending], failures: []);
+      final notifications = FakeNotifications();
+      await runBackgroundCheck(
+        bridge: bridge,
+        service: notifications,
+        bootstrap: () async {},
+        isDisguised: () async => false,
+      );
+      final posted = notifications.posted.single;
+      expect(posted.title, 'Gerfaut');
+      expect(posted.body, 'New transaction · pending');
     });
 
     test('syncs as before at a periodic cadence', () async {
@@ -721,12 +741,14 @@ void main() {
     List<String> said(
       List<LiveTx> txs, {
       bool masked = false,
+      bool locked = false,
       AmountUnit unit = AmountUnit.btc,
     }) => NewTxAnnouncer.compose(
       txs,
       walletNames: const {'w1': 'Cold storage'},
       unit: unit,
       masked: masked,
+      locked: locked,
     ).map((notice) => notice.body).toList();
 
     test('names the amount, in the unit on screen', () {
@@ -755,6 +777,7 @@ void main() {
         walletNames: const {'w1': 'Cold storage'},
         unit: AmountUnit.btc,
         masked: false,
+        locked: false,
       );
       expect(notices.map((n) => n.id).toSet(), hasLength(1));
       expect(notices.map((n) => n.title).toSet(), {'Cold storage'});
@@ -785,7 +808,7 @@ void main() {
           service.notifications.posted.single.body,
           'A pending payment is no longer coming',
         );
-        expect(service.notifications.posted.single.title, 'Cold storage');
+        expect(service.notifications.posted.single.title, 'Gerfaut');
       },
     );
   });
