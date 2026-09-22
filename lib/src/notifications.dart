@@ -24,6 +24,9 @@ abstract class NotificationService {
 
   /// Posts a notification, replacing the one already up under [id].
   Future<void> show(int id, String title, String body);
+
+  /// Takes every notification the app has posted off the screen.
+  Future<void> cancelAll();
 }
 
 /// The one channel Gerfaut posts on; the user tunes or silences it
@@ -94,6 +97,12 @@ class LocalNotificationService implements NotificationService {
       ),
     );
   }
+
+  /// Every notification of the app, whichever isolate posted it. Not
+  /// the one of a foreground service still running: Android keeps it
+  /// until the service stops.
+  @override
+  Future<void> cancelAll() => _plugin.cancelAll();
 }
 
 final notificationServiceProvider = Provider<NotificationService>(

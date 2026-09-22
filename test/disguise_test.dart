@@ -29,6 +29,10 @@ class _NoBiometrics implements BiometricGate {
 /// Records what would have been posted instead of touching the platform.
 class _RecordingNotifications implements NotificationService {
   final List<String> posted = [];
+  int cleared = 0;
+
+  /// Answers a clear the way a platform without the plugin does.
+  bool refuseClear = false;
   @override
   Future<void> init() async {}
   @override
@@ -36,6 +40,12 @@ class _RecordingNotifications implements NotificationService {
   @override
   Future<void> show(int id, String title, String body) async =>
       posted.add(body);
+  @override
+  Future<void> cancelAll() async {
+    if (refuseClear) throw MissingPluginException();
+    cleared++;
+    posted.clear();
+  }
 }
 
 const AppLock _pinLock = AppLock(kind: LockKind.pin, biometric: false);
@@ -56,12 +66,19 @@ FakeBridge _locked({AppLock lock = _pinLock, String secret = '1234'}) {
     ..lockSecret = secret;
 }
 
-Widget _securityApp(FakeBridge bridge, FakeDisguise disguise) {
+Widget _securityApp(
+  FakeBridge bridge,
+  FakeDisguise disguise, {
+  _RecordingNotifications? notifications,
+}) {
   return ProviderScope(
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
       disguiseServiceProvider.overrideWithValue(disguise),
       biometricGateProvider.overrideWithValue(_NoBiometrics()),
+      notificationServiceProvider.overrideWithValue(
+        notifications ?? _RecordingNotifications(),
+      ),
     ],
     child: MaterialApp(
       theme: themeFrom(GerfautTokens.light, Brightness.light),
@@ -203,6 +220,51 @@ void main() {
       expect(tester.widget<Switch>(_disguiseSwitch()).value, isTrue);
     });
 
+    testWidgets('turning it on takes what was said off the shade', (
+      tester,
+    ) async {
+      // A notification from before stays in the shade otherwise, headed
+      // "Gerfaut" and titled with a wallet's name, over the calculator.
+      final disguise = FakeDisguise();
+      final notifications = _RecordingNotifications();
+      await notifications.show(1, 'Cold storage', 'New transaction · pending');
+      await tester.pumpWidget(
+        _securityApp(_locked(), disguise, notifications: notifications),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(_disguiseSwitch());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Turn on the disguise'));
+      await tester.pumpAndSettle();
+
+      expect(disguise.disguised, isTrue);
+      expect(notifications.cleared, 1);
+      expect(notifications.posted, isEmpty);
+    });
+
+    testWidgets('a notification that cannot be cleared keeps the disguise', (
+      tester,
+    ) async {
+      final disguise = FakeDisguise();
+      await tester.pumpWidget(
+        _securityApp(
+          _locked(),
+          disguise,
+          notifications: _RecordingNotifications()..refuseClear = true,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(_disguiseSwitch());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Turn on the disguise'));
+      await tester.pumpAndSettle();
+
+      expect(disguise.disguised, isTrue);
+      expect(tester.widget<Switch>(_disguiseSwitch()).value, isTrue);
+    });
+
     testWidgets('a launcher that refuses leaves the switch off and says why', (
       tester,
     ) async {
@@ -240,7 +302,10 @@ void main() {
 
     testWidgets('turning it off reverses all of it', (tester) async {
       final disguise = FakeDisguise(disguised: true);
-      await tester.pumpWidget(_securityApp(_locked(), disguise));
+      final notifications = _RecordingNotifications();
+      await tester.pumpWidget(
+        _securityApp(_locked(), disguise, notifications: notifications),
+      );
       await tester.pumpAndSettle();
 
       expect(tester.widget<Switch>(_disguiseSwitch()).value, isTrue);
@@ -250,6 +315,7 @@ void main() {
       // The app's own face back first, then its widgets.
       expect(disguise.calls, ['disguise:false', 'widgets:true']);
       expect(disguise.disguised, isFalse);
+      expect(notifications.cleared, 0);
     });
 
     testWidgets('removing the PIN while disguised drops the disguise with it', (

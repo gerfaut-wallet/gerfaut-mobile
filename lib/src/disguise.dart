@@ -135,6 +135,15 @@ class DisguiseController extends Notifier<DisguiseState> {
       }
       await service.setWidgetsEnabled(false);
       await service.setDisguised(true);
+      // What was said before stays in the shade otherwise, headed with
+      // the app's name and titled with a wallet's, over a calculator.
+      // After the swap: nothing posted from now on gets past the
+      // disguise, so this is the last of it.
+      try {
+        await ref.read(notificationServiceProvider).cancelAll();
+      } catch (_) {
+        // The disguise is on all the same; the shade is the user's.
+      }
     } else {
       await service.setDisguised(false);
       await service.setWidgetsEnabled(true);

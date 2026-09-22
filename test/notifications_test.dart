@@ -37,6 +37,9 @@ class FakeNotifications implements NotificationService {
   Future<void> show(int id, String title, String body) async {
     posted.add((id: id, title: title, body: body));
   }
+
+  @override
+  Future<void> cancelAll() async => posted.clear();
 }
 
 NewTx tx(int sats, {String txid = 'a', bool confirmed = true}) =>
