@@ -152,9 +152,10 @@ class NewTxAnnouncer {
   /// what an earlier notice promised. Pure: the same transactions,
   /// names, unit and mask always say the same.
   ///
-  /// Every notice about one transaction carries its id, so the
-  /// confirmation, or the news that it is not coming, takes the place
-  /// of the arrival instead of stacking under it.
+  /// Every notice about one payment carries its id, the txid it was
+  /// first announced under, so the confirmation, a fee bump's included,
+  /// or the news that it is not coming takes the place of the arrival
+  /// instead of stacking under it.
   static List<TxNotice> compose(
     List<LiveTx> txs, {
     required Map<String, String> walletNames,
@@ -169,7 +170,7 @@ class NewTxAnnouncer {
     for (final MapEntry(key: walletId, value: mine) in byWallet.entries) {
       final title = notificationTitle(walletNames[walletId] ?? walletId);
       TxNotice notice(LiveTx tx) => TxNotice(
-        id: noticeId(tx.txid),
+        id: noticeId(tx.payment),
         title: title,
         body: _describe(tx, unit: unit, masked: masked),
       );

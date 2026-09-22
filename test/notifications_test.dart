@@ -198,6 +198,63 @@ void main() {
       expect(notificationTitle('₿ 🦅 Vault'), '₿ 🦅 Vault');
     });
 
+    test('a fee bump confirms in the place of its pending notice', () {
+      List<TxNotice> say(LiveTx tx) => NewTxAnnouncer.compose(
+        [tx],
+        walletNames: const {'w1': 'Cold storage'},
+        unit: AmountUnit.btc,
+        masked: false,
+      );
+      final pending = say(
+        const LiveTx(
+          walletId: 'w1',
+          txid: 'first',
+          netSats: 50000,
+          stage: TxStage.mempool,
+        ),
+      ).single;
+      final bumped = say(
+        const LiveTx(
+          walletId: 'w1',
+          txid: 'bump',
+          netSats: 49600,
+          stage: TxStage.confirmed,
+          replaces: 'first',
+        ),
+      ).single;
+      expect(bumped.id, pending.id);
+      expect(bumped.body, endsWith('· confirmed'));
+      // Without a replaced txid, a transaction keeps an id of its own.
+      final other = say(
+        const LiveTx(
+          walletId: 'w1',
+          txid: 'bump',
+          netSats: 49600,
+          stage: TxStage.confirmed,
+        ),
+      ).single;
+      expect(other.id, isNot(pending.id));
+    });
+
+    test('the replaced txid is read from the core', () {
+      final bump = LiveTx.fromJson(const {
+        'wallet_id': 'w1',
+        'txid': 'bump',
+        'net_sats': 49600,
+        'stage': 'confirmed',
+        'replaces': 'first',
+      });
+      expect(bump.payment, 'first');
+      final plain = LiveTx.fromJson(const {
+        'wallet_id': 'w1',
+        'txid': 'plain',
+        'net_sats': 1000,
+        'stage': 'mempool',
+      });
+      expect(plain.replaces, isNull);
+      expect(plain.payment, 'plain');
+    });
+
     test('the same transaction always gets the same id', () {
       expect(noticeId('abc'), noticeId('abc'));
       expect(noticeId('abc'), isNot(noticeId('abd')));

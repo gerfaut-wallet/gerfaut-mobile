@@ -971,6 +971,7 @@ class LiveTx {
     required this.txid,
     required this.netSats,
     required this.stage,
+    this.replaces,
   });
 
   factory LiveTx.fromJson(Map<String, dynamic> json) {
@@ -979,6 +980,7 @@ class LiveTx {
       txid: json['txid'] as String,
       netSats: json['net_sats'] as int,
       stage: TxStage.fromId(json['stage'] as String?),
+      replaces: json['replaces'] as String?,
     );
   }
 
@@ -986,6 +988,15 @@ class LiveTx {
   final String txid;
   final int netSats;
   final TxStage stage;
+
+  /// The txid the payment was first announced under, when [txid] is a
+  /// fee bump of it the core recognised; null otherwise.
+  final String? replaces;
+
+  /// The txid the notifications about this payment go under: the first
+  /// one announced. A fee bump confirms under a txid of its own, and its
+  /// confirmation takes the place of the pending notice this way.
+  String get payment => replaces ?? txid;
 }
 
 /// Where the live watch stands.

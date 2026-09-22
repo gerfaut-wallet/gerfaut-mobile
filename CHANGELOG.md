@@ -72,10 +72,10 @@ The first release: Gerfaut for Android.
   measured on a phone yet.
 - A transaction is announced once when it appears and once when it confirms,
   whichever part of the app saw it first. A fee bump brings no second
-  notice. An incoming payment that leaves the mempool before it confirms,
-  with nothing in its place that pays the wallet, gets one more notice
-  saying it is no longer coming. While an app lock is set, notifications
-  carry no amounts.
+  notice, and its confirmation takes the place of the pending one. An
+  incoming payment that leaves the mempool before it confirms, with nothing
+  in its place that pays the wallet, gets one more notice saying it is no
+  longer coming. While an app lock is set, notifications carry no amounts.
 - Signet, testnet4 and regtest alongside mainnet.
 - Gerfaut Premium, as an eighth section of the settings. Enter the account
   key bought on gerfaut-wallet.com, switch a wallet on, and the server
