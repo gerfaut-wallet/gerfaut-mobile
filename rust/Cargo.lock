@@ -3802,6 +3802,7 @@ version = "0.1.0"
 dependencies = [
  "flutter_rust_bridge",
  "gerfaut-core",
+ "log",
  "serde",
  "serde_json",
  "tokio",

@@ -38,7 +38,25 @@ static MANAGER: OnceCell<WalletManager> = OnceCell::const_new();
 
 #[flutter_rust_bridge::frb(init)]
 pub fn init_app() {
-    flutter_rust_bridge::setup_default_user_utils();
+    match console_log_level(cfg!(debug_assertions)) {
+        Some(level) => flutter_rust_bridge::setup_log_to_console(level),
+        None => log::set_max_level(log::LevelFilter::Off),
+    }
+    // A panic still reaches Dart with its backtrace.
+    flutter_rust_bridge::setup_backtrace();
+}
+
+/// How much of what the crates log reaches the console, which is logcat
+/// on Android: everything in a debug build, nothing in a release one.
+///
+/// The Electrum client logs every request it sends and every answer it
+/// reads at the trace level: the scripts of every wallet, their
+/// histories, whole transactions. The WebSocket of a mempool instance
+/// logs every message the same way. Logcat is read over adb and goes
+/// into bug reports, past the app lock and the disguise, and the live
+/// watch would feed it all day.
+fn console_log_level(debug_build: bool) -> Option<log::LevelFilter> {
+    debug_build.then_some(log::LevelFilter::Trace)
 }
 
 // --- helpers -----------------------------------------------------------
@@ -1259,6 +1277,15 @@ mod tests {
 
     fn payload(error: &CoreError) -> Value {
         serde_json::from_str(&core_error_json(error)).expect("the payload is JSON")
+    }
+
+    /// A release build writes nothing to logcat: what the Electrum
+    /// client traces is every script and transaction of every wallet.
+    /// A debug build keeps the traces a developer reads.
+    #[test]
+    fn a_release_build_logs_nothing() {
+        assert_eq!(console_log_level(false), None);
+        assert_eq!(console_log_level(true), Some(log::LevelFilter::Trace));
     }
 
     /// The words of a refusal are the server's own, and nothing else:
