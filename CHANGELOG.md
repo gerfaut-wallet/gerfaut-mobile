@@ -54,22 +54,28 @@ The first release: Gerfaut for Android.
 - Local notifications when a sync finds something new. Nothing leaves the
   phone for them.
 - Live watch, a new choice under Settings, Notifications. Gerfaut keeps a
-  connection open to your own server and tells you within seconds when a
-  transaction reaches the mempool, and again at its first confirmation. It
-  runs with the app closed and comes back after a restart of the phone.
-  Android requires a small permanent notification for it, which has a Stop
-  button. A sheet explains all this before anything is turned on, then asks
-  for the battery exemption, which you can refuse. Your server learns what a
-  sync already tells it, plus the fact that your phone stays connected. A
-  check every 15 minutes stays scheduled for whenever Android stops Live.
-  Force-stopping the app ends Live until you open Gerfaut again, and what
-  arrived meanwhile is announced then. The calculator disguise turns Live
-  off. Battery use has not been measured on a phone yet.
-- A transaction is announced once when it appears and once when it
-  confirms, whichever part of the app saw it first. A fee bump brings no
-  second notice. An incoming payment that is replaced or dropped before it
-  confirms gets one more, saying it is no longer coming. While an app lock
-  is set, notifications carry no amounts.
+  connection open to the backend your syncs already use, and tells you when
+  a transaction reaches the mempool, then again at its first confirmation.
+  From an Electrum server that takes a few seconds; an Esplora server can
+  only be polled, so it takes longer. With the Automatic backend, the
+  connection goes first to an Electrum server run by one of the operators
+  the syncs rotate through. Live runs with the app closed and comes back
+  after a restart of the phone. Android requires a small permanent
+  notification for it, which has a Stop button. A sheet explains all this
+  before anything is turned on, then asks for the battery exemption, which
+  you can refuse. The server learns what a sync already tells it, plus how
+  long your phone stays connected and from where. A check every 15 minutes
+  stays scheduled for whenever Android stops Live. Force-stopping the app
+  ends Live until you open Gerfaut again, and what arrived in the meantime
+  is announced then. Turning the calculator disguise on turns Live off and
+  clears Gerfaut's notifications from the shade. Battery use has not been
+  measured on a phone yet.
+- A transaction is announced once when it appears and once when it confirms,
+  whichever part of the app saw it first. A fee bump brings no second
+  notice. An incoming payment that leaves the mempool before it confirms,
+  with nothing in its place that pays the wallet, gets one more notice
+  saying it is no longer coming. While an app lock is set, notifications
+  carry no amounts.
 - Signet, testnet4 and regtest alongside mainnet.
 - Gerfaut Premium, as an eighth section of the settings. Enter the account
   key bought on gerfaut-wallet.com, switch a wallet on, and the server
