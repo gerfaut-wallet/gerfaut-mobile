@@ -172,6 +172,32 @@ void main() {
       expect(notices.map((n) => n.title), ['Cold storage', 'w2']);
     });
 
+    test('a name that reorders or breaks the text is said plainly', () {
+      final notices = NewTxAnnouncer.compose(
+        claimed([
+          report([tx(1000)]),
+        ]),
+        // An override that shows "gnivas" as "saving", an isolate, a
+        // mark, and two lines.
+        walletNames: const {
+          'w1': '\u202Egnivas\u202C \u2067Cold\u2069\u200F\nstorage\t',
+        },
+        unit: AmountUnit.btc,
+        masked: false,
+      );
+      expect(notices.single.title, 'gnivas Cold storage');
+    });
+
+    test('a long name is cut, and a name of marks alone says wallet', () {
+      final long = notificationTitle('x' * 200);
+      expect(long.runes.length, notificationTitleMax);
+      expect(long, endsWith('…'));
+      expect(notificationTitle('Cold storage'), 'Cold storage');
+      expect(notificationTitle('\u200E\u202E\u0000 '), 'Wallet');
+      // Letters outside the basic plane are counted, and kept, whole.
+      expect(notificationTitle('₿ 🦅 Vault'), '₿ 🦅 Vault');
+    });
+
     test('the same transaction always gets the same id', () {
       expect(noticeId('abc'), noticeId('abc'));
       expect(noticeId('abc'), isNot(noticeId('abd')));

@@ -167,7 +167,7 @@ class NewTxAnnouncer {
     }
     final notices = <TxNotice>[];
     for (final MapEntry(key: walletId, value: mine) in byWallet.entries) {
-      final title = walletNames[walletId] ?? walletId;
+      final title = notificationTitle(walletNames[walletId] ?? walletId);
       TxNotice notice(LiveTx tx) => TxNotice(
         id: noticeId(tx.txid),
         title: title,
@@ -239,6 +239,48 @@ String _describe(LiveTx tx, {required AmountUnit unit, required bool masked}) {
 
 String _plural(int count, String noun) =>
     '$count $noun${count == 1 ? '' : 's'}';
+
+/// The longest wallet name a notification carries, in characters.
+const int notificationTitleMax = 64;
+
+/// A wallet's name as a notification carries it: on one line, without
+/// the invisible marks that reorder text or hide it, and at most
+/// [notificationTitleMax] characters. A name is typed, or comes in a
+/// backup made elsewhere, and the notification is read by whoever holds
+/// the phone: it names the wallet in plain letters or not at all.
+String notificationTitle(String name) {
+  final plain = StringBuffer();
+  for (final rune in name.runes) {
+    if (_bidiControls.contains(rune)) continue;
+    // A control character, a line break among them, is a space here.
+    final control = rune < 0x20 || (rune >= 0x7F && rune <= 0x9F);
+    plain.writeCharCode(control ? 0x20 : rune);
+  }
+  final flat = plain.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (flat.isEmpty) return 'Wallet';
+  final runes = flat.runes.toList();
+  if (runes.length <= notificationTitleMax) return flat;
+  final cut = String.fromCharCodes(runes.take(notificationTitleMax - 1));
+  return '${cut.trimRight()}…';
+}
+
+/// The marks that change the direction text is laid out in: the Arabic
+/// letter mark, the left-to-right and right-to-left marks, the
+/// embeddings and overrides, and the isolates.
+const Set<int> _bidiControls = {
+  0x061C,
+  0x200E,
+  0x200F,
+  0x202A,
+  0x202B,
+  0x202C,
+  0x202D,
+  0x202E,
+  0x2066,
+  0x2067,
+  0x2068,
+  0x2069,
+};
 
 /// Whether a notification may carry an amount: never while balances are
 /// masked, and never while an app lock exists. A notification is read
