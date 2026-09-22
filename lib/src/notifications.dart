@@ -170,7 +170,10 @@ class NewTxAnnouncer {
     for (final MapEntry(key: walletId, value: mine) in byWallet.entries) {
       final title = notificationTitle(walletNames[walletId] ?? walletId);
       TxNotice notice(LiveTx tx) => TxNotice(
-        id: noticeId(tx.payment),
+        // The wallet is part of it: a payment from one watched wallet to
+        // another is announced for each, and neither takes the other's
+        // place.
+        id: noticeId('${tx.walletId}:${tx.payment}'),
         title: title,
         body: _describe(tx, unit: unit, masked: masked),
       );

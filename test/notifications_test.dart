@@ -236,6 +236,30 @@ void main() {
       expect(other.id, isNot(pending.id));
     });
 
+    test('a payment between two watched wallets is said in each', () {
+      final notices = NewTxAnnouncer.compose(
+        const [
+          LiveTx(
+            walletId: 'w1',
+            txid: 'move',
+            netSats: -50000,
+            stage: TxStage.mempool,
+          ),
+          LiveTx(
+            walletId: 'w2',
+            txid: 'move',
+            netSats: 50000,
+            stage: TxStage.mempool,
+          ),
+        ],
+        walletNames: const {'w1': 'Spending', 'w2': 'Cold storage'},
+        unit: AmountUnit.btc,
+        masked: false,
+      );
+      expect(notices.map((n) => n.title), ['Spending', 'Cold storage']);
+      expect(notices.map((n) => n.id).toSet(), hasLength(2));
+    });
+
     test('the replaced txid is read from the core', () {
       final bump = LiveTx.fromJson(const {
         'wallet_id': 'w1',
