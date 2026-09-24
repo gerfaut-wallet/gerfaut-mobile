@@ -507,12 +507,14 @@ const Duration deviceCheckPeriod = Duration(minutes: 5);
 TxNotice deviceNotice(PremiumDevice device, {required bool locked}) {
   return TxNotice(
     id: noticeId('device:${device.id}'),
-    // Under an app lock the title is the app's own, as for every other
-    // notification: the body names no wallet and no amount already.
+    // Under an app lock the generic form every notification takes
+    // there: the app's name, and what happened without the particulars.
+    // The desktop app's words.
     title: locked ? lockedTitle : 'Gerfaut Premium: new device',
-    body:
-        'A new ${device.label} asks for access to your Premium account. '
-        'Open Gerfaut to approve or refuse it.',
+    body: locked
+        ? 'A new device asks for access. Open Gerfaut to approve or refuse it.'
+        : 'A new ${device.label} asks for access to your Premium account. '
+              'Open Gerfaut to approve or refuse it.',
   );
 }
 

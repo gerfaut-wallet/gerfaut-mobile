@@ -82,6 +82,13 @@ class _DevicesCardState extends ConsumerState<DevicesCard> {
   bool _verifying = false;
   BridgeException? _error;
 
+  /// What a benign confirmation says once the server has done it.
+  static String _done(DeviceAction action) => switch (action) {
+    DeviceAction.approve => 'Device approved',
+    DeviceAction.refuse => 'Device refused',
+    DeviceAction.disconnect => 'Device disconnected',
+  };
+
   void _ask(PremiumDevice device, DeviceAction action) {
     if (_busyId != null || _verifying) return;
     setState(() {
@@ -121,6 +128,9 @@ class _DevicesCardState extends ConsumerState<DevicesCard> {
       }
       if (!mounted) return;
       setState(() => _asking = null);
+      // The row itself says what changed; the toast only confirms it.
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(_done(action))));
     } on BridgeException catch (error) {
       if (mounted) setState(() => _error = error);
     } finally {

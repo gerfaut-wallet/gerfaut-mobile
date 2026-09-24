@@ -1837,7 +1837,7 @@ class _RemoveChannelQuestion extends StatelessWidget {
 
 /// What removing a channel asks first.
 const String removeChannelQuestion =
-    'Remove this channel? Alerts stop going to it at once.';
+    'Remove this channel? Gerfaut stops sending alerts to it at once.';
 
 /// One channel: its glyph, its kind, the masked target under it, the
 /// state as a pill when it has one, and the actions under a menu.

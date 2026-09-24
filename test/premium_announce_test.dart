@@ -38,9 +38,15 @@ void main() {
         'A new iPhone asks for access to your Premium account. Open Gerfaut '
         'to approve or refuse it.',
       );
-      // Under an app lock, the title every notification has there.
-      expect(deviceNotice(waiting, locked: true).title, 'Gerfaut');
-      expect(deviceNotice(waiting, locked: true).id, plain.id);
+      // Under an app lock, the generic form every notification takes
+      // there: the app's name, and no particulars.
+      final locked = deviceNotice(waiting, locked: true);
+      expect(locked.title, 'Gerfaut');
+      expect(
+        locked.body,
+        'A new device asks for access. Open Gerfaut to approve or refuse it.',
+      );
+      expect(locked.id, plain.id);
     });
   });
 
@@ -110,6 +116,7 @@ void main() {
       await tester.pumpWidget(wholeApp(bridge, notifications: notifications));
       await tester.pumpAndSettle();
       expect(notifications.posted.single.title, 'Gerfaut');
+      expect(notifications.posted.single.body, isNot(contains('Windows')));
     });
 
     testWidgets('disguised, nothing is posted, and nothing later', (

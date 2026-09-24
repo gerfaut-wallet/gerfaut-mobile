@@ -517,6 +517,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(screenLock.asked, [confirmItsYouTitle]);
       expect(bridge.premiumCalls, contains('approve:dev2'));
+      expect(find.text('Device approved'), findsOneWidget);
       expect(find.text('Waiting · 10 days left'), findsNothing);
       expect(find.text('Full access'), findsNWidgets(2));
       expect(find.text(DeviceAction.approve.question), findsNothing);
@@ -537,6 +538,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(bridge.premiumCalls, contains('remove-device:dev2'));
       expect(find.text('Windows computer'), findsNothing);
+      expect(find.text('Device refused'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
     });
 
     testWidgets('disconnecting a device with access goes by its menu', (
@@ -557,6 +560,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(bridge.premiumCalls, contains('remove-device:dev2'));
       expect(find.text('Linux computer'), findsNothing);
+      expect(find.text('Device disconnected'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
     });
 
     testWidgets('a refused check sends nothing and keeps the question', (
