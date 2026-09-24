@@ -607,9 +607,11 @@ class DeviceWatch extends Notifier<void> {
       return;
     }
     if (fresh.isEmpty) return;
-    // Nothing is posted while disguised: a notification's header
-    // carries the app's name. The banner says it inside the app, and
-    // the device counts as announced all the same.
+    // Posted only while the app's notifications are on, and never while
+    // disguised: a notification's header carries the app's name. The
+    // banner says it inside the app either way, and the device counts
+    // as announced all the same.
+    if (!ref.read(notifyNewTxProvider)) return;
     if (ref.read(disguiseProvider).disguised) return;
     // Settings not read yet say nothing of a lock: said as if there
     // were one.

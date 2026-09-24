@@ -14,10 +14,20 @@ const String newDeviceBanner =
 
 /// A key activated first on this phone, a Windows computer that entered
 /// it an hour ago and waits.
-FakeBridge withWaitingComputer() {
+FakeBridge withWaitingComputer({bool notifying = true}) {
   final bridge = premiumBridge(activated: true);
   bridge.premiumAddDevice();
+  if (notifying) notifyOn(bridge);
   return bridge;
+}
+
+/// The app's notifications turned on, as the settings keep them.
+void notifyOn(FakeBridge bridge) {
+  bridge.settings = Settings(
+    activeNetwork: bridge.settings.activeNetwork,
+    backends: bridge.settings.backends,
+    appPrefs: {...bridge.settings.appPrefs, 'notify.new_tx': '1'},
+  );
 }
 
 void main() {
@@ -150,8 +160,21 @@ void main() {
       expect(bridge.premiumCalls, isNot(contains('devices')));
     });
 
+    testWidgets('with notifications off, the banner alone', (tester) async {
+      final bridge = withWaitingComputer(notifying: false);
+      final notifications = RecordingNotifications();
+      await tester.pumpWidget(wholeApp(bridge, notifications: notifications));
+      await tester.pumpAndSettle();
+      expect(find.text(newDeviceBanner), findsOneWidget);
+      expect(notifications.posted, isEmpty);
+      // Counted all the same: turning notifications on later does not
+      // bring up an old device.
+      expect(bridge.premiumAnnounced, ['dev2']);
+    });
+
     testWidgets('coming back to the app looks again', (tester) async {
       final bridge = premiumBridge(activated: true);
+      notifyOn(bridge);
       final notifications = RecordingNotifications();
       await tester.pumpWidget(wholeApp(bridge, notifications: notifications));
       await tester.pumpAndSettle();
