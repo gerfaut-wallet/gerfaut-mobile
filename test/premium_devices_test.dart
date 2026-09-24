@@ -16,11 +16,32 @@ import 'package:gerfaut/widgets/buttons.dart';
 import 'package:gerfaut/widgets/notice.dart';
 import 'package:gerfaut/widgets/section_card.dart';
 import 'package:gerfaut/widgets/status_pill.dart';
+import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
 import 'fakes.dart';
 import 'premium_harness.dart';
 
 const String waitingTitle = 'Waiting for approval';
+
+/// What the licence says while a key change waits for its answer.
+const String unfinishedChange =
+    'The key change did not finish. Try again to complete it.';
+
+/// An answer lost on the way: a tunnel, a slow Tor circuit, a timeout.
+const BridgeException unreachable = BridgeException(
+  'premium_unreachable',
+  'the premium server is unreachable: could not connect',
+);
+
+/// The server's sentence for a key with every device it takes.
+const String fullKeyWords =
+    'this key already has 10 devices; disconnect one from a device with '
+    'full access';
+
+/// The same, as a note of the page says it.
+const String fullKeySentence =
+    'This key already has 10 devices; disconnect one from a device with '
+    'full access.';
 
 /// A key activated first on this phone, a Windows computer that entered
 /// it an hour ago and waits.
@@ -1066,6 +1087,389 @@ void main() {
         ),
         isFalse,
       );
+    });
+  });
+
+  group('a lost answer', () {
+    testWidgets('a key change that did not finish says so, and ends with '
+        'the same key', (tester) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      final screenLock = FakeScreenLock();
+      bridge.onPremiumChangeKey = () => throw unreachable;
+      await tester.pumpWidget(premiumApp(bridge, screenLock: screenLock));
+      await tester.pumpAndSettle();
+      expect(find.text('Copy key'), findsNWidgets(2));
+
+      await tester.tap(find.text('Change key'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(DangerButton, 'Change key'));
+      await tester.pumpAndSettle();
+      expect(find.text('Could not reach the Gerfaut server.'), findsOneWidget);
+      expect(bridge.premiumKeyChangePending, isTrue);
+      await tester.tap(find.widgetWithText(GhostButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      // The licence says it, in amber, and hands out no key that may
+      // already be dead: neither there nor on the checklist.
+      final note = tester.widget<GerfautNotice>(
+        find.ancestor(
+          of: find.text(unfinishedChange),
+          matching: find.byType(GerfautNotice),
+        ),
+      );
+      expect(note.tone, NoticeTone.info);
+      expect(find.text('Try again'), findsOneWidget);
+      expect(find.text('Copy key'), findsNothing);
+      expect(find.text('Change key'), findsNothing);
+      expect(find.text('Forget this key'), findsNothing);
+
+      // Straight to who holds the phone, then the key the core kept.
+      bridge.onPremiumChangeKey = null;
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+      expect(screenLock.asked, [confirmItsYouTitle, confirmItsYouTitle]);
+      expect(bridge.premiumCalls.where((c) => c == 'change-key'), hasLength(2));
+      expect(find.text('Your new key'), findsOneWidget);
+      expect(find.text('wxyz-2345-6789-abcd'), findsOneWidget);
+
+      await tester.tap(find.text('I saved my new key'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(PrimaryButton, 'Done'));
+      await tester.pumpAndSettle();
+      expect(find.text(unfinishedChange), findsNothing);
+      expect(find.text('Change key'), findsOneWidget);
+    });
+
+    testWidgets('trying again goes once, however many taps', (tester) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumKeyChangePending = true;
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      // A second sheet would send a second change, which would draw a
+      // key behind the one the first shows.
+      await tester.tap(find.text('Try again'));
+      await tester.tap(find.text('Try again'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(find.byType(ChangeKeySheet), findsOneWidget);
+      expect(bridge.premiumCalls.where((c) => c == 'change-key'), hasLength(1));
+    });
+
+    testWidgets('a refused check leaves the change as it was', (tester) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumKeyChangePending = true;
+      final screenLock = FakeScreenLock(outcome: ScreenLockOutcome.refused);
+      await tester.pumpWidget(premiumApp(bridge, screenLock: screenLock));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+      expect(screenLock.asked, [confirmItsYouTitle]);
+      expect(bridge.premiumCalls, isNot(contains('change-key')));
+      // The question stands, to be answered again.
+      expect(find.text('Change your Premium key'), findsOneWidget);
+    });
+
+    testWidgets('a connected phone keeps its key until the change is done', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumKeyChangePending = true;
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+      // Leaving would lose the new key, which only this vault holds.
+      expect(find.text('Forget this key'), findsNothing);
+      expect(find.text(unfinishedChange), findsOneWidget);
+    });
+
+    testWidgets('a disconnected phone can no longer finish it, and may '
+        'leave', (tester) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumKeyChangePending = true;
+      bridge.premiumDisconnected = true;
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+      expect(find.text(unfinishedChange), findsNothing);
+
+      await tester.tap(find.text('Forget this key'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(DangerButton, 'Forget key'));
+      await tester.pumpAndSettle();
+      expect(bridge.premiumKey, isNull);
+      expect(bridge.premiumKeyChangePending, isFalse);
+    });
+
+    testWidgets('another key on a connected phone asks who holds it', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      // No certificate that verifies: the field is there, over a phone
+      // connected with full access.
+      bridge.premiumClaims = null;
+      bridge.onPremiumLicence = (_) => throw unreachable;
+      final screenLock = FakeScreenLock(outcome: ScreenLockOutcome.refused);
+      await tester.pumpWidget(premiumApp(bridge, screenLock: screenLock));
+      await tester.pumpAndSettle();
+      expect(find.text('Devices'), findsOneWidget);
+
+      // Entering another key moves this phone to that account: what
+      // forgetting the key does, behind the same question.
+      await tester.enterText(find.byType(TextField), 'wxyz-2345-6789-abcd');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Activate'));
+      await tester.pumpAndSettle();
+      expect(screenLock.asked, [confirmItsYouTitle]);
+      expect(
+        bridge.premiumCalls.where((c) => c.startsWith('connect:')),
+        isEmpty,
+      );
+
+      screenLock.outcome = ScreenLockOutcome.confirmed;
+      await tester.tap(find.text('Activate'));
+      await tester.pumpAndSettle();
+      expect(bridge.premiumCalls, contains('connect:wxyz-2345-6789-abcd'));
+
+      // The key already held asks nothing.
+      screenLock.asked.clear();
+      await tester.enterText(find.byType(TextField), knownKey);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Activate'));
+      await tester.pumpAndSettle();
+      expect(screenLock.asked, isEmpty);
+    });
+
+    testWidgets('renewing hands out no key while a change is unfinished', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final launcher = FakeUrlLauncher();
+      UrlLauncherPlatform.instance = launcher;
+      final clipboard = FakeSensitiveClipboard();
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumKeyChangePending = true;
+      await tester.pumpWidget(premiumApp(bridge, clipboard: clipboard));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Renew'));
+      await tester.pumpAndSettle();
+      expect(launcher.launched, ['https://gerfaut-wallet.com/premium#renew']);
+      expect(clipboard.copied, isEmpty);
+    });
+
+    testWidgets('a connection sent without an answer goes again as it was', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge();
+      bridge.onPremiumConnect = (_) => throw unreachable;
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), knownKey);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Activate'));
+      await tester.pumpAndSettle();
+      expect(find.text('Could not reach the Gerfaut server.'), findsOneWidget);
+      expect(bridge.premiumConnectPending, 'abcdefghijkmnpqr');
+      expect(bridge.premiumKey, isNull);
+
+      // Opened again later, the server back: the connection goes by
+      // itself, and nothing has to be typed twice.
+      bridge.onPremiumConnect = null;
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+      expect(bridge.premiumCalls, contains('ensure'));
+      expect(bridge.premiumConnectPending, isNull);
+      expect(bridge.premiumKey, 'abcdefghijkmnpqr');
+      expect(find.text('Devices'), findsOneWidget);
+      expect(find.text('This device'), findsOneWidget);
+    });
+
+    testWidgets('a rate limit holds the connection back and says how long', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge();
+      bridge.premiumConnectPending = 'abcdefghijkmnpqr';
+      bridge.onPremiumEnsure = () => throw const BridgeException(
+        'premium_rate_limited',
+        'the premium server asks to wait before trying again',
+        retryAfter: 42,
+      );
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('The server asks to wait. Try again in 42 s.'),
+        findsOneWidget,
+      );
+      expect(
+        bridge.premiumCalls.where((c) => c.startsWith('connect:')),
+        isEmpty,
+      );
+    });
+
+    testWidgets('a key with every device it takes leaves this device '
+        'disconnected, in the server words', (tester) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      // A vault from before devices: a key, a certificate, no token.
+      bridge.premiumDeviceList.clear();
+      bridge.premiumThisDeviceId = null;
+      bridge.onPremiumConnect = (_) =>
+          throw const BridgeException('premium_too_many_devices', fullKeyWords);
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      // The server's sentence says it all, and what to do first.
+      final note = tester.widget<GerfautNotice>(
+        find.ancestor(
+          of: find.text(fullKeySentence),
+          matching: find.byType(GerfautNotice),
+        ),
+      );
+      expect(note.tone, NoticeTone.info);
+      expect(find.textContaining('was disconnected'), findsNothing);
+      expect(find.text('Connect again'), findsOneWidget);
+      // Asked once, not again behind the user's back.
+      expect(
+        bridge.premiumCalls.where((c) => c.startsWith('connect:')),
+        hasLength(1),
+      );
+
+      // Connecting again meets the same answer, said once.
+      await tester.tap(find.text('Connect again'));
+      await tester.pumpAndSettle();
+      expect(find.text(fullKeySentence), findsOneWidget);
+
+      // A device disconnected elsewhere makes room.
+      bridge.onPremiumConnect = null;
+      await tester.tap(find.text('Connect again'));
+      await tester.pumpAndSettle();
+      expect(find.text(fullKeySentence), findsNothing);
+      expect(find.text(waitingTitle), findsOneWidget);
+    });
+
+    testWidgets('forgetting the key out of reach tells the server later', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      final me = bridge.premiumThisDeviceId!;
+      bridge.onPremiumRevoke = (_) => throw unreachable;
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Forget this key'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(DangerButton, 'Forget key'));
+      await tester.pumpAndSettle();
+      // Gone from here all the same; the server hears of it later.
+      expect(find.text('Activate'), findsOneWidget);
+      expect(bridge.premiumKey, isNull);
+      expect(bridge.premiumPendingLogouts, [me]);
+    });
+  });
+
+  group('what the app review settled', () {
+    testWidgets('a device whose access is not known asks before it leaves', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      // The server out of reach: this device may well have full access.
+      bridge.onPremiumMe = () => throw unreachable;
+      final screenLock = FakeScreenLock();
+      await tester.pumpWidget(premiumApp(bridge, screenLock: screenLock));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Forget this key'));
+      await tester.pumpAndSettle();
+      // Deleting the account stays for a device known to see it.
+      expect(find.text('Also delete everything on the server'), findsNothing);
+      await tester.tap(find.widgetWithText(DangerButton, 'Forget key'));
+      await tester.pumpAndSettle();
+      expect(screenLock.asked, [confirmItsYouTitle]);
+      expect(bridge.premiumCalls, contains('log-out'));
+    });
+
+    testWidgets('a failed copy of the new key is said under it', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      final clipboard = FakeSensitiveClipboard(fails: true);
+      await tester.pumpWidget(premiumApp(bridge, clipboard: clipboard));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Change key'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(DangerButton, 'Change key'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Copy'));
+      await tester.pumpAndSettle();
+      final note = tester.widget<GerfautNotice>(
+        find.ancestor(
+          of: find.text('Could not copy the key.'),
+          matching: find.byType(GerfautNotice),
+        ),
+      );
+      expect(note.tone, NoticeTone.info);
+      expect(find.text('Copied'), findsNothing);
+      expect(find.byType(SnackBar), findsNothing);
+      // Copied by hand, the key can still be saved and the sheet left.
+      expect(find.text('wxyz-2345-6789-abcd'), findsOneWidget);
+    });
+
+    testWidgets('a failed copy on renewing is said, and the page opens', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final launcher = FakeUrlLauncher();
+      UrlLauncherPlatform.instance = launcher;
+      final bridge = premiumBridge(activated: true);
+      final clipboard = FakeSensitiveClipboard(fails: true);
+      await tester.pumpWidget(premiumApp(bridge, clipboard: clipboard));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Renew'));
+      await tester.pumpAndSettle();
+      expect(launcher.launched, ['https://gerfaut-wallet.com/premium#renew']);
+      expect(find.text('Could not copy the key.'), findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets('a failed copy on the checklist is said under its step', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      final clipboard = FakeSensitiveClipboard(fails: true);
+      await tester.pumpWidget(premiumApp(bridge, clipboard: clipboard));
+      await tester.pumpAndSettle();
+
+      await tester.tap(protectCopy);
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byType(ProtectAccountCard),
+          matching: find.text('Could not copy the key.'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byType(SnackBar), findsNothing);
+
+      // The next copy that works takes the note away.
+      clipboard.fails = false;
+      await tester.tap(protectCopy);
+      await tester.pumpAndSettle();
+      expect(find.text('Could not copy the key.'), findsNothing);
+      expect(clipboard.copied, ['abcd-efgh-ijkm-npqr']);
     });
   });
 }

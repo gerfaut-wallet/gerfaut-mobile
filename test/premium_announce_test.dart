@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/premium.dart';
+import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/widgets/alert_banner.dart';
 import 'package:gerfaut/widgets/buttons.dart';
 
@@ -210,6 +215,108 @@ void main() {
       // Full access now: the account's devices are read, which a
       // waiting device never does.
       expect(bridge.premiumCalls, contains('devices'));
+    });
+
+    test('a list read under another connection raises nothing', () async {
+      final bridge = withWaitingComputer();
+      final container = ProviderContainer(
+        overrides: [bridgeProvider.overrideWithValue(bridge)],
+      );
+      addTearDown(container.dispose);
+      container.listen(waitingDevicesProvider, (previous, next) {});
+      await container.read(premiumDevicesProvider.future);
+      expect(container.read(waitingDevicesProvider), hasLength(1));
+
+      /// The vault moved on, and the next list is held on its way.
+      Future<Completer<void>> moveOn(void Function() change) async {
+        final gate = Completer<void>();
+        bridge.onPremiumDevices = () => gate.future;
+        change();
+        container.invalidate(premiumStateProvider);
+        await container.read(premiumFullAccessProvider.future);
+        await pumpEventQueue();
+        return gate;
+      }
+
+      Future<void> letThrough(Completer<void> gate) async {
+        bridge.onPremiumDevices = null;
+        gate.complete();
+        await container.read(premiumDevicesProvider.future);
+        await pumpEventQueue();
+      }
+
+      // The key changed: the list read with the old one says nothing of
+      // who waits now.
+      var gate = await moveOn(() => bridge.premiumKey = 'wxyz23456789abcd');
+      expect(container.read(accountDevicesProvider), isNull);
+      expect(container.read(waitingDevicesProvider), isEmpty);
+      await letThrough(gate);
+      expect(container.read(waitingDevicesProvider), hasLength(1));
+
+      // Another key connected this device anew: the last account's
+      // list is nobody's business here.
+      gate = await moveOn(() {
+        bridge.premiumKey = 'mnpq23456789abcd';
+        bridge.premiumThisDeviceId = bridge.premiumAddDevice(
+          platform: DevicePlatform.android,
+          waiting: false,
+        );
+      });
+      expect(container.read(waitingDevicesProvider), isEmpty);
+      await letThrough(gate);
+      expect(container.read(waitingDevicesProvider), hasLength(1));
+
+      // Logged out: nothing, at once.
+      bridge.premiumKey = null;
+      bridge.premiumThisDeviceId = null;
+      container.invalidate(premiumStateProvider);
+      await container.read(premiumStateProvider.future);
+      expect(container.read(waitingDevicesProvider), isEmpty);
+    });
+
+    testWidgets('logouts the server did not hear of go at the start, or on '
+        'the way back', (tester) async {
+      final bridge = premiumBridge(activated: true);
+      final gone = bridge.premiumAddDevice(waiting: false);
+      bridge.premiumPendingLogouts.add(gone);
+      bridge.onPremiumRevoke = (_) => throw const BridgeException(
+        'premium_unreachable',
+        'the premium server is unreachable: could not connect',
+      );
+      await tester.pumpWidget(wholeApp(bridge));
+      await tester.pumpAndSettle();
+      expect(bridge.premiumCalls, contains('flush-logouts'));
+      expect(bridge.premiumPendingLogouts, [gone]);
+
+      bridge.onPremiumRevoke = null;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(bridge.premiumPendingLogouts, isEmpty);
+      expect(bridge.premiumDeviceList.where((d) => d.id == gone), isEmpty);
+    });
+
+    testWidgets('the heartbeat sends a lost connection again', (tester) async {
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumConsents.add(
+        const WatchConsent(walletId: 'w1', consentedAt: 1),
+      );
+      // Disconnected, and connecting again lost its answer on the way.
+      bridge.premiumDisconnected = true;
+      bridge.premiumConnectPending = 'abcdefghijkmnpqr';
+      bridge.onPremiumEnsure = () => throw const BridgeException(
+        'premium_unreachable',
+        'the premium server is unreachable: could not connect',
+      );
+      await tester.pumpWidget(wholeApp(bridge));
+      await tester.pumpAndSettle();
+      expect(bridge.premiumConnectPending, isNotNull);
+
+      bridge.onPremiumEnsure = null;
+      await tester.pump(heartbeatPeriod);
+      await tester.pumpAndSettle();
+      expect(bridge.premiumConnectPending, isNull);
+      expect(bridge.premiumDisconnected, isFalse);
     });
 
     testWidgets('coming back to the app looks again', (tester) async {
