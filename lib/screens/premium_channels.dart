@@ -389,7 +389,9 @@ class _TelegramChannelScreenState extends ConsumerState<TelegramChannelScreen> {
         setState(() => _notYet = true);
       }
     } on BridgeException catch (error) {
-      if (byHand && mounted) setState(() => _error = error);
+      if (!mounted) return;
+      if (byHand) setState(() => _error = error);
+      rereadIfDisowned(ref, error);
     } finally {
       if (mounted) setState(() => _checking = false);
     }
@@ -589,6 +591,7 @@ class _EmailChannelScreenState extends ConsumerState<EmailChannelScreen> {
           _busy = false;
           _error = error;
         });
+        rereadIfDisowned(ref, error);
       }
     }
   }
@@ -759,6 +762,7 @@ class _WebhookChannelScreenState extends ConsumerState<WebhookChannelScreen> {
           _busy = false;
           _error = error;
         });
+        rereadIfDisowned(ref, error);
       }
     }
   }

@@ -94,7 +94,8 @@ final premiumFullAccessProvider = FutureProvider<bool>((ref) async {
 /// entered, and null on a device that waits for approval.
 final premiumAccountProvider = FutureProvider<PremiumAccount?>((ref) async {
   if (!await ref.watch(premiumFullAccessProvider.future)) return null;
-  return ref.watch(bridgeProvider).premiumAccount();
+  final bridge = ref.watch(bridgeProvider);
+  return _asThisDevice(ref, bridge.premiumAccount);
 });
 
 /// This device's connection to the account, as the vault holds it: the
@@ -132,7 +133,8 @@ final premiumDevicesProvider = FutureProvider<DeviceList>((ref) async {
       !await ref.watch(premiumFullAccessProvider.future)) {
     return DeviceList(connection, const []);
   }
-  final devices = await ref.watch(bridgeProvider).premiumDevices();
+  final bridge = ref.watch(bridgeProvider);
+  final devices = await _asThisDevice(ref, bridge.premiumDevices);
   return DeviceList(connection, devices);
 });
 
@@ -182,6 +184,32 @@ const Set<String> disownedKinds = {
   'premium_too_many_devices',
 };
 
+/// Whether [error] is one of [disownedKinds]: the server turned this
+/// device away, and the vault says so already.
+bool disowns(Object? error) =>
+    error is BridgeException && disownedKinds.contains(error.kind);
+
+/// A call about the account, made with this device's token. Whichever
+/// call meets the server turning the device away, the core drops the
+/// token before the error comes back; the vault is read again then, so
+/// every screen falls back to the way in instead of standing on the
+/// answers of a connection that is gone.
+Future<T> _asThisDevice<T>(Ref<Object?> ref, Future<T> Function() call) async {
+  try {
+    return await call();
+  } catch (error) {
+    if (disowns(error)) {
+      Future.microtask(() => ref.invalidate(premiumStateProvider));
+    }
+    rethrow;
+  }
+}
+
+/// [_asThisDevice] for a call a screen makes itself.
+void rereadIfDisowned(WidgetRef ref, Object error) {
+  if (disowns(error)) ref.invalidate(premiumStateProvider);
+}
+
 /// A failure that says this device no longer sees the account, as
 /// opposed to a server out of reach, which says nothing about it.
 bool _turnedAway(Object? error) =>
@@ -209,7 +237,8 @@ final premiumCandidatesProvider = FutureProvider<List<WalletMeta>>((ref) async {
 /// and on a device that waits for approval.
 final premiumWalletsProvider = FutureProvider<List<WalletWatch>>((ref) async {
   if (!await ref.watch(premiumFullAccessProvider.future)) return const [];
-  return ref.watch(bridgeProvider).premiumWallets();
+  final bridge = ref.watch(bridgeProvider);
+  return _asThisDevice(ref, bridge.premiumWallets);
 });
 
 /// The account's channels. Empty without a key, and on a device that
@@ -218,7 +247,8 @@ final premiumChannelsProvider = FutureProvider<List<PremiumChannel>>((
   ref,
 ) async {
   if (!await ref.watch(premiumFullAccessProvider.future)) return const [];
-  return ref.watch(bridgeProvider).premiumChannels();
+  final bridge = ref.watch(bridgeProvider);
+  return _asThisDevice(ref, bridge.premiumChannels);
 });
 
 /// The last events of the account, newest first, each id once: the
@@ -226,7 +256,8 @@ final premiumChannelsProvider = FutureProvider<List<PremiumChannel>>((
 /// doubled line would read as two alerts.
 final premiumEventsProvider = FutureProvider<List<PremiumEvent>>((ref) async {
   if (!await ref.watch(premiumFullAccessProvider.future)) return const [];
-  final events = await ref.watch(bridgeProvider).premiumRecentEvents();
+  final bridge = ref.watch(bridgeProvider);
+  final events = await _asThisDevice(ref, bridge.premiumRecentEvents);
   final seen = <int>{};
   return [
     for (final event in events)
@@ -925,7 +956,9 @@ class WatchMonitor extends Notifier<WatchStatus> {
         await bridge.premiumAcknowledgeOffline(null);
         ref.invalidate(premiumStateProvider);
       }
-    } catch (_) {
+    } catch (error) {
+      // Turned away rather than out of reach: the vault says so now.
+      if (disowns(error)) ref.invalidate(premiumStateProvider);
       _status = WatchStatus(
         failures: _status.failures + 1,
         offlineSince: _status.offlineSince ?? _now(),

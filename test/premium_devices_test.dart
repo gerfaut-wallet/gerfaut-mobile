@@ -1472,4 +1472,41 @@ void main() {
       expect(clipboard.copied, ['abcd-efgh-ijkm-npqr']);
     });
   });
+
+  group('what the final review settled', () {
+    const plainNote = 'This device was disconnected from your Premium account.';
+
+    testWidgets('turned away while it reads the account, the page falls '
+        'back to the way in', (tester) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumAddDevice(platform: DevicePlatform.linux, waiting: false);
+      await tester.pumpWidget(premiumApp(bridge, root: true));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Premium'));
+      await tester.pumpAndSettle();
+      expect(find.text('Change key'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      // The key is changed on the computer, which disconnects every
+      // other device; this one has not asked about itself since.
+      bridge.premiumDeviceList.removeWhere(
+        (d) => d.id == bridge.premiumThisDeviceId,
+      );
+      bridge.premiumServerKey = 'mnpq23456789abcd';
+      final asked = bridge.premiumCalls.where((c) => c == 'me').length;
+
+      // The page reads the devices again as it opens, and the server
+      // refuses the token: no stale list, no key to change or copy.
+      await tester.tap(find.text('Premium'));
+      await tester.pumpAndSettle();
+      expect(bridge.premiumCalls.where((c) => c == 'me'), hasLength(asked));
+      expect(find.text(plainNote), findsOneWidget);
+      expect(find.text('Connect again'), findsOneWidget);
+      expect(find.text('Devices'), findsNothing);
+      expect(find.text('Change key'), findsNothing);
+      expect(find.text('Linux computer'), findsNothing);
+    });
+  });
 }

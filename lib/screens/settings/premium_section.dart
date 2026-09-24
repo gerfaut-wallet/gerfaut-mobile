@@ -163,9 +163,11 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
         if (mounted && licence.claims.expiresAt != before) {
           ref.invalidate(premiumStateProvider);
         }
-      } on BridgeException {
+      } on BridgeException catch (error) {
         // Offline, or a key the server no longer knows: the stored
-        // certificate stands, verified as it is.
+        // certificate stands, verified as it is. A device turned away
+        // meanwhile reads so from the vault.
+        if (mounted) rereadIfDisowned(ref, error);
       }
     });
   }
@@ -425,7 +427,9 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
       ref.invalidate(premiumEventsProvider);
       return true;
     } on BridgeException catch (error) {
-      if (mounted) setState(() => _walletsError = error);
+      if (!mounted) return false;
+      setState(() => _walletsError = error);
+      rereadIfDisowned(ref, error);
       return false;
     } finally {
       if (mounted) setState(() => _busyWalletIds.remove(id));
@@ -503,7 +507,9 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
           );
       }
     } on BridgeException catch (error) {
-      if (mounted) setState(() => _channelsError = error);
+      if (!mounted) return;
+      setState(() => _channelsError = error);
+      rereadIfDisowned(ref, error);
       return;
     }
     if (created == null || !mounted) return;
@@ -588,7 +594,10 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
       await _bridge.premiumTestChannel(channel.id);
       if (mounted && !quiet) _toast('Test sent to ${channel.kind.label}');
     } on BridgeException catch (error) {
-      if (mounted) setState(() => _channelsError = error);
+      if (mounted) {
+        setState(() => _channelsError = error);
+        rereadIfDisowned(ref, error);
+      }
     } finally {
       if (mounted) setState(() => _busyChannelId = null);
     }
@@ -628,7 +637,10 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
       ref.invalidate(premiumAccountProvider);
       _toast('Channel removed');
     } on BridgeException catch (error) {
-      if (mounted) setState(() => _channelsError = error);
+      if (mounted) {
+        setState(() => _channelsError = error);
+        rereadIfDisowned(ref, error);
+      }
     } finally {
       if (mounted) setState(() => _busyChannelId = null);
     }
@@ -2263,7 +2275,10 @@ class _ConfirmCodeRowState extends ConsumerState<_ConfirmCodeRow> {
       _controller.clear();
       widget.onConfirmed();
     } on BridgeException catch (error) {
-      if (mounted) setState(() => _error = error);
+      if (mounted) {
+        setState(() => _error = error);
+        rereadIfDisowned(ref, error);
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
