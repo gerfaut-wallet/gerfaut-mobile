@@ -1913,9 +1913,7 @@ class FakeBridge implements GerfautBridge {
     if (premiumKey == null) {
       throw const BridgeException('premium_no_key', 'no premium key');
     }
-    if (premiumThisDeviceId != null &&
-        !premiumDisconnected &&
-        _me() == null) {
+    if (premiumThisDeviceId != null && !premiumDisconnected && _me() == null) {
       // Refused or disconnected elsewhere: the core drops the token.
       premiumDisconnected = true;
       throw const BridgeException(

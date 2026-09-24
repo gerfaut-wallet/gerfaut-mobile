@@ -105,9 +105,7 @@ class _ChangeKeySheetState extends ConsumerState<ChangeKeySheet> {
           bottom: MediaQuery.viewInsetsOf(context).bottom + GerfautSpacing.md,
         ),
         child: SingleChildScrollView(
-          child: newKey == null
-              ? _asking(tokens)
-              : _revealed(tokens, newKey),
+          child: newKey == null ? _asking(tokens) : _revealed(tokens, newKey),
         ),
       ),
     );

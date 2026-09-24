@@ -749,9 +749,7 @@ class RustBridge implements GerfautBridge {
 
   @override
   Future<PremiumDevice> premiumConnect(String key) async {
-    return PremiumDevice.fromJson(
-      _object(await rust.premiumConnect(key: key)),
-    );
+    return PremiumDevice.fromJson(_object(await rust.premiumConnect(key: key)));
   }
 
   @override
@@ -768,9 +766,9 @@ class RustBridge implements GerfautBridge {
 
   @override
   Future<List<PremiumDevice>> premiumDevices() async {
-    return _list(
-      await rust.premiumDevices(),
-    ).map(PremiumDevice.fromJson).toList();
+    return _list(await rust.premiumDevices())
+        .map(PremiumDevice.fromJson)
+        .toList();
   }
 
   @override

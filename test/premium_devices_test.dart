@@ -143,8 +143,10 @@ void main() {
           .getTopLeft(find.text('Protect your Premium account'))
           .dy;
       final wallets = tester.getTopLeft(find.text('Watched wallets')).dy;
-      expect(licence < devices && devices < protect && protect < wallets,
-          isTrue);
+      expect(
+        licence < devices && devices < protect && protect < wallets,
+        isTrue,
+      );
     });
 
     testWidgets('a later device waits and sees nothing of the account', (
@@ -252,9 +254,7 @@ void main() {
       expect(find.text('Activate'), findsOneWidget);
     });
 
-    testWidgets('a key with every device it may have says so', (
-      tester,
-    ) async {
+    testWidgets('a key with every device it may have says so', (tester) async {
       useTallSurface(tester);
       final bridge = premiumBridge();
       bridge.onPremiumConnect = (_) => throw const BridgeException(
@@ -349,8 +349,10 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Activate'));
       await tester.pumpAndSettle();
-      expect(find.text('This key no longer works. Enter the new one.'),
-          findsNothing);
+      expect(
+        find.text('This key no longer works. Enter the new one.'),
+        findsNothing,
+      );
       expect(find.text('Devices'), findsOneWidget);
     });
 
@@ -768,10 +770,7 @@ void main() {
       expect(find.text('Changing…'), findsOneWidget);
       await tester.tap(change, warnIfMissed: false);
       await tester.pump();
-      expect(
-        bridge.premiumCalls.where((c) => c == 'change-key'),
-        hasLength(1),
-      );
+      expect(bridge.premiumCalls.where((c) => c == 'change-key'), hasLength(1));
       gate.complete();
       await tester.pumpAndSettle();
       expect(find.text('Could not reach the Gerfaut server.'), findsOneWidget);
@@ -925,7 +924,10 @@ void main() {
       );
       expect(protectCardShows(saved, all), isFalse);
       expect(
-        protectCardShows(const PremiumView(key: 'k', checklistHidden: true), one),
+        protectCardShows(
+          const PremiumView(key: 'k', checklistHidden: true),
+          one,
+        ),
         isFalse,
       );
     });

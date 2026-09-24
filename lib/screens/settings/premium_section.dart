@@ -663,12 +663,13 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
           if (steps != null && protectCardShows(view, steps))
             ProtectAccountCard(view: view, steps: steps),
         ],
-        if (full || !view.hasKey) ..._accountCards(
-          view: view,
-          walletsError: walletsError,
-          channelsError: channelsError,
-          eventsError: eventsError,
-        ),
+        if (full || !view.hasKey)
+          ..._accountCards(
+            view: view,
+            walletsError: walletsError,
+            channelsError: channelsError,
+            eventsError: eventsError,
+          ),
       ],
     );
   }
@@ -683,55 +684,55 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
     required BridgeException? eventsError,
   }) {
     return [
-        _WatchedWalletsCard(
-          view: view,
-          busyWalletIds: _busyWalletIds,
-          holding: _verifying,
-          confirmingUnwatchId: _confirmUnwatchId,
-          onToggle: (wallet, on) => _setWatched(wallet, on, view),
-          onUnwatchOrphan: _unwatchOrphan,
-          onUnwatchConfirm: _unwatch,
-          onUnwatchCancel: _cancelUnwatch,
+      _WatchedWalletsCard(
+        view: view,
+        busyWalletIds: _busyWalletIds,
+        holding: _verifying,
+        confirmingUnwatchId: _confirmUnwatchId,
+        onToggle: (wallet, on) => _setWatched(wallet, on, view),
+        onUnwatchOrphan: _unwatchOrphan,
+        onUnwatchConfirm: _unwatch,
+        onUnwatchCancel: _cancelUnwatch,
+      ),
+      if (walletsError != null)
+        PremiumErrorNote(
+          error: walletsError,
+          onRetry: () {
+            setState(() => _walletsError = null);
+            ref.invalidate(premiumAccountProvider);
+            ref.invalidate(premiumCandidatesProvider);
+            ref.invalidate(premiumWalletsProvider);
+          },
         ),
-        if (walletsError != null)
-          PremiumErrorNote(
-            error: walletsError,
-            onRetry: () {
-              setState(() => _walletsError = null);
-              ref.invalidate(premiumAccountProvider);
-              ref.invalidate(premiumCandidatesProvider);
-              ref.invalidate(premiumWalletsProvider);
-            },
-          ),
-        _ChannelsCard(
-          view: view,
-          busyChannelId: _busyChannelId,
-          holding: _verifying,
-          confirmingRemoveId: _confirmRemoveChannelId,
-          adding: _addingChannel,
-          onAdd: () => _addChannel(view),
-          onTest: _test,
-          onRemove: _askRemove,
-          onRemoveConfirm: _remove,
-          onRemoveCancel: _cancelRemove,
-          onSubscribe: _openNtfy,
-          onLinkCode: (channel) => _openTelegram(channel, view),
-          onConfirmed: _confirmed,
+      _ChannelsCard(
+        view: view,
+        busyChannelId: _busyChannelId,
+        holding: _verifying,
+        confirmingRemoveId: _confirmRemoveChannelId,
+        adding: _addingChannel,
+        onAdd: () => _addChannel(view),
+        onTest: _test,
+        onRemove: _askRemove,
+        onRemoveConfirm: _remove,
+        onRemoveCancel: _cancelRemove,
+        onSubscribe: _openNtfy,
+        onLinkCode: (channel) => _openTelegram(channel, view),
+        onConfirmed: _confirmed,
+      ),
+      if (channelsError != null)
+        PremiumErrorNote(
+          error: channelsError,
+          onRetry: () {
+            setState(() => _channelsError = null);
+            ref.invalidate(premiumChannelsProvider);
+          },
         ),
-        if (channelsError != null)
-          PremiumErrorNote(
-            error: channelsError,
-            onRetry: () {
-              setState(() => _channelsError = null);
-              ref.invalidate(premiumChannelsProvider);
-            },
-          ),
-        _RecentAlertsCard(view: view),
-        if (eventsError != null)
-          PremiumErrorNote(
-            error: eventsError,
-            onRetry: () => ref.invalidate(premiumEventsProvider),
-          ),
+      _RecentAlertsCard(view: view),
+      if (eventsError != null)
+        PremiumErrorNote(
+          error: eventsError,
+          onRetry: () => ref.invalidate(premiumEventsProvider),
+        ),
     ];
   }
 

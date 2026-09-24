@@ -358,9 +358,7 @@ class _DeviceRow extends StatelessWidget {
                 ),
                 confirm: PremiumButton(
                   label: 'Approve',
-                  onPressed: holding
-                      ? null
-                      : () => onAsk(DeviceAction.approve),
+                  onPressed: holding ? null : () => onAsk(DeviceAction.approve),
                 ),
               ),
             ),

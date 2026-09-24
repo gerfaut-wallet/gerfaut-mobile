@@ -84,9 +84,7 @@ final premiumAccountProvider = FutureProvider<PremiumAccount?>((ref) async {
 
 /// Every device of the account, oldest first. Empty unless this one
 /// has full access: only such a device may see the others.
-final premiumDevicesProvider = FutureProvider<List<PremiumDevice>>((
-  ref,
-) async {
+final premiumDevicesProvider = FutureProvider<List<PremiumDevice>>((ref) async {
   if (!await ref.watch(premiumFullAccessProvider.future)) return const [];
   return ref.watch(bridgeProvider).premiumDevices();
 });
@@ -599,9 +597,9 @@ class DeviceWatch extends Notifier<void> {
     try {
       // Handed the whole waiting list, the core keeps it and gives
       // back the devices it had not seen: an empty list clears it.
-      fresh = await ref
-          .read(bridgeProvider)
-          .premiumMarkAnnounced([for (final device in waiting) device.id]);
+      fresh = await ref.read(bridgeProvider).premiumMarkAnnounced([
+        for (final device in waiting) device.id,
+      ]);
     } catch (_) {
       // Nothing was taken: the next list asks again.
       return;

@@ -24,7 +24,11 @@ ProtectSteps protectSteps({
   required AppLock? lock,
 }) {
   final full = devices.where((device) => device.fullAccess).length;
-  return (secondDevice: full >= 2, appLock: lock != null, keySaved: view.keySaved);
+  return (
+    secondDevice: full >= 2,
+    appLock: lock != null,
+    keySaved: view.keySaved,
+  );
 }
 
 /// Whether the card shows: on a device with full access, until it is
