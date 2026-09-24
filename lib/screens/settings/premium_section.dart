@@ -1225,7 +1225,7 @@ class _ForgetQuestion extends StatelessWidget {
               (true, true) => 'Deleting…',
               (true, false) => 'Delete and forget',
               (false, true) => 'Forgetting…',
-              (false, false) => 'Forget key',
+              (false, false) => 'Forget the key',
             },
             onPressed: forgetting ? null : onConfirm,
           ),

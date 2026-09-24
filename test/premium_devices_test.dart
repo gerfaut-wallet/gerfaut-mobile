@@ -292,7 +292,7 @@ void main() {
       );
       // A waiting device cannot delete the account: no box to tick.
       expect(find.text('Also delete everything on the server'), findsNothing);
-      await tester.tap(find.widgetWithText(DangerButton, 'Forget key'));
+      await tester.tap(find.widgetWithText(DangerButton, 'Forget the key'));
       await tester.pumpAndSettle();
       expect(bridge.premiumCalls, contains('log-out'));
       expect(find.text('Activate'), findsOneWidget);
@@ -1199,7 +1199,7 @@ void main() {
 
       await tester.tap(find.text('Forget this key'));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(DangerButton, 'Forget key'));
+      await tester.tap(find.widgetWithText(DangerButton, 'Forget the key'));
       await tester.pumpAndSettle();
       expect(bridge.premiumKey, isNull);
       expect(bridge.premiumKeyChangePending, isFalse);
@@ -1368,7 +1368,7 @@ void main() {
 
       await tester.tap(find.text('Forget this key'));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(DangerButton, 'Forget key'));
+      await tester.tap(find.widgetWithText(DangerButton, 'Forget the key'));
       await tester.pumpAndSettle();
       // Gone from here all the same; the server hears of it later.
       expect(find.text('Activate'), findsOneWidget);
@@ -1393,7 +1393,7 @@ void main() {
       await tester.pumpAndSettle();
       // Deleting the account stays for a device known to see it.
       expect(find.text('Also delete everything on the server'), findsNothing);
-      await tester.tap(find.widgetWithText(DangerButton, 'Forget key'));
+      await tester.tap(find.widgetWithText(DangerButton, 'Forget the key'));
       await tester.pumpAndSettle();
       expect(screenLock.asked, [confirmItsYouTitle]);
       expect(bridge.premiumCalls, contains('log-out'));
@@ -1624,7 +1624,7 @@ void main() {
       );
       // A device the server let go has no account to delete.
       expect(find.text('Also delete everything on the server'), findsNothing);
-      await tester.tap(find.widgetWithText(DangerButton, 'Forget key'));
+      await tester.tap(find.widgetWithText(DangerButton, 'Forget the key'));
       await tester.pumpAndSettle();
       expect(screenLock.asked, isEmpty);
       expect(bridge.premiumKey, isNull);

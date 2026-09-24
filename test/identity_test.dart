@@ -443,14 +443,14 @@ void main() {
       // account would have no device left to refuse the next one.
       await tester.tap(find.text('Also delete everything on the server'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Forget key'));
+      await tester.tap(find.text('Forget the key'));
       await tester.pumpAndSettle();
       expect(screenLock.asked, hasLength(2));
       expect(bridge.premiumKey, isNotNull);
       expect(bridge.premiumCalls, isNot(contains('log-out')));
 
       screenLock.outcome = ScreenLockOutcome.confirmed;
-      await tester.tap(find.text('Forget key'));
+      await tester.tap(find.text('Forget the key'));
       await tester.pumpAndSettle();
       expect(bridge.premiumCalls, contains('log-out'));
       expect(bridge.premiumKey, isNull);
@@ -468,7 +468,7 @@ void main() {
 
       await tester.tap(find.text('Forget this key'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Forget key'));
+      await tester.tap(find.text('Forget the key'));
       await tester.pumpAndSettle();
       expect(screenLock.asked, isEmpty);
       expect(bridge.premiumKey, isNull);
