@@ -89,7 +89,7 @@ fn core_error_kind(error: &CoreError) -> &'static str {
 /// the user back to the field, a key with no paid time to the renewal
 /// page, an unreachable server to the "watch is offline" banner.
 ///
-/// Seven, the same the desktop app answers with. A kind the screens
+/// The same the desktop app answers with. A kind the screens
 /// act on the same way is a kind they can only print, and what they
 /// would print is a parser's complaint: an answer that does not decode
 /// is a captive portal's login page where JSON was promised, which is
@@ -105,6 +105,9 @@ fn core_error_kind(error: &CoreError) -> &'static str {
 /// A device the server wants connected first and a device that holds no
 /// token are one case too: either way the key has to connect it, which
 /// is what the screen offers.
+///
+/// A key change sent and not answered has a kind of its own: the screen
+/// offers to try it again, and nothing else finishes it.
 fn premium_error_kind(error: &PremiumError) -> &'static str {
     match error {
         PremiumError::NoKey => "premium_no_key",
@@ -120,6 +123,7 @@ fn premium_error_kind(error: &PremiumError) -> &'static str {
         PremiumError::DeviceDisconnected => "premium_device_disconnected",
         PremiumError::TooManyDevices(_) => "premium_too_many_devices",
         PremiumError::NoDevice | PremiumError::DeviceRequired => "premium_no_device",
+        PremiumError::KeyChangePending => "premium_key_change_pending",
     }
 }
 
