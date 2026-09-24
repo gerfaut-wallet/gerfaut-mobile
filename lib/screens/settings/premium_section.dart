@@ -228,13 +228,16 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
     }
   }
 
-  Future<void> _forget() async {
+  /// Forgets the key here, or deletes the account with it. [full] says
+  /// this device has full access.
+  Future<void> _forget({required bool full}) async {
     if (_forgetting || _verifying) return;
-    // Taking the account down is for its owner only: the key alone
-    // leaves this phone without a question, since the server keeps
-    // everything, but the account itself is not a thing for whoever
-    // holds the phone unlocked to delete.
-    if (_deleteAccount && !await _confirmIdentity()) return;
+    // Taking the account down is for its owner only. So is taking this
+    // device off it when it has full access: the server forgets the
+    // device, and an account left with no device that sees it has
+    // nobody to refuse the next one, whoever connects it. A device
+    // that waits, or that the server let go, leaves without a question.
+    if ((_deleteAccount || full) && !await _confirmIdentity()) return;
     if (!mounted) return;
     setState(() {
       _forgetting = true;
@@ -586,7 +589,7 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
       canDelete: full,
       forgetting: _forgetting || _verifying,
       onCancel: _cancelForget,
-      onConfirm: _forget,
+      onConfirm: () => _forget(full: full),
       onDeleteAccountChanged: (on) => setState(() => _deleteAccount = on),
     );
     final devices = full ? ref.watch(premiumDevicesProvider).valueOrNull : null;

@@ -68,6 +68,7 @@ Widget premiumApp(
   FakeScreenLock? screenLock,
   FakeFingerprint? fingerprint,
   bool dark = false,
+  SettingsSection section = SettingsSection.premium,
 }) {
   return ProviderScope(
     overrides: [
@@ -87,7 +88,7 @@ Widget premiumApp(
       theme: dark
           ? themeFrom(GerfautTokens.dark, Brightness.dark)
           : themeFrom(GerfautTokens.light, Brightness.light),
-      home: SettingsScreen(section: root ? null : SettingsSection.premium),
+      home: SettingsScreen(section: root ? null : section),
     ),
   );
 }
@@ -103,7 +104,9 @@ Widget wholeApp(
       bridgeProvider.overrideWithValue(bridge),
       disguiseServiceProvider.overrideWithValue(disguise ?? FakeDisguise()),
       screenLockGateProvider.overrideWithValue(FakeScreenLock()),
-      biometricGateProvider.overrideWithValue(FakeFingerprint(available: false)),
+      biometricGateProvider.overrideWithValue(
+        FakeFingerprint(available: false),
+      ),
       notificationServiceProvider.overrideWithValue(
         notifications ?? RecordingNotifications(),
       ),
@@ -117,4 +120,3 @@ void useTallSurface(WidgetTester tester) {
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
 }
-

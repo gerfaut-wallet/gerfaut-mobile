@@ -11,6 +11,7 @@ import '../../widgets/notice.dart';
 import '../../widgets/reorder.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/wallet_icon.dart';
+import '../confirm_identity.dart';
 import 'fields.dart';
 
 /// The Wallets section: the gap limit every wallet shares, then the
@@ -33,6 +34,10 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
   final _renameController = TextEditingController();
   String? _confirmRemoveId;
   String? _walletError;
+
+  /// The wallet a removal is under way for, the owner's check included:
+  /// its question's answers are held, so a second tap sends nothing.
+  String? _removingId;
 
   /// Wallet whose rescan was started here; its row says so meanwhile.
   String? _rescanningId;
@@ -119,7 +124,15 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
   }
 
   Future<void> _remove(String id) async {
+    if (_removingId != null) return;
+    // A wallet the server watches leaves its watch with it, and its
+    // alerts stop: whoever holds the phone proves they own it first,
+    // as for stopping the watch from the Premium section.
+    final premium = ref.read(premiumStateProvider).valueOrNull;
+    final watched = premium != null && premium.hasKey && premium.consented(id);
+    setState(() => _removingId = id);
     try {
+      if (watched && !await confirmIdentity(context, ref)) return;
       await ref.read(bridgeProvider).removeWallet(id);
       ref.invalidate(walletsProvider);
       // The server is told after the answer, and the Premium card reads
@@ -130,6 +143,8 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
       _toast('Wallet removed');
     } catch (error) {
       setState(() => _walletError = '$error');
+    } finally {
+      if (mounted) setState(() => _removingId = null);
     }
   }
 
@@ -369,6 +384,7 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
       movable: shown.length > 1,
       renaming: _renamingId == wallet.id,
       confirmingRemove: _confirmRemoveId == wallet.id,
+      removing: _removingId == wallet.id,
       watchedByServer: watchedByServer,
       renameController: _renameController,
       onRenameStart: () {
@@ -409,6 +425,7 @@ class _WalletRow extends StatelessWidget {
     required this.movable,
     required this.renaming,
     required this.confirmingRemove,
+    required this.removing,
     required this.watchedByServer,
     required this.renameController,
     required this.onRenameStart,
@@ -431,6 +448,9 @@ class _WalletRow extends StatelessWidget {
   final bool movable;
   final bool renaming;
   final bool confirmingRemove;
+
+  /// The removal is under way: its answers are held.
+  final bool removing;
 
   /// The server watches this wallet: removing it here takes it off the
   /// server as well, alert history included, and the note says so.
@@ -600,10 +620,13 @@ class _WalletRow extends StatelessWidget {
               // confirmation, and the way out sits beside it — or
               // above it, once the text is too large for one line.
               action: ConfirmActions(
-                cancel: GhostButton(label: 'Cancel', onPressed: onCancel),
+                cancel: GhostButton(
+                  label: 'Cancel',
+                  onPressed: removing ? null : onCancel,
+                ),
                 confirm: DangerButton(
                   label: 'Remove wallet',
-                  onPressed: onRemoveConfirm,
+                  onPressed: removing ? null : onRemoveConfirm,
                 ),
               ),
             ),

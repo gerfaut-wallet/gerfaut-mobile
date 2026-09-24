@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/screens/confirm_identity.dart';
+import 'package:gerfaut/screens/settings.dart';
 import 'package:gerfaut/screens/settings/premium_section.dart';
 import 'package:gerfaut/src/identity.dart';
 import 'package:gerfaut/src/models.dart';
@@ -321,7 +322,7 @@ void main() {
       expect(tester.widget<DangerButton>(remove).onPressed, isNull);
     });
 
-    testWidgets('deleting the account asks, forgetting the key does not', (
+    testWidgets('a device with full access asks before it leaves', (
       tester,
     ) async {
       useTallSurface(tester);
@@ -340,12 +341,76 @@ void main() {
       expect(bridge.premiumAccountDeleted, isFalse);
       expect(bridge.premiumKey, isNotNull);
 
+      // Leaving alone asks too: the server forgets this device, and the
+      // account would have no device left to refuse the next one.
       await tester.tap(find.text('Also delete everything on the server'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Forget key'));
       await tester.pumpAndSettle();
-      expect(screenLock.asked, hasLength(1));
+      expect(screenLock.asked, hasLength(2));
+      expect(bridge.premiumKey, isNotNull);
+      expect(bridge.premiumCalls, isNot(contains('log-out')));
+
+      screenLock.outcome = ScreenLockOutcome.confirmed;
+      await tester.tap(find.text('Forget key'));
+      await tester.pumpAndSettle();
+      expect(bridge.premiumCalls, contains('log-out'));
       expect(bridge.premiumKey, isNull);
+    });
+
+    testWidgets('a device that waits leaves without a question', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumMakeWaiting(bridge.premiumThisDeviceId!);
+      final screenLock = FakeScreenLock();
+      await tester.pumpWidget(premiumApp(bridge, screenLock: screenLock));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Forget this key'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Forget key'));
+      await tester.pumpAndSettle();
+      expect(screenLock.asked, isEmpty);
+      expect(bridge.premiumKey, isNull);
+    });
+
+    testWidgets('removing a watched wallet asks, a plain one does not', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumConsents.add(
+        const WatchConsent(walletId: 'w1', consentedAt: 1),
+      );
+      final screenLock = FakeScreenLock(outcome: ScreenLockOutcome.refused);
+      await tester.pumpWidget(
+        premiumApp(
+          bridge,
+          screenLock: screenLock,
+          section: SettingsSection.wallets,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The rows in the vault's order: Cold storage, then Donations.
+      Future<void> remove(int row) async {
+        await tester.tap(find.text('Remove').at(row));
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(DangerButton, 'Remove wallet'));
+        await tester.pumpAndSettle();
+      }
+
+      await remove(0);
+      expect(screenLock.asked, hasLength(1));
+      expect(bridge.wallets.map((w) => w.id), contains('w1'));
+
+      await tester.tap(find.widgetWithText(GhostButton, 'Cancel'));
+      await tester.pumpAndSettle();
+      await remove(1);
+      expect(screenLock.asked, hasLength(1));
+      expect(bridge.wallets.map((w) => w.id), isNot(contains('w2')));
     });
 
     testWidgets('unwatching a wallet asks', (tester) async {
