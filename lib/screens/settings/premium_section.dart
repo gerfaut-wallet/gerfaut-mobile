@@ -173,7 +173,21 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   /// device has full access at once; any later one waits, and the
   /// section shows the wait.
   Future<void> _activate() async {
-    if (_activating) return;
+    if (_activating || _verifying) return;
+    // Another key moves a connected device to another account and logs
+    // it out of this one: what "Forget this key" does, behind the same
+    // question to whoever holds the phone.
+    final view = ref.read(premiumStateProvider).valueOrNull;
+    final me = view == null
+        ? null
+        : currentDevice(view, ref.read(premiumMeProvider).valueOrNull);
+    final leaving =
+        view != null &&
+        view.connected &&
+        !(me != null && !me.fullAccess) &&
+        normalizeKey(_keyController.text) != view.key;
+    if (leaving && !await _confirmIdentity()) return;
+    if (!mounted) return;
     setState(() {
       _activating = true;
       _licenceError = null;
@@ -303,16 +317,19 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
     }
   }
 
-  /// Forgets the key here, or deletes the account with it. [full] says
-  /// this device has full access.
-  Future<void> _forget({required bool full}) async {
+  /// Forgets the key here, or deletes the account with it. [confirm]
+  /// says this device is connected and not known to wait: it may have
+  /// full access, and leaving asks who holds the phone.
+  Future<void> _forget({required bool confirm}) async {
     if (_forgetting || _verifying) return;
     // Taking the account down is for its owner only. So is taking this
     // device off it when it has full access: the server forgets the
-    // device, and an account left with no device that sees it has
-    // nobody to refuse the next one, whoever connects it. A device
-    // that waits, or that the server let go, leaves without a question.
-    if ((_deleteAccount || full) && !await _confirmIdentity()) return;
+    // device, coming back takes an approval or ten days, and an account
+    // left with no device that sees it has nobody to refuse the next
+    // one. A device whose access is not known yet, the server out of
+    // reach, is asked too rather than let through. A device that waits,
+    // or that the server let go, leaves without a question.
+    if ((_deleteAccount || confirm) && !await _confirmIdentity()) return;
     if (!mounted) return;
     setState(() {
       _forgetting = true;
@@ -684,7 +701,8 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
       canDelete: full,
       forgetting: _forgetting || _verifying,
       onCancel: _cancelForget,
-      onConfirm: () => _forget(full: full),
+      // Connected and not known to wait: full access, or not known yet.
+      onConfirm: () => _forget(confirm: view.connected && !waiting),
       onDeleteAccountChanged: (on) => setState(() => _deleteAccount = on),
     );
     final devices = full ? ref.watch(accountDevicesProvider) : null;
