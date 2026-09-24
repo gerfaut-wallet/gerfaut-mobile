@@ -186,6 +186,14 @@ class SettingsScreen extends ConsumerWidget {
           case LicenceStatus.active:
             final until =
                 'Active until ${formatDate(premium.claims!.expiresAt)}';
+            // A device the server let go, or one still waiting, sees
+            // nothing of the account: the line says where it stands
+            // rather than a count it cannot have.
+            if (premium.disconnected) return '$until · disconnected';
+            final me = ref.watch(premiumMeProvider).valueOrNull;
+            if (me != null && !me.fullAccess) {
+              return '$until · waiting for approval';
+            }
             // The count is the server's, read once a key is set; until
             // it answers, the date stands alone rather than a guess.
             final watched = ref.watch(premiumWalletsProvider).valueOrNull;

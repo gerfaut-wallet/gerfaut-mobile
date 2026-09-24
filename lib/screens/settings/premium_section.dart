@@ -19,18 +19,26 @@ import '../../widgets/premium_pill.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/status_pill.dart';
 import '../../widgets/wallet_icon.dart';
+import '../change_key.dart';
 import '../confirm_identity.dart';
 import '../premium_channels.dart';
 import '../premium_consent.dart';
 import '../wallet_home.dart';
+import 'premium_devices.dart';
+import 'premium_error_note.dart';
+import 'premium_protect.dart';
 
 /// How often the server is asked again while a wallet's first scan
 /// runs, and for how long before the asking stops.
 const Duration scanPollEvery = Duration(seconds: 5);
 const Duration scanPollFor = Duration(minutes: 2);
 
-/// The Premium section: four cards, in this order. The licence, the
-/// wallets the server watches, where alerts go, and what it said lately.
+/// The Premium section. The licence first; on a device with full access
+/// then the account's devices, the card that protects it until its three
+/// steps are done, the wallets the server watches, where alerts go, and
+/// what it said lately. A device that waits for approval sees the
+/// licence and the wait, and nothing of the account; one the server
+/// disconnected sees the licence and the way to connect again.
 ///
 /// Nothing is sold here: no price, no countdown, one link to the site.
 /// Without a key the section is silent, and asks the server nothing.
@@ -56,6 +64,17 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   /// a second call, and the deletion is not a thing to ask for twice.
   bool _forgetting = false;
   bool _refreshedLicence = false;
+
+  /// The kept key is being tried again, for a device the server
+  /// disconnected.
+  bool _connecting = false;
+
+  /// The kept key was refused on the way back: it was changed on
+  /// another device, and the field asks for the new one.
+  bool _keyRejected = false;
+
+  /// A waiting device asks the server again whether it was approved.
+  bool _checkingAgain = false;
 
   // The watched wallets.
 
@@ -142,7 +161,11 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
     });
   }
 
+  /// Connects this phone with the key typed in. The account's first
+  /// device has full access at once; any later one waits, and the
+  /// section shows the wait.
   Future<void> _activate() async {
+    if (_activating) return;
     setState(() {
       _activating = true;
       _licenceError = null;
@@ -151,6 +174,7 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
       await _bridge.premiumConnect(_keyController.text);
       if (!mounted) return;
       _keyController.clear();
+      _keyRejected = false;
       // The certificate just came in: nothing to fetch again this visit.
       _refreshedLicence = true;
       invalidatePremium(ref);
@@ -158,6 +182,49 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
       if (mounted) setState(() => _licenceError = error);
     } finally {
       if (mounted) setState(() => _activating = false);
+    }
+  }
+
+  /// A device the server disconnected tries the key it kept. It comes
+  /// back as a new device, which waits like any other; a key changed
+  /// elsewhere is refused, and the field comes back for the new one.
+  Future<void> _connectAgain(PremiumView view) async {
+    final key = view.key;
+    if (_connecting || key == null) return;
+    setState(() {
+      _connecting = true;
+      _licenceError = null;
+    });
+    try {
+      await _bridge.premiumConnect(key);
+      if (!mounted) return;
+      invalidatePremium(ref);
+    } on BridgeException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        if (error.kind == 'premium_unknown_key') {
+          _keyRejected = true;
+        } else {
+          _licenceError = error;
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _connecting = false);
+    }
+  }
+
+  /// Asks the server again where this waiting device stands: approved
+  /// meanwhile, it opens on the whole account.
+  Future<void> _checkAgain() async {
+    if (_checkingAgain) return;
+    setState(() => _checkingAgain = true);
+    ref.invalidate(premiumMeProvider);
+    try {
+      await ref.read(premiumMeProvider.future);
+    } catch (_) {
+      // The note under the licence says what failed.
+    } finally {
+      if (mounted) setState(() => _checkingAgain = false);
     }
   }
 
@@ -186,6 +253,7 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
       setState(() {
         _confirmForget = false;
         _deleteAccount = false;
+        _keyRejected = false;
       });
       invalidatePremium(ref);
     } on BridgeException catch (error) {
@@ -466,16 +534,37 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
     _refreshLicenceOnce(view);
     final status = licenceStatus(view);
 
+    // Where this device stands decides what the page holds: the whole
+    // account, the wait, or the way back in. Nothing is asked without a
+    // key, nor for a device the server disconnected.
+    final asksDevice = view.hasKey && !view.disconnected;
+    final me = asksDevice ? ref.watch(premiumMeProvider) : null;
+    final device = me?.valueOrNull;
+    final full = device?.fullAccess ?? false;
+    final waiting = device != null && !device.fullAccess;
+    final meError = device == null && me != null && me.hasError
+        ? _bridgeError(me.error)
+        : null;
+    if (const {
+      'premium_device_disconnected',
+      'premium_unknown_key',
+    }.contains(meError?.kind)) {
+      // The core dropped the token as the server refused it, or found
+      // the kept key changed: the vault now says the device is
+      // disconnected, and reading it again lands there for good.
+      Future.microtask(() {
+        if (mounted) ref.invalidate(premiumStateProvider);
+      });
+    }
+
     // What the server was asked, and whether it answered: a read that
     // failed gets the same amber note as an action that failed, under
-    // the card it concerns. Nothing is asked without a key.
-    final account = view.hasKey ? ref.watch(premiumAccountProvider) : null;
-    final candidates = view.hasKey
-        ? ref.watch(premiumCandidatesProvider)
-        : null;
-    final watched = view.hasKey ? ref.watch(premiumWalletsProvider) : null;
-    final channels = view.hasKey ? ref.watch(premiumChannelsProvider) : null;
-    final events = view.hasKey ? ref.watch(premiumEventsProvider) : null;
+    // the card it concerns.
+    final account = full ? ref.watch(premiumAccountProvider) : null;
+    final candidates = full ? ref.watch(premiumCandidatesProvider) : null;
+    final watched = full ? ref.watch(premiumWalletsProvider) : null;
+    final channels = full ? ref.watch(premiumChannelsProvider) : null;
+    final events = full ? ref.watch(premiumEventsProvider) : null;
     final scanned = watched?.valueOrNull;
     if (scanned != null) {
       // Off the build: following a scan moves providers.
@@ -491,30 +580,106 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
     final channelsError = _channelsError ?? _bridgeError(channels?.error);
     final eventsError = _bridgeError(events?.error);
 
+    final forget = _ForgetQuestion(
+      deleteAccount: _deleteAccount,
+      // The account goes only from a device that sees it.
+      canDelete: full,
+      forgetting: _forgetting || _verifying,
+      onCancel: _cancelForget,
+      onConfirm: _forget,
+      onDeleteAccountChanged: (on) => setState(() => _deleteAccount = on),
+    );
+    final devices = full ? ref.watch(premiumDevicesProvider).valueOrNull : null;
+    final lock = ref.watch(settingsProvider).valueOrNull?.appLock;
+    final steps = devices == null
+        ? null
+        : protectSteps(view: view, devices: devices, lock: lock);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _LicenceCard(
           view: view,
           status: status,
+          asksKey: _keyRejected,
+          full: full,
+          waiting: waiting,
           controller: _keyController,
           activating: _activating,
-          confirmingForget: _confirmForget,
-          deleteAccount: _deleteAccount,
-          forgetting: _forgetting || _verifying,
+          confirmingForget: _confirmForget && !waiting,
+          forget: forget,
           onActivate: _activate,
+          onChangeKey: () => showChangeKeySheet(context),
           onForgetStart: () => setState(() => _confirmForget = true),
-          onForgetCancel: _cancelForget,
-          onForgetConfirm: _forget,
-          onDeleteAccountChanged: (on) => setState(() => _deleteAccount = on),
         ),
+        if (_keyRejected)
+          const Padding(
+            padding: EdgeInsets.only(bottom: GerfautSpacing.gutter),
+            child: GerfautNotice(
+              tone: NoticeTone.info,
+              liveRegion: true,
+              message: 'This key no longer works. Enter the new one.',
+            ),
+          ),
         if (_licenceError != null)
-          _ErrorNote(
+          PremiumErrorNote(
             error: _licenceError!,
             onRetry: _activating || !isWellFormedKey(_keyController.text)
                 ? null
                 : _activate,
           ),
+        if (view.hasKey && view.disconnected && !_keyRejected)
+          _DisconnectedNote(
+            connecting: _connecting,
+            onConnect: () => _connectAgain(view),
+          ),
+        if (asksDevice && device == null && meError == null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: GerfautSpacing.gutter),
+            child: Text(
+              'Loading…',
+              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+            ),
+          ),
+        if (meError != null)
+          PremiumErrorNote(
+            error: meError,
+            onRetry: () => ref.invalidate(premiumMeProvider),
+          ),
+        if (waiting)
+          _WaitingCard(
+            device: device,
+            checking: _checkingAgain,
+            confirmingForget: _confirmForget,
+            forget: forget,
+            onCheckAgain: _checkAgain,
+            onForgetStart: () => setState(() => _confirmForget = true),
+          ),
+        if (full) ...[
+          const DevicesCard(),
+          if (steps != null && protectCardShows(view, steps))
+            ProtectAccountCard(view: view, steps: steps),
+        ],
+        if (full || !view.hasKey) ..._accountCards(
+          view: view,
+          walletsError: walletsError,
+          channelsError: channelsError,
+          eventsError: eventsError,
+        ),
+      ],
+    );
+  }
+
+  /// What the server watches for the account, where it tells, and what
+  /// it said lately: in their placeholder words without a key, and read
+  /// from the server on a device with full access.
+  List<Widget> _accountCards({
+    required PremiumView view,
+    required BridgeException? walletsError,
+    required BridgeException? channelsError,
+    required BridgeException? eventsError,
+  }) {
+    return [
         _WatchedWalletsCard(
           view: view,
           busyWalletIds: _busyWalletIds,
@@ -526,7 +691,7 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
           onUnwatchCancel: _cancelUnwatch,
         ),
         if (walletsError != null)
-          _ErrorNote(
+          PremiumErrorNote(
             error: walletsError,
             onRetry: () {
               setState(() => _walletsError = null);
@@ -551,7 +716,7 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
           onConfirmed: _confirmed,
         ),
         if (channelsError != null)
-          _ErrorNote(
+          PremiumErrorNote(
             error: channelsError,
             onRetry: () {
               setState(() => _channelsError = null);
@@ -560,12 +725,11 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
           ),
         _RecentAlertsCard(view: view),
         if (eventsError != null)
-          _ErrorNote(
+          PremiumErrorNote(
             error: eventsError,
             onRetry: () => ref.invalidate(premiumEventsProvider),
           ),
-      ],
-    );
+    ];
   }
 
   /// A provider's failure as the bridge named it; anything else is
@@ -577,71 +741,48 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   }
 }
 
-/// A call that failed, in an amber note under the card it concerns.
-/// The words follow the kind: the server out of reach gets a retry, a
-/// key the server refuses gets the reason. Which sentence each kind
-/// gets lives in [premiumFailure], with the pages that add a channel.
-class _ErrorNote extends StatelessWidget {
-  const _ErrorNote({required this.error, this.onRetry});
-
-  final BridgeException error;
-  final VoidCallback? onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final failure = premiumFailure(error);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: GerfautSpacing.gutter),
-      child: GerfautNotice(
-        tone: NoticeTone.info,
-        message: failure.message,
-        hint: failure.hint,
-        detail: failure.detail,
-        liveRegion: true,
-        action: failure.retry && onRetry != null
-            ? GhostButton(label: 'Retry', onPressed: onRetry)
-            : null,
-      ),
-    );
-  }
-}
-
 // --- 1. Licence ------------------------------------------------------------
 
 class _LicenceCard extends ConsumerWidget {
   const _LicenceCard({
     required this.view,
     required this.status,
+    required this.asksKey,
+    required this.full,
+    required this.waiting,
     required this.controller,
     required this.activating,
     required this.confirmingForget,
-    required this.deleteAccount,
-    required this.forgetting,
+    required this.forget,
     required this.onActivate,
+    required this.onChangeKey,
     required this.onForgetStart,
-    required this.onForgetCancel,
-    required this.onForgetConfirm,
-    required this.onDeleteAccountChanged,
   });
 
   final PremiumView view;
   final LicenceStatus status;
+
+  /// The field again, whatever the vault holds: the kept key was
+  /// refused, and the new one is asked for.
+  final bool asksKey;
+
+  /// This device has full access: it may change the key.
+  final bool full;
+
+  /// This device waits for approval: "Forget this key" stands on the
+  /// card that says so, with the other thing it can do, and not twice.
+  final bool waiting;
   final TextEditingController controller;
   final bool activating;
+
+  /// The question under "Forget this key" is up.
   final bool confirmingForget;
 
-  /// The account on the server goes with the key: ticked, the
-  /// confirmation is about something nothing brings back.
-  final bool deleteAccount;
-
-  /// The confirmed press is with the core: its buttons are held, and
-  /// the one pressed says what it is doing.
-  final bool forgetting;
+  /// That question, built by the section, which holds its state.
+  final Widget forget;
   final VoidCallback onActivate;
+  final VoidCallback onChangeKey;
   final VoidCallback onForgetStart;
-  final VoidCallback onForgetCancel;
-  final VoidCallback onForgetConfirm;
-  final ValueChanged<bool> onDeleteAccountChanged;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -650,11 +791,23 @@ class _LicenceCard extends ConsumerWidget {
       icon: LucideIcons.keyRound,
       iconColor: tokens.premium,
       title: 'Licence',
-      children: switch (status) {
-        LicenceStatus.none => _withoutKey(tokens),
-        LicenceStatus.active => _withKey(context, ref, tokens, active: true),
-        LicenceStatus.expired => _withKey(context, ref, tokens, active: false),
-      },
+      children: asksKey
+          ? _withoutKey(tokens)
+          : switch (status) {
+              LicenceStatus.none => _withoutKey(tokens),
+              LicenceStatus.active => _withKey(
+                context,
+                ref,
+                tokens,
+                active: true,
+              ),
+              LicenceStatus.expired => _withKey(
+                context,
+                ref,
+                tokens,
+                active: false,
+              ),
+            },
     );
   }
 
@@ -781,6 +934,8 @@ class _LicenceCard extends ConsumerWidget {
           style: tokens.body.copyWith(color: tokens.pending),
         ),
       const SizedBox(height: GerfautSpacing.sm),
+      // A Wrap: at a large text size the third button goes to a line of
+      // its own rather than past the edge of the card.
       Wrap(
         children: [
           GhostButton(
@@ -788,15 +943,64 @@ class _LicenceCard extends ConsumerWidget {
             icon: LucideIcons.externalLink,
             onPressed: () => _renew(context, ref, key),
           ),
-          GhostButton(
-            label: 'Forget this key',
-            icon: LucideIcons.eraser,
-            onPressed: confirmingForget ? null : onForgetStart,
-          ),
+          if (full)
+            GhostButton(
+              label: 'Change key',
+              icon: LucideIcons.rotateCcwKey,
+              onPressed: onChangeKey,
+            ),
+          if (!waiting)
+            GhostButton(
+              label: 'Forget this key',
+              icon: LucideIcons.eraser,
+              onPressed: confirmingForget ? null : onForgetStart,
+            ),
         ],
       ),
       if (confirmingForget) ...[
         const SizedBox(height: GerfautSpacing.sm),
+        forget,
+      ],
+    ];
+  }
+}
+
+/// The question under "Forget this key", on the licence or on the card
+/// of a device that waits: what leaving costs, the box that takes the
+/// account down with the key where this device may, and the two
+/// answers.
+class _ForgetQuestion extends StatelessWidget {
+  const _ForgetQuestion({
+    required this.deleteAccount,
+    required this.canDelete,
+    required this.forgetting,
+    required this.onCancel,
+    required this.onConfirm,
+    required this.onDeleteAccountChanged,
+  });
+
+  /// The account on the server goes with the key: ticked, the
+  /// confirmation is about something nothing brings back.
+  final bool deleteAccount;
+
+  /// This device sees the account and may delete it; one that waits,
+  /// or that the server disconnected, may only leave.
+  final bool canDelete;
+
+  /// The confirmed press is with the core: its buttons are held, and
+  /// the one pressed says what it is doing.
+  final bool forgetting;
+  final VoidCallback onCancel;
+  final VoidCallback onConfirm;
+  final ValueChanged<bool> onDeleteAccountChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final deleting = deleteAccount && canDelete;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
         // Amber either way. Nothing on chain is touched by either:
         // forgetting the key stops this phone hearing about the watch,
         // deleting the account stops the watch itself and spends the
@@ -804,7 +1008,8 @@ class _LicenceCard extends ConsumerWidget {
         // words carry it; red stays for what costs funds or privacy.
         GerfautNotice(
           tone: NoticeTone.info,
-          message: deleteAccount
+          liveRegion: true,
+          message: deleting
               ? 'Deleting the account removes the wallets it watches, the '
                     'channels it tells and the key itself from the server. '
                     'This cannot be undone, and whatever paid time the key '
@@ -813,29 +1018,141 @@ class _LicenceCard extends ConsumerWidget {
                     'on the server. It is your only proof of purchase: '
                     'keep a copy before you forget it here.',
         ),
-        const SizedBox(height: GerfautSpacing.xs),
-        _DeleteAccountBox(
-          value: deleteAccount,
-          onChanged: forgetting ? null : onDeleteAccountChanged,
-        ),
+        if (canDelete) ...[
+          const SizedBox(height: GerfautSpacing.xs),
+          _DeleteAccountBox(
+            value: deleteAccount,
+            onChanged: forgetting ? null : onDeleteAccountChanged,
+          ),
+        ],
         const SizedBox(height: GerfautSpacing.xs),
         ConfirmActions(
           cancel: GhostButton(
             label: 'Cancel',
-            onPressed: forgetting ? null : onForgetCancel,
+            onPressed: forgetting ? null : onCancel,
           ),
           confirm: DangerButton(
-            label: switch ((deleteAccount, forgetting)) {
+            label: switch ((deleting, forgetting)) {
               (true, true) => 'Deleting…',
               (true, false) => 'Delete and forget',
               (false, true) => 'Forgetting…',
               (false, false) => 'Forget key',
             },
-            onPressed: forgetting ? null : onForgetConfirm,
+            onPressed: forgetting ? null : onConfirm,
           ),
         ),
       ],
-    ];
+    );
+  }
+}
+
+/// The server no longer takes this device's token: another device
+/// disconnected it, or the key was changed. The key is still here, and
+/// "Connect again" tries it: the device comes back as a new one, which
+/// waits like any other.
+class _DisconnectedNote extends StatelessWidget {
+  const _DisconnectedNote({required this.connecting, required this.onConnect});
+
+  final bool connecting;
+  final VoidCallback onConnect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: GerfautSpacing.gutter),
+      child: GerfautNotice(
+        tone: NoticeTone.info,
+        message: 'This device was disconnected from your Premium account.',
+        actionsBelow: true,
+        action: GhostButton(
+          label: connecting ? 'Connecting…' : 'Connect again',
+          icon: LucideIcons.plug,
+          onPressed: connecting ? null : onConnect,
+        ),
+      ),
+    );
+  }
+}
+
+/// A device connected with the key and not approved yet: it sees
+/// nothing of the account until another device approves it, or the
+/// wait ends. The card stands where the account's cards would, says
+/// until when, where to approve it, and why the wait is there.
+class _WaitingCard extends StatelessWidget {
+  const _WaitingCard({
+    required this.device,
+    required this.checking,
+    required this.confirmingForget,
+    required this.forget,
+    required this.onCheckAgain,
+    required this.onForgetStart,
+  });
+
+  final PremiumDevice device;
+
+  /// The server is being asked again.
+  final bool checking;
+
+  /// The question under "Forget this key" is up.
+  final bool confirmingForget;
+  final Widget forget;
+  final VoidCallback onCheckAgain;
+  final VoidCallback onForgetStart;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final text = tokens.bodySmall.copyWith(color: tokens.text);
+    final until =
+        device.pendingUntil ?? device.connectedAt + pendingDays * 86400;
+    return SectionCard(
+      icon: LucideIcons.hourglass,
+      iconColor: tokens.premium,
+      title: 'Waiting for approval',
+      children: [
+        Text(
+          'This device connected to your Premium account on '
+          '${formatDate(device.connectedAt)}. It shows your watched wallets, '
+          'channels and alerts once one of your other devices approves it, '
+          'or on ${formatDate(until)} without approval.',
+          style: text,
+        ),
+        const SizedBox(height: GerfautSpacing.sm),
+        Text(
+          'Approve it in Gerfaut on another device: '
+          'Settings › Premium › Devices.',
+          style: text,
+        ),
+        const SizedBox(height: GerfautSpacing.sm),
+        Text(
+          'The wait protects you if someone else gets your key: they see '
+          'nothing and can change nothing while you are warned.',
+          style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+        ),
+        const SizedBox(height: GerfautSpacing.md),
+        Wrap(
+          spacing: GerfautSpacing.sm,
+          runSpacing: GerfautSpacing.sm,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SecondaryButton(
+              label: checking ? 'Checking…' : 'Check again',
+              icon: LucideIcons.refreshCw,
+              onPressed: checking ? null : onCheckAgain,
+            ),
+            GhostButton(
+              label: 'Forget this key',
+              icon: LucideIcons.eraser,
+              onPressed: confirmingForget ? null : onForgetStart,
+            ),
+          ],
+        ),
+        if (confirmingForget) ...[
+          const SizedBox(height: GerfautSpacing.sm),
+          forget,
+        ],
+      ],
+    );
   }
 }
 

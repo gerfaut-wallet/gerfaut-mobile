@@ -42,13 +42,61 @@ final premiumStateProvider = FutureProvider<PremiumView>((ref) {
   return ref.watch(bridgeProvider).premiumState();
 });
 
+/// This device as the server sees it: whether it has full access, and
+/// until when it waits. Null without a key, and once the server has
+/// disconnected it: nothing is asked then.
+///
+/// A key kept by a version that had no devices yet is connected here
+/// first, the way a key typed in would be, and the vault read again
+/// for the token it now holds.
+final premiumMeProvider = FutureProvider<PremiumDevice?>((ref) async {
+  final state = await ref.watch(premiumStateProvider.future);
+  if (!state.hasKey || state.disconnected) return null;
+  final bridge = ref.watch(bridgeProvider);
+  if (state.device == null) {
+    final connected = await bridge.premiumEnsureDevice();
+    if (connected != null) {
+      // Off this build: the state it watches has just changed under it.
+      Future.microtask(() => ref.invalidate(premiumStateProvider));
+      return connected;
+    }
+  }
+  return bridge.premiumDevice();
+});
+
+/// Whether this device sees the account: everything past the licence
+/// waits on it, so a device still waiting asks the server for nothing
+/// it would refuse.
+final premiumFullAccessProvider = FutureProvider<bool>((ref) async {
+  final me = await ref.watch(premiumMeProvider.future);
+  return me?.fullAccess ?? false;
+});
+
 /// The server's view of the account: paid time, counts, and the network
 /// it watches. Null without a key, so nothing is asked before one is
-/// entered.
+/// entered, and null on a device that waits for approval.
 final premiumAccountProvider = FutureProvider<PremiumAccount?>((ref) async {
-  final state = await ref.watch(premiumStateProvider.future);
-  if (!state.hasKey) return null;
+  if (!await ref.watch(premiumFullAccessProvider.future)) return null;
   return ref.watch(bridgeProvider).premiumAccount();
+});
+
+/// Every device of the account, oldest first. Empty unless this one
+/// has full access: only such a device may see the others.
+final premiumDevicesProvider = FutureProvider<List<PremiumDevice>>((
+  ref,
+) async {
+  if (!await ref.watch(premiumFullAccessProvider.future)) return const [];
+  return ref.watch(bridgeProvider).premiumDevices();
+});
+
+/// The other devices that wait for approval, from the last list read.
+/// What the red banner of the home screen is about.
+final waitingDevicesProvider = Provider<List<PremiumDevice>>((ref) {
+  final devices = ref.watch(premiumDevicesProvider).valueOrNull;
+  return [
+    for (final device in devices ?? const <PremiumDevice>[])
+      if (!device.fullAccess && !device.thisDevice) device,
+  ];
 });
 
 /// The wallets of this vault the server could watch: those on its
@@ -63,19 +111,19 @@ final premiumCandidatesProvider = FutureProvider<List<WalletMeta>>((ref) async {
   return ref.watch(bridgeProvider).listWallets(chain);
 });
 
-/// The wallets the server watches for this key. Empty without a key.
+/// The wallets the server watches for this key. Empty without a key,
+/// and on a device that waits for approval.
 final premiumWalletsProvider = FutureProvider<List<WalletWatch>>((ref) async {
-  final state = await ref.watch(premiumStateProvider.future);
-  if (!state.hasKey) return const [];
+  if (!await ref.watch(premiumFullAccessProvider.future)) return const [];
   return ref.watch(bridgeProvider).premiumWallets();
 });
 
-/// The account's channels. Empty without a key.
+/// The account's channels. Empty without a key, and on a device that
+/// waits for approval.
 final premiumChannelsProvider = FutureProvider<List<PremiumChannel>>((
   ref,
 ) async {
-  final state = await ref.watch(premiumStateProvider.future);
-  if (!state.hasKey) return const [];
+  if (!await ref.watch(premiumFullAccessProvider.future)) return const [];
   return ref.watch(bridgeProvider).premiumChannels();
 });
 
@@ -83,8 +131,7 @@ final premiumChannelsProvider = FutureProvider<List<PremiumChannel>>((
 /// server may hand the same event twice across two machines, and a
 /// doubled line would read as two alerts.
 final premiumEventsProvider = FutureProvider<List<PremiumEvent>>((ref) async {
-  final state = await ref.watch(premiumStateProvider.future);
-  if (!state.hasKey) return const [];
+  if (!await ref.watch(premiumFullAccessProvider.future)) return const [];
   final events = await ref.watch(bridgeProvider).premiumRecentEvents();
   final seen = <int>{};
   return [
@@ -96,6 +143,8 @@ final premiumEventsProvider = FutureProvider<List<PremiumEvent>>((ref) async {
 /// Forgets everything read from the server, after something changed it.
 void invalidatePremium(WidgetRef ref) {
   ref.invalidate(premiumStateProvider);
+  ref.invalidate(premiumMeProvider);
+  ref.invalidate(premiumDevicesProvider);
   ref.invalidate(premiumAccountProvider);
   ref.invalidate(premiumCandidatesProvider);
   ref.invalidate(premiumWalletsProvider);
@@ -425,6 +474,29 @@ String? _sentence(String words) {
   if (trimmed.isEmpty) return null;
   final capital = trimmed[0].toUpperCase() + trimmed.substring(1);
   return RegExp(r'[.!?]$').hasMatch(capital) ? capital : '$capital.';
+}
+
+// --- devices -------------------------------------------------------------
+
+/// How long a new device waits without approval. Mirrors the server,
+/// which decides it.
+const int pendingDays = 10;
+
+/// Whole days a waiting device has left, counting the one under way:
+/// a device due tomorrow morning has one day left, never zero.
+int waitingDaysLeft(PremiumDevice device, {int? nowUnix}) {
+  final until = device.pendingUntil;
+  if (until == null) return 0;
+  final now = nowUnix ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  final seconds = until - now;
+  if (seconds <= 0) return 1;
+  return (seconds + 86399) ~/ 86400;
+}
+
+/// The state of a waiting device on its row.
+String waitingLabel(PremiumDevice device, {int? nowUnix}) {
+  final days = waitingDaysLeft(device, nowUnix: nowUnix);
+  return 'Waiting · $days ${days == 1 ? 'day' : 'days'} left';
 }
 
 // --- the heartbeat -------------------------------------------------------

@@ -12,6 +12,7 @@ class SectionCard extends StatelessWidget {
     required this.title,
     required this.children,
     this.iconColor,
+    this.trailing,
   }) : glyph = null;
 
   /// The same card with a glyph of our own — an [OnionIcon] — for the
@@ -24,6 +25,7 @@ class SectionCard extends StatelessWidget {
     required this.title,
     required this.children,
     this.iconColor,
+    this.trailing,
   }) : icon = null;
 
   /// The Lucide glyph of the section; null when [glyph] draws it.
@@ -39,6 +41,10 @@ class SectionCard extends StatelessWidget {
   /// cards set Bruyère here, so the section reads as the paid service's
   /// from its glyph on.
   final Color? iconColor;
+
+  /// One quiet action at the end of the title, for the card itself
+  /// rather than for anything in it: "Hide".
+  final Widget? trailing;
 
   /// The frame every section card wears: card surface, hairline, the
   /// large radius.
@@ -64,6 +70,7 @@ class SectionCard extends StatelessWidget {
             glyph: glyph ?? Icon(icon),
             title: title,
             color: iconColor,
+            trailing: trailing,
           ),
           ...children,
         ],
@@ -116,7 +123,12 @@ class SliverSectionCard extends StatelessWidget {
 /// An icon, a title in the display face, and the gap before the
 /// controls.
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.glyph, required this.title, this.color});
+  const _SectionTitle({
+    required this.glyph,
+    required this.title,
+    this.color,
+    this.trailing,
+  });
 
   /// A Lucide [Icon] or a glyph of ours; either way it is the card
   /// that says how big and what colour, never the caller.
@@ -126,6 +138,9 @@ class _SectionTitle extends StatelessWidget {
 
   /// The icon's ink when a card has one of its own.
   final Color? color;
+
+  /// An action at the end of the row, when the card has one.
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -142,8 +157,14 @@ class _SectionTitle extends StatelessWidget {
           // Flexible, because a Row hands an inflexible child unbounded
           // width: at a doubled text scale on a narrow frame a one-word
           // title ran off the card rather than wrapping onto a second
-          // line.
-          Flexible(child: Text(title, style: tokens.h2)),
+          // line. With an action at the end, the title takes the rest.
+          if (trailing == null)
+            Flexible(child: Text(title, style: tokens.h2))
+          else ...[
+            Expanded(child: Text(title, style: tokens.h2)),
+            const SizedBox(width: GerfautSpacing.sm),
+            trailing!,
+          ],
         ],
       ),
     );
