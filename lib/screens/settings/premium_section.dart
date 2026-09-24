@@ -201,13 +201,16 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
       invalidatePremium(ref);
     } on BridgeException catch (error) {
       if (!mounted) return;
-      setState(() {
-        if (error.kind == 'premium_unknown_key') {
-          _keyRejected = true;
-        } else {
-          _licenceError = error;
-        }
-      });
+      switch (error.kind) {
+        case 'premium_unknown_key':
+          setState(() => _keyRejected = true);
+        // The core kept the server's sentence with the disconnection:
+        // the note that offers to connect again says it, once.
+        case 'premium_too_many_devices':
+          ref.invalidate(premiumStateProvider);
+        default:
+          setState(() => _licenceError = error);
+      }
     } finally {
       if (mounted) setState(() => _connecting = false);
     }
@@ -544,8 +547,10 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
 
     // Where this device stands decides what the page holds: the whole
     // account, the wait, or the way back in. Nothing is asked without a
-    // key, nor for a device the server disconnected.
-    final asksDevice = view.hasKey && !view.disconnected;
+    // key, nor for a device the server disconnected, unless a connection
+    // whose answer was lost is to be sent again.
+    final asksDevice =
+        (view.hasKey && !view.disconnected) || view.connectPending;
     final me = asksDevice ? ref.watch(premiumMeProvider) : null;
     // The last answer, the failure of a read made since included: a
     // provider keeps its previous value through an error, and a device
@@ -553,16 +558,22 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
     final meError = me != null && me.hasError && !me.isLoading
         ? _bridgeError(me.error)
         : null;
-    final turnedAway = const {
-      'premium_device_disconnected',
-      'premium_unknown_key',
-    }.contains(meError?.kind);
+    final turnedAway = disownedKinds.contains(meError?.kind);
     if (turnedAway) {
-      // The core dropped the token as the server refused it, or found
-      // the kept key changed: the vault now says the device is
-      // disconnected, and reading it again lands there for good.
+      // The core dropped the token as the server refused it, found the
+      // kept key changed, or met every device the key takes: the vault
+      // now says the device is disconnected, and reading it again lands
+      // there for good. A first connection sent again and refused for
+      // the last reason leaves no key to be disconnected from: the
+      // server's sentence stays under the field instead.
       Future.microtask(() {
-        if (mounted) ref.invalidate(premiumStateProvider);
+        if (!mounted) return;
+        if (!view.hasKey &&
+            meError?.kind == 'premium_too_many_devices' &&
+            _licenceError == null) {
+          setState(() => _licenceError = meError);
+        }
+        ref.invalidate(premiumStateProvider);
       });
     }
     // A server out of reach leaves the last answer standing, the note
@@ -645,6 +656,7 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
           ),
         if (view.hasKey && view.disconnected && !_keyRejected)
           _DisconnectedNote(
+            reason: view.disconnectedReason,
             connecting: _connecting,
             onConnect: () => _connectAgain(view),
           ),
@@ -1067,9 +1079,19 @@ class _ForgetQuestion extends StatelessWidget {
 /// disconnected it, or the key was changed. The key is still here, and
 /// "Connect again" tries it: the device comes back as a new one, which
 /// waits like any other.
+///
+/// Or the server would not connect it at all, the key having every
+/// device it takes: the note then says so in the server's sentence,
+/// which also says what to do first.
 class _DisconnectedNote extends StatelessWidget {
-  const _DisconnectedNote({required this.connecting, required this.onConnect});
+  const _DisconnectedNote({
+    required this.reason,
+    required this.connecting,
+    required this.onConnect,
+  });
 
+  /// The server's own words for why it would not connect this device.
+  final String? reason;
   final bool connecting;
   final VoidCallback onConnect;
 
@@ -1079,7 +1101,7 @@ class _DisconnectedNote extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: GerfautSpacing.gutter),
       child: GerfautNotice(
         tone: NoticeTone.info,
-        message: 'This device was disconnected from your Premium account.',
+        message: disconnectedWords(reason),
         actionsBelow: true,
         action: GhostButton(
           label: connecting ? 'Connecting…' : 'Connect again',

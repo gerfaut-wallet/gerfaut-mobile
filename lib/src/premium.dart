@@ -48,14 +48,18 @@ final premiumStateProvider = FutureProvider<PremiumView>((ref) {
 /// until when it waits. Null without a key, and once the server has
 /// disconnected it: nothing is asked then.
 ///
-/// A key kept by a version that had no devices yet is connected here
-/// first, the way a key typed in would be, and the vault read again
-/// for the token it now holds.
+/// A connection whose answer was lost is sent again here first, as it
+/// was, and so is a key kept by a version that had no devices yet, the
+/// way a key typed in would be; the vault is read again for the token
+/// it now holds. The core decides what may go: nothing while a rate
+/// limit's wait runs, and never the key on its own once the server has
+/// turned this device away.
 final premiumMeProvider = FutureProvider<PremiumDevice?>((ref) async {
   final state = await ref.watch(premiumStateProvider.future);
-  if (!state.hasKey || state.disconnected) return null;
   final bridge = ref.watch(bridgeProvider);
-  if (state.device == null) {
+  final unconnected =
+      state.hasKey && !state.disconnected && state.device == null;
+  if (state.connectPending || unconnected) {
     final connected = await bridge.premiumEnsureDevice();
     if (connected != null) {
       // Off this build: the state it watches has just changed under it.
@@ -63,6 +67,7 @@ final premiumMeProvider = FutureProvider<PremiumDevice?>((ref) async {
       return connected;
     }
   }
+  if (!state.hasKey || state.disconnected) return null;
   return bridge.premiumDevice();
 });
 
@@ -166,6 +171,16 @@ final waitingDevicesProvider = Provider<List<PremiumDevice>>((ref) {
       if (!device.fullAccess && !device.thisDevice) device,
   ];
 });
+
+/// What asking about this device answers when the server turned it
+/// away: its token disowned, the kept key no longer known, or every
+/// device the key takes already there. The core has written it to the
+/// vault, and reading the vault again shows it.
+const Set<String> disownedKinds = {
+  'premium_device_disconnected',
+  'premium_unknown_key',
+  'premium_too_many_devices',
+};
 
 /// A failure that says this device no longer sees the account, as
 /// opposed to a server out of reach, which says nothing about it.
@@ -568,6 +583,15 @@ String? _sentence(String words) {
 const String keyChangePendingMessage =
     'The key change did not finish. Try again to complete it.';
 
+/// What the note under the licence says of a device the server
+/// disconnected: the server's own sentence when it gave one, the key
+/// having every device it takes, and the app's words otherwise. The
+/// desktop app says the same.
+String disconnectedWords(String? reason) {
+  final words = reason == null ? null : _sentence(reason);
+  return words ?? 'This device was disconnected from your Premium account.';
+}
+
 /// How long a new device waits without approval. Mirrors the server,
 /// which decides it.
 const int pendingDays = 10;
@@ -645,16 +669,13 @@ class DeviceWatch extends Notifier<void> {
         _waitTimer?.cancel();
         _waitTimer = null;
       }
-      // Turned away while nobody looked: the core dropped the token,
-      // and the vault read again says so everywhere, the settings row
-      // included.
+      // Turned away while nobody looked: the core dropped the token, or
+      // found every device the key takes, and the vault read again says
+      // so everywhere, the settings row included.
       final error = next.error;
       if (!next.isLoading &&
           error is BridgeException &&
-          const {
-            'premium_device_disconnected',
-            'premium_unknown_key',
-          }.contains(error.kind)) {
+          disownedKinds.contains(error.kind)) {
         ref.invalidate(premiumStateProvider);
       }
     }, fireImmediately: true);
@@ -680,9 +701,23 @@ class DeviceWatch extends Notifier<void> {
       if (now == null || list.connection != now) return;
       unawaited(_announce(list.devices));
     }, fireImmediately: true);
+    // The logouts the server could not be told of go at the start.
+    Future.microtask(flushLogouts);
   }
 
   bool get _full => ref.read(premiumFullAccessProvider).valueOrNull ?? false;
+
+  /// Tells the server about the connections this device left while it
+  /// could not be reached: the core holds their tokens, and asks nothing
+  /// when it holds none. What still cannot go waits for the next start,
+  /// return or heartbeat.
+  Future<void> flushLogouts() async {
+    try {
+      await ref.read(bridgeProvider).premiumFlushLogouts();
+    } catch (_) {
+      // Out of reach: the tokens stay queued in the vault.
+    }
+  }
 
   /// This device waits for approval.
   bool get _waiting {
@@ -721,12 +756,17 @@ class DeviceWatch extends Notifier<void> {
   /// The app is back in front: the list is read again. Only a real
   /// return counts, from another app or from the phone's lock; the
   /// notification shade pulled down over Gerfaut is not one.
+  ///
+  /// A connection whose answer was lost is sent again then too, and the
+  /// logouts still owed to the server are told.
   void resume() {
-    if (_waiting) {
+    final state = ref.read(premiumStateProvider).valueOrNull;
+    if (_waiting || (state?.connectPending ?? false)) {
       _askMe();
     } else {
       unawaited(check());
     }
+    unawaited(flushLogouts());
   }
 
   Future<void> _announce(List<PremiumDevice> devices) async {
@@ -864,11 +904,16 @@ class WatchMonitor extends Notifier<WatchStatus> {
     return premium != null && premium.hasKey && premium.watched.isNotEmpty;
   }
 
-  /// One heartbeat, now.
+  /// One heartbeat, now. A connection whose answer was lost goes again
+  /// with it, through [premiumMeProvider]: the pulse is one of the
+  /// occasions it gets, with the start and the return to the front.
   Future<void> check() async {
     if (_checking || !_active) return;
     _checking = true;
     _lastCheckAt = _now();
+    if (ref.read(premiumStateProvider).valueOrNull?.connectPending ?? false) {
+      ref.invalidate(premiumMeProvider);
+    }
     final bridge = ref.read(bridgeProvider);
     try {
       await bridge.premiumHeartbeat();
