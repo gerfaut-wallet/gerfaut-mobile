@@ -19,6 +19,7 @@ import '../../widgets/premium_pill.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/status_pill.dart';
 import '../../widgets/wallet_icon.dart';
+import '../confirm_identity.dart';
 import '../premium_channels.dart';
 import '../premium_consent.dart';
 import '../wallet_home.dart';
@@ -73,6 +74,14 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   String? _busyChannelId;
   BridgeException? _channelsError;
 
+  /// The channel whose removal is being asked about, under its row.
+  String? _confirmRemoveChannelId;
+
+  /// Whoever holds the phone is being asked to prove it: every answer
+  /// to a question on this page is held until they have, so a second
+  /// tap cannot open a second prompt or send the call on its own.
+  bool _verifying = false;
+
   /// A channel is being added: the sheet is up, or the server is being
   /// asked for one. The button is held meanwhile, since the ntfy and
   /// Telegram kinds are created on the spot and a second tap in that
@@ -97,6 +106,18 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   void _toast(String message) {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Asks whoever holds the phone to prove they own it, holding every
+  /// question on the page meanwhile. True on a yes.
+  Future<bool> _confirmIdentity() async {
+    if (_verifying) return false;
+    setState(() => _verifying = true);
+    try {
+      return await confirmIdentity(context, ref);
+    } finally {
+      if (mounted) setState(() => _verifying = false);
+    }
   }
 
   // --- the licence -------------------------------------------------------
@@ -141,7 +162,13 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   }
 
   Future<void> _forget() async {
-    if (_forgetting) return;
+    if (_forgetting || _verifying) return;
+    // Taking the account down is for its owner only: the key alone
+    // leaves this phone without a question, since the server keeps
+    // everything, but the account itself is not a thing for whoever
+    // holds the phone unlocked to delete.
+    if (_deleteAccount && !await _confirmIdentity()) return;
+    if (!mounted) return;
     setState(() {
       _forgetting = true;
       _licenceError = null;
@@ -205,6 +232,8 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   /// said yes. On a refusal it stays, the failure under the card, so
   /// the next try is one tap away rather than a switch and a question.
   Future<void> _unwatch(String id) async {
+    if (_busyWalletIds.contains(id)) return;
+    if (!await _confirmIdentity() || !mounted) return;
     final done = await _askForWallet(
       id,
       () => _bridge.premiumUnwatchWallet(id),
@@ -379,7 +408,23 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
     }
   }
 
+  /// Remove, from a channel's menu: asked about under its row first,
+  /// since alerts stop reaching it the moment it goes.
+  void _askRemove(PremiumChannel channel) {
+    setState(() {
+      _confirmRemoveChannelId = channel.id;
+      _channelsError = null;
+    });
+  }
+
+  void _cancelRemove() => setState(() => _confirmRemoveChannelId = null);
+
+  /// The yes: the owner proves who they are, then the server is asked,
+  /// the question held up until it answers so a failure keeps the next
+  /// try one tap away.
   Future<void> _remove(PremiumChannel channel) async {
+    if (_busyChannelId != null) return;
+    if (!await _confirmIdentity() || !mounted) return;
     setState(() {
       _busyChannelId = channel.id;
       _channelsError = null;
@@ -391,6 +436,7 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
         await _bridge.setAppPref(ntfyTopicPref(channel.id), '');
       }
       if (!mounted) return;
+      _confirmRemoveChannelId = null;
       ref.invalidate(settingsProvider);
       ref.invalidate(premiumChannelsProvider);
       ref.invalidate(premiumAccountProvider);
@@ -455,7 +501,7 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
           activating: _activating,
           confirmingForget: _confirmForget,
           deleteAccount: _deleteAccount,
-          forgetting: _forgetting,
+          forgetting: _forgetting || _verifying,
           onActivate: _activate,
           onForgetStart: () => setState(() => _confirmForget = true),
           onForgetCancel: _cancelForget,
@@ -472,6 +518,7 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
         _WatchedWalletsCard(
           view: view,
           busyWalletIds: _busyWalletIds,
+          holding: _verifying,
           confirmingUnwatchId: _confirmUnwatchId,
           onToggle: (wallet, on) => _setWatched(wallet, on, view),
           onUnwatchOrphan: _unwatchOrphan,
@@ -491,10 +538,14 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
         _ChannelsCard(
           view: view,
           busyChannelId: _busyChannelId,
+          holding: _verifying,
+          confirmingRemoveId: _confirmRemoveChannelId,
           adding: _addingChannel,
           onAdd: () => _addChannel(view),
           onTest: _test,
-          onRemove: _remove,
+          onRemove: _askRemove,
+          onRemoveConfirm: _remove,
+          onRemoveCancel: _cancelRemove,
           onSubscribe: _openNtfy,
           onLinkCode: (channel) => _openTelegram(channel, view),
           onConfirmed: _confirmed,
@@ -853,6 +904,7 @@ class _WatchedWalletsCard extends ConsumerWidget {
   const _WatchedWalletsCard({
     required this.view,
     required this.busyWalletIds,
+    required this.holding,
     required this.confirmingUnwatchId,
     required this.onToggle,
     required this.onUnwatchOrphan,
@@ -864,6 +916,10 @@ class _WatchedWalletsCard extends ConsumerWidget {
 
   /// The wallets a call is out about; their rows are held.
   final Set<String> busyWalletIds;
+
+  /// The owner is being asked to prove who they are: the question's
+  /// answers are held meanwhile.
+  final bool holding;
 
   /// The wallet whose row carries the unwatch question, if any.
   final String? confirmingUnwatchId;
@@ -949,6 +1005,7 @@ class _WatchedWalletsCard extends ConsumerWidget {
             name: name,
             local: local,
             busy: busyWalletIds.contains(id),
+            holding: holding,
             onConfirm: () => onUnwatchConfirm(id),
             onCancel: onUnwatchCancel,
           ),
@@ -1125,11 +1182,16 @@ class _UnwatchQuestion extends StatelessWidget {
     required this.name,
     required this.local,
     required this.busy,
+    required this.holding,
     required this.onConfirm,
     required this.onCancel,
   });
 
   final String name;
+
+  /// The owner is being asked who they are: the answers wait, their
+  /// words unchanged.
+  final bool holding;
 
   /// This phone still holds the wallet, and says so: unwatching is
   /// not removing. A wallet the server alone has gets no such clause.
@@ -1159,11 +1221,11 @@ class _UnwatchQuestion extends StatelessWidget {
         action: ConfirmActions(
           cancel: GhostButton(
             label: 'Cancel',
-            onPressed: busy ? null : onCancel,
+            onPressed: busy || holding ? null : onCancel,
           ),
           confirm: DangerButton(
             label: busy ? 'Unwatching…' : 'Unwatch',
-            onPressed: busy ? null : onConfirm,
+            onPressed: busy || holding ? null : onConfirm,
           ),
         ),
       ),
@@ -1248,10 +1310,14 @@ class _ChannelsCard extends ConsumerWidget {
   const _ChannelsCard({
     required this.view,
     required this.busyChannelId,
+    required this.holding,
+    required this.confirmingRemoveId,
     required this.adding,
     required this.onAdd,
     required this.onTest,
     required this.onRemove,
+    required this.onRemoveConfirm,
+    required this.onRemoveCancel,
     required this.onSubscribe,
     required this.onLinkCode,
     required this.onConfirmed,
@@ -1260,11 +1326,24 @@ class _ChannelsCard extends ConsumerWidget {
   final PremiumView view;
   final String? busyChannelId;
 
+  /// The owner is being asked who they are: the question's answers
+  /// wait meanwhile.
+  final bool holding;
+
+  /// The channel whose removal is being asked about, if any.
+  final String? confirmingRemoveId;
+
   /// A channel is on its way: the button that starts one is held.
   final bool adding;
   final VoidCallback onAdd;
   final void Function(PremiumChannel channel) onTest;
+
+  /// Remove, from the row's menu: puts the question under the row.
   final void Function(PremiumChannel channel) onRemove;
+
+  /// The two answers to that question.
+  final void Function(PremiumChannel channel) onRemoveConfirm;
+  final VoidCallback onRemoveCancel;
 
   /// Reopens the subscribe page of an ntfy channel whose topic the
   /// vault still holds.
@@ -1318,6 +1397,13 @@ class _ChannelsCard extends ConsumerWidget {
               onSubscribe: onSubscribe,
               onLinkCode: () => onLinkCode(channel),
             ),
+            if (confirmingRemoveId == channel.id)
+              _RemoveChannelQuestion(
+                busy: busyChannelId == channel.id,
+                holding: holding,
+                onConfirm: () => onRemoveConfirm(channel),
+                onCancel: onRemoveCancel,
+              ),
             // The server turned this one off and delivers nothing to
             // it, whatever else the row would have said: amber under
             // the row, and the words say on their own what to do.
@@ -1371,6 +1457,59 @@ class _ChannelsCard extends ConsumerWidget {
     return '${view.ntfyBaseUrl}/$topic';
   }
 }
+
+/// The question under a channel whose Remove was chosen. Amber: the
+/// alerts stop going there, and nothing on chain is touched; the button
+/// that does it is the destructive one, as for every removal. It stays
+/// up while the server answers, its buttons held, so a second press has
+/// nothing to land on.
+class _RemoveChannelQuestion extends StatelessWidget {
+  const _RemoveChannelQuestion({
+    required this.busy,
+    required this.holding,
+    required this.onConfirm,
+    required this.onCancel,
+  });
+
+  /// The call is with the server.
+  final bool busy;
+
+  /// The owner is being asked who they are.
+  final bool holding;
+  final VoidCallback onConfirm;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final held = busy || holding;
+    return Padding(
+      padding: const EdgeInsets.only(
+        top: GerfautSpacing.xs,
+        bottom: GerfautSpacing.sm,
+      ),
+      child: GerfautNotice(
+        tone: NoticeTone.info,
+        liveRegion: true,
+        message: removeChannelQuestion,
+        actionsBelow: true,
+        action: ConfirmActions(
+          cancel: GhostButton(
+            label: 'Cancel',
+            onPressed: held ? null : onCancel,
+          ),
+          confirm: DangerButton(
+            label: busy ? 'Removing…' : 'Remove',
+            onPressed: held ? null : onConfirm,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// What removing a channel asks first.
+const String removeChannelQuestion =
+    'Remove this channel? Alerts stop going to it at once.';
 
 /// One channel: its glyph, its kind, the masked target under it, the
 /// state as a pill when it has one, and the actions under a menu.

@@ -13,7 +13,9 @@ import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/src/documents.dart';
 import 'package:gerfaut/src/electrum.dart';
 import 'package:gerfaut/src/home_widgets.dart';
+import 'package:gerfaut/src/identity.dart';
 import 'package:gerfaut/src/live.dart';
+import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/screen.dart';
 import 'package:gerfaut/src/window.dart';
@@ -200,6 +202,43 @@ class FakeWidgetBoard implements WidgetBoard {
 
 /// Records what would have been written instead of opening the
 /// system's save dialog.
+/// The phone's own screen lock, answering what the test says instead
+/// of putting a prompt up.
+class FakeScreenLock implements ScreenLockGate {
+  FakeScreenLock({this.outcome = ScreenLockOutcome.confirmed});
+
+  ScreenLockOutcome outcome;
+
+  /// Every reason the prompt was put with, in order.
+  final List<String> asked = [];
+
+  @override
+  Future<ScreenLockOutcome> confirm(String reason) async {
+    asked.add(reason);
+    return outcome;
+  }
+}
+
+/// The phone's biometric prompt, answering what the test says.
+class FakeFingerprint implements BiometricGate {
+  FakeFingerprint({this.available = true, this.passes = true});
+
+  bool available;
+  bool passes;
+
+  /// Every reason the prompt was put with, in order.
+  final List<String> asked = [];
+
+  @override
+  Future<bool> canCheck() async => available;
+
+  @override
+  Future<bool> authenticate(String reason) async {
+    asked.add(reason);
+    return passes;
+  }
+}
+
 /// Records what was copied through the sensitive route instead of
 /// reaching the platform.
 class FakeSensitiveClipboard implements SensitiveClipboard {
