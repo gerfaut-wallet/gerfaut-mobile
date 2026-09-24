@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/screens/change_key.dart';
 import 'package:gerfaut/screens/confirm_identity.dart';
+import 'package:gerfaut/screens/premium_channels.dart';
 import 'package:gerfaut/screens/settings/premium_devices.dart';
 import 'package:gerfaut/screens/settings/premium_protect.dart';
 import 'package:gerfaut/src/bridge.dart';
@@ -1609,6 +1610,53 @@ void main() {
         findsNothing,
       );
       expect(find.text('Forget this key'), findsNothing);
+    });
+
+    testWidgets('the new key leaves by its Copy button alone', (tester) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Change key'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(DangerButton, 'Change key'));
+      await tester.pumpAndSettle();
+
+      // The system's own copy would put the whole account on a clipboard
+      // it previews and keeps a history of.
+      final shown = find.byKey(const Key('change_key.value'));
+      expect(tester.widget<Text>(shown).data, 'wxyz-2345-6789-abcd');
+      expect(
+        find.descendant(
+          of: find.byType(ChangeKeySheet),
+          matching: find.byType(SelectableText),
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('an ntfy topic leaves by its Copy button alone', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      UrlLauncherPlatform.instance = FakeUrlLauncher();
+      final bridge = premiumBridge(activated: true);
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add a channel'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ntfy'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(NtfyChannelScreen), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(NtfyChannelScreen),
+          matching: find.byType(SelectableText),
+        ),
+        findsNothing,
+      );
+      await tester.pump(const Duration(seconds: 5));
     });
   });
 }

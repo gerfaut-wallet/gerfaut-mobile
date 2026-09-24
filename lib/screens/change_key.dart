@@ -220,8 +220,11 @@ class _ChangeKeySheetState extends ConsumerState<ChangeKeySheet> {
         ),
         const SizedBox(height: GerfautSpacing.md),
         // The one large identifier of the app: read and compared symbol
-        // by symbol, so mono, selectable, and never cut short. At a
-        // large text size it breaks at a dash, between two groups.
+        // by symbol, so mono, and never cut short. At a large text size
+        // it breaks at a dash, between two groups. Not selectable: the
+        // system's own copy would put the whole account on a clipboard
+        // it previews and keeps a history of. "Copy" goes by the
+        // guarded one.
         Container(
           padding: const EdgeInsets.symmetric(
             horizontal: GerfautSpacing.md,
@@ -231,7 +234,7 @@ class _ChangeKeySheetState extends ConsumerState<ChangeKeySheet> {
             color: tokens.surfaceSunken,
             borderRadius: BorderRadius.circular(GerfautRadius.md),
           ),
-          child: SelectableText(
+          child: Text(
             newKey,
             key: const Key('change_key.value'),
             textAlign: TextAlign.center,

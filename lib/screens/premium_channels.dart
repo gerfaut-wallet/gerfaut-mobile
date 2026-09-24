@@ -260,7 +260,10 @@ class _NtfyChannelScreenState extends ConsumerState<NtfyChannelScreen> {
                       style: tokens.label.copyWith(color: tokens.textMuted),
                     ),
                     const SizedBox(height: GerfautSpacing.sm),
-                    SelectableText(
+                    // Not selectable, for the reason "Copy" is guarded:
+                    // the system's own copy would hand the topic to the
+                    // clipboard preview and its history.
+                    Text(
                       widget.subscribeUrl,
                       style: tokens.data.copyWith(fontSize: 14),
                     ),
