@@ -119,11 +119,13 @@ The first release: Gerfaut for Android.
   notification also announces each new device, once. While an app lock is set,
   it names neither the device nor the account, and nothing is posted while the
   app is disguised. Gerfaut checks the list when it opens, when it comes back
-  to the front, and every 5 minutes while it is open.
+  to the front, and every 5 minutes while it stays on screen. In the
+  background, it asks nothing.
 - A phone waiting for approval sees a single card in place of the account: the
   day it connected, the day it gets full access without approval, and a Check
   again button. It also checks its own standing every 5 minutes while the app
-  is open, and opens up on its own as soon as another device approves it.
+  is on screen, keeps checking when an attempt fails, and opens up on its own
+  as soon as another device approves it.
 - Change key replaces the account key. The old key stops working at once, on
   the website too, and the server disconnects every other device. The new key
   is shown once, with a Copy button, and the sheet stays open until you tick
@@ -131,7 +133,8 @@ The first release: Gerfaut for Android.
 - A phone the server disconnected says so under the Licence card, in the
   server's own words when it gave some, with a Connect again button. If the
   key was changed on another device, the key field comes back so you can enter
-  the new one.
+  the new one. Forget this key sits beside it, for when you do not have the
+  new key.
 - After the first connection, a Protect your Premium account card suggests 3
   things: connect a second device, turn on the app lock, and save the key in a
   password manager. Each step ticks itself as soon as Gerfaut can tell it is
@@ -142,11 +145,13 @@ The first release: Gerfaut for Android.
   Concretely, it asks for the app lock's PIN, password or fingerprint, and
   checks it the way the lock screen does. Without an app lock, the phone's own
   screen lock answers instead, and it is also asked before a first app lock is
-  set on a phone that holds a Premium key: otherwise, whoever holds the phone
-  unlocked could choose a PIN and answer with it. Gerfaut also asks before you
-  forget the key on a phone with full access or enter another key on it, and
-  before you add a channel while the app lock is on. A phone with no lock at
-  all is sent to Settings › Security to set one.
+  set on a phone that holds a Premium key, or is still connecting one:
+  otherwise, whoever holds the phone unlocked could choose a PIN and answer
+  with it. Gerfaut also asks before you forget the key on a phone with full
+  access or enter another key on it. While the app lock is on, it asks too
+  before you add a channel, or open again the subscribe link or the link code
+  of an existing one. A phone with no lock at all is sent to Settings ›
+  Security to set one.
 - Forget this key also disconnects this phone from the account on the server.
   Connecting it again takes a new approval, or 10 days.
 - A lost answer from the Gerfaut server costs neither the key nor a device.
@@ -161,7 +166,10 @@ The first release: Gerfaut for Android.
   can, at the same moments.
 - The Licence card offers Copy key until you mark the key as saved. When the
   clipboard refuses a copy, an amber note under the button says so and stays
-  there.
+  there. Hide and Mark as done on the Protect card do the same when the vault
+  cannot save them.
+- When the server asks to wait, the note says how long, in seconds, minutes or
+  hours.
 - One APK per processor architecture instead of one carrying all three:
   50 MB to download on a 64-bit ARM phone rather than 127.
 - Reproducible builds. The APKs are built in a container where every tool
