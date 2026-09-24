@@ -1706,11 +1706,13 @@ class FakeBridge implements GerfautBridge {
       key.replaceAll(RegExp(r'[\s-]'), '').toLowerCase();
 
   /// What every account call checks first, the way the core and the
-  /// server do: a key, a token for it, and full access.
+  /// server do: a key, a token for it, and full access. A token the
+  /// server no longer knows is dropped, whichever call met it.
   void _needKey() {
     if (premiumKey == null) {
       throw const BridgeException('premium_no_key', 'no premium key');
     }
+    _disownIfGone();
     final me = _me();
     if (me == null) {
       throw const BridgeException(
@@ -1872,6 +1874,20 @@ class FakeBridge implements GerfautBridge {
   /// This device holds a token the server has not disowned.
   bool get _holdsDevice => premiumThisDeviceId != null && !premiumDisconnected;
 
+  /// The token this device holds is one the server no longer knows:
+  /// refused or disconnected elsewhere, or behind a key changed there.
+  /// The core drops it, and a key change under way with it, since the
+  /// server applies one only for a device it keeps; the key stays.
+  void _disownIfGone() {
+    if (!_holdsDevice || _me() != null) return;
+    premiumDisconnected = true;
+    premiumKeyChangePending = false;
+    throw const BridgeException(
+      'premium_device_disconnected',
+      'this device was disconnected from the Premium account',
+    );
+  }
+
   /// What a refused connection leaves, the way the core decides it: a
   /// refusal that settles it drops the connection under way, and one
   /// about the stored key leaves this device disconnected, with the
@@ -1924,8 +1940,12 @@ class FakeBridge implements GerfautBridge {
     premiumCalls.add('connect:$key');
     final normalized = _normalizeKey(key);
     final stored = premiumKey == normalized;
-    // Moving on would lose the key a change drew.
-    if (premiumKey != null && !stored && premiumKeyChangePending) {
+    // Moving on would lose the key a change drew, while this device
+    // could still finish it: without its token, it never was applied.
+    if (premiumKey != null &&
+        !stored &&
+        premiumKeyChangePending &&
+        _holdsDevice) {
       throw const BridgeException(
         'premium_key_change_pending',
         'the key change did not finish; try again to complete it',
@@ -1948,6 +1968,9 @@ class FakeBridge implements GerfautBridge {
     }
     premiumConnectPending = null;
     premiumDisconnectedReason = null;
+    // No key change is left to finish: this device had no token, or
+    // moved to another account, which it may not while one could.
+    if (!(stored && _holdsDevice)) premiumKeyChangePending = false;
     // A key typed again on the device it connected comes back as that
     // device: nothing new to wait for.
     final me = _me();
@@ -2003,14 +2026,7 @@ class FakeBridge implements GerfautBridge {
     if (premiumKey == null) {
       throw const BridgeException('premium_no_key', 'no premium key');
     }
-    if (premiumThisDeviceId != null && !premiumDisconnected && _me() == null) {
-      // Refused or disconnected elsewhere: the core drops the token.
-      premiumDisconnected = true;
-      throw const BridgeException(
-        'premium_device_disconnected',
-        'this device was disconnected from the Premium account',
-      );
-    }
+    _disownIfGone();
     final me = _me();
     if (me == null) {
       throw const BridgeException(
@@ -2061,6 +2077,14 @@ class FakeBridge implements GerfautBridge {
   @override
   Future<void> premiumRemoveDevice(String id) async {
     premiumCalls.add('remove-device:$id');
+    // This device leaving while its key change is unanswered would
+    // lose the only copy of the new key.
+    if (id == premiumThisDeviceId && premiumKeyChangePending) {
+      throw const BridgeException(
+        'premium_key_change_pending',
+        'the key change did not finish; try again to complete it',
+      );
+    }
     final hook = onPremiumRemoveDevice;
     if (hook != null) await hook(id);
     _needKey();
@@ -2081,12 +2105,22 @@ class FakeBridge implements GerfautBridge {
   @override
   Future<String> premiumChangeKey() async {
     premiumCalls.add('change-key');
+    // Without its token this device sends nothing, and a change under
+    // way ends there: it was never applied.
+    if (!_holdsDevice) {
+      premiumKeyChangePending = false;
+      throw const BridgeException(
+        'premium_no_device',
+        'this device is not connected to the Premium account',
+      );
+    }
     // Drawn and kept before the request leaves, as the core does: the
     // next try sends the same key.
     premiumKeyChangePending = true;
     try {
       final hook = onPremiumChangeKey;
       if (hook != null) await hook();
+      _disownIfGone();
       _needKey();
     } on BridgeException catch (error) {
       // A refusal settles it; an answer lost on the way may hide a
@@ -2094,6 +2128,7 @@ class FakeBridge implements GerfautBridge {
       const settles = {
         'premium_rejected',
         'premium_device_pending',
+        'premium_device_disconnected',
         'premium_no_device',
         'invalid_input',
       };
