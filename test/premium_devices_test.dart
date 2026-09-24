@@ -1658,5 +1658,46 @@ void main() {
       );
       await tester.pump(const Duration(seconds: 5));
     });
+
+    testWidgets('the checklist says a write the vault would not take', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumLocalWritesFail = true;
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      Finder inCard(String text) => find.descendant(
+        of: find.byType(ProtectAccountCard),
+        matching: find.text(text),
+      );
+
+      await tester.tap(find.text('Mark as done'));
+      await tester.pumpAndSettle();
+      final marked = tester.widget<GerfautNotice>(
+        find.ancestor(
+          of: inCard('Could not mark the key as saved.'),
+          matching: find.byType(GerfautNotice),
+        ),
+      );
+      expect(marked.tone, NoticeTone.info);
+      expect(marked.liveRegion, isTrue);
+      expect(find.text('Mark as done'), findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
+
+      await tester.tap(find.text('Hide'));
+      await tester.pumpAndSettle();
+      expect(inCard('Could not hide the card.'), findsOneWidget);
+      // One failure at a time: the last press is the one said.
+      expect(inCard('Could not mark the key as saved.'), findsNothing);
+      expect(find.text('Protect your Premium account'), findsOneWidget);
+
+      bridge.premiumLocalWritesFail = false;
+      await tester.tap(find.text('Hide'));
+      await tester.pumpAndSettle();
+      expect(find.text('Protect your Premium account'), findsNothing);
+      expect(find.text('Could not hide the card.'), findsNothing);
+    });
   });
 }

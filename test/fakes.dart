@@ -2145,15 +2145,26 @@ class FakeBridge implements GerfautBridge {
     return premiumNextKey;
   }
 
+  /// The vault refuses the checklist's writes, as a full disk would.
+  bool premiumLocalWritesFail = false;
+
+  void _localWrite() {
+    if (premiumLocalWritesFail) {
+      throw const BridgeException('vault', 'the vault could not be written');
+    }
+  }
+
   @override
   Future<void> premiumSetKeySaved(bool saved) async {
     premiumCalls.add('key-saved:$saved');
+    _localWrite();
     premiumKeySaved = saved;
   }
 
   @override
   Future<void> premiumHideChecklist() async {
     premiumCalls.add('hide-checklist');
+    _localWrite();
     premiumChecklistHidden = true;
   }
 

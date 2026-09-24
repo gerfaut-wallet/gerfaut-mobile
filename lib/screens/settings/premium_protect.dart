@@ -60,6 +60,9 @@ class ProtectAccountCard extends ConsumerStatefulWidget {
   ConsumerState<ProtectAccountCard> createState() => _ProtectAccountCardState();
 }
 
+/// The two things the card writes to the vault.
+enum _Write { hide, keySaved }
+
 class _ProtectAccountCardState extends ConsumerState<ProtectAccountCard> {
   /// A write to the vault is under way: its button is held.
   bool _busy = false;
@@ -67,15 +70,27 @@ class _ProtectAccountCardState extends ConsumerState<ProtectAccountCard> {
   /// The last "Copy key" did not reach the clipboard.
   bool _copyFailed = false;
 
-  Future<void> _write(Future<void> Function(GerfautBridge bridge) call) async {
+  /// The write the vault last refused, said under its button until the
+  /// next press.
+  _Write? _failed;
+
+  /// A write that fails leaves the card as it was, to press again, and
+  /// says so under the button that asked: a card that stays put after
+  /// "Hide" reads as a button that does nothing.
+  Future<void> _write(
+    _Write what,
+    Future<void> Function(GerfautBridge bridge) call,
+  ) async {
     if (_busy) return;
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _failed = null;
+    });
     try {
       await call(ref.read(bridgeProvider));
       ref.invalidate(premiumStateProvider);
-    } on BridgeException {
-      // A local write that failed leaves the card as it was, to try
-      // again.
+    } catch (_) {
+      if (mounted) setState(() => _failed = what);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -109,9 +124,21 @@ class _ProtectAccountCardState extends ConsumerState<ProtectAccountCard> {
         label: 'Hide',
         onPressed: _busy
             ? null
-            : () => _write((bridge) => bridge.premiumHideChecklist()),
+            : () => _write(
+                _Write.hide,
+                (bridge) => bridge.premiumHideChecklist(),
+              ),
       ),
       children: [
+        // "Hide" sits in the header: its failure right under it.
+        if (_failed == _Write.hide) ...[
+          const GerfautNotice(
+            tone: NoticeTone.info,
+            liveRegion: true,
+            message: 'Could not hide the card.',
+          ),
+          const SizedBox(height: GerfautSpacing.md),
+        ],
         _Step(
           done: steps.secondDevice,
           title: 'Connect a second device',
@@ -158,7 +185,10 @@ class _ProtectAccountCardState extends ConsumerState<ProtectAccountCard> {
               icon: LucideIcons.check,
               onPressed: _busy
                   ? null
-                  : () => _write((bridge) => bridge.premiumSetKeySaved(true)),
+                  : () => _write(
+                      _Write.keySaved,
+                      (bridge) => bridge.premiumSetKeySaved(true),
+                    ),
             ),
           ],
         ),
@@ -170,6 +200,14 @@ class _ProtectAccountCardState extends ConsumerState<ProtectAccountCard> {
             tone: NoticeTone.info,
             liveRegion: true,
             message: 'Could not copy the key.',
+          ),
+        ],
+        if (_failed == _Write.keySaved && !steps.keySaved) ...[
+          const SizedBox(height: GerfautSpacing.sm),
+          const GerfautNotice(
+            tone: NoticeTone.info,
+            liveRegion: true,
+            message: 'Could not mark the key as saved.',
           ),
         ],
       ],
