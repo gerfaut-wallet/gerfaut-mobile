@@ -545,10 +545,17 @@ TxNotice deviceNotice(PremiumDevice device, {required bool locked}) {
 /// announced and hands each out a single time, so neither a restart
 /// nor two readers at once say anything twice.
 ///
+/// On a device that waits itself, the same rhythm asks the server
+/// where it stands, so that it opens on the whole account by itself
+/// once approved, or once its wait is over.
+///
 /// Whoever reads the list — this watch, the banner, the Devices card —
 /// feeds the announcement, so a device seen anywhere is announced.
 class DeviceWatch extends Notifier<void> {
   Timer? _timer;
+
+  /// While this device waits: asks the server where it stands.
+  Timer? _waitTimer;
   bool _checking = false;
 
   @override
@@ -556,7 +563,30 @@ class DeviceWatch extends Notifier<void> {
     ref.onDispose(() {
       _timer?.cancel();
       _timer = null;
+      _waitTimer?.cancel();
+      _waitTimer = null;
     });
+    ref.listen(premiumMeProvider, (_, next) {
+      final me = next.valueOrNull;
+      if (me != null && !me.fullAccess && !next.hasError) {
+        _waitTimer ??= Timer.periodic(deviceCheckPeriod, (_) => _askMe());
+      } else if (!next.isLoading) {
+        _waitTimer?.cancel();
+        _waitTimer = null;
+      }
+      // Turned away while nobody looked: the core dropped the token,
+      // and the vault read again says so everywhere, the settings row
+      // included.
+      final error = next.error;
+      if (!next.isLoading &&
+          error is BridgeException &&
+          const {
+            'premium_device_disconnected',
+            'premium_unknown_key',
+          }.contains(error.kind)) {
+        ref.invalidate(premiumStateProvider);
+      }
+    }, fireImmediately: true);
     // Listened to, not watched: nothing listens to this watch itself,
     // and a provider nobody listens to is not rebuilt when what it
     // watches changes. A subscription keeps both answers coming.
@@ -578,6 +608,15 @@ class DeviceWatch extends Notifier<void> {
   }
 
   bool get _full => ref.read(premiumFullAccessProvider).valueOrNull ?? false;
+
+  /// This device waits for approval.
+  bool get _waiting {
+    final me = ref.read(premiumMeProvider).valueOrNull;
+    return me != null && !me.fullAccess;
+  }
+
+  /// Asks the server again where this waiting device stands.
+  void _askMe() => ref.invalidate(premiumMeProvider);
 
   /// Reads the list again, now.
   Future<void> check() async {
@@ -607,7 +646,13 @@ class DeviceWatch extends Notifier<void> {
   /// The app is back in front: the list is read again. Only a real
   /// return counts, from another app or from the phone's lock; the
   /// notification shade pulled down over Gerfaut is not one.
-  void resume() => unawaited(check());
+  void resume() {
+    if (_waiting) {
+      _askMe();
+    } else {
+      unawaited(check());
+    }
+  }
 
   Future<void> _announce(List<PremiumDevice> devices) async {
     final waiting = [

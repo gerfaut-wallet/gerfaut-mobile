@@ -190,6 +190,28 @@ void main() {
       expect(find.text(newDeviceBanner), findsNothing);
     });
 
+    testWidgets('a waiting device finds out by itself it was approved', (
+      tester,
+    ) async {
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumMakeWaiting(bridge.premiumThisDeviceId!);
+      await tester.pumpWidget(wholeApp(bridge));
+      await tester.pumpAndSettle();
+      final asked = bridge.premiumCalls.where((c) => c == 'me').length;
+      expect(bridge.premiumCalls, isNot(contains('devices')));
+
+      await bridge.premiumApproveDeviceOnServer(bridge.premiumThisDeviceId!);
+      await tester.pump(deviceCheckPeriod);
+      await tester.pumpAndSettle();
+      expect(
+        bridge.premiumCalls.where((c) => c == 'me').length,
+        greaterThan(asked),
+      );
+      // Full access now: the account's devices are read, which a
+      // waiting device never does.
+      expect(bridge.premiumCalls, contains('devices'));
+    });
+
     testWidgets('coming back to the app looks again', (tester) async {
       final bridge = premiumBridge(activated: true);
       notifyOn(bridge);
