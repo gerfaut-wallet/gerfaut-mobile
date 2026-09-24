@@ -382,6 +382,47 @@ void main() {
       expect(find.text('Connect again'), findsOneWidget);
     });
 
+    testWidgets('a wait turned away on checking again says so', (tester) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumMakeWaiting(bridge.premiumThisDeviceId!);
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+      expect(find.text(waitingTitle), findsOneWidget);
+
+      // Refused on another device, or the key changed there, meanwhile:
+      // the answer before this one must not go on standing.
+      bridge.premiumDeviceList.removeWhere(
+        (d) => d.id == bridge.premiumThisDeviceId,
+      );
+      await tester.tap(find.text('Check again'));
+      await tester.pumpAndSettle();
+      expect(find.text(waitingTitle), findsNothing);
+      expect(
+        find.text('This device was disconnected from your Premium account.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a server out of reach leaves the wait as it was', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumMakeWaiting(bridge.premiumThisDeviceId!);
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      bridge.onPremiumMe = () => throw const BridgeException(
+        'premium_unreachable',
+        'the premium server is unreachable: could not connect',
+      );
+      await tester.tap(find.text('Check again'));
+      await tester.pumpAndSettle();
+      expect(find.text(waitingTitle), findsOneWidget);
+      expect(find.text('Could not reach the Gerfaut server.'), findsOneWidget);
+    });
+
     testWidgets('the root row says where the device stands', (tester) async {
       useTallSurface(tester);
       final bridge = premiumBridge(activated: true);

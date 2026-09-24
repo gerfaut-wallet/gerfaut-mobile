@@ -542,16 +542,17 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
     // key, nor for a device the server disconnected.
     final asksDevice = view.hasKey && !view.disconnected;
     final me = asksDevice ? ref.watch(premiumMeProvider) : null;
-    final device = me?.valueOrNull;
-    final full = device?.fullAccess ?? false;
-    final waiting = device != null && !device.fullAccess;
-    final meError = device == null && me != null && me.hasError
+    // The last answer, the failure of a read made since included: a
+    // provider keeps its previous value through an error, and a device
+    // the server has just turned away must not go on showing as it was.
+    final meError = me != null && me.hasError && !me.isLoading
         ? _bridgeError(me.error)
         : null;
-    if (const {
+    final turnedAway = const {
       'premium_device_disconnected',
       'premium_unknown_key',
-    }.contains(meError?.kind)) {
+    }.contains(meError?.kind);
+    if (turnedAway) {
       // The core dropped the token as the server refused it, or found
       // the kept key changed: the vault now says the device is
       // disconnected, and reading it again lands there for good.
@@ -559,6 +560,11 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
         if (mounted) ref.invalidate(premiumStateProvider);
       });
     }
+    // A server out of reach leaves the last answer standing, the note
+    // under the licence saying why it could not be checked again.
+    final device = turnedAway ? null : me?.valueOrNull;
+    final full = device?.fullAccess ?? false;
+    final waiting = device != null && !device.fullAccess;
 
     // What the server was asked, and whether it answered: a read that
     // failed gets the same amber note as an action that failed, under
