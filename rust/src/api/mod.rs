@@ -874,7 +874,9 @@ async fn store_premium(
 /// device it may have, comes back as the error the field shows; nothing
 /// is stored then. An answer lost on the way keeps the connection under
 /// way, and trying again sends the same one. Another key is refused,
-/// `premium_key_change_pending`, while a key change has not finished.
+/// `premium_key_change_pending`, while a key change has not finished and
+/// this device still holds the token that could finish it; without the
+/// token the change was never applied, and connecting ends it.
 pub async fn premium_connect(key: String) -> String {
     let manager = try_json!(manager());
     match manager
@@ -936,7 +938,9 @@ pub async fn premium_approve_device(id: String) -> String {
     }
 }
 
-/// Refuses a waiting device, or disconnects one with full access.
+/// Refuses a waiting device, or disconnects one with full access. This
+/// device's own id is refused, `premium_key_change_pending`, while its
+/// key change has not finished.
 pub async fn premium_remove_device(id: String) -> String {
     let manager = try_json!(manager());
     match manager
@@ -981,7 +985,9 @@ pub async fn premium_flush_logouts() -> String {
 ///
 /// The core draws the key and keeps it before the request leaves: an
 /// answer lost on the way leaves the change under way, which the view
-/// says, and the next call sends that same key rather than a new one.
+/// says, and the next call sends that same key rather than a new one. A
+/// device without its token sends nothing, `premium_no_device`, and a
+/// change under way ends there.
 pub async fn premium_change_key() -> String {
     let manager = try_json!(manager());
     match manager.premium_change_key(&premium_base_url()).await {
