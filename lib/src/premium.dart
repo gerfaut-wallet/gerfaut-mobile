@@ -270,6 +270,10 @@ enum PremiumFailureKind {
   noPaidTime,
   noKey,
   invalid,
+  devicePending,
+  deviceDisconnected,
+  tooManyDevices,
+  noDevice,
   tor,
   other,
 }
@@ -285,6 +289,10 @@ PremiumFailureKind premiumFailureKind(String kind) => switch (kind) {
   'premium_no_paid_time' => PremiumFailureKind.noPaidTime,
   'premium_no_key' => PremiumFailureKind.noKey,
   'premium_invalid' => PremiumFailureKind.invalid,
+  'premium_device_pending' => PremiumFailureKind.devicePending,
+  'premium_device_disconnected' => PremiumFailureKind.deviceDisconnected,
+  'premium_too_many_devices' => PremiumFailureKind.tooManyDevices,
+  'premium_no_device' => PremiumFailureKind.noDevice,
   'tor' => PremiumFailureKind.tor,
   _ => PremiumFailureKind.other,
 };
@@ -364,6 +372,23 @@ PremiumFailure premiumFailure(BridgeException error, {String? refusal}) {
       hint: "Check this phone's date and time, then try again.",
       retry: true,
     ),
+    // The server's own sentences, shown as they are: they say what the
+    // device can do about it, and the desktop app shows the same.
+    PremiumFailureKind.devicePending => const PremiumFailure(
+      'This device is waiting for approval: approve it on another of your '
+      'devices, or wait until it gets full access.',
+    ),
+    PremiumFailureKind.deviceDisconnected => const PremiumFailure(
+      'This device was disconnected from the Premium account.',
+    ),
+    PremiumFailureKind.tooManyDevices => PremiumFailure(
+      _sentence(error.message) ??
+          'This key already has 10 devices; disconnect one from a device '
+              'with full access.',
+    ),
+    PremiumFailureKind.noDevice => const PremiumFailure(
+      'Connect this device with the Premium key first.',
+    ),
     // The call goes through Tor whenever the backend of the active
     // network does, and nothing falls back to the clear: a Tor that
     // cannot be reached is a call that never happened. The core's own
@@ -390,9 +415,15 @@ PremiumFailure premiumFailure(BridgeException error, {String? refusal}) {
 String? _serverSentence(String message) {
   final match = _statusWords.firstMatch(message);
   if (match == null) return null;
-  final words = match.group(1)!.trim();
-  if (words.isEmpty) return null;
-  final capital = words[0].toUpperCase() + words.substring(1);
+  return _sentence(match.group(1)!);
+}
+
+/// The server's words as a sentence of the page: capitalized and
+/// stopped, nothing else changed. Null when there are none.
+String? _sentence(String words) {
+  final trimmed = words.trim();
+  if (trimmed.isEmpty) return null;
+  final capital = trimmed[0].toUpperCase() + trimmed.substring(1);
   return RegExp(r'[.!?]$').hasMatch(capital) ? capital : '$capital.';
 }
 

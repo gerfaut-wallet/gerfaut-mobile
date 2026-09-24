@@ -3001,6 +3001,26 @@ class WatchConsent {
   final int consentedAt;
 }
 
+/// What this device keeps of its own connection to the account: which
+/// device it is and since when. The token that goes with it never
+/// leaves the core.
+class DeviceLink {
+  const DeviceLink({required this.id, required this.connectedAt});
+
+  factory DeviceLink.fromJson(Map<String, dynamic> json) {
+    return DeviceLink(
+      id: json['id'] as String,
+      connectedAt: json['connected_at'] as int,
+    );
+  }
+
+  /// The server's id for this device.
+  final String id;
+
+  /// Unix seconds.
+  final int connectedAt;
+}
+
 /// The premium account as the vault keeps it, with the claims of its
 /// certificate already verified offline. Empty until a key is entered.
 class PremiumView {
@@ -3010,6 +3030,10 @@ class PremiumView {
     this.claims,
     this.watched = const [],
     this.acknowledgedOfflineUntil,
+    this.device,
+    this.disconnected = false,
+    this.keySaved = false,
+    this.checklistHidden = false,
     this.ntfyBaseUrl = 'https://ntfy.gerfaut-wallet.com',
     this.telegramBot = 'GerfautAlertsBot',
   });
@@ -3025,6 +3049,13 @@ class PremiumView {
           .map((w) => WatchConsent.fromJson(w as Map<String, dynamic>))
           .toList(),
       acknowledgedOfflineUntil: json['acknowledged_offline_until'] as int?,
+      device: switch (json['device']) {
+        final Map<String, dynamic> device => DeviceLink.fromJson(device),
+        _ => null,
+      },
+      disconnected: json['disconnected'] as bool? ?? false,
+      keySaved: json['key_saved'] as bool? ?? false,
+      checklistHidden: json['checklist_hidden'] as bool? ?? false,
       ntfyBaseUrl:
           json['ntfy_base_url'] as String? ?? 'https://ntfy.gerfaut-wallet.com',
       telegramBot: json['telegram_bot'] as String? ?? 'GerfautAlertsBot',
@@ -3048,6 +3079,21 @@ class PremiumView {
   /// hidden because the user dismissed it.
   final int? acknowledgedOfflineUntil;
 
+  /// This device's connection to the account; null before the key was
+  /// entered, and once the server has disconnected it.
+  final DeviceLink? device;
+
+  /// The server refused this device's token: another device
+  /// disconnected it, or the key was changed elsewhere. The key stays,
+  /// for connecting again.
+  final bool disconnected;
+
+  /// The user said the key is in a password manager.
+  final bool keySaved;
+
+  /// The "Protect your Premium account" card was hidden.
+  final bool checklistHidden;
+
   /// The ntfy instance the server publishes to.
   final String ntfyBaseUrl;
 
@@ -3055,6 +3101,10 @@ class PremiumView {
   final String telegramBot;
 
   bool get hasKey => key != null;
+
+  /// A key, and a device the server knows it by: what every call past
+  /// the licence needs.
+  bool get connected => key != null && device != null && !disconnected;
 
   /// Whether the user already said yes for this wallet.
   bool consented(String walletId) => watched.any((w) => w.walletId == walletId);
@@ -3081,6 +3131,103 @@ class PremiumLicence {
   /// Unix seconds.
   final int paidUntil;
   final LicenceClaims claims;
+}
+
+/// What kind of machine a device is. The server knows these five and no
+/// free name: whatever it tells the account's channels about a device
+/// comes from this list, never from text the device chose.
+enum DevicePlatform {
+  android('android', 'Android phone'),
+  ios('ios', 'iPhone'),
+  windows('windows', 'Windows computer'),
+  macos('macos', 'Mac'),
+  linux('linux', 'Linux computer');
+
+  const DevicePlatform(this.id, this.label);
+
+  /// Stable machine identifier, as serialized by the core.
+  final String id;
+
+  /// What the device is called on screen and in a notification.
+  final String label;
+
+  /// A platform this build does not know reads as a computer of no
+  /// particular make rather than breaking the list.
+  static DevicePlatform? fromId(String? id) {
+    for (final platform in DevicePlatform.values) {
+      if (platform.id == id) return platform;
+    }
+    return null;
+  }
+}
+
+/// Whether a device sees the account yet.
+enum DeviceAccess {
+  /// Sees and changes everything the key allows.
+  full('full'),
+
+  /// Connected, waiting: it sees nothing and changes nothing until
+  /// another device approves it, or the wait ends.
+  pending('pending');
+
+  const DeviceAccess(this.id);
+
+  final String id;
+
+  static DeviceAccess fromId(String? id) =>
+      id == 'full' ? DeviceAccess.full : DeviceAccess.pending;
+}
+
+/// One device connected to the account, as the server describes it.
+class PremiumDevice {
+  const PremiumDevice({
+    required this.id,
+    required this.platform,
+    required this.connectedAt,
+    required this.access,
+    this.pendingUntil,
+    this.approvedAt,
+    this.thisDevice = false,
+  });
+
+  factory PremiumDevice.fromJson(Map<String, dynamic> json) {
+    return PremiumDevice(
+      id: json['id'] as String,
+      platform: DevicePlatform.fromId(json['platform'] as String?),
+      connectedAt: json['connected_at'] as int,
+      // Anything but a plain "full" waits: an access this build cannot
+      // read is not one to treat as granted.
+      access: DeviceAccess.fromId(json['access'] as String?),
+      pendingUntil: json['pending_until'] as int?,
+      approvedAt: json['approved_at'] as int?,
+      thisDevice: json['this_device'] as bool? ?? false,
+    );
+  }
+
+  final String id;
+
+  /// Null for a platform this build does not know.
+  final DevicePlatform? platform;
+
+  /// Unix seconds.
+  final int connectedAt;
+  final DeviceAccess access;
+
+  /// Unix seconds when a waiting device gets full access without
+  /// approval; null once it has it.
+  final int? pendingUntil;
+
+  /// Unix seconds when another device approved it, or when it got full
+  /// access as the account's first; null while it waits.
+  final int? approvedAt;
+
+  /// The device this app runs on.
+  final bool thisDevice;
+
+  bool get fullAccess => access == DeviceAccess.full;
+
+  /// What the device is called on screen.
+  String get label => platform?.label ?? 'Device';
 }
 
 /// `GET /v1/account`.
@@ -3349,8 +3496,10 @@ class PremiumEvent {
     return PremiumEvent(
       id: json['id'] as int,
       kind: AlertKind.fromId(json['kind'] as String?),
-      wallet: json['wallet'] as String,
-      walletName: json['wallet_name'] as String,
+      // An account event, a device or a key, names no wallet. The log
+      // does not serve those, and one that slips through still reads.
+      wallet: json['wallet'] as String? ?? '',
+      walletName: json['wallet_name'] as String? ?? '',
       at: json['at'] as int,
       data: json['data'] as Map<String, dynamic>? ?? const {},
     );

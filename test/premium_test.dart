@@ -391,7 +391,7 @@ void main() {
       expect(note.tone, NoticeTone.info);
       expect(bridge.premiumKey, isNull);
 
-      bridge.onPremiumActivate = (_) => throw const BridgeException(
+      bridge.onPremiumLicence = (_) => throw const BridgeException(
         'premium_no_paid_time',
         'this key has no paid time left',
       );
@@ -409,7 +409,7 @@ void main() {
       useTallSurface(tester);
       final bridge = premiumBridge();
       var attempts = 0;
-      bridge.onPremiumActivate = (key) {
+      bridge.onPremiumLicence = (key) {
         attempts++;
         if (attempts == 1) {
           throw const BridgeException(
@@ -449,7 +449,7 @@ void main() {
       final bridge = premiumBridge();
       // A hotel wifi answering its own login page where JSON was
       // promised: on a phone, the likeliest of these by far.
-      bridge.onPremiumActivate = (_) => throw const BridgeException(
+      bridge.onPremiumLicence = (_) => throw const BridgeException(
         'premium_unreachable',
         'unexpected answer from the premium server: expected value at '
             'line 1 column 1',
@@ -472,7 +472,7 @@ void main() {
     ) async {
       useTallSurface(tester);
       final bridge = premiumBridge();
-      bridge.onPremiumActivate = (_) => throw const BridgeException(
+      bridge.onPremiumLicence = (_) => throw const BridgeException(
         'premium_invalid',
         'invalid licence certificate: signature does not verify',
       );
@@ -576,7 +576,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(bridge.premiumCalls, contains('delete-account'));
-      expect(bridge.premiumCalls, isNot(contains('forget')));
+      expect(bridge.premiumCalls, isNot(contains('log-out')));
       expect(bridge.premiumAccountDeleted, isTrue);
       // The server went first, and everything went with it.
       expect(bridge.premiumChannelList, isEmpty);
@@ -692,7 +692,7 @@ void main() {
         issuedAt: now - 40 * 86400,
       );
       // The refresh on opening would restore the fake's paid time.
-      bridge.onPremiumActivate = (_) => throw const BridgeException(
+      bridge.onPremiumLicence = (_) => throw const BridgeException(
         'premium_unreachable',
         'the premium server is unreachable: could not connect',
       );

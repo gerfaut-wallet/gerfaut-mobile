@@ -17,6 +17,7 @@ import 'package:gerfaut/src/identity.dart';
 import 'package:gerfaut/src/live.dart';
 import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
+import 'package:gerfaut/src/notifications.dart';
 import 'package:gerfaut/src/screen.dart';
 import 'package:gerfaut/src/window.dart';
 import 'package:url_launcher_platform_interface/link.dart';
@@ -202,6 +203,25 @@ class FakeWidgetBoard implements WidgetBoard {
 
 /// Records what would have been written instead of opening the
 /// system's save dialog.
+/// Records what would have been posted instead of reaching the system.
+class RecordingNotifications implements NotificationService {
+  final List<({int id, String title, String body})> posted = [];
+
+  @override
+  Future<void> init() async {}
+
+  @override
+  Future<bool> requestPermission() async => true;
+
+  @override
+  Future<void> show(int id, String title, String body) async {
+    posted.add((id: id, title: title, body: body));
+  }
+
+  @override
+  Future<void> cancelAll() async => posted.clear();
+}
+
 /// The phone's own screen lock, answering what the test says instead
 /// of putting a prompt up.
 class FakeScreenLock implements ScreenLockGate {
@@ -1549,6 +1569,31 @@ class FakeBridge implements GerfautBridge {
   final List<WatchConsent> premiumConsents = [];
   int? premiumAcknowledgedUntil;
 
+  /// This device's id on the server, while the vault holds its token;
+  /// null before the key connected it and once the server disowned it.
+  String? premiumThisDeviceId;
+
+  /// The server disowned this device; the key stays.
+  bool premiumDisconnected = false;
+  bool premiumKeySaved = false;
+  bool premiumChecklistHidden = false;
+
+  /// The waiting devices the core recorded as announced.
+  List<String> premiumAnnounced = [];
+
+  /// The account's devices on the server, oldest first. [thisDevice]
+  /// is read from [premiumThisDeviceId], not from this list.
+  final List<PremiumDevice> premiumDeviceList = [];
+
+  /// Whether the account ever had a device: the first one is trusted
+  /// at once, every later one waits.
+  bool premiumHadDevice = false;
+  int premiumDeviceIds = 0;
+
+  /// Unix seconds the fake server's clock reads: the device's own, as
+  /// the screens count a wait from it.
+  int premiumNow = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
   /// The server side: what it watches, the channels, the log.
   final List<WalletWatch> premiumWatched = [];
   final List<PremiumChannel> premiumChannelList = [];
@@ -1561,10 +1606,23 @@ class FakeBridge implements GerfautBridge {
   /// Every call, in order, for assertions.
   final List<String> premiumCalls = [];
 
-  /// Activation hook; throw a [BridgeException] to simulate the server
-  /// out of reach. The default answers the way the server does: unknown
-  /// key, or the licence.
-  FutureOr<PremiumLicence> Function(String key)? onPremiumActivate;
+  /// Licence hook, for a connection and for a refresh alike; throw a
+  /// [BridgeException] to simulate the server out of reach. The default
+  /// answers the way the server does: unknown key, or the licence.
+  FutureOr<PremiumLicence> Function(String key)? onPremiumLicence;
+
+  /// Connection hook, asked before the device is made; throw a
+  /// [BridgeException] to simulate a refusal: every device the key may
+  /// have, a limit on connections.
+  FutureOr<void> Function(String key)? onPremiumConnect;
+
+  /// Hooks on the device calls; throw a [BridgeException] to simulate
+  /// the server out of reach, or refusing.
+  FutureOr<void> Function()? onPremiumMe;
+  FutureOr<void> Function()? onPremiumDevices;
+  FutureOr<void> Function(String id)? onPremiumApprove;
+  FutureOr<void> Function(String id)? onPremiumRemoveDevice;
+  FutureOr<void> Function()? onPremiumChangeKey;
 
   /// Watch hook; throw a [BridgeException] to simulate a refusal. The
   /// default registers the wallet.
@@ -1613,9 +1671,101 @@ class FakeBridge implements GerfautBridge {
   static String _normalizeKey(String key) =>
       key.replaceAll(RegExp(r'[\s-]'), '').toLowerCase();
 
+  /// What every account call checks first, the way the core and the
+  /// server do: a key, a token for it, and full access.
   void _needKey() {
     if (premiumKey == null) {
       throw const BridgeException('premium_no_key', 'no premium key');
+    }
+    final me = _me();
+    if (me == null) {
+      throw const BridgeException(
+        'premium_no_device',
+        'this device is not connected to the Premium account',
+      );
+    }
+    if (!me.fullAccess) {
+      throw BridgeException(
+        'premium_device_pending',
+        'this device is waiting for approval',
+        pendingUntil: me.pendingUntil,
+      );
+    }
+  }
+
+  /// This device on the server, while the vault holds its token.
+  PremiumDevice? _me() {
+    final id = premiumThisDeviceId;
+    if (id == null || premiumDisconnected) return null;
+    for (final device in premiumDeviceList) {
+      if (device.id == id) return _asSeen(device);
+    }
+    return null;
+  }
+
+  PremiumDevice _asSeen(PremiumDevice device) => PremiumDevice(
+    id: device.id,
+    platform: device.platform,
+    connectedAt: device.connectedAt,
+    access: device.access,
+    pendingUntil: device.pendingUntil,
+    approvedAt: device.approvedAt,
+    thisDevice: device.id == premiumThisDeviceId,
+  );
+
+  /// A device of the account the test puts on the server: another
+  /// phone, a computer, waiting or not. Answers its id.
+  String premiumAddDevice({
+    DevicePlatform platform = DevicePlatform.windows,
+    bool waiting = true,
+    int? connectedAt,
+  }) {
+    premiumDeviceIds += 1;
+    final id = 'dev$premiumDeviceIds';
+    final at = connectedAt ?? premiumNow - 3600;
+    premiumDeviceList.add(
+      PremiumDevice(
+        id: id,
+        platform: platform,
+        connectedAt: at,
+        access: waiting ? DeviceAccess.pending : DeviceAccess.full,
+        pendingUntil: waiting ? at + 10 * 86400 : null,
+        approvedAt: waiting ? null : at,
+      ),
+    );
+    premiumHadDevice = true;
+    return id;
+  }
+
+  /// Another device of the account approves [id], the way the server
+  /// records it: full access from now.
+  Future<void> premiumApproveDeviceOnServer(String id) async {
+    for (var i = 0; i < premiumDeviceList.length; i++) {
+      final d = premiumDeviceList[i];
+      if (d.id != id) continue;
+      premiumDeviceList[i] = PremiumDevice(
+        id: d.id,
+        platform: d.platform,
+        connectedAt: d.connectedAt,
+        access: DeviceAccess.full,
+        approvedAt: premiumNow,
+      );
+    }
+  }
+
+  /// A device that waits for the server's own reasons, this one
+  /// included: another device must approve it.
+  void premiumMakeWaiting(String id) {
+    for (var i = 0; i < premiumDeviceList.length; i++) {
+      final d = premiumDeviceList[i];
+      if (d.id != id) continue;
+      premiumDeviceList[i] = PremiumDevice(
+        id: d.id,
+        platform: d.platform,
+        connectedAt: d.connectedAt,
+        access: DeviceAccess.pending,
+        pendingUntil: d.connectedAt + 10 * 86400,
+      );
     }
   }
 
@@ -1657,6 +1807,13 @@ class FakeBridge implements GerfautBridge {
   @override
   Future<PremiumView> premiumState() async {
     premiumCalls.add('state');
+    final me = premiumDisconnected ? null : premiumThisDeviceId;
+    DeviceLink? link;
+    for (final device in premiumDeviceList) {
+      if (device.id == me) {
+        link = DeviceLink(id: device.id, connectedAt: device.connectedAt);
+      }
+    }
     return PremiumView(
       key: premiumKey,
       keyDisplay: premiumKey == null
@@ -1668,53 +1825,238 @@ class FakeBridge implements GerfautBridge {
       claims: premiumKey == null ? null : premiumClaims,
       watched: List.of(premiumConsents),
       acknowledgedOfflineUntil: premiumAcknowledgedUntil,
+      device: link,
+      disconnected: premiumDisconnected,
+      keySaved: premiumKeySaved,
+      checklistHidden: premiumChecklistHidden,
+    );
+  }
+
+  /// The licence for [key], as the server would issue it.
+  Future<PremiumLicence> _licence(String key) async {
+    final hook = onPremiumLicence;
+    if (hook != null) return hook(key);
+    if (key != premiumServerKey) {
+      throw const BridgeException(
+        'premium_unknown_key',
+        'the premium server does not know this key',
+      );
+    }
+    return PremiumLicence(
+      certificate: 'eyJ2IjoxfQ.c2ln',
+      paidUntil: premiumPaidUntil,
+      claims: LicenceClaims(
+        subject: 'ab' * 32,
+        expiresAt: premiumPaidUntil,
+        issuedAt: premiumPaidUntil - 60 * 86400,
+      ),
     );
   }
 
   @override
-  Future<PremiumLicence> premiumActivate(String key) async {
-    premiumCalls.add('activate:$key');
+  Future<PremiumDevice> premiumConnect(String key) async {
+    premiumCalls.add('connect:$key');
     final normalized = _normalizeKey(key);
-    final activate = onPremiumActivate;
-    final PremiumLicence licence;
-    if (activate != null) {
-      licence = await activate(normalized);
-    } else {
-      if (normalized != premiumServerKey) {
-        throw const BridgeException(
-          'premium_unknown_key',
-          'the premium server does not know this key',
-        );
-      }
-      licence = PremiumLicence(
-        certificate: 'eyJ2IjoxfQ.c2ln',
-        paidUntil: premiumPaidUntil,
-        claims: LicenceClaims(
-          subject: 'ab' * 32,
-          expiresAt: premiumPaidUntil,
-          issuedAt: premiumPaidUntil - 60 * 86400,
-        ),
-      );
+    final hook = onPremiumConnect;
+    if (hook != null) await hook(normalized);
+    // The licence decides whether the key is known, as the server's
+    // answer to the connection does.
+    final licence = await _licence(normalized);
+    // A key typed again on the device it connected comes back as that
+    // device: nothing new to wait for.
+    final me = _me();
+    if (me != null && premiumKey == normalized) {
+      premiumClaims = licence.claims;
+      return me;
     }
+    if (premiumKey != normalized) {
+      premiumKeySaved = false;
+      premiumChecklistHidden = false;
+      premiumAnnounced = [];
+    }
+    premiumDeviceIds += 1;
+    final id = 'dev$premiumDeviceIds';
+    final founder = !premiumHadDevice;
+    premiumHadDevice = true;
+    final device = PremiumDevice(
+      id: id,
+      platform: DevicePlatform.android,
+      connectedAt: premiumNow,
+      access: founder ? DeviceAccess.full : DeviceAccess.pending,
+      pendingUntil: founder ? null : premiumNow + 10 * 86400,
+      approvedAt: founder ? premiumNow : null,
+    );
+    premiumDeviceList.add(device);
+    premiumThisDeviceId = id;
+    premiumDisconnected = false;
     premiumKey = normalized;
     premiumClaims = licence.claims;
     premiumAcknowledgedUntil = null;
-    return licence;
+    return _asSeen(device);
+  }
+
+  @override
+  Future<PremiumDevice?> premiumEnsureDevice() async {
+    premiumCalls.add('ensure');
+    final key = premiumKey;
+    if (key == null || premiumThisDeviceId != null || premiumDisconnected) {
+      return null;
+    }
+    return premiumConnect(key);
+  }
+
+  @override
+  Future<PremiumDevice> premiumDevice() async {
+    premiumCalls.add('me');
+    final hook = onPremiumMe;
+    if (hook != null) await hook();
+    if (premiumKey == null) {
+      throw const BridgeException('premium_no_key', 'no premium key');
+    }
+    if (premiumThisDeviceId != null &&
+        !premiumDisconnected &&
+        _me() == null) {
+      // Refused or disconnected elsewhere: the core drops the token.
+      premiumDisconnected = true;
+      throw const BridgeException(
+        'premium_device_disconnected',
+        'this device was disconnected from the Premium account',
+      );
+    }
+    final me = _me();
+    if (me == null) {
+      throw const BridgeException(
+        'premium_no_device',
+        'this device is not connected to the Premium account',
+      );
+    }
+    return me;
+  }
+
+  @override
+  Future<List<PremiumDevice>> premiumDevices() async {
+    premiumCalls.add('devices');
+    final hook = onPremiumDevices;
+    if (hook != null) await hook();
+    _needKey();
+    return [for (final device in premiumDeviceList) _asSeen(device)];
+  }
+
+  @override
+  Future<PremiumDevice> premiumApproveDevice(String id) async {
+    premiumCalls.add('approve:$id');
+    final hook = onPremiumApprove;
+    if (hook != null) await hook(id);
+    _needKey();
+    for (var i = 0; i < premiumDeviceList.length; i++) {
+      final d = premiumDeviceList[i];
+      if (d.id != id) continue;
+      if (d.fullAccess) {
+        throw const BridgeException(
+          'premium_rejected',
+          'this device already has full access',
+        );
+      }
+      final approved = PremiumDevice(
+        id: d.id,
+        platform: d.platform,
+        connectedAt: d.connectedAt,
+        access: DeviceAccess.full,
+        approvedAt: premiumNow,
+      );
+      premiumDeviceList[i] = approved;
+      return _asSeen(approved);
+    }
+    throw const BridgeException('premium_rejected', 'no such device');
+  }
+
+  @override
+  Future<void> premiumRemoveDevice(String id) async {
+    premiumCalls.add('remove-device:$id');
+    final hook = onPremiumRemoveDevice;
+    if (hook != null) await hook(id);
+    _needKey();
+    final before = premiumDeviceList.length;
+    premiumDeviceList.removeWhere((d) => d.id == id);
+    if (premiumDeviceList.length == before) {
+      throw const BridgeException('premium_rejected', 'no such device');
+    }
+    if (id == premiumThisDeviceId) premiumDisconnected = true;
+  }
+
+  /// The key a change draws, as the core shows it.
+  String premiumNextKey = 'wxyz-2345-6789-abcd';
+
+  @override
+  Future<String> premiumChangeKey() async {
+    premiumCalls.add('change-key');
+    final hook = onPremiumChangeKey;
+    if (hook != null) await hook();
+    _needKey();
+    final key = _normalizeKey(premiumNextKey);
+    premiumServerKey = key;
+    premiumKey = key;
+    premiumKeySaved = false;
+    premiumAnnounced = [];
+    premiumDeviceList.removeWhere((d) => d.id != premiumThisDeviceId);
+    return premiumNextKey;
+  }
+
+  @override
+  Future<void> premiumSetKeySaved(bool saved) async {
+    premiumCalls.add('key-saved:$saved');
+    premiumKeySaved = saved;
+  }
+
+  @override
+  Future<void> premiumHideChecklist() async {
+    premiumCalls.add('hide-checklist');
+    premiumChecklistHidden = true;
+  }
+
+  @override
+  Future<List<String>> premiumMarkAnnounced(List<String> pending) async {
+    premiumCalls.add('announced:${pending.join(',')}');
+    final fresh = [
+      for (final id in pending)
+        if (!premiumAnnounced.contains(id)) id,
+    ];
+    premiumAnnounced = List.of(pending);
+    return fresh;
   }
 
   @override
   Future<PremiumLicence> premiumRefreshLicence() async {
     premiumCalls.add('refresh');
-    _needKey();
-    return premiumActivate(premiumKey!);
+    if (premiumKey == null) {
+      throw const BridgeException('premium_no_key', 'no premium key');
+    }
+    if (_me() == null) {
+      throw const BridgeException(
+        'premium_no_device',
+        'this device is not connected to the Premium account',
+      );
+    }
+    final licence = await _licence(premiumKey!);
+    premiumClaims = licence.claims;
+    return licence;
   }
 
   @override
-  Future<void> premiumForgetKey() async {
-    premiumCalls.add('forget');
+  Future<void> premiumLogOut() async {
+    premiumCalls.add('log-out');
+    final me = premiumThisDeviceId;
+    if (me != null && !premiumDisconnected) {
+      premiumDeviceList.removeWhere((d) => d.id == me);
+    }
     premiumKey = null;
     premiumClaims = null;
     premiumAcknowledgedUntil = null;
+    premiumThisDeviceId = null;
+    premiumDisconnected = false;
+    premiumKeySaved = false;
+    premiumChecklistHidden = false;
+    premiumAnnounced = [];
   }
 
   @override
@@ -1937,11 +2279,14 @@ class FakeBridge implements GerfautBridge {
     premiumAccountDeleted = true;
     premiumWatched.clear();
     premiumChannelList.clear();
+    premiumDeviceList.clear();
     premiumEvents = [];
     premiumKey = null;
     premiumClaims = null;
     premiumConsents.clear();
     premiumAcknowledgedUntil = null;
+    premiumThisDeviceId = null;
+    premiumDisconnected = false;
   }
 
   @override

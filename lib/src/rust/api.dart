@@ -7,7 +7,7 @@ import 'frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `channel_view`, `core_error_json`, `core_error_kind`, `decode_key`, `error_json`, `from_json`, `manager`, `now_unix`, `ok_json`, `parse_network_opt`, `parse_network`, `parse_variant`, `premium_client`, `premium_error_kind`, `premium_view`, `store_premium`, `to_json`
+// These functions are ignored because they are not marked as `pub`: `channel_view`, `console_log_level`, `core_error_json`, `core_error_kind`, `decode_key`, `error_json`, `from_json`, `manager`, `now_unix`, `ok_json`, `parse_network_opt`, `parse_network`, `parse_variant`, `premium_base_url`, `premium_client`, `premium_error_kind`, `premium_public_key`, `premium_view`, `store_premium`, `to_json`
 
 /// Opens (or creates) the vault under `data_dir` with a 32-byte key given
 /// as 64 hex characters. Idempotent: once initialized, later calls (hot
@@ -302,29 +302,88 @@ Future<String> importBackup({
   choicesJson: choicesJson,
 );
 
+/// Points a debug build at another premium server, a local one for an
+/// end-to-end run: the core reads its address and the key its
+/// certificates are signed with from the environment, and this sets
+/// them before any premium call is made. A release build has no such
+/// door: the call does nothing there, and the core would not read the
+/// variables anyway. Blank values leave the production server.
+String premiumDebugEndpoint({
+  required String baseUrl,
+  required String publicKey,
+}) => RustLib.instance.api.crateApiPremiumDebugEndpoint(
+  baseUrl: baseUrl,
+  publicKey: publicKey,
+);
+
 /// The premium account as the vault keeps it, with its certificate
 /// read. Returns a serialized `PremiumView`.
 Future<String> premiumState() => RustLib.instance.api.crateApiPremiumState();
 
-/// Enters an account key: checks its shape, asks the server for the
-/// licence, verifies the certificate against the embedded key and
-/// stores both. Returns the serialized `Licence`. A key the server does
-/// not know, or one never paid for, comes back as the error the field
-/// shows; nothing is stored then.
-Future<String> premiumActivate({required String key}) =>
-    RustLib.instance.api.crateApiPremiumActivate(key: key);
+/// Connects this phone to the account with a key: the core checks its
+/// shape, has the server make a device of it, keeps the key and the
+/// device's token together, then fetches the certificate. Returns the
+/// serialized `Device`: full access for the account's first, waiting
+/// for any later one. A key the server does not know, or one with every
+/// device it may have, comes back as the error the field shows; nothing
+/// is stored then.
+Future<String> premiumConnect({required String key}) =>
+    RustLib.instance.api.crateApiPremiumConnect(key: key);
 
-/// Fetches the certificate again with the stored key, for the paid
-/// time a renewal added, and stores it. Returns the serialized
-/// `Licence`.
+/// Connects a key kept by a version that had no devices yet. Returns the
+/// serialized `Device` it connected, or `null` when there was nothing to
+/// do: no key, a device already, or one the server disconnected, which
+/// connects again only when the user asks.
+Future<String> premiumEnsureDevice() =>
+    RustLib.instance.api.crateApiPremiumEnsureDevice();
+
+/// This device as the server sees it. Returns the serialized `Device`.
+Future<String> premiumDevice() => RustLib.instance.api.crateApiPremiumDevice();
+
+/// Every device of the account, oldest first; full access only. Returns
+/// a serialized `Vec<Device>`.
+Future<String> premiumDevices() =>
+    RustLib.instance.api.crateApiPremiumDevices();
+
+/// Gives a waiting device full access now. Returns the serialized
+/// `Device`, approved.
+Future<String> premiumApproveDevice({required String id}) =>
+    RustLib.instance.api.crateApiPremiumApproveDevice(id: id);
+
+/// Refuses a waiting device, or disconnects one with full access.
+Future<String> premiumRemoveDevice({required String id}) =>
+    RustLib.instance.api.crateApiPremiumRemoveDevice(id: id);
+
+/// Logs this device out: the server is told as far as it can be reached,
+/// then the key, the token and the certificate leave the vault. The
+/// server goes on watching what it was told to; the consents stay, so
+/// the same key entered again asks nothing twice.
+Future<String> premiumLogOut() => RustLib.instance.api.crateApiPremiumLogOut();
+
+/// Draws a new key for the account; full access only. The old key stops
+/// working everywhere and every other device is disconnected. Returns
+/// `{"key": "xxxx-xxxx-xxxx-xxxx"}`, the one time the new key is shown.
+Future<String> premiumChangeKey() =>
+    RustLib.instance.api.crateApiPremiumChangeKey();
+
+/// Records whether the user put the key somewhere safe.
+Future<String> premiumSetKeySaved({required bool saved}) =>
+    RustLib.instance.api.crateApiPremiumSetKeySaved(saved: saved);
+
+/// Hides the "Protect your Premium account" card.
+Future<String> premiumHideChecklist() =>
+    RustLib.instance.api.crateApiPremiumHideChecklist();
+
+/// Hands the ids of every device that waits, as the latest list shows
+/// them, and takes back the ones no notification announced yet: each is
+/// handed out once, whoever asks. Returns a JSON array of ids.
+Future<String> premiumMarkAnnounced({required List<String> pending}) =>
+    RustLib.instance.api.crateApiPremiumMarkAnnounced(pending: pending);
+
+/// Fetches the certificate again, for the paid time a renewal added,
+/// and keeps it. Returns the serialized `Licence`.
 Future<String> premiumRefreshLicence() =>
     RustLib.instance.api.crateApiPremiumRefreshLicence();
-
-/// Drops the key and its certificate from this device. The server goes
-/// on watching what it was told to; the consents given here stay, so
-/// the same key entered again asks nothing twice.
-Future<String> premiumForgetKey() =>
-    RustLib.instance.api.crateApiPremiumForgetKey();
 
 /// Keeps the "watch is offline" banner quiet until `until` (unix
 /// seconds), or lets it show again with `None`.

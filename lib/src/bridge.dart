@@ -16,7 +16,12 @@ import 'rust/api.dart' as rust;
 /// internal — plus the bridge-level not_initialized, bad_key, bad_json,
 /// and the premium server's, which are [premiumErrorKinds].
 class BridgeException implements Exception {
-  const BridgeException(this.kind, this.message, {this.retryAfter});
+  const BridgeException(
+    this.kind,
+    this.message, {
+    this.retryAfter,
+    this.pendingUntil,
+  });
 
   final String kind;
   final String message;
@@ -25,18 +30,24 @@ class BridgeException implements Exception {
   /// `premium_rate_limited` when it named a wait.
   final int? retryAfter;
 
+  /// Unix seconds when this device gets full access without approval,
+  /// with `premium_device_pending`.
+  final int? pendingUntil;
+
   @override
   String toString() => message;
 }
 
 /// Every kind a premium call can fail with, and the whole of it.
 ///
-/// Seven, where the core has ten: the bridge folds what a screen cannot
-/// act on differently, the way the desktop app does. An answer that
-/// does not decode goes under `premium_unreachable` — on a phone that
-/// is a hotel's login page, not something to read out — and a
+/// Eleven, where the core has more: the bridge folds what a screen
+/// cannot act on differently, the way the desktop app does. An answer
+/// that does not decode goes under `premium_unreachable` — on a phone
+/// that is a hotel's login page, not something to read out — and a
 /// certificate or a heartbeat that does not check out is
-/// `premium_invalid`, whichever of the two it was.
+/// `premium_invalid`, whichever of the two it was. A device the server
+/// wants connected first and a device with no token here are one case,
+/// `premium_no_device`: either way the key has to connect it.
 ///
 /// This list is what holds the screens to a sentence for each: a kind
 /// added here and left unanswered fails the test that walks it.
@@ -48,6 +59,10 @@ const List<String> premiumErrorKinds = [
   'premium_rate_limited',
   'premium_unreachable',
   'premium_invalid',
+  'premium_device_pending',
+  'premium_device_disconnected',
+  'premium_too_many_devices',
+  'premium_no_device',
 ];
 
 /// Every operation the app can ask of the core.
@@ -231,18 +246,56 @@ abstract class GerfautBridge {
   /// claims verified offline by the core. Never touches the network.
   Future<PremiumView> premiumState();
 
-  /// Enters an account key: the core checks its shape, fetches the
-  /// licence, verifies the certificate and stores both. Kinds:
-  /// premium_unreachable, premium_unknown_key, premium_no_paid_time.
-  Future<PremiumLicence> premiumActivate(String key);
+  /// Connects this phone to the account with a key: the core checks
+  /// its shape, has the server make a device of it, keeps the key and
+  /// the device's token together in the vault, then fetches the
+  /// licence. The account's first device has full access at once; any
+  /// later one waits. Kinds: premium_unreachable, premium_unknown_key,
+  /// premium_too_many_devices, premium_rate_limited.
+  Future<PremiumDevice> premiumConnect(String key);
+
+  /// A key kept by a version that had no devices yet: connected now, as
+  /// any key typed in. Null when there is nothing to do.
+  Future<PremiumDevice?> premiumEnsureDevice();
+
+  /// This device as the server sees it: its access, and until when it
+  /// waits. Any device may ask.
+  Future<PremiumDevice> premiumDevice();
+
+  /// Every device of the account, oldest first. Full access only.
+  Future<List<PremiumDevice>> premiumDevices();
+
+  /// Gives a waiting device full access now. Full access only.
+  Future<PremiumDevice> premiumApproveDevice(String id);
+
+  /// Refuses a waiting device or disconnects one that had access. Full
+  /// access only.
+  Future<void> premiumRemoveDevice(String id);
+
+  /// Draws a new key: the old one stops working everywhere and every
+  /// other device is disconnected. Answers the new key as it is shown.
+  /// Full access only.
+  Future<String> premiumChangeKey();
+
+  /// Records whether the user put the key in a password manager.
+  Future<void> premiumSetKeySaved(bool saved);
+
+  /// Puts the "Protect your Premium account" card away for good.
+  Future<void> premiumHideChecklist();
+
+  /// Hands the ids of every device that waits, as the latest list shows
+  /// them, and takes back those no notification announced yet: each is
+  /// handed out once, whoever asks, so none is announced twice.
+  Future<List<String>> premiumMarkAnnounced(List<String> pending);
 
   /// Fetches the certificate again with the stored key, for the time a
   /// renewal added, and stores it.
   Future<PremiumLicence> premiumRefreshLicence();
 
-  /// Drops the key and its certificate from this device. The server
-  /// goes on watching; the consents stay.
-  Future<void> premiumForgetKey();
+  /// Tells the server this device is leaving, when it can, then drops
+  /// the key, the token and the certificate from this device. The
+  /// server goes on watching; the consents stay.
+  Future<void> premiumLogOut();
 
   /// Keeps the "watch is offline" banner quiet until [untilUnix], or
   /// lets it show again with null.
@@ -311,6 +364,7 @@ class RustBridge implements GerfautBridge {
         error['kind'] as String? ?? 'internal',
         error['message'] as String? ?? 'unknown error',
         retryAfter: error['retry_after'] as int?,
+        pendingUntil: error['pending_until'] as int?,
       );
     }
     return decoded;
@@ -694,10 +748,62 @@ class RustBridge implements GerfautBridge {
   }
 
   @override
-  Future<PremiumLicence> premiumActivate(String key) async {
-    return PremiumLicence.fromJson(
-      _object(await rust.premiumActivate(key: key)),
+  Future<PremiumDevice> premiumConnect(String key) async {
+    return PremiumDevice.fromJson(
+      _object(await rust.premiumConnect(key: key)),
     );
+  }
+
+  @override
+  Future<PremiumDevice?> premiumEnsureDevice() async {
+    final decoded = _decode(await rust.premiumEnsureDevice());
+    if (decoded == null) return null;
+    return PremiumDevice.fromJson(decoded as Map<String, dynamic>);
+  }
+
+  @override
+  Future<PremiumDevice> premiumDevice() async {
+    return PremiumDevice.fromJson(_object(await rust.premiumDevice()));
+  }
+
+  @override
+  Future<List<PremiumDevice>> premiumDevices() async {
+    return _list(
+      await rust.premiumDevices(),
+    ).map(PremiumDevice.fromJson).toList();
+  }
+
+  @override
+  Future<PremiumDevice> premiumApproveDevice(String id) async {
+    return PremiumDevice.fromJson(
+      _object(await rust.premiumApproveDevice(id: id)),
+    );
+  }
+
+  @override
+  Future<void> premiumRemoveDevice(String id) async {
+    _ok(await rust.premiumRemoveDevice(id: id));
+  }
+
+  @override
+  Future<String> premiumChangeKey() async {
+    return _object(await rust.premiumChangeKey())['key'] as String;
+  }
+
+  @override
+  Future<void> premiumSetKeySaved(bool saved) async {
+    _ok(await rust.premiumSetKeySaved(saved: saved));
+  }
+
+  @override
+  Future<void> premiumHideChecklist() async {
+    _ok(await rust.premiumHideChecklist());
+  }
+
+  @override
+  Future<List<String>> premiumMarkAnnounced(List<String> pending) async {
+    return (_decode(await rust.premiumMarkAnnounced(pending: pending)) as List)
+        .cast<String>();
   }
 
   @override
@@ -706,8 +812,8 @@ class RustBridge implements GerfautBridge {
   }
 
   @override
-  Future<void> premiumForgetKey() async {
-    _ok(await rust.premiumForgetKey());
+  Future<void> premiumLogOut() async {
+    _ok(await rust.premiumLogOut());
   }
 
   @override

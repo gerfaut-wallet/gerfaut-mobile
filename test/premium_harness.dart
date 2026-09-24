@@ -12,6 +12,7 @@ import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/src/identity.dart';
 import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
+import 'package:gerfaut/src/notifications.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
 
@@ -48,6 +49,12 @@ FakeBridge premiumBridge({List<WalletMeta>? wallets, bool activated = false}) {
       expiresAt: bridge.premiumPaidUntil,
       issuedAt: bridge.premiumPaidUntil - 60 * 86400,
     );
+    // This phone connected first, and has full access since.
+    bridge.premiumThisDeviceId = bridge.premiumAddDevice(
+      platform: DevicePlatform.android,
+      waiting: false,
+      connectedAt: bridge.premiumNow - 30 * 86400,
+    );
   }
   return bridge;
 }
@@ -60,6 +67,7 @@ Widget premiumApp(
   FakeAppOpener? appOpener,
   FakeScreenLock? screenLock,
   FakeFingerprint? fingerprint,
+  bool dark = false,
 }) {
   return ProviderScope(
     overrides: [
@@ -76,20 +84,29 @@ Widget premiumApp(
       if (appOpener != null) appOpenerProvider.overrideWithValue(appOpener),
     ],
     child: MaterialApp(
-      theme: themeFrom(GerfautTokens.light, Brightness.light),
+      theme: dark
+          ? themeFrom(GerfautTokens.dark, Brightness.dark)
+          : themeFrom(GerfautTokens.light, Brightness.light),
       home: SettingsScreen(section: root ? null : SettingsSection.premium),
     ),
   );
 }
 
 /// The whole app, the way it starts: the banner lives on the home screen.
-Widget wholeApp(FakeBridge bridge) {
+Widget wholeApp(
+  FakeBridge bridge, {
+  RecordingNotifications? notifications,
+  FakeDisguise? disguise,
+}) {
   return ProviderScope(
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
-      disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+      disguiseServiceProvider.overrideWithValue(disguise ?? FakeDisguise()),
       screenLockGateProvider.overrideWithValue(FakeScreenLock()),
       biometricGateProvider.overrideWithValue(FakeFingerprint(available: false)),
+      notificationServiceProvider.overrideWithValue(
+        notifications ?? RecordingNotifications(),
+      ),
     ],
     child: const GerfautApp(),
   );

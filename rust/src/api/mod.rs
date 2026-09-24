@@ -16,11 +16,12 @@ use gerfaut_core::export::ExportOptions;
 use gerfaut_core::input::{ImportOptions, ParsedInput, ScriptKind};
 use gerfaut_core::lock::LockKind;
 use gerfaut_core::premium::client::{
-    DEFAULT_BASE_URL, NTFY_BASE_URL, TELEGRAM_BOT, new_ntfy_topic, ntfy_subscribe_url,
-    telegram_link_url,
+    NTFY_BASE_URL, TELEGRAM_BOT, new_ntfy_topic, ntfy_subscribe_url, telegram_link_url,
 };
-use gerfaut_core::premium::licence::{self, LICENCE_PUBLIC_KEY_HEX};
-use gerfaut_core::premium::{Channel, ChannelKind, Event, PremiumClient, PremiumState};
+use gerfaut_core::premium::licence;
+use gerfaut_core::premium::{
+    Channel, ChannelKind, DevicePlatform, Event, PremiumClient, PremiumState, endpoint,
+};
 use gerfaut_core::price::{FiatCurrency, PriceSource};
 use gerfaut_core::store::VaultKey;
 use gerfaut_core::wallet::meta::{WalletIcon, WalletKind};
@@ -100,6 +101,10 @@ fn core_error_kind(error: &CoreError) -> &'static str {
 ///
 /// The match is exhaustive on purpose: a variant added to the core
 /// stops the build here until somebody says which of them it is.
+///
+/// A device the server wants connected first and a device that holds no
+/// token are one case too: either way the key has to connect it, which
+/// is what the screen offers.
 fn premium_error_kind(error: &PremiumError) -> &'static str {
     match error {
         PremiumError::NoKey => "premium_no_key",
@@ -111,6 +116,10 @@ fn premium_error_kind(error: &PremiumError) -> &'static str {
         PremiumError::InvalidCertificate(_)
         | PremiumError::InvalidHeartbeat(_)
         | PremiumError::StaleHeartbeat { .. } => "premium_invalid",
+        PremiumError::DevicePending { .. } => "premium_device_pending",
+        PremiumError::DeviceDisconnected => "premium_device_disconnected",
+        PremiumError::TooManyDevices(_) => "premium_too_many_devices",
+        PremiumError::NoDevice | PremiumError::DeviceRequired => "premium_no_device",
     }
 }
 
@@ -129,6 +138,21 @@ fn core_error_json(error: &CoreError) -> String {
     // answered to say it could not do the thing.
     if let CoreError::Premium(PremiumError::Rejected(words)) = error {
         return error_json("premium_rejected", words);
+    }
+    // The same for the server's sentence about a key with every device
+    // it may have: the screen shows it as the server wrote it.
+    if let CoreError::Premium(PremiumError::TooManyDevices(words)) = error {
+        return error_json("premium_too_many_devices", words);
+    }
+    // A device that waits carries the moment its wait ends, for the
+    // screen to say it.
+    if let CoreError::Premium(PremiumError::DevicePending { until }) = error {
+        return json!({ "error": {
+            "kind": "premium_device_pending",
+            "message": error.to_string(),
+            "pending_until": until,
+        } })
+        .to_string();
     }
     // A request to slow down carries the wait, in seconds, for the
     // screen to count from; `null` when the server named none.
@@ -311,7 +335,7 @@ pub async fn remove_wallet(id: String) -> String {
             // here whatever the server says, and what could not be told
             // stays queued in the vault until it can be.
             flutter_rust_bridge::spawn(async move {
-                let _ = manager.premium_flush_unwatch(PREMIUM_BASE_URL).await;
+                let _ = manager.premium_flush_unwatch(&premium_base_url()).await;
             });
             ok_json()
         }
@@ -706,7 +730,8 @@ pub async fn import_backup(source: String, password: String, choices_json: Strin
 
 // --- premium -----------------------------------------------------------
 
-/// The server every premium call goes to.
+/// The server every premium call goes to, as the core names it: the
+/// production one, unless a debug build was pointed at another.
 ///
 /// Clearnet, which does not settle how the call travels: the manager
 /// sends it through Tor when the base URL is an onion and also when the
@@ -715,7 +740,45 @@ pub async fn import_backup(source: String, password: String, choices_json: Strin
 /// this server instead. A Tor that cannot be reached then is a call
 /// that does not happen, reported as `tor`; nothing falls back to the
 /// clear.
-const PREMIUM_BASE_URL: &str = DEFAULT_BASE_URL;
+fn premium_base_url() -> String {
+    endpoint().0
+}
+
+/// The key the server's certificates are signed with, from the same
+/// place as its address: a certificate verifies against the server it
+/// came from.
+fn premium_public_key() -> String {
+    endpoint().1
+}
+
+/// What this build tells the server it runs on.
+const PLATFORM: DevicePlatform = DevicePlatform::Android;
+
+/// Points a debug build at another premium server, a local one for an
+/// end-to-end run: the core reads its address and the key its
+/// certificates are signed with from the environment, and this sets
+/// them before any premium call is made. A release build has no such
+/// door: the call does nothing there, and the core would not read the
+/// variables anyway. Blank values leave the production server.
+#[flutter_rust_bridge::frb(sync)]
+pub fn premium_debug_endpoint(base_url: String, public_key: String) -> String {
+    #[cfg(debug_assertions)]
+    {
+        if !base_url.trim().is_empty() {
+            // SAFETY: called once, from the app's start, before the
+            // manager is opened and before any premium call reads the
+            // environment; nothing else in the process writes it.
+            unsafe { std::env::set_var("GERFAUT_PREMIUM_URL", base_url.trim()) };
+        }
+        if !public_key.trim().is_empty() {
+            // SAFETY: as above.
+            unsafe { std::env::set_var("GERFAUT_PREMIUM_PUBLIC_KEY", public_key.trim()) };
+        }
+    }
+    #[cfg(not(debug_assertions))]
+    let _ = (base_url, public_key);
+    ok_json()
+}
 
 /// Most events the alerts card shows.
 const RECENT_EVENTS: usize = 20;
@@ -735,16 +798,28 @@ fn now_unix() -> i64 {
 /// the certificate, verified offline against the embedded key, so the
 /// licence state shows without a network. A certificate that no longer
 /// verifies reads as no certificate.
+///
+/// This device's connection goes as its id and date alone: the token
+/// never leaves the core, and the screens have no use for it.
 fn premium_view(state: &PremiumState) -> serde_json::Value {
-    let claims = state.certificate.as_deref().and_then(|certificate| {
-        licence::verify_certificate(certificate, LICENCE_PUBLIC_KEY_HEX).ok()
-    });
+    let public_key = premium_public_key();
+    let claims = state
+        .certificate
+        .as_deref()
+        .and_then(|certificate| licence::verify_certificate(certificate, &public_key).ok());
     json!({
         "key": state.key,
         "key_display": state.key.as_deref().map(licence::format_key),
         "claims": claims,
         "watched": state.watched,
         "acknowledged_offline_until": state.acknowledged_offline_until,
+        "device": state.device.as_ref().map(|device| json!({
+            "id": device.id,
+            "connected_at": device.connected_at,
+        })),
+        "disconnected": state.disconnected,
+        "key_saved": state.key_saved,
+        "checklist_hidden": state.checklist_hidden,
         "ntfy_base_url": NTFY_BASE_URL,
         "telegram_bot": TELEGRAM_BOT,
     })
@@ -757,10 +832,11 @@ pub async fn premium_state() -> String {
     to_json(&premium_view(&manager.premium_state().await))
 }
 
-/// A client for the production server carrying the stored key.
+/// A client for the premium server carrying the stored key and this
+/// device's token.
 async fn premium_client(manager: &WalletManager) -> Result<PremiumClient, String> {
     manager
-        .premium_client(PREMIUM_BASE_URL)
+        .premium_client(&premium_base_url())
         .await
         .map_err(|e| core_error_json(&e))
 }
@@ -779,78 +855,143 @@ async fn store_premium(
     Ok(state)
 }
 
-/// Enters an account key: checks its shape, asks the server for the
-/// licence, verifies the certificate against the embedded key and
-/// stores both. Returns the serialized `Licence`. A key the server does
-/// not know, or one never paid for, comes back as the error the field
-/// shows; nothing is stored then.
-pub async fn premium_activate(key: String) -> String {
+/// Connects this phone to the account with a key: the core checks its
+/// shape, has the server make a device of it, keeps the key and the
+/// device's token together, then fetches the certificate. Returns the
+/// serialized `Device`: full access for the account's first, waiting
+/// for any later one. A key the server does not know, or one with every
+/// device it may have, comes back as the error the field shows; nothing
+/// is stored then.
+pub async fn premium_connect(key: String) -> String {
     let manager = try_json!(manager());
-    if !licence::is_well_formed_key(&key) {
-        return error_json(
-            "invalid_input",
-            "an account key is sixteen symbols, shown as xxxx-xxxx-xxxx-xxxx",
-        );
-    }
-    let key = licence::normalize_key(&key);
-    // Through the manager, like every other premium call: a key typed on
-    // a phone whose node is an onion is checked over Tor too, and the
-    // check never reaches the server by the clear route.
-    let client = match manager
-        .premium_client_with_key(PREMIUM_BASE_URL, Some(key.clone()))
+    match manager
+        .premium_connect(&premium_base_url(), &key, PLATFORM)
         .await
     {
-        Ok(client) => client,
-        Err(e) => return core_error_json(&e),
-    };
-    let licence = match client.licence().await {
-        Ok(licence) => licence,
-        Err(e) => return core_error_json(&e),
-    };
-    try_json!(
-        store_premium(manager, |state| {
-            state.key = Some(key);
-            state.certificate = Some(licence.certificate.clone());
-            state.acknowledged_offline_until = None;
-        })
-        .await
-    );
-    to_json(&licence)
+        Ok(device) => to_json(&device),
+        Err(e) => core_error_json(&e),
+    }
 }
 
-/// Fetches the certificate again with the stored key, for the paid
-/// time a renewal added, and stores it. Returns the serialized
-/// `Licence`.
+/// Connects a key kept by a version that had no devices yet. Returns the
+/// serialized `Device` it connected, or `null` when there was nothing to
+/// do: no key, a device already, or one the server disconnected, which
+/// connects again only when the user asks.
+pub async fn premium_ensure_device() -> String {
+    let manager = try_json!(manager());
+    match manager
+        .premium_ensure_device(&premium_base_url(), PLATFORM)
+        .await
+    {
+        Ok(device) => to_json(&device),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// This device as the server sees it. Returns the serialized `Device`.
+pub async fn premium_device() -> String {
+    let manager = try_json!(manager());
+    match manager.premium_device(&premium_base_url()).await {
+        Ok(device) => to_json(&device),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Every device of the account, oldest first; full access only. Returns
+/// a serialized `Vec<Device>`.
+pub async fn premium_devices() -> String {
+    let manager = try_json!(manager());
+    match manager.premium_devices(&premium_base_url()).await {
+        Ok(devices) => to_json(&devices),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Gives a waiting device full access now. Returns the serialized
+/// `Device`, approved.
+pub async fn premium_approve_device(id: String) -> String {
+    let manager = try_json!(manager());
+    match manager
+        .premium_approve_device(&premium_base_url(), &id)
+        .await
+    {
+        Ok(device) => to_json(&device),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Refuses a waiting device, or disconnects one with full access.
+pub async fn premium_remove_device(id: String) -> String {
+    let manager = try_json!(manager());
+    match manager
+        .premium_remove_device(&premium_base_url(), &id)
+        .await
+    {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Logs this device out: the server is told as far as it can be reached,
+/// then the key, the token and the certificate leave the vault. The
+/// server goes on watching what it was told to; the consents stay, so
+/// the same key entered again asks nothing twice.
+pub async fn premium_log_out() -> String {
+    let manager = try_json!(manager());
+    match manager.premium_log_out(&premium_base_url()).await {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Draws a new key for the account; full access only. The old key stops
+/// working everywhere and every other device is disconnected. Returns
+/// `{"key": "xxxx-xxxx-xxxx-xxxx"}`, the one time the new key is shown.
+pub async fn premium_change_key() -> String {
+    let manager = try_json!(manager());
+    match manager.premium_change_key(&premium_base_url()).await {
+        Ok(key) => json!({ "key": key }).to_string(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Records whether the user put the key somewhere safe.
+pub async fn premium_set_key_saved(saved: bool) -> String {
+    let manager = try_json!(manager());
+    match manager.premium_set_key_saved(saved).await {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Hides the "Protect your Premium account" card.
+pub async fn premium_hide_checklist() -> String {
+    let manager = try_json!(manager());
+    match manager.premium_hide_checklist().await {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Hands the ids of every device that waits, as the latest list shows
+/// them, and takes back the ones no notification announced yet: each is
+/// handed out once, whoever asks. Returns a JSON array of ids.
+pub async fn premium_mark_announced(pending: Vec<String>) -> String {
+    let manager = try_json!(manager());
+    match manager.premium_mark_announced(&pending).await {
+        Ok(fresh) => to_json(&fresh),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Fetches the certificate again, for the paid time a renewal added,
+/// and keeps it. Returns the serialized `Licence`.
 pub async fn premium_refresh_licence() -> String {
     let manager = try_json!(manager());
-    let client = try_json!(premium_client(manager).await);
-    let licence = match client.licence().await {
-        Ok(licence) => licence,
-        Err(e) => return core_error_json(&e),
-    };
-    try_json!(
-        store_premium(manager, |state| {
-            state.certificate = Some(licence.certificate.clone());
-        })
-        .await
-    );
-    to_json(&licence)
-}
-
-/// Drops the key and its certificate from this device. The server goes
-/// on watching what it was told to; the consents given here stay, so
-/// the same key entered again asks nothing twice.
-pub async fn premium_forget_key() -> String {
-    let manager = try_json!(manager());
-    try_json!(
-        store_premium(manager, |state| {
-            state.key = None;
-            state.certificate = None;
-            state.acknowledged_offline_until = None;
-        })
-        .await
-    );
-    ok_json()
+    match manager.premium_refresh_licence(&premium_base_url()).await {
+        Ok(licence) => to_json(&licence),
+        Err(e) => core_error_json(&e),
+    }
 }
 
 /// Keeps the "watch is offline" banner quiet until `until` (unix
@@ -927,7 +1068,10 @@ pub async fn premium_watch_wallet(id: String) -> String {
 /// removing the wallet later queues nothing for a server that forgot it.
 pub async fn premium_unwatch_wallet(id: String) -> String {
     let manager = try_json!(manager());
-    match manager.premium_unwatch_wallet(PREMIUM_BASE_URL, &id).await {
+    match manager
+        .premium_unwatch_wallet(&premium_base_url(), &id)
+        .await
+    {
         Ok(()) => ok_json(),
         Err(e) => core_error_json(&e),
     }
@@ -999,7 +1143,7 @@ pub async fn premium_create_channel(
 pub async fn premium_confirm_channel(id: String, code: String) -> String {
     let manager = try_json!(manager());
     match manager
-        .premium_confirm_channel(PREMIUM_BASE_URL, &id, &code)
+        .premium_confirm_channel(&premium_base_url(), &id, &code)
         .await
     {
         Ok(channel) => channel_view(&channel).to_string(),
@@ -1012,7 +1156,7 @@ pub async fn premium_confirm_channel(id: String, code: String) -> String {
 /// dropped unless the server confirmed. There is no way back.
 pub async fn premium_delete_account() -> String {
     let manager = try_json!(manager());
-    match manager.premium_delete_account(PREMIUM_BASE_URL).await {
+    match manager.premium_delete_account(&premium_base_url()).await {
         Ok(()) => ok_json(),
         Err(e) => core_error_json(&e),
     }
@@ -1077,7 +1221,7 @@ pub async fn premium_heartbeat() -> String {
     // next pulse: the queue is tried before the beat, and what still
     // cannot be told waits for the one after. Only the beat says
     // whether the watch is alive; a queue that will not flush does not.
-    let _ = manager.premium_flush_unwatch(PREMIUM_BASE_URL).await;
+    let _ = manager.premium_flush_unwatch(&premium_base_url()).await;
     let client = try_json!(premium_client(manager).await);
     match client.heartbeat(now_unix()).await {
         Ok(report) => to_json(&report),

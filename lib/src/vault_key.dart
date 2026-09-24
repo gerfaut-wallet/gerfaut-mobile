@@ -13,6 +13,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -139,12 +140,35 @@ Future<void> setVaultAside() async {
   await setVaultAsideIn(dir.path);
 }
 
+/// A debug build can be pointed at another Premium server, a local one
+/// for an end-to-end run, with
+/// `--dart-define=GERFAUT_PREMIUM_URL=http://10.0.2.2:8080` and
+/// `--dart-define=GERFAUT_PREMIUM_PUBLIC_KEY=<hex>`, the key that server
+/// signs its certificates with.
+const String _debugPremiumUrl = String.fromEnvironment('GERFAUT_PREMIUM_URL');
+const String _debugPremiumPublicKey = String.fromEnvironment(
+  'GERFAUT_PREMIUM_PUBLIC_KEY',
+);
+
+/// Hands the core the server a debug build was pointed at, before the
+/// vault opens and before any Premium call. A release build compiles
+/// this out, and its core would not listen either.
+void pointAtDebugPremiumServer() {
+  if (!kDebugMode) return;
+  if (_debugPremiumUrl.isEmpty && _debugPremiumPublicKey.isEmpty) return;
+  rust_api.premiumDebugEndpoint(
+    baseUrl: _debugPremiumUrl,
+    publicKey: _debugPremiumPublicKey,
+  );
+}
+
 /// Loads the Rust bridge and opens the encrypted vault in the app's
 /// documents directory. Runs once before the home screen shows, and
 /// again after a vault was set aside: the bridge is only loaded the
 /// first time.
 Future<void> bootstrapGerfaut() async {
   if (!RustLib.instance.initialized) await RustLib.init();
+  pointAtDebugPremiumServer();
   final dir = await getApplicationDocumentsDirectory();
   final keyHex = await obtainVaultKeyHex(dataDir: dir.path);
   final result = await rust_api.initManager(dataDir: dir.path, keyHex: keyHex);

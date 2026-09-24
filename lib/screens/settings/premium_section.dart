@@ -148,7 +148,7 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
       _licenceError = null;
     });
     try {
-      await _bridge.premiumActivate(_keyController.text);
+      await _bridge.premiumConnect(_keyController.text);
       if (!mounted) return;
       _keyController.clear();
       // The certificate just came in: nothing to fetch again this visit.
@@ -180,7 +180,7 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
         // leaves the key where it was.
         await _bridge.premiumDeleteAccount();
       } else {
-        await _bridge.premiumForgetKey();
+        await _bridge.premiumLogOut();
       }
       if (!mounted) return;
       setState(() {
