@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -45,6 +46,12 @@ Future<void> toggle(WidgetTester tester, String wallet) async {
   );
   await tester.pumpAndSettle();
 }
+
+/// A node of a screen reader's traversal whose words begin with [start].
+Matcher startsReading(String start) => predicate<SemanticsNode>(
+  (node) => node.label.startsWith(start),
+  'a node that starts reading "$start"',
+);
 
 /// What the server holds for a wallet this phone no longer has.
 const WalletWatch oldLaptop = WalletWatch(
@@ -823,6 +830,85 @@ void main() {
         findsOneWidget,
       );
       await tester.pump(const Duration(seconds: 5));
+    });
+  });
+
+  group('what a screen reader hears', () {
+    testWidgets('the key field is a stop of its own, in the order seen', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(premiumApp(premiumBridge()));
+      await tester.pumpAndSettle();
+
+      // Named by its label, and holding no other words: the field used
+      // to take the whole page as its hint, and nothing else was read.
+      final field = tester.getSemantics(find.byType(TextField));
+      expect(field.flagsCollection.isTextField, isTrue);
+      expect(field.label, startsWith('ACCOUNT KEY'));
+      for (final other in ['Licence', 'Bought on', 'Watched wallets']) {
+        expect(field.label, isNot(contains(other)), reason: other);
+      }
+      expect(
+        tester.semantics.simulatedAccessibilityTraversal(),
+        containsAllInOrder(<Matcher>[
+          isSemantics(label: 'Licence'),
+          allOf(isSemantics(isTextField: true), startsReading('ACCOUNT KEY')),
+          startsReading('Bought on gerfaut-wallet.com.'),
+          isSemantics(label: 'Activate', isButton: true),
+          isSemantics(label: 'Get Premium', isButton: true),
+          startsReading('Watched wallets'),
+          startsReading('Channels'),
+          startsReading('Recent alerts'),
+        ]),
+      );
+      handle.dispose();
+    });
+
+    testWidgets('the key refused is announced once, after the card', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final handle = tester.ensureSemantics();
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumDisconnected = true;
+      bridge.premiumServerKey = 'zzzzzzzzzzzzzzzz';
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Connect again'));
+      await tester.pumpAndSettle();
+
+      const asked = 'This key no longer works. Enter the new one.';
+      // A live region of its own, announced as it appears; the field is
+      // neither part of it nor one itself.
+      final note = tester.getSemantics(find.text(asked));
+      expect(note.flagsCollection.isLiveRegion, isTrue);
+      expect(note.flagsCollection.isTextField, isFalse);
+      final field = tester.getSemantics(find.byType(TextField));
+      expect(field.flagsCollection.isLiveRegion, isFalse);
+      expect(field.label, isNot(contains(asked)));
+      expect(
+        tester.semantics.simulatedAccessibilityTraversal(),
+        containsAllInOrder(<Matcher>[
+          isSemantics(label: 'Licence'),
+          allOf(isSemantics(isTextField: true), startsReading('ACCOUNT KEY')),
+          startsReading('Bought on gerfaut-wallet.com.'),
+          isSemantics(label: 'Activate', isButton: true),
+          isSemantics(label: 'Forget this key', isButton: true),
+          isSemantics(label: 'Note\n$asked', isLiveRegion: true),
+        ]),
+      );
+
+      // Typing rebuilds the page and leaves the note as it was, the same
+      // node with the same words: nothing to announce again.
+      final (id, label) = (note.id, note.label);
+      await tester.enterText(find.byType(TextField), 'abcl');
+      await tester.pumpAndSettle();
+      expect(find.textContaining('A key never contains'), findsOneWidget);
+      final again = tester.getSemantics(find.text(asked));
+      expect((again.id, again.label), (id, label));
+      handle.dispose();
     });
   });
 
@@ -1750,6 +1836,21 @@ void main() {
       expect(find.textContaining('Confirmation sent to'), findsNothing);
       expect(find.text('m***@example.org'), findsOneWidget);
       expect(find.byType(TextField), findsNothing);
+    });
+
+    testWidgets('e-mail: the code field is a stop of its own', (tester) async {
+      useTallSurface(tester);
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(premiumApp(waitingForCode()));
+      await tester.pumpAndSettle();
+
+      final field = tester.getSemantics(find.byType(TextField));
+      expect(field.flagsCollection.isTextField, isTrue);
+      expect(field.label, startsWith('Code'));
+      for (final other in ['Channels', 'Confirmation sent to', 'Licence']) {
+        expect(field.label, isNot(contains(other)), reason: other);
+      }
+      handle.dispose();
     });
 
     testWidgets('e-mail: a refused code says so beside the field', (

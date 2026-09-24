@@ -1010,58 +1010,77 @@ class _LicenceCard extends StatelessWidget {
     final canForget =
         view.hasKey && !waiting && !(view.keyChangePending && view.connected);
     return [
-      Text(
-        'ACCOUNT KEY',
-        style: tokens.label.copyWith(color: tokens.textMuted),
-      ),
-      const SizedBox(height: GerfautSpacing.sm),
-      TextField(
-        controller: controller,
-        autocorrect: false,
-        enableSuggestions: false,
-        enabled: !activating,
-        keyboardType: TextInputType.visiblePassword,
-        textCapitalization: TextCapitalization.none,
-        inputFormatters: const [AccountKeyFormatter()],
-        style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
-        onSubmitted: (_) {
-          if (wellFormed && !activating) onActivate();
-        },
-        decoration: InputDecoration(
-          hintText: 'xxxx-xxxx-xxxx-xxxx',
-          hintStyle: tokens.data.copyWith(
-            fontSize: tokens.body.fontSize,
-            color: tokens.textMuted,
-          ),
-          filled: true,
-          fillColor: tokens.surfaceSunken,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: GerfautSpacing.md,
-            vertical: GerfautSpacing.sm,
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(GerfautRadius.sm),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(GerfautRadius.sm),
-            borderSide: BorderSide(color: tokens.premium, width: 2),
-          ),
+      // The field is a node of its own, named by the label above it and
+      // carrying what is said about what was typed. A text field has
+      // no node of its own otherwise: it takes over the card's, and a
+      // screen reader then heard the title and every line of the card
+      // as the hint of one edit box, and no text around it.
+      MergeSemantics(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'ACCOUNT KEY',
+              style: tokens.label.copyWith(color: tokens.textMuted),
+            ),
+            const SizedBox(height: GerfautSpacing.sm),
+            TextField(
+              controller: controller,
+              autocorrect: false,
+              enableSuggestions: false,
+              enabled: !activating,
+              keyboardType: TextInputType.visiblePassword,
+              textCapitalization: TextCapitalization.none,
+              inputFormatters: const [AccountKeyFormatter()],
+              style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
+              onSubmitted: (_) {
+                if (wellFormed && !activating) onActivate();
+              },
+              decoration: InputDecoration(
+                hintText: 'xxxx-xxxx-xxxx-xxxx',
+                hintStyle: tokens.data.copyWith(
+                  fontSize: tokens.body.fontSize,
+                  color: tokens.textMuted,
+                ),
+                filled: true,
+                fillColor: tokens.surfaceSunken,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: GerfautSpacing.md,
+                  vertical: GerfautSpacing.sm,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                  borderSide: BorderSide(color: tokens.premium, width: 2),
+                ),
+              ),
+            ),
+            if (strangers.isNotEmpty) ...[
+              const SizedBox(height: GerfautSpacing.xs),
+              // Not an error panel: the field is not wrong, one symbol is.
+              Text(
+                'A key never contains l, o, 0 or 1: check '
+                '${strangers.join(", ")}.',
+                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+              ),
+            ],
+          ],
         ),
       ),
-      if (strangers.isNotEmpty) ...[
-        const SizedBox(height: GerfautSpacing.xs),
-        // Not an error panel: the field is not wrong, one symbol is.
-        Text(
-          'A key never contains l, o, 0 or 1: check ${strangers.join(", ")}.',
+      const SizedBox(height: GerfautSpacing.sm),
+      // A stop of its own, after the field it is about, rather than
+      // folded into the card's title ahead of it.
+      Semantics(
+        container: true,
+        child: Text(
+          'Bought on gerfaut-wallet.com. The key is shown once at purchase; '
+          'there is no account to recover it from.',
           style: tokens.bodySmall.copyWith(color: tokens.textMuted),
         ),
-      ],
-      const SizedBox(height: GerfautSpacing.sm),
-      Text(
-        'Bought on gerfaut-wallet.com. The key is shown once at purchase; '
-        'there is no account to recover it from.',
-        style: tokens.bodySmall.copyWith(color: tokens.textMuted),
       ),
       const SizedBox(height: GerfautSpacing.md),
       // A Wrap: at a large text size the link goes under the button
@@ -2354,7 +2373,14 @@ class _ConfirmCodeRowState extends ConsumerState<_ConfirmCodeRow> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('CODE', style: tokens.label.copyWith(color: tokens.textMuted)),
+          // Named on the field itself, which the button beside it keeps
+          // from sharing one node with this label.
+          ExcludeSemantics(
+            child: Text(
+              'CODE',
+              style: tokens.label.copyWith(color: tokens.textMuted),
+            ),
+          ),
           const SizedBox(height: GerfautSpacing.sm),
           // A Wrap, so the button goes to a line of its own at a large
           // text size instead of squeezing the field off the screen.
@@ -2417,43 +2443,49 @@ class _CodeField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    return TextField(
-      controller: controller,
-      enabled: enabled,
-      autocorrect: false,
-      enableSuggestions: false,
-      keyboardType: TextInputType.number,
-      inputFormatters: [
-        FilteringTextInputFormatter.digitsOnly,
-        LengthLimitingTextInputFormatter(confirmationCodeLength),
-      ],
-      style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
-      textAlignVertical: TextAlignVertical.center,
-      onChanged: (_) => onChanged(),
-      onSubmitted: onSubmitted == null ? null : (_) => onSubmitted!(),
-      decoration: InputDecoration(
-        hintText: '000000',
-        hintStyle: tokens.data.copyWith(
-          fontSize: tokens.body.fontSize,
-          color: tokens.textMuted,
-        ),
-        filled: true,
-        fillColor: tokens.surfaceSunken,
-        // The line and its padding come to 42px at the body size: the
-        // floor is what makes the field a target, the text centred in
-        // whatever the floor leaves.
-        constraints: const BoxConstraints(minHeight: 44),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: GerfautSpacing.md,
-          vertical: GerfautSpacing.sm,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(GerfautRadius.sm),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(GerfautRadius.sm),
-          borderSide: BorderSide(color: tokens.premium, width: 2),
+    // A node of its own, as the key's field: otherwise the field takes
+    // over the card's, and the channels are read as its hint.
+    return Semantics(
+      container: true,
+      label: 'Code',
+      child: TextField(
+        controller: controller,
+        enabled: enabled,
+        autocorrect: false,
+        enableSuggestions: false,
+        keyboardType: TextInputType.number,
+        inputFormatters: [
+          FilteringTextInputFormatter.digitsOnly,
+          LengthLimitingTextInputFormatter(confirmationCodeLength),
+        ],
+        style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
+        textAlignVertical: TextAlignVertical.center,
+        onChanged: (_) => onChanged(),
+        onSubmitted: onSubmitted == null ? null : (_) => onSubmitted!(),
+        decoration: InputDecoration(
+          hintText: '000000',
+          hintStyle: tokens.data.copyWith(
+            fontSize: tokens.body.fontSize,
+            color: tokens.textMuted,
+          ),
+          filled: true,
+          fillColor: tokens.surfaceSunken,
+          // The line and its padding come to 42px at the body size: the
+          // floor is what makes the field a target, the text centred in
+          // whatever the floor leaves.
+          constraints: const BoxConstraints(minHeight: 44),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: GerfautSpacing.md,
+            vertical: GerfautSpacing.sm,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(GerfautRadius.sm),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(GerfautRadius.sm),
+            borderSide: BorderSide(color: tokens.premium, width: 2),
+          ),
         ),
       ),
     );

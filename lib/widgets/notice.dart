@@ -82,7 +82,9 @@ class GerfautNotice extends StatelessWidget {
   /// Set it when the note appears in reaction to something the person
   /// just did, so a screen reader announces it instead of waiting to be
   /// walked into. Off for a note that was on the page all along: a
-  /// region that announces itself on every rebuild is noise.
+  /// region that announces itself on every rebuild is noise. A live
+  /// note is its own node, so it is announced once when it appears and
+  /// again only if its own words change.
   final bool liveRegion;
 
   @override
@@ -186,7 +188,12 @@ class GerfautNotice extends StatelessWidget {
       child: body,
     );
 
-    return liveRegion ? Semantics(liveRegion: true, child: panel) : panel;
+    // A node of its own: a live region that folds into its parent makes
+    // that parent the region, a card or a field, which is then read
+    // out whole each time any of its words changes.
+    return liveRegion
+        ? Semantics(container: true, liveRegion: true, child: panel)
+        : panel;
   }
 }
 

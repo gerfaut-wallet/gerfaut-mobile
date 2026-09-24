@@ -59,21 +59,32 @@ class SectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    return Container(
-      margin: const EdgeInsets.only(bottom: GerfautSpacing.gutter),
-      padding: const EdgeInsets.all(GerfautSpacing.md),
-      decoration: frame(tokens),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _SectionTitle(
-            glyph: glyph ?? Icon(icon),
-            title: title,
-            color: iconColor,
-            trailing: trailing,
+    // One stop for a screen reader, its title first. Without it, the
+    // words of every card on the page fold into a single node, and a
+    // field among them takes that node over: the whole page read as
+    // the hint of one text field, and a note under a card read only
+    // after every card below it. The margin stays outside, so the
+    // focus drawn around the card is its frame.
+    return Padding(
+      padding: const EdgeInsets.only(bottom: GerfautSpacing.gutter),
+      child: Semantics(
+        container: true,
+        child: Container(
+          padding: const EdgeInsets.all(GerfautSpacing.md),
+          decoration: frame(tokens),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SectionTitle(
+                glyph: glyph ?? Icon(icon),
+                title: title,
+                color: iconColor,
+                trailing: trailing,
+              ),
+              ...children,
+            ],
           ),
-          ...children,
-        ],
+        ),
       ),
     );
   }
