@@ -130,6 +130,15 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
 
   GerfautBridge get _bridge => ref.read(bridgeProvider);
 
+  /// Where the providers live. A call that changes what the vault or
+  /// the server holds takes it, and the bridge, before its first await,
+  /// and reads the state again through it: the page may be left before
+  /// the answer, and the rest of the app must follow the change all the
+  /// same. `ref` dies with this page; the container outlives it. Only
+  /// what the page shows itself waits on `mounted`.
+  ProviderContainer get _container =>
+      ProviderScope.containerOf(context, listen: false);
+
   void _toast(String message) {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
@@ -156,18 +165,20 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   void _refreshLicenceOnce(PremiumView view) {
     if (_refreshedLicence || !view.hasKey) return;
     _refreshedLicence = true;
+    final container = _container;
+    final bridge = container.read(bridgeProvider);
     Future.microtask(() async {
       try {
         final before = view.claims?.expiresAt;
-        final licence = await _bridge.premiumRefreshLicence();
-        if (mounted && licence.claims.expiresAt != before) {
-          ref.invalidate(premiumStateProvider);
+        final licence = await bridge.premiumRefreshLicence();
+        if (licence.claims.expiresAt != before) {
+          container.invalidate(premiumStateProvider);
         }
       } on BridgeException catch (error) {
         // Offline, or a key the server no longer knows: the stored
         // certificate stands, verified as it is. A device turned away
         // meanwhile reads so from the vault.
-        if (mounted) rereadIfDisowned(ref, error);
+        rereadIfDisowned(container, error);
       }
     });
   }
@@ -191,18 +202,20 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
         normalizeKey(_keyController.text) != view.key;
     if (leaving && !await _confirmIdentity()) return;
     if (!mounted) return;
+    final container = _container;
+    final bridge = _bridge;
     setState(() {
       _activating = true;
       _licenceError = null;
     });
     try {
-      await _bridge.premiumConnect(_keyController.text);
+      await bridge.premiumConnect(_keyController.text);
+      invalidatePremium(container);
       if (!mounted) return;
       _keyController.clear();
       _keyRejected = false;
       // The certificate just came in: nothing to fetch again this visit.
       _refreshedLicence = true;
-      invalidatePremium(ref);
     } on BridgeException catch (error) {
       if (mounted) setState(() => _licenceError = error);
     } finally {
@@ -280,23 +293,28 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   Future<void> _connectAgain(PremiumView view) async {
     final key = view.key;
     if (_connecting || key == null) return;
+    final container = _container;
+    final bridge = _bridge;
     setState(() {
       _connecting = true;
       _licenceError = null;
     });
     try {
-      await _bridge.premiumConnect(key);
-      if (!mounted) return;
-      invalidatePremium(ref);
+      await bridge.premiumConnect(key);
+      invalidatePremium(container);
     } on BridgeException catch (error) {
+      // The core kept the server's sentence with the disconnection:
+      // the note that offers to connect again says it, once.
+      if (error.kind == 'premium_too_many_devices') {
+        container.invalidate(premiumStateProvider);
+      }
       if (!mounted) return;
       switch (error.kind) {
         case 'premium_unknown_key':
           setState(() => _keyRejected = true);
-        // The core kept the server's sentence with the disconnection:
-        // the note that offers to connect again says it, once.
+        // Said by the note that offers to connect again, read above.
         case 'premium_too_many_devices':
-          ref.invalidate(premiumStateProvider);
+          break;
         default:
           setState(() => _licenceError = error);
       }
@@ -334,6 +352,11 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
     // or that the server let go, leaves without a question.
     if ((_deleteAccount || confirm) && !await _confirmIdentity()) return;
     if (!mounted) return;
+    // Leaving the page while "Forgetting…" shows must not leave the app
+    // on a key the vault no longer holds: the settings row and the page
+    // opened again read the vault whatever became of this one.
+    final container = _container;
+    final bridge = _bridge;
     setState(() {
       _forgetting = true;
       _licenceError = null;
@@ -343,18 +366,19 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
         // The server first, and nothing is dropped here unless it
         // confirmed: the core does both, in that order, so a refusal
         // leaves the key where it was.
-        await _bridge.premiumDeleteAccount();
+        await bridge.premiumDeleteAccount();
       } else {
-        await _bridge.premiumLogOut();
+        await bridge.premiumLogOut();
       }
+      invalidatePremium(container);
       if (!mounted) return;
       setState(() {
         _confirmForget = false;
         _deleteAccount = false;
         _keyRejected = false;
       });
-      invalidatePremium(ref);
     } on BridgeException catch (error) {
+      rereadIfDisowned(container, error);
       if (mounted) setState(() => _licenceError = error);
     } finally {
       if (mounted) setState(() => _forgetting = false);
@@ -415,21 +439,20 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   /// failure lands under the card, and what the server holds is read
   /// again afterwards. True once the server has said yes.
   Future<bool> _askForWallet(String id, Future<void> Function() call) async {
+    final container = _container;
     setState(() {
       _busyWalletIds.add(id);
       _walletsError = null;
     });
     try {
       await call();
-      if (!mounted) return true;
-      ref.invalidate(premiumStateProvider);
-      ref.invalidate(premiumWalletsProvider);
-      ref.invalidate(premiumEventsProvider);
+      container.invalidate(premiumStateProvider);
+      container.invalidate(premiumWalletsProvider);
+      container.invalidate(premiumEventsProvider);
       return true;
     } on BridgeException catch (error) {
-      if (!mounted) return false;
-      setState(() => _walletsError = error);
-      rereadIfDisowned(ref, error);
+      rereadIfDisowned(container, error);
+      if (mounted) setState(() => _walletsError = error);
       return false;
     } finally {
       if (mounted) setState(() => _busyWalletIds.remove(id));
@@ -483,20 +506,24 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
     // Without a lock nobody is sent to set one for this.
     if (!await confirmIdentity(context, ref, appLockOnly: true)) return;
     if (!mounted) return;
+    final container = _container;
+    final bridge = _bridge;
     final before = ref.read(premiumChannelsProvider).valueOrNull?.length ?? 0;
     setState(() => _channelsError = null);
     CreatedChannel? created;
     try {
       switch (kind) {
         case ChannelKind.ntfy:
-          created = await _bridge.premiumCreateChannel(kind);
+          created = await bridge.premiumCreateChannel(kind);
           final topic = created.topic;
           if (topic != null) {
-            await _bridge.setAppPref(ntfyTopicPref(created.channel.id), topic);
-            if (mounted) ref.invalidate(settingsProvider);
+            // Kept even if the page was left meanwhile: the subscribe
+            // link opens again from the channel's row.
+            await bridge.setAppPref(ntfyTopicPref(created.channel.id), topic);
+            container.invalidate(settingsProvider);
           }
         case ChannelKind.telegram:
-          created = await _bridge.premiumCreateChannel(kind);
+          created = await bridge.premiumCreateChannel(kind);
         case ChannelKind.email:
           created = await Navigator.of(context).push<CreatedChannel>(
             MaterialPageRoute(builder: (_) => const EmailChannelScreen()),
@@ -507,14 +534,14 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
           );
       }
     } on BridgeException catch (error) {
-      if (!mounted) return;
-      setState(() => _channelsError = error);
-      rereadIfDisowned(ref, error);
+      rereadIfDisowned(container, error);
+      if (mounted) setState(() => _channelsError = error);
       return;
     }
-    if (created == null || !mounted) return;
-    ref.invalidate(premiumChannelsProvider);
-    ref.invalidate(premiumAccountProvider);
+    if (created == null) return;
+    container.invalidate(premiumChannelsProvider);
+    container.invalidate(premiumAccountProvider);
+    if (!mounted) return;
     final channel = created.channel;
     // The first channel proves itself at once; one that has not
     // answered yet only once it has, since nothing is delivered to a
@@ -577,27 +604,24 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
     );
   }
 
-  /// A channel just proved itself with its code: the card reads it
-  /// again, linked, and the account's count with it.
-  void _confirmed() {
-    setState(() => _channelsError = null);
-    ref.invalidate(premiumChannelsProvider);
-    ref.invalidate(premiumAccountProvider);
-  }
+  /// A channel just proved itself with its code: its row has had the
+  /// card read again, linked, and the account's count with it; an old
+  /// failure under the card goes.
+  void _confirmed() => setState(() => _channelsError = null);
 
   Future<void> _test(PremiumChannel channel, {bool quiet = false}) async {
+    final container = _container;
+    final bridge = _bridge;
     setState(() {
       _busyChannelId = channel.id;
       _channelsError = null;
     });
     try {
-      await _bridge.premiumTestChannel(channel.id);
+      await bridge.premiumTestChannel(channel.id);
       if (mounted && !quiet) _toast('Test sent to ${channel.kind.label}');
     } on BridgeException catch (error) {
-      if (mounted) {
-        setState(() => _channelsError = error);
-        rereadIfDisowned(ref, error);
-      }
+      rereadIfDisowned(container, error);
+      if (mounted) setState(() => _channelsError = error);
     } finally {
       if (mounted) setState(() => _busyChannelId = null);
     }
@@ -620,27 +644,27 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   Future<void> _remove(PremiumChannel channel) async {
     if (_busyChannelId != null) return;
     if (!await _confirmIdentity() || !mounted) return;
+    final container = _container;
+    final bridge = _bridge;
     setState(() {
       _busyChannelId = channel.id;
       _channelsError = null;
     });
     try {
-      await _bridge.premiumDeleteChannel(channel.id);
+      await bridge.premiumDeleteChannel(channel.id);
       if (channel.kind == ChannelKind.ntfy) {
         // The topic goes with the channel: nothing left to subscribe to.
-        await _bridge.setAppPref(ntfyTopicPref(channel.id), '');
+        await bridge.setAppPref(ntfyTopicPref(channel.id), '');
       }
+      container.invalidate(settingsProvider);
+      container.invalidate(premiumChannelsProvider);
+      container.invalidate(premiumAccountProvider);
       if (!mounted) return;
       _confirmRemoveChannelId = null;
-      ref.invalidate(settingsProvider);
-      ref.invalidate(premiumChannelsProvider);
-      ref.invalidate(premiumAccountProvider);
       _toast('Channel removed');
     } on BridgeException catch (error) {
-      if (mounted) {
-        setState(() => _channelsError = error);
-        rereadIfDisowned(ref, error);
-      }
+      rereadIfDisowned(container, error);
+      if (mounted) setState(() => _channelsError = error);
     } finally {
       if (mounted) setState(() => _busyChannelId = null);
     }
@@ -1904,8 +1928,8 @@ class _ChannelsCard extends ConsumerWidget {
   /// from yet.
   final void Function(PremiumChannel channel) onLinkCode;
 
-  /// Told once a channel has been linked by its code, so the card and
-  /// the account are read again.
+  /// Told once a channel has been linked by its code, the card and the
+  /// account already read again.
   final VoidCallback onConfirmed;
 
   @override
@@ -2280,22 +2304,24 @@ class _ConfirmCodeRowState extends ConsumerState<_ConfirmCodeRow> {
   bool get _complete => _controller.text.length == confirmationCodeLength;
 
   Future<void> _confirm() async {
+    // Held before the call, as the section does: the channel is linked
+    // whether or not this row is still on screen when the server says so.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final bridge = ref.read(bridgeProvider);
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      await ref
-          .read(bridgeProvider)
-          .premiumConfirmChannel(widget.channel.id, _controller.text);
+      await bridge.premiumConfirmChannel(widget.channel.id, _controller.text);
+      container.invalidate(premiumChannelsProvider);
+      container.invalidate(premiumAccountProvider);
       if (!mounted) return;
       _controller.clear();
       widget.onConfirmed();
     } on BridgeException catch (error) {
-      if (mounted) {
-        setState(() => _error = error);
-        rereadIfDisowned(ref, error);
-      }
+      rereadIfDisowned(container, error);
+      if (mounted) setState(() => _error = error);
     } finally {
       if (mounted) setState(() => _busy = false);
     }

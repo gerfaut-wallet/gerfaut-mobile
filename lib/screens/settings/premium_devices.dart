@@ -125,6 +125,11 @@ class _DevicesCardState extends ConsumerState<DevicesCard> {
       if (mounted) setState(() => _verifying = false);
     }
     if (!confirmed || !mounted) return;
+    // Held before the call: the list is read again whether or not the
+    // page is still open when the server answers, or the banner of the
+    // home screen would go on asking about a device already approved.
+    // `ref` dies with the page; the container outlives it.
+    final container = ProviderScope.containerOf(context, listen: false);
     setState(() {
       _busyId = device.id;
       _error = null;
@@ -146,12 +151,10 @@ class _DevicesCardState extends ConsumerState<DevicesCard> {
     } on BridgeException catch (error) {
       if (mounted) setState(() => _error = error);
     } finally {
-      if (mounted) {
-        setState(() => _busyId = null);
-        // Read again either way: a device refused elsewhere meanwhile is
-        // gone, one approved elsewhere has its access.
-        ref.invalidate(premiumDevicesProvider);
-      }
+      if (mounted) setState(() => _busyId = null);
+      // Read again either way: a device refused elsewhere meanwhile is
+      // gone, one approved elsewhere has its access.
+      container.invalidate(premiumDevicesProvider);
     }
   }
 

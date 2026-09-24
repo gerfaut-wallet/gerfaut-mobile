@@ -89,6 +89,34 @@ void main() {
       expect(find.text(newDeviceBanner), findsNothing);
     });
 
+    testWidgets('an approval answered after the page was left ends it too', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = withWaitingComputer();
+      final gate = Completer<void>();
+      bridge.onPremiumApprove = (_) => gate.future;
+      await tester.pumpWidget(wholeApp(bridge));
+      await tester.pumpAndSettle();
+      expect(find.text(newDeviceBanner), findsOneWidget);
+
+      await tester.tap(find.text('Review'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(PremiumButton, 'Approve'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(PremiumButton, 'Approve'));
+      await tester.pump();
+      expect(find.text('Approving…'), findsOneWidget);
+
+      // Home before the server answers: the banner goes with its answer,
+      // not at the next check five minutes on.
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(find.text(newDeviceBanner), findsNothing);
+    });
+
     testWidgets('no banner while nothing waits', (tester) async {
       final bridge = premiumBridge(activated: true);
       bridge.premiumAddDevice(waiting: false);

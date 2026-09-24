@@ -205,9 +205,11 @@ Future<T> _asThisDevice<T>(Ref<Object?> ref, Future<T> Function() call) async {
   }
 }
 
-/// [_asThisDevice] for a call a screen makes itself.
-void rereadIfDisowned(WidgetRef ref, Object error) {
-  if (disowns(error)) ref.invalidate(premiumStateProvider);
+/// [_asThisDevice] for a call a screen makes itself. Through the
+/// container, as [invalidatePremium] is: the answer may land after the
+/// page that asked was left.
+void rereadIfDisowned(ProviderContainer container, Object error) {
+  if (disowns(error)) container.invalidate(premiumStateProvider);
 }
 
 /// A failure that says this device no longer sees the account, as
@@ -266,15 +268,21 @@ final premiumEventsProvider = FutureProvider<List<PremiumEvent>>((ref) async {
 });
 
 /// Forgets everything read from the server, after something changed it.
-void invalidatePremium(WidgetRef ref) {
-  ref.invalidate(premiumStateProvider);
-  ref.invalidate(premiumMeProvider);
-  ref.invalidate(premiumDevicesProvider);
-  ref.invalidate(premiumAccountProvider);
-  ref.invalidate(premiumCandidatesProvider);
-  ref.invalidate(premiumWalletsProvider);
-  ref.invalidate(premiumChannelsProvider);
-  ref.invalidate(premiumEventsProvider);
+///
+/// Through the container, never a widget's `ref`: the change is made
+/// whether or not the page that asked for it is still open when the
+/// answer lands, and a `ref` dies with its widget, while the container
+/// outlives it. A page holds the container before its first await, and
+/// only what it shows itself waits on `mounted`.
+void invalidatePremium(ProviderContainer container) {
+  container.invalidate(premiumStateProvider);
+  container.invalidate(premiumMeProvider);
+  container.invalidate(premiumDevicesProvider);
+  container.invalidate(premiumAccountProvider);
+  container.invalidate(premiumCandidatesProvider);
+  container.invalidate(premiumWalletsProvider);
+  container.invalidate(premiumChannelsProvider);
+  container.invalidate(premiumEventsProvider);
 }
 
 /// Where a channel's ntfy topic is kept in the vault, by channel id: the

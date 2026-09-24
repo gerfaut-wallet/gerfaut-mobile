@@ -82,13 +82,17 @@ class _ProtectAccountCardState extends ConsumerState<ProtectAccountCard> {
     Future<void> Function(GerfautBridge bridge) call,
   ) async {
     if (_busy) return;
+    // Held before the write: the vault is read again even if the page
+    // was left meanwhile. `ref` dies with the page, and a write that
+    // worked would read here as one that failed.
+    final container = ProviderScope.containerOf(context, listen: false);
     setState(() {
       _busy = true;
       _failed = null;
     });
     try {
       await call(ref.read(bridgeProvider));
-      ref.invalidate(premiumStateProvider);
+      container.invalidate(premiumStateProvider);
     } catch (_) {
       if (mounted) setState(() => _failed = what);
     } finally {

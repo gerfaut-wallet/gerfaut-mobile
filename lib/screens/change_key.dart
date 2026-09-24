@@ -77,24 +77,28 @@ class _ChangeKeySheetState extends ConsumerState<ChangeKeySheet> {
 
   Future<void> _change() async {
     if (_busy) return;
+    // Held before the first await: `ref` dies with the sheet, and the
+    // app must read the vault again whatever became of it.
+    final container = ProviderScope.containerOf(context, listen: false);
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      if (!await confirmIdentity(context, ref)) return;
+      // Gone meanwhile, the sheet has nowhere to show a new key: none
+      // is asked for.
+      if (!await confirmIdentity(context, ref) || !mounted) return;
       final key = await ref.read(bridgeProvider).premiumChangeKey();
-      if (!mounted) return;
-      setState(() => _newKey = key);
       // The other devices are gone, and the key in the vault is new:
       // the section reads it all again behind the sheet.
-      invalidatePremium(ref);
-    } on BridgeException catch (error) {
+      invalidatePremium(container);
       if (!mounted) return;
-      setState(() => _error = error);
+      setState(() => _newKey = key);
+    } on BridgeException catch (error) {
       // The change may be under way now, its answer lost: the licence
       // behind the sheet reads the vault again, and says so.
-      ref.invalidate(premiumStateProvider);
+      container.invalidate(premiumStateProvider);
+      if (mounted) setState(() => _error = error);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -124,14 +128,15 @@ class _ChangeKeySheetState extends ConsumerState<ChangeKeySheet> {
 
   Future<void> _done() async {
     if (!_saved || _closing) return;
+    final container = ProviderScope.containerOf(context, listen: false);
     setState(() => _closing = true);
     try {
       await ref.read(bridgeProvider).premiumSetKeySaved(true);
     } on BridgeException {
       // The checklist asks again; the key itself is changed and kept.
     }
+    container.invalidate(premiumStateProvider);
     if (!mounted) return;
-    ref.invalidate(premiumStateProvider);
     Navigator.of(context).pop();
   }
 

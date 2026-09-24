@@ -690,6 +690,86 @@ void main() {
       expect(bridge.premiumKey, isNotNull);
     });
 
+    testWidgets('a key forgotten after the page was left is gone everywhere', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumMakeWaiting(bridge.premiumThisDeviceId!);
+      // The server is slow to hear that this device leaves.
+      final gate = Completer<void>();
+      bridge.onPremiumRevoke = (_) => gate.future;
+      await tester.pumpWidget(premiumApp(bridge, root: true));
+      await tester.pumpAndSettle();
+      final until = formatDate(bridge.premiumPaidUntil);
+      expect(
+        find.text('Active until $until · waiting for approval'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Premium'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Forget this key'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(DangerButton, 'Forget the key'));
+      await tester.pump();
+      expect(find.text('Forgetting…'), findsOneWidget);
+
+      // Back to the list before the answer.
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(bridge.premiumKey, isNull);
+      expect(find.text('Not activated'), findsOneWidget);
+      expect(find.textContaining('waiting for approval'), findsNothing);
+      // Opened again, the page asks for a key: no key kept, no wait.
+      await tester.tap(find.text('Premium'));
+      await tester.pumpAndSettle();
+      expect(find.text('Activate'), findsOneWidget);
+      expect(find.text('Waiting for approval'), findsNothing);
+      expect(find.text('Forget this key'), findsNothing);
+    });
+
+    testWidgets('an account deleted after the page was left is gone too', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      final gate = Completer<void>();
+      bridge.onPremiumDeleteAccount = () => gate.future;
+      await tester.pumpWidget(premiumApp(bridge, root: true));
+      await tester.pumpAndSettle();
+      final until = formatDate(bridge.premiumPaidUntil);
+      expect(
+        find.text('Active until $until · no wallets watched'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Premium'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Forget this key'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Also delete everything on the server'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete and forget'));
+      await tester.pump();
+      expect(find.text('Deleting…'), findsOneWidget);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(bridge.premiumAccountDeleted, isTrue);
+      expect(find.text('Not activated'), findsOneWidget);
+      await tester.tap(find.text('Premium'));
+      await tester.pumpAndSettle();
+      expect(find.text('Activate'), findsOneWidget);
+      expect(find.text('Devices'), findsNothing);
+    });
+
     testWidgets('an expired key says so in amber, with the grace', (
       tester,
     ) async {

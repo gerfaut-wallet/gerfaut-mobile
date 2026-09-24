@@ -375,6 +375,9 @@ class _TelegramChannelScreenState extends ConsumerState<TelegramChannelScreen> {
   /// last tick and whatever it finds is the whole answer.
   Future<void> _check({bool byHand = false}) async {
     if (_checking || _linked) return;
+    // Held before the call: an answer that lands after the page was
+    // left still reaches the channel's row. `ref` dies with the page.
+    final container = ProviderScope.containerOf(context, listen: false);
     setState(() {
       _checking = true;
       _notYet = false;
@@ -383,18 +386,18 @@ class _TelegramChannelScreenState extends ConsumerState<TelegramChannelScreen> {
     try {
       final channels = await ref.read(bridgeProvider).premiumChannels();
       final mine = channels.where((c) => c.id == widget.channelId);
+      final linked = mine.isNotEmpty && mine.first.linked;
+      if (linked) container.invalidate(premiumChannelsProvider);
       if (!mounted) return;
-      if (mine.isNotEmpty && mine.first.linked) {
+      if (linked) {
         _timer?.cancel();
         setState(() => _linked = true);
-        ref.invalidate(premiumChannelsProvider);
       } else if (byHand) {
         setState(() => _notYet = true);
       }
     } on BridgeException catch (error) {
-      if (!mounted) return;
-      if (byHand) setState(() => _error = error);
-      rereadIfDisowned(ref, error);
+      rereadIfDisowned(container, error);
+      if (mounted && byHand) setState(() => _error = error);
     } finally {
       if (mounted) setState(() => _checking = false);
     }
@@ -576,6 +579,7 @@ class _EmailChannelScreenState extends ConsumerState<EmailChannelScreen> {
   }
 
   Future<void> _add() async {
+    final container = ProviderScope.containerOf(context, listen: false);
     setState(() {
       _busy = true;
       _error = null;
@@ -587,14 +591,18 @@ class _EmailChannelScreenState extends ConsumerState<EmailChannelScreen> {
             ChannelKind.email,
             target: _controller.text.trim(),
           );
+      // The channel is made: the card reads its list again whether or
+      // not this page is still open to hand it back.
+      container.invalidate(premiumChannelsProvider);
+      container.invalidate(premiumAccountProvider);
       if (mounted) Navigator.of(context).pop(created);
     } on BridgeException catch (error) {
+      rereadIfDisowned(container, error);
       if (mounted) {
         setState(() {
           _busy = false;
           _error = error;
         });
-        rereadIfDisowned(ref, error);
       }
     }
   }
@@ -745,6 +753,7 @@ class _WebhookChannelScreenState extends ConsumerState<WebhookChannelScreen> {
   }
 
   Future<void> _add() async {
+    final container = ProviderScope.containerOf(context, listen: false);
     setState(() {
       _busy = true;
       _error = null;
@@ -758,14 +767,17 @@ class _WebhookChannelScreenState extends ConsumerState<WebhookChannelScreen> {
             target: _urlController.text.trim(),
             secret: secret.isEmpty ? null : secret,
           );
+      // As for an address: read again, whether or not the page is open.
+      container.invalidate(premiumChannelsProvider);
+      container.invalidate(premiumAccountProvider);
       if (mounted) Navigator.of(context).pop(created);
     } on BridgeException catch (error) {
+      rereadIfDisowned(container, error);
       if (mounted) {
         setState(() {
           _busy = false;
           _error = error;
         });
-        rereadIfDisowned(ref, error);
       }
     }
   }

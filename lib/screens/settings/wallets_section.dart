@@ -130,19 +130,24 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
     // as for stopping the watch from the Premium section.
     final premium = ref.read(premiumStateProvider).valueOrNull;
     final watched = premium != null && premium.hasKey && premium.consented(id);
+    // Held before the first await: the lists are read again even if
+    // the page was left meanwhile. `ref` dies with it.
+    final container = ProviderScope.containerOf(context, listen: false);
     setState(() => _removingId = id);
     try {
       if (watched && !await confirmIdentity(context, ref)) return;
+      if (!mounted) return;
       await ref.read(bridgeProvider).removeWallet(id);
-      ref.invalidate(walletsProvider);
+      container.invalidate(walletsProvider);
       // The server is told after the answer, and the Premium card reads
       // its list again rather than keep a row for a wallet that is gone.
-      ref.invalidate(premiumStateProvider);
-      ref.invalidate(premiumWalletsProvider);
+      container.invalidate(premiumStateProvider);
+      container.invalidate(premiumWalletsProvider);
+      if (!mounted) return;
       setState(() => _confirmRemoveId = null);
       _toast('Wallet removed');
     } catch (error) {
-      setState(() => _walletError = '$error');
+      if (mounted) setState(() => _walletError = '$error');
     } finally {
       if (mounted) setState(() => _removingId = null);
     }
