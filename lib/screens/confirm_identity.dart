@@ -185,107 +185,108 @@ class _ConfirmItsYouSheetState extends ConsumerState<ConfirmItsYouSheet> {
         top: GerfautSpacing.md,
         bottom: MediaQuery.viewInsetsOf(context).bottom + GerfautSpacing.md,
       ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Semantics(
-              header: true,
-              child: Text(confirmItsYouTitle, style: tokens.h2),
-            ),
-            const SizedBox(height: GerfautSpacing.md),
-            Text(
-              label.toUpperCase(),
-              style: tokens.label.copyWith(color: tokens.textMuted),
-            ),
-            const SizedBox(height: GerfautSpacing.sm),
-            TextField(
-              key: const Key('identity.secret'),
-              controller: _controller,
-              autofocus: true,
-              obscureText: _hidden,
-              enabled: !blocked,
-              autocorrect: false,
-              enableSuggestions: false,
-              keyboardType: _pin ? TextInputType.number : TextInputType.text,
-              inputFormatters: _pin
-                  ? [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(12),
-                    ]
-                  : null,
-              style: tokens.body,
-              textInputAction: TextInputAction.done,
-              onChanged: (_) => setState(() => _message = null),
-              onSubmitted: (_) => _confirm(),
-              decoration: InputDecoration(
-                // The caption above is what the eye reads; the hint is
-                // what a screen reader hears on the field itself.
-                hintText: label,
-                hintStyle: tokens.body.copyWith(color: tokens.textMuted),
-                filled: true,
-                fillColor: tokens.surfaceSunken,
-                constraints: const BoxConstraints(minHeight: 44),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: GerfautSpacing.md,
-                  vertical: GerfautSpacing.sm + GerfautSpacing.xs,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(GerfautRadius.sm),
-                  borderSide: BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(GerfautRadius.sm),
-                  borderSide: BorderSide(color: tokens.primary, width: 2),
-                ),
-                suffixIcon: _pin
-                    ? null
-                    : IconButton(
-                        tooltip: _hidden ? 'Show password' : 'Hide password',
-                        onPressed: () => setState(() => _hidden = !_hidden),
-                        icon: Icon(
-                          _hidden ? LucideIcons.eye : LucideIcons.eyeOff,
-                          size: 18,
-                          color: tokens.textMuted,
-                        ),
-                      ),
-              ),
-            ),
-            if (note != null) ...[
-              const SizedBox(height: GerfautSpacing.sm),
-              // A refused secret is a fact, not an alarm: muted, as on
-              // the lock screen.
+      // Clear of the gesture bar, as every sheet's last button must be.
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               Semantics(
-                liveRegion: true,
-                child: Text(
-                  note,
-                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                header: true,
+                child: Text(confirmItsYouTitle, style: tokens.h2),
+              ),
+              const SizedBox(height: GerfautSpacing.md),
+              // The field names itself, as on the lock screen: one word in
+              // the box, heard by a screen reader on the box itself.
+              TextField(
+                key: const Key('identity.secret'),
+                controller: _controller,
+                autofocus: true,
+                obscureText: _hidden,
+                enabled: !blocked,
+                autocorrect: false,
+                enableSuggestions: false,
+                keyboardType: _pin ? TextInputType.number : TextInputType.text,
+                inputFormatters: _pin
+                    ? [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(12),
+                      ]
+                    : null,
+                style: tokens.body,
+                textInputAction: TextInputAction.done,
+                onChanged: (_) => setState(() => _message = null),
+                onSubmitted: (_) => _confirm(),
+                decoration: InputDecoration(
+                  // The caption above is what the eye reads; the hint is
+                  // what a screen reader hears on the field itself.
+                  hintText: label,
+                  hintStyle: tokens.body.copyWith(color: tokens.textMuted),
+                  filled: true,
+                  fillColor: tokens.surfaceSunken,
+                  constraints: const BoxConstraints(minHeight: 44),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: GerfautSpacing.md,
+                    vertical: GerfautSpacing.sm + GerfautSpacing.xs,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                    borderSide: BorderSide(color: tokens.primary, width: 2),
+                  ),
+                  suffixIcon: _pin
+                      ? null
+                      : IconButton(
+                          tooltip: _hidden ? 'Show password' : 'Hide password',
+                          onPressed: () => setState(() => _hidden = !_hidden),
+                          icon: Icon(
+                            _hidden ? LucideIcons.eye : LucideIcons.eyeOff,
+                            size: 18,
+                            color: tokens.textMuted,
+                          ),
+                        ),
                 ),
               ),
-            ],
-            const SizedBox(height: GerfautSpacing.md),
-            if (_offersBiometrics) ...[
-              GhostButton(
-                label: 'Use fingerprint or face',
-                icon: LucideIcons.fingerprint,
-                onPressed: _checking ? null : _tryBiometrics,
+              if (note != null) ...[
+                const SizedBox(height: GerfautSpacing.sm),
+                // A refused secret is a fact, not an alarm: muted, as on
+                // the lock screen.
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    note,
+                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                  ),
+                ),
+              ],
+              const SizedBox(height: GerfautSpacing.md),
+              if (_offersBiometrics) ...[
+                GhostButton(
+                  label: 'Use fingerprint or face',
+                  icon: LucideIcons.fingerprint,
+                  onPressed: _checking ? null : _tryBiometrics,
+                ),
+                const SizedBox(height: GerfautSpacing.sm),
+              ],
+              PrimaryButton(
+                label: _checking ? 'Checking…' : 'Confirm',
+                expand: true,
+                onPressed: blocked || _checking ? null : _confirm,
               ),
               const SizedBox(height: GerfautSpacing.sm),
+              GhostButton(
+                label: 'Cancel',
+                onPressed: _checking
+                    ? null
+                    : () => Navigator.of(context).pop(false),
+              ),
             ],
-            PrimaryButton(
-              label: _checking ? 'Checking…' : 'Confirm',
-              expand: true,
-              onPressed: blocked || _checking ? null : _confirm,
-            ),
-            const SizedBox(height: GerfautSpacing.sm),
-            GhostButton(
-              label: 'Cancel',
-              onPressed: _checking
-                  ? null
-                  : () => Navigator.of(context).pop(false),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -300,40 +301,43 @@ class AppLockNeededSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    return Padding(
-      padding: const EdgeInsets.all(GerfautSpacing.md),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Semantics(
-            header: true,
-            child: Text(confirmItsYouTitle, style: tokens.h2),
-          ),
-          const SizedBox(height: GerfautSpacing.sm),
-          Text(appLockNeededMessage, style: tokens.body),
-          const SizedBox(height: GerfautSpacing.md),
-          PrimaryButton(
-            label: 'Set an app lock',
-            icon: LucideIcons.lock,
-            expand: true,
-            onPressed: () {
-              final navigator = Navigator.of(context);
-              navigator.pop();
-              navigator.push(
-                MaterialPageRoute<void>(
-                  builder: (_) =>
-                      const SettingsScreen(section: SettingsSection.security),
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: GerfautSpacing.sm),
-          GhostButton(
-            label: 'Cancel',
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ],
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.all(GerfautSpacing.md),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Semantics(
+              header: true,
+              child: Text(confirmItsYouTitle, style: tokens.h2),
+            ),
+            const SizedBox(height: GerfautSpacing.sm),
+            Text(appLockNeededMessage, style: tokens.body),
+            const SizedBox(height: GerfautSpacing.md),
+            PrimaryButton(
+              label: 'Set an app lock',
+              icon: LucideIcons.lock,
+              expand: true,
+              onPressed: () {
+                final navigator = Navigator.of(context);
+                navigator.pop();
+                navigator.push(
+                  MaterialPageRoute<void>(
+                    builder: (_) =>
+                        const SettingsScreen(section: SettingsSection.security),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: GerfautSpacing.sm),
+            GhostButton(
+              label: 'Cancel',
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ],
+        ),
       ),
     );
   }

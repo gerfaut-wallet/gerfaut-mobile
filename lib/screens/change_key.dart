@@ -104,8 +104,13 @@ class _ChangeKeySheetState extends ConsumerState<ChangeKeySheet> {
           top: GerfautSpacing.md,
           bottom: MediaQuery.viewInsetsOf(context).bottom + GerfautSpacing.md,
         ),
-        child: SingleChildScrollView(
-          child: newKey == null ? _asking(tokens) : _revealed(tokens, newKey),
+        // Clear of the gesture bar: the last button of the sheet sits
+        // where the thumb that swipes home would land otherwise.
+        child: SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            child: newKey == null ? _asking(tokens) : _revealed(tokens, newKey),
+          ),
         ),
       ),
     );
