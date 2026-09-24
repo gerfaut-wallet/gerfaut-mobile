@@ -618,10 +618,21 @@ const String keyChangePendingMessage =
 /// disconnected: the server's own sentence when it gave one, the key
 /// having every device it takes, and the app's words otherwise. The
 /// desktop app says the same.
+///
+/// A refusal that carried no sentence reaches the vault as its bare
+/// status, `HTTP 404`, what a proxy without a route or a captive portal
+/// answers: that names a layer, not a reason, and the note says what it
+/// says without one.
 String disconnectedWords(String? reason) {
-  final words = reason == null ? null : _sentence(reason);
-  return words ?? 'This device was disconnected from your Premium account.';
+  final words = reason?.trim() ?? '';
+  if (words.isEmpty || _bareStatus.hasMatch(words)) {
+    return 'This device was disconnected from your Premium account.';
+  }
+  return _sentence(words)!;
 }
+
+/// A status and nothing else.
+final RegExp _bareStatus = RegExp(r'^HTTP \d{3}$');
 
 /// How long a new device waits without approval. Mirrors the server,
 /// which decides it.

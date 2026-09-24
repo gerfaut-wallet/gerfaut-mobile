@@ -1477,6 +1477,29 @@ void main() {
   group('what the final review settled', () {
     const plainNote = 'This device was disconnected from your Premium account.';
 
+    test('a bare status is no reason to give', () {
+      expect(disconnectedWords('HTTP 404'), plainNote);
+      expect(disconnectedWords(' HTTP 502 '), plainNote);
+      expect(disconnectedWords(''), plainNote);
+      expect(disconnectedWords(null), plainNote);
+      // The server's own words are the reason, as the desktop app says.
+      expect(disconnectedWords(fullKeyWords), fullKeySentence);
+    });
+
+    testWidgets('a device disconnected with a bare status reads plainly', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumDisconnected = true;
+      bridge.premiumDisconnectedReason = 'HTTP 404';
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+      expect(find.text(plainNote), findsOneWidget);
+      expect(find.textContaining('HTTP'), findsNothing);
+      expect(find.text('Connect again'), findsOneWidget);
+    });
+
     testWidgets('turned away while it reads the account, the page falls '
         'back to the way in', (tester) async {
       useTallSurface(tester);
