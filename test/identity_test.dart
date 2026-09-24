@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/screens/confirm_identity.dart';
+import 'package:gerfaut/screens/premium_channels.dart';
 import 'package:gerfaut/screens/settings.dart';
 import 'package:gerfaut/screens/settings/premium_section.dart';
 import 'package:gerfaut/src/identity.dart';
 import 'package:gerfaut/src/models.dart';
+import 'package:gerfaut/src/premium.dart';
 import 'package:gerfaut/widgets/buttons.dart';
 import 'package:local_auth/local_auth.dart';
 
@@ -510,6 +512,82 @@ void main() {
         bridge.premiumCalls.where((c) => c == 'create:telegram:'),
         hasLength(1),
       );
+    });
+
+    testWidgets("reopening a channel's link asks under an app lock only", (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumChannelList.addAll(const [
+        ntfyChannel,
+        PremiumChannel(
+          id: 'ch2',
+          kind: ChannelKind.telegram,
+          target: '',
+          linked: false,
+          linkCode: 'code2',
+          startUrl: 'https://t.me/GerfautAlertsBot?start=code2',
+          createdAt: 2,
+        ),
+      ]);
+      bridge.appPrefs[ntfyTopicPref('ch1')] = 'abcdefghijkmnpqrstuvwxyz';
+      final screenLock = FakeScreenLock();
+      await tester.pumpWidget(premiumApp(bridge, screenLock: screenLock));
+      await tester.pumpAndSettle();
+
+      Future<void> choose(String menu, String entry) async {
+        await tester.tap(find.byTooltip(menu));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(entry));
+        await tester.pumpAndSettle();
+      }
+
+      Future<void> leave() async {
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+      }
+
+      // No lock: both open as they always did, and nobody is sent to
+      // set one.
+      await choose('More for ntfy', 'Subscribe link');
+      expect(find.byType(NtfyChannelScreen), findsOneWidget);
+      await leave();
+      await choose('More for Telegram', 'Link code');
+      expect(find.byType(TelegramChannelScreen), findsOneWidget);
+      await leave();
+      expect(screenLock.asked, isEmpty);
+
+      // Behind a lock, the topic and the code each hand out every alert
+      // of the account: its secret first, and a no opens nothing.
+      bridge.lock = const AppLock(kind: LockKind.pin, biometric: false);
+      await choose('More for ntfy', 'Subscribe link');
+      expect(find.byType(ConfirmItsYouSheet), findsOneWidget);
+      await tester.tap(find.widgetWithText(GhostButton, 'Cancel').last);
+      await tester.pumpAndSettle();
+      expect(find.byType(NtfyChannelScreen), findsNothing);
+
+      await choose('More for Telegram', 'Link code');
+      expect(find.byType(ConfirmItsYouSheet), findsOneWidget);
+      await tester.tap(find.widgetWithText(GhostButton, 'Cancel').last);
+      await tester.pumpAndSettle();
+      expect(find.byType(TelegramChannelScreen), findsNothing);
+
+      // The owner's PIN opens them.
+      await choose('More for ntfy', 'Subscribe link');
+      await tester.enterText(find.byKey(const Key('identity.secret')), '1234');
+      await tester.tap(find.widgetWithText(PrimaryButton, 'Confirm'));
+      await tester.pumpAndSettle();
+      expect(find.byType(NtfyChannelScreen), findsOneWidget);
+      await leave();
+
+      await choose('More for Telegram', 'Link code');
+      await tester.enterText(find.byKey(const Key('identity.secret')), '1234');
+      await tester.tap(find.widgetWithText(PrimaryButton, 'Confirm'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TelegramChannelScreen), findsOneWidget);
+      await leave();
+      expect(screenLock.asked, isEmpty);
     });
 
     testWidgets('unwatching a wallet asks', (tester) async {

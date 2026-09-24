@@ -136,12 +136,13 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   }
 
   /// Asks whoever holds the phone to prove they own it, holding every
-  /// question on the page meanwhile. True on a yes.
-  Future<bool> _confirmIdentity() async {
+  /// question on the page meanwhile. True on a yes. [appLockOnly] asks
+  /// only behind an app lock, as [confirmIdentity] does.
+  Future<bool> _confirmIdentity({bool appLockOnly = false}) async {
     if (_verifying) return false;
     setState(() => _verifying = true);
     try {
-      return await confirmIdentity(context, ref);
+      return await confirmIdentity(context, ref, appLockOnly: appLockOnly);
     } finally {
       if (mounted) setState(() => _verifying = false);
     }
@@ -529,6 +530,23 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
     }
   }
 
+  /// The subscribe link of an ntfy channel, or the link code of a
+  /// Telegram chat not linked yet, opened again from the channel's row.
+  /// Either hands whoever reads it every alert of the account: behind
+  /// an app lock, whoever holds the phone proves they own it first, as
+  /// for adding a channel. The page that opens right after a channel is
+  /// made asks nothing more: its owner has just been asked.
+  Future<void> _reopenNtfy(String subscribeUrl) async {
+    if (!await _confirmIdentity(appLockOnly: true) || !mounted) return;
+    _openNtfy(subscribeUrl);
+  }
+
+  Future<void> _reopenTelegram(PremiumChannel channel, PremiumView view) async {
+    if (channel.linkCode == null) return;
+    if (!await _confirmIdentity(appLockOnly: true) || !mounted) return;
+    _openTelegram(channel, view);
+  }
+
   void _openNtfy(String subscribeUrl) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -843,8 +861,8 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
         onRemove: _askRemove,
         onRemoveConfirm: _remove,
         onRemoveCancel: _cancelRemove,
-        onSubscribe: _openNtfy,
-        onLinkCode: (channel) => _openTelegram(channel, view),
+        onSubscribe: _reopenNtfy,
+        onLinkCode: (channel) => _reopenTelegram(channel, view),
         onConfirmed: _confirmed,
       ),
       if (channelsError != null)
