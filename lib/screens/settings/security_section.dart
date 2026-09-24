@@ -65,6 +65,10 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
   /// without one has no owner's secret to ask for, and without a key
   /// there is nothing the lock would stand in front of: the lock is set
   /// as it always was.
+  ///
+  /// A first connection whose answer was lost counts as a key: the
+  /// vault holds it only once the server answers, but the core sends it
+  /// again on its own, and the account may already be this phone's.
   Future<bool> _mayChooseFirstLock() async {
     final PremiumView premium;
     try {
@@ -73,7 +77,7 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
       if (mounted) setState(() => _error = error.message);
       return false;
     }
-    if (!premium.hasKey) return true;
+    if (!premium.hasKey && !premium.connectPending) return true;
     final outcome = await ref
         .read(screenLockGateProvider)
         .confirm(confirmItsYouTitle);

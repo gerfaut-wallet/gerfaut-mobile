@@ -4,6 +4,7 @@ import 'package:gerfaut/screens/confirm_identity.dart';
 import 'package:gerfaut/screens/premium_channels.dart';
 import 'package:gerfaut/screens/settings.dart';
 import 'package:gerfaut/screens/settings/premium_section.dart';
+import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/identity.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/premium.dart';
@@ -371,6 +372,35 @@ void main() {
       await turnLockOn(tester);
       expect(untouched.asked, isEmpty);
       expect(find.text('Turn on the app lock'), findsOneWidget);
+    });
+
+    testWidgets('a first connection whose answer was lost counts as a key', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      // The key went out and its answer never came back: the vault holds
+      // no key yet, and the core sends the connection again on its own.
+      // The account may already be this phone's.
+      final bridge = premiumBridge();
+      bridge.premiumConnectPending = 'abcdefghijkmnpqr';
+      bridge.onPremiumEnsure = () => throw const BridgeException(
+        'premium_unreachable',
+        'the premium server is unreachable: could not connect',
+      );
+      final screenLock = FakeScreenLock(outcome: ScreenLockOutcome.refused);
+      await tester.pumpWidget(
+        premiumApp(
+          bridge,
+          screenLock: screenLock,
+          section: SettingsSection.security,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await turnLockOn(tester);
+      expect(screenLock.asked, [confirmItsYouTitle]);
+      expect(find.text('Turn on the app lock'), findsNothing);
+      expect(bridge.lock, isNull);
     });
   });
 
