@@ -139,10 +139,20 @@ void main() {
       expect(named.retry, isTrue);
       expect(named.detail, isNull);
 
-      final long = premiumFailure(
-        const BridgeException('premium_rate_limited', 'x', retryAfter: 600),
-      );
-      expect(long.message, 'The server asks to wait. Try again in 600 s.');
+      // In the unit a person reads it in, rounded up: the hourly
+      // ceiling on connections answers with nearly an hour.
+      String wait(int seconds) => premiumFailure(
+        BridgeException('premium_rate_limited', 'x', retryAfter: seconds),
+      ).message;
+      expect(wait(59), 'The server asks to wait. Try again in 59 s.');
+      expect(wait(60), 'The server asks to wait. Try again in 1 min.');
+      expect(wait(61), 'The server asks to wait. Try again in 2 min.');
+      expect(wait(600), 'The server asks to wait. Try again in 10 min.');
+      expect(wait(3599), 'The server asks to wait. Try again in 60 min.');
+      expect(wait(3528), 'The server asks to wait. Try again in 59 min.');
+      expect(wait(3600), 'The server asks to wait. Try again in 1 h.');
+      expect(wait(3601), 'The server asks to wait. Try again in 2 h.');
+      expect(wait(86400), 'The server asks to wait. Try again in 24 h.');
 
       final unnamed = premiumFailure(
         const BridgeException('premium_rate_limited', 'x'),

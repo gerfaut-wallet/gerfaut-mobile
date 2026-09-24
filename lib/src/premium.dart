@@ -526,7 +526,8 @@ PremiumFailure premiumFailure(BridgeException error, {String? refusal}) {
     // and says how long when it knows. Word for word what the desktop
     // app says.
     PremiumFailureKind.rateLimited => PremiumFailure(switch (error.retryAfter) {
-      final int seconds => 'The server asks to wait. Try again in $seconds s.',
+      final int seconds =>
+        'The server asks to wait. Try again in ${waitWords(seconds)}.',
       null => 'The server asks to wait. Try again in a moment.',
     }, retry: true),
     PremiumFailureKind.unknownKey => const PremiumFailure(
@@ -588,6 +589,15 @@ PremiumFailure premiumFailure(BridgeException error, {String? refusal}) {
       retry: true,
     ),
   };
+}
+
+/// A wait in the unit a person reads it in, rounded up: the hourly
+/// ceiling on connections answers with nearly an hour, which "3528 s"
+/// hides. The desktop app's words.
+String waitWords(int seconds) {
+  if (seconds < 60) return '$seconds s';
+  if (seconds < 3600) return '${(seconds + 59) ~/ 60} min';
+  return '${(seconds + 3599) ~/ 3600} h';
 }
 
 /// The sentence a failing status carried, capitalized and stopped, or
