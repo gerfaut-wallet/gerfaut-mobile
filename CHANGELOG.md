@@ -190,3 +190,11 @@ The first release: Gerfaut for Android.
   so what belongs to the paid service reads as such at a glance: the card
   icons, the switch that hands a wallet to the server, and the buttons that
   activate a key, confirm the watch or add a channel.
+
+### Fixed
+
+- Leaving Settings › Premium before the server answers no longer leaves the
+  app out of date. Forget the key and go back right away: the Premium row in
+  Settings now reads "Not activated" as soon as the server answers, instead
+  of showing the old key until the app restarts. Every other Premium action
+  behaves the same.
