@@ -262,10 +262,17 @@ class FakeFingerprint implements BiometricGate {
 /// Records what was copied through the sensitive route instead of
 /// reaching the platform.
 class FakeSensitiveClipboard implements SensitiveClipboard {
+  FakeSensitiveClipboard({this.fails = false});
+
+  /// The clipboard refuses, as a platform may.
+  bool fails;
   final List<String> copied = [];
 
   @override
-  Future<void> copy(String text) async => copied.add(text);
+  Future<void> copy(String text) async {
+    if (fails) throw PlatformException(code: 'clipboard');
+    copied.add(text);
+  }
 }
 
 /// Records which app a link was handed to instead of starting an

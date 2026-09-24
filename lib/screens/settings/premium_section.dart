@@ -76,6 +76,14 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   /// A waiting device asks the server again whether it was approved.
   bool _checkingAgain = false;
 
+  /// The last "Copy key" did not reach the clipboard.
+  bool _copyFailed = false;
+
+  /// The change of key is on screen: a second tap opens nothing. Two
+  /// sheets would send two changes, and the second would draw another
+  /// key behind the one the first just showed.
+  bool _changingKey = false;
+
   // The watched wallets.
 
   /// The wallets a call is out about, each held until its own answer
@@ -182,6 +190,70 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
       if (mounted) setState(() => _licenceError = error);
     } finally {
       if (mounted) setState(() => _activating = false);
+    }
+  }
+
+  /// Puts [key] on the guarded clipboard: the system shows no preview of
+  /// it and keeps none in its history. A copy that fails says so under
+  /// the buttons, where it was asked, and stays until the next one
+  /// works: a toast would be gone before the empty clipboard was found.
+  /// True once it is there.
+  Future<bool> _copy(String key) async {
+    try {
+      await ref.read(sensitiveClipboardProvider).copy(key);
+    } catch (_) {
+      if (mounted) setState(() => _copyFailed = true);
+      return false;
+    }
+    if (mounted) setState(() => _copyFailed = false);
+    return true;
+  }
+
+  /// "Copy key", offered on the licence until the key is saved.
+  Future<void> _copyKey(PremiumView view) async {
+    final key = view.keyDisplay ?? view.key;
+    if (key == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    if (await _copy(key)) {
+      messenger.showSnackBar(const SnackBar(content: Text('Key copied')));
+    }
+  }
+
+  /// Opens the renewal form, the key on the clipboard.
+  ///
+  /// The key never rides in the address: see [premiumRenewUrl]. It goes
+  /// by the guarded clipboard and the line that follows says where to
+  /// put it. The page opens either way: whoever has the key at hand can
+  /// type it. While a key change waits for its answer the key here may
+  /// already be dead, and none is handed out.
+  Future<void> _renew(PremiumView view) async {
+    final key = view.key;
+    if (key != null && !view.keyChangePending) {
+      final messenger = ScaffoldMessenger.of(context);
+      if (await _copy(key)) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Key copied, paste it on the renewal page'),
+          ),
+        );
+      }
+    }
+    await openExternal(premiumRenewUrl);
+  }
+
+  /// Opens the change of key, once. [resume] sends again the change
+  /// whose answer was lost: the same key goes, and only its answer puts
+  /// the new key in view.
+  Future<void> _changeKey({bool resume = false}) async {
+    if (_changingKey) return;
+    // Set before the sheet is asked for, so a second tap in the same
+    // frame finds it; the rebuild only greys the button after.
+    _changingKey = true;
+    setState(() {});
+    try {
+      await showChangeKeySheet(context, resume: resume);
+    } finally {
+      if (mounted) setState(() => _changingKey = false);
     }
   }
 
@@ -635,8 +707,11 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
           confirmingForget: _confirmForget && !waiting,
           forget: forget,
           onActivate: _activate,
-          onChangeKey: () => showChangeKeySheet(context),
+          onChangeKey: _changeKey,
           onForgetStart: () => setState(() => _confirmForget = true),
+          copyFailed: _copyFailed,
+          onCopyKey: () => _copyKey(view),
+          onRenew: () => _renew(view),
         ),
         if (_keyRejected)
           const Padding(
@@ -659,6 +734,17 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
             reason: view.disconnectedReason,
             connecting: _connecting,
             onConnect: () => _connectAgain(view),
+          ),
+        // A key change sent and not answered, on a device that can still
+        // finish it: the server may already hold the new key, which only
+        // this vault keeps.
+        if (view.hasKey &&
+            view.keyChangePending &&
+            !view.disconnected &&
+            !_keyRejected)
+          _UnfinishedKeyChangeNote(
+            holding: _changingKey,
+            onTryAgain: () => _changeKey(resume: true),
           ),
         if (asksDevice && device == null && meError == null)
           Padding(
@@ -771,7 +857,7 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
 
 // --- 1. Licence ------------------------------------------------------------
 
-class _LicenceCard extends ConsumerWidget {
+class _LicenceCard extends StatelessWidget {
   const _LicenceCard({
     required this.view,
     required this.status,
@@ -785,6 +871,9 @@ class _LicenceCard extends ConsumerWidget {
     required this.onActivate,
     required this.onChangeKey,
     required this.onForgetStart,
+    required this.copyFailed,
+    required this.onCopyKey,
+    required this.onRenew,
   });
 
   final PremiumView view;
@@ -812,8 +901,17 @@ class _LicenceCard extends ConsumerWidget {
   final VoidCallback onChangeKey;
   final VoidCallback onForgetStart;
 
+  /// The last copy of the key did not reach the clipboard.
+  final bool copyFailed;
+
+  /// Copies the key, offered until the user says it is saved.
+  final VoidCallback onCopyKey;
+
+  /// Opens the renewal form, the key on the clipboard.
+  final VoidCallback onRenew;
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     return SectionCard(
       icon: LucideIcons.keyRound,
@@ -823,18 +921,8 @@ class _LicenceCard extends ConsumerWidget {
           ? _withoutKey(tokens)
           : switch (status) {
               LicenceStatus.none => _withoutKey(tokens),
-              LicenceStatus.active => _withKey(
-                context,
-                ref,
-                tokens,
-                active: true,
-              ),
-              LicenceStatus.expired => _withKey(
-                context,
-                ref,
-                tokens,
-                active: false,
-              ),
+              LicenceStatus.active => _withKey(tokens, active: true),
+              LicenceStatus.expired => _withKey(tokens, active: false),
             },
     );
   }
@@ -918,29 +1006,15 @@ class _LicenceCard extends ConsumerWidget {
     ];
   }
 
-  /// Opens the renewal form and puts the key on the clipboard.
-  ///
-  /// The key never rides in the address: see [premiumRenewUrl]. It is
-  /// copied through the guarded clipboard, so the system shows no
-  /// preview of it and keeps none in its history, and the line that
-  /// follows says where to put it.
-  Future<void> _renew(BuildContext context, WidgetRef ref, String key) async {
-    final messenger = ScaffoldMessenger.of(context);
-    await ref.read(sensitiveClipboardProvider).copy(key);
-    messenger.showSnackBar(
-      const SnackBar(content: Text('Key copied, paste it on the renewal page')),
-    );
-    await openExternal(premiumRenewUrl);
-  }
-
-  List<Widget> _withKey(
-    BuildContext context,
-    WidgetRef ref,
-    GerfautTokens tokens, {
-    required bool active,
-  }) {
+  List<Widget> _withKey(GerfautTokens tokens, {required bool active}) {
     final claims = view.claims!;
-    final key = view.key!;
+    // A key change sent and not answered: the key above may be dead,
+    // the new one is in the vault, and only its answer shows it. The
+    // note under the card finishes it; meanwhile the key is not handed
+    // out, and a connected device does not leave, which would lose the
+    // new key: the core refuses it too.
+    final changing = view.keyChangePending;
+    final canForget = !waiting && !(changing && view.connected);
     return [
       if (active)
         Row(
@@ -969,15 +1043,26 @@ class _LicenceCard extends ConsumerWidget {
           GhostButton(
             label: 'Renew',
             icon: LucideIcons.externalLink,
-            onPressed: () => _renew(context, ref, key),
+            onPressed: onRenew,
           ),
-          if (full)
+          // "Try again" on the note is the change while one is under
+          // way: the same key goes, never a second one.
+          if (full && !changing)
             GhostButton(
               label: 'Change key',
               icon: LucideIcons.rotateCcwKey,
               onPressed: onChangeKey,
             ),
-          if (!waiting)
+          // Until the key is saved somewhere, the one place a phone keeps
+          // it is one tap from the clipboard. Not while a change is under
+          // way: the key here may already be dead.
+          if (!view.keySaved && !changing)
+            GhostButton(
+              label: 'Copy key',
+              icon: LucideIcons.copy,
+              onPressed: onCopyKey,
+            ),
+          if (canForget)
             GhostButton(
               label: 'Forget this key',
               icon: LucideIcons.eraser,
@@ -985,7 +1070,17 @@ class _LicenceCard extends ConsumerWidget {
             ),
         ],
       ),
-      if (confirmingForget) ...[
+      if (copyFailed && !changing) ...[
+        const SizedBox(height: GerfautSpacing.xs),
+        // Said where it was asked, and it stays: a toast would be gone
+        // before anyone noticed the clipboard was empty.
+        const GerfautNotice(
+          tone: NoticeTone.info,
+          liveRegion: true,
+          message: 'Could not copy the key.',
+        ),
+      ],
+      if (confirmingForget && canForget) ...[
         const SizedBox(height: GerfautSpacing.sm),
         forget,
       ],
@@ -1107,6 +1202,40 @@ class _DisconnectedNote extends StatelessWidget {
           label: connecting ? 'Connecting…' : 'Connect again',
           icon: LucideIcons.plug,
           onPressed: connecting ? null : onConnect,
+        ),
+      ),
+    );
+  }
+}
+
+/// A key change sent and not answered: the server may already have
+/// made the new key the account's, and the key on the card may be dead.
+/// Amber, under the licence, with the one way on: "Try again" asks who
+/// holds the phone, as a change does, sends the same new key, and shows
+/// it once the server has answered.
+class _UnfinishedKeyChangeNote extends StatelessWidget {
+  const _UnfinishedKeyChangeNote({
+    required this.holding,
+    required this.onTryAgain,
+  });
+
+  /// The change is on screen already.
+  final bool holding;
+  final VoidCallback onTryAgain;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: GerfautSpacing.gutter),
+      // Not announced by itself: it is the state the page opens on, and
+      // the change that failed has said so already.
+      child: GerfautNotice(
+        tone: NoticeTone.info,
+        message: keyChangePendingMessage,
+        actionsBelow: true,
+        action: PremiumButton(
+          label: 'Try again',
+          onPressed: holding ? null : onTryAgain,
         ),
       ),
     );

@@ -14,13 +14,17 @@ import 'confirm_identity.dart';
 /// Opens the change of key. It cannot be swiped away: once the new key
 /// is on screen, "Done" is the only way out, and only once the box
 /// says it was saved.
-Future<void> showChangeKeySheet(BuildContext context) {
+///
+/// [resume] finishes a change whose answer was lost: the owner already
+/// read the warning and said yes, so the sheet goes straight to who
+/// holds the phone, then sends the key the core kept, the same one.
+Future<void> showChangeKeySheet(BuildContext context, {bool resume = false}) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     isDismissible: false,
     enableDrag: false,
-    builder: (_) => const ChangeKeySheet(),
+    builder: (_) => ChangeKeySheet(resume: resume),
   );
 }
 
@@ -33,8 +37,16 @@ Future<void> showChangeKeySheet(BuildContext context) {
 /// leaked changes it, and whoever took it is left with nothing. The
 /// press is confirmed by who holds the phone first, and never sent
 /// twice: the button is held from the first tap.
+///
+/// The core draws the new key and keeps it before the request leaves.
+/// An answer lost on the way leaves the change under way: the licence
+/// says so, and trying again sends that same key, which the server
+/// takes as the change it already made.
 class ChangeKeySheet extends ConsumerStatefulWidget {
-  const ChangeKeySheet({super.key});
+  const ChangeKeySheet({super.key, this.resume = false});
+
+  /// Finishes a change whose answer was lost, from the first frame.
+  final bool resume;
 
   @override
   ConsumerState<ChangeKeySheet> createState() => _ChangeKeySheetState();
@@ -47,8 +59,21 @@ class _ChangeKeySheetState extends ConsumerState<ChangeKeySheet> {
   /// The key the server drew, once it has.
   String? _newKey;
   bool _copied = false;
+
+  /// The last "Copy" did not reach the clipboard.
+  bool _copyFailed = false;
   bool _saved = false;
   bool _closing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.resume) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _change();
+      });
+    }
+  }
 
   Future<void> _change() async {
     if (_busy) return;
@@ -65,15 +90,36 @@ class _ChangeKeySheetState extends ConsumerState<ChangeKeySheet> {
       // the section reads it all again behind the sheet.
       invalidatePremium(ref);
     } on BridgeException catch (error) {
-      if (mounted) setState(() => _error = error);
+      if (!mounted) return;
+      setState(() => _error = error);
+      // The change may be under way now, its answer lost: the licence
+      // behind the sheet reads the vault again, and says so.
+      ref.invalidate(premiumStateProvider);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
+  /// A copy that fails says so under the key, where it is to be copied
+  /// by hand now, and not in a toast gone before it is read.
   Future<void> _copy(String key) async {
-    await ref.read(sensitiveClipboardProvider).copy(key);
-    if (mounted) setState(() => _copied = true);
+    try {
+      await ref.read(sensitiveClipboardProvider).copy(key);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _copied = false;
+          _copyFailed = true;
+        });
+      }
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _copied = true;
+        _copyFailed = false;
+      });
+    }
   }
 
   Future<void> _done() async {
@@ -205,6 +251,14 @@ class _ChangeKeySheetState extends ConsumerState<ChangeKeySheet> {
             onPressed: () => _copy(newKey),
           ),
         ),
+        if (_copyFailed) ...[
+          const SizedBox(height: GerfautSpacing.sm),
+          const GerfautNotice(
+            tone: NoticeTone.info,
+            liveRegion: true,
+            message: 'Could not copy the key.',
+          ),
+        ],
         const SizedBox(height: GerfautSpacing.md),
         Text(
           'Save it in your password manager now. This device keeps it, but '

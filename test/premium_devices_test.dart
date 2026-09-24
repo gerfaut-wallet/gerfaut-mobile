@@ -14,6 +14,7 @@ import 'package:gerfaut/src/premium.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/buttons.dart';
 import 'package:gerfaut/widgets/notice.dart';
+import 'package:gerfaut/widgets/section_card.dart';
 import 'package:gerfaut/widgets/status_pill.dart';
 
 import 'fakes.dart';
@@ -31,6 +32,12 @@ FakeBridge withWaitingComputer() {
 
 /// The device line of the second device, which is the waiting one.
 Finder rowOf(String label) => find.text(label);
+
+/// "Copy key" on the checklist, apart from the one on the licence.
+final Finder protectCopy = find.descendant(
+  of: find.byType(ProtectAccountCard),
+  matching: find.text('Copy key'),
+);
 
 /// How many checklist steps a screen reader hears called [said].
 int stepMarks(WidgetTester tester, String said) => find
@@ -874,6 +881,55 @@ void main() {
     });
   });
 
+  group('the key on the licence', () {
+    testWidgets('is offered until it is saved', (tester) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      final clipboard = FakeSensitiveClipboard();
+      await tester.pumpWidget(premiumApp(bridge, clipboard: clipboard));
+      await tester.pumpAndSettle();
+
+      final licenceCopy = find.descendant(
+        of: find.ancestor(
+          of: find.text('Licence'),
+          matching: find.byType(SectionCard),
+        ),
+        matching: find.text('Copy key'),
+      );
+      expect(licenceCopy, findsOneWidget);
+      await tester.tap(licenceCopy);
+      await tester.pumpAndSettle();
+      expect(clipboard.copied, ['abcd-efgh-ijkm-npqr']);
+      expect(find.text('Key copied'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+
+      bridge.premiumKeySaved = true;
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpWidget(premiumApp(bridge, clipboard: clipboard));
+      await tester.pumpAndSettle();
+      expect(find.text('Copy key'), findsNothing);
+    });
+
+    testWidgets('a copy that fails says so where it was asked', (tester) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      final clipboard = FakeSensitiveClipboard(fails: true);
+      await tester.pumpWidget(premiumApp(bridge, clipboard: clipboard));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Copy key').first);
+      await tester.pumpAndSettle();
+      final note = tester.widget<GerfautNotice>(
+        find.ancestor(
+          of: find.text('Could not copy the key.'),
+          matching: find.byType(GerfautNotice),
+        ),
+      );
+      expect(note.tone, NoticeTone.info);
+      expect(find.byType(SnackBar), findsNothing);
+    });
+  });
+
   group('protect your premium account', () {
     testWidgets('three steps, each checked from what the app knows', (
       tester,
@@ -909,7 +965,7 @@ void main() {
       );
       expect(stepMarks(tester, 'To do'), 3);
       expect(find.text('Set up'), findsOneWidget);
-      expect(find.text('Copy key'), findsOneWidget);
+      expect(protectCopy, findsOneWidget);
       expect(find.text('Mark as done'), findsOneWidget);
     });
 
@@ -920,7 +976,7 @@ void main() {
       await tester.pumpWidget(premiumApp(bridge, clipboard: clipboard));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Copy key'));
+      await tester.tap(protectCopy);
       await tester.pumpAndSettle();
       expect(clipboard.copied, ['abcd-efgh-ijkm-npqr']);
 

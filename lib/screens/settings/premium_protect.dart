@@ -64,6 +64,9 @@ class _ProtectAccountCardState extends ConsumerState<ProtectAccountCard> {
   /// A write to the vault is under way: its button is held.
   bool _busy = false;
 
+  /// The last "Copy key" did not reach the clipboard.
+  bool _copyFailed = false;
+
   Future<void> _write(Future<void> Function(GerfautBridge bridge) call) async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -82,7 +85,15 @@ class _ProtectAccountCardState extends ConsumerState<ProtectAccountCard> {
     final key = widget.view.keyDisplay ?? widget.view.key;
     if (key == null) return;
     final messenger = ScaffoldMessenger.of(context);
-    await ref.read(sensitiveClipboardProvider).copy(key);
+    try {
+      await ref.read(sensitiveClipboardProvider).copy(key);
+    } catch (_) {
+      // Said under the step, where it was asked, and it stays.
+      if (mounted) setState(() => _copyFailed = true);
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _copyFailed = false);
     messenger.showSnackBar(const SnackBar(content: Text('Key copied')));
   }
 
@@ -134,11 +145,14 @@ class _ProtectAccountCardState extends ConsumerState<ProtectAccountCard> {
               'again.',
           last: true,
           actions: [
-            GhostButton(
-              label: 'Copy key',
-              icon: LucideIcons.copy,
-              onPressed: _copyKey,
-            ),
+            // Not while a key change waits for its answer: the key here
+            // may already be dead, and the licence says how to finish.
+            if (!widget.view.keyChangePending)
+              GhostButton(
+                label: 'Copy key',
+                icon: LucideIcons.copy,
+                onPressed: _copyKey,
+              ),
             GhostButton(
               label: 'Mark as done',
               icon: LucideIcons.check,
@@ -148,6 +162,16 @@ class _ProtectAccountCardState extends ConsumerState<ProtectAccountCard> {
             ),
           ],
         ),
+        if (_copyFailed &&
+            !steps.keySaved &&
+            !widget.view.keyChangePending) ...[
+          const SizedBox(height: GerfautSpacing.sm),
+          const GerfautNotice(
+            tone: NoticeTone.info,
+            liveRegion: true,
+            message: 'Could not copy the key.',
+          ),
+        ],
       ],
     );
   }
