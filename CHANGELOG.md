@@ -103,6 +103,65 @@ The first release: Gerfaut for Android.
   the key had left goes with them. Premium calls go through Tor whenever the
   node connection does, never around it. When the server misses 2 heartbeats
   in a row, a red banner on the home screen says so until you acknowledge it.
+- Premium devices. The account key connects this phone to the account. In
+  return, the server hands the phone a token of its own, which the encrypted
+  vault keeps and never shows, and every request after that carries this token
+  instead of the key. The first device an account ever has gets full access at
+  once. Any later device waits 10 days, or until a device with full access
+  approves it, and in the meantime it sees nothing and changes nothing.
+- A Devices card in Settings › Premium lists every device that entered the
+  key, with its platform, the day it connected, and either full access or the
+  number of days it still has to wait. From there, you approve or refuse a
+  waiting device, or disconnect another one.
+- While a device waits for approval, a red banner at the top of the home
+  screen says so, and its Review button opens the Devices card. The banner
+  goes away on its own once nothing waits. When notifications are on, a
+  notification also announces each new device, once. While an app lock is set,
+  it names neither the device nor the account, and nothing is posted while the
+  app is disguised. Gerfaut checks the list when it opens, when it comes back
+  to the front, and every 5 minutes while it is open.
+- A phone waiting for approval sees a single card in place of the account: the
+  day it connected, the day it gets full access without approval, and a Check
+  again button. It also checks its own standing every 5 minutes while the app
+  is open, and opens up on its own as soon as another device approves it.
+- Change key replaces the account key. The old key stops working at once, on
+  the website too, and the server disconnects every other device. The new key
+  is shown once, with a Copy button, and the sheet stays open until you tick
+  "I saved my new key".
+- A phone the server disconnected says so under the Licence card, in the
+  server's own words when it gave some, with a Connect again button. If the
+  key was changed on another device, the key field comes back so you can enter
+  the new one.
+- After the first connection, a Protect your Premium account card suggests 3
+  things: connect a second device, turn on the app lock, and save the key in a
+  password manager. Each step ticks itself as soon as Gerfaut can tell it is
+  done, and you can hide the card.
+- Before approving, refusing or disconnecting a device, changing the key,
+  deleting the account, taking a wallet off the server, removing a wallet the
+  server watches or removing a channel, Gerfaut asks you to confirm it's you.
+  Concretely, it asks for the app lock's PIN, password or fingerprint, and
+  checks it the way the lock screen does. Without an app lock, the phone's own
+  screen lock answers instead, and it is also asked before a first app lock is
+  set on a phone that holds a Premium key: otherwise, whoever holds the phone
+  unlocked could choose a PIN and answer with it. Gerfaut also asks before you
+  forget the key on a phone with full access or enter another key on it, and
+  before you add a channel while the app lock is on. A phone with no lock at
+  all is sent to Settings › Security to set one.
+- Forget this key also disconnects this phone from the account on the server.
+  Connecting it again takes a new approval, or 10 days.
+- A lost answer from the Gerfaut server costs neither the key nor a device.
+  When a connection never gets its answer back, Gerfaut sends the exact same
+  request again on its own: when the app opens, when it comes back to the
+  front, and at each heartbeat. When a key change never gets its answer back,
+  the Licence card says "The key change did not finish. Try again to complete
+  it." with a Try again button, which sends the same new key. Until then,
+  Gerfaut offers no key to copy, and a connected phone can neither change nor
+  forget its key, since only this phone holds the new one. If you forget the
+  key while the server is out of reach, Gerfaut tells the server as soon as it
+  can, at the same moments.
+- The Licence card offers Copy key until you mark the key as saved. When the
+  clipboard refuses a copy, an amber note under the button says so and stays
+  there.
 - One APK per processor architecture instead of one carrying all three:
   50 MB to download on a 64-bit ARM phone rather than 127.
 - Reproducible builds. The APKs are built in a container where every tool
