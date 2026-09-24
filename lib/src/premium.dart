@@ -91,13 +91,32 @@ final premiumDevicesProvider = FutureProvider<List<PremiumDevice>>((ref) async {
 
 /// The other devices that wait for approval, from the last list read.
 /// What the red banner of the home screen is about.
+///
+/// Only on a device that sees the account, and never from a list the
+/// server has since disowned: a device disconnected, or waiting again
+/// behind a changed key, has no business raising the banner.
 final waitingDevicesProvider = Provider<List<PremiumDevice>>((ref) {
-  final devices = ref.watch(premiumDevicesProvider).valueOrNull;
+  if (!(ref.watch(premiumFullAccessProvider).valueOrNull ?? false)) {
+    return const [];
+  }
+  final devices = ref.watch(premiumDevicesProvider);
+  if (_turnedAway(devices.error)) return const [];
   return [
-    for (final device in devices ?? const <PremiumDevice>[])
+    for (final device in devices.valueOrNull ?? const <PremiumDevice>[])
       if (!device.fullAccess && !device.thisDevice) device,
   ];
 });
+
+/// A failure that says this device no longer sees the account, as
+/// opposed to a server out of reach, which says nothing about it.
+bool _turnedAway(Object? error) =>
+    error is BridgeException &&
+    const {
+      'premium_device_disconnected',
+      'premium_device_pending',
+      'premium_no_device',
+      'premium_unknown_key',
+    }.contains(error.kind);
 
 /// The wallets of this vault the server could watch: those on its
 /// network, whichever network the workspace shows. Empty without a key,

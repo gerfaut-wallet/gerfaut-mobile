@@ -172,6 +172,24 @@ void main() {
       expect(bridge.premiumAnnounced, ['dev2']);
     });
 
+    testWidgets('the banner goes with a device the server turned away', (
+      tester,
+    ) async {
+      final bridge = withWaitingComputer();
+      await tester.pumpWidget(wholeApp(bridge));
+      await tester.pumpAndSettle();
+      expect(find.text(newDeviceBanner), findsOneWidget);
+
+      // Refused from the computer, or the key changed there.
+      bridge.premiumDeviceList.removeWhere(
+        (d) => d.id == bridge.premiumThisDeviceId,
+      );
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(find.text(newDeviceBanner), findsNothing);
+    });
+
     testWidgets('coming back to the app looks again', (tester) async {
       final bridge = premiumBridge(activated: true);
       notifyOn(bridge);
