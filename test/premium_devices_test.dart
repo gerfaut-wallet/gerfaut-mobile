@@ -481,6 +481,25 @@ void main() {
       expect(find.byTooltip('More for Android phone'), findsNothing);
     });
 
+    testWidgets('reads the list again each time it opens', (tester) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      await tester.pumpWidget(premiumApp(bridge, root: true));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Premium'));
+      await tester.pumpAndSettle();
+      expect(find.text('Android phone'), findsOneWidget);
+      expect(find.text('Windows computer'), findsNothing);
+
+      // A device connects while the page is closed; the app stays open.
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      bridge.premiumAddDevice();
+      await tester.tap(find.text('Premium'));
+      await tester.pumpAndSettle();
+      expect(find.text('Windows computer'), findsOneWidget);
+    });
+
     testWidgets('approving asks, checks who holds the phone, then tells', (
       tester,
     ) async {

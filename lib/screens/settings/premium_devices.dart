@@ -82,6 +82,18 @@ class _DevicesCardState extends ConsumerState<DevicesCard> {
   bool _verifying = false;
   BridgeException? _error;
 
+  @override
+  void initState() {
+    super.initState();
+    // The list is read again whenever the card comes on screen: a device
+    // may have connected since the last look, and whoever opens this
+    // page opens it to see who is there now. The last list stands in
+    // meanwhile.
+    Future.microtask(() {
+      if (mounted) ref.invalidate(premiumDevicesProvider);
+    });
+  }
+
   /// What a benign confirmation says once the server has done it.
   static String _done(DeviceAction action) => switch (action) {
     DeviceAction.approve => 'Device approved',
