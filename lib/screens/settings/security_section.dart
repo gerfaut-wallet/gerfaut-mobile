@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../src/bridge.dart';
 import '../../src/disguise.dart';
+import '../../src/identity.dart';
 import '../../src/lock.dart';
 import '../../src/models.dart';
 import '../../src/notifications.dart';
@@ -15,6 +16,7 @@ import '../../widgets/choice_group.dart';
 import '../../widgets/notice.dart';
 import '../../widgets/password_field.dart';
 import '../../widgets/section_card.dart';
+import '../confirm_identity.dart';
 
 /// The settings card that turns the lock on and changes its secret.
 class SecuritySection extends ConsumerStatefulWidget {
@@ -32,6 +34,8 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
   void _afterChange() => ref.invalidate(settingsProvider);
 
   Future<void> _setLock({LockKind? kind}) async {
+    if (kind == null && !await _mayChooseFirstLock()) return;
+    if (!mounted) return;
     final chosen = await showModalBottomSheet<_NewSecret>(
       context: context,
       isScrollControlled: true,
@@ -49,6 +53,33 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
     } on BridgeException catch (error) {
       if (mounted) setState(() => _error = error.message);
     }
+  }
+
+  /// Whether whoever holds the phone may choose its first app lock.
+  ///
+  /// With a Premium key here, the app lock is what proves the owner
+  /// before a device is approved, the key changed or the account
+  /// deleted; until one is set, the phone's own screen lock does. A
+  /// first lock chosen by whoever holds the phone unlocked would hand
+  /// them that proof, so the phone's screen lock is asked first. A phone
+  /// without one has no owner's secret to ask for, and without a key
+  /// there is nothing the lock would stand in front of: the lock is set
+  /// as it always was.
+  Future<bool> _mayChooseFirstLock() async {
+    final PremiumView premium;
+    try {
+      premium = await ref.read(bridgeProvider).premiumState();
+    } on BridgeException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+      return false;
+    }
+    if (!premium.hasKey) return true;
+    final outcome = await ref
+        .read(screenLockGateProvider)
+        .confirm(confirmItsYouTitle);
+    // Refused: a change of mind, or not the owner. The phone said why,
+    // if anything needed saying.
+    return outcome != ScreenLockOutcome.refused;
   }
 
   Future<void> _turnOff(LockKind kind) async {

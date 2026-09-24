@@ -304,6 +304,72 @@ void main() {
       expect(find.text('Security'), findsWidgets);
       expect(find.text('App lock'), findsOneWidget);
     });
+
+    /// Turns the app lock on from Settings › Security.
+    Future<void> turnLockOn(WidgetTester tester) async {
+      await tester.tap(find.byType(Switch).first);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a first app lock is the phone screen lock\'s to allow', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = open();
+      // Whoever holds the phone unlocked chooses a PIN of their own, to
+      // answer every question after it: the phone says no.
+      final screenLock = FakeScreenLock(outcome: ScreenLockOutcome.refused);
+      await tester.pumpWidget(
+        premiumApp(
+          bridge,
+          screenLock: screenLock,
+          section: SettingsSection.security,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await turnLockOn(tester);
+      expect(screenLock.asked, [confirmItsYouTitle]);
+      expect(find.text('Turn on the app lock'), findsNothing);
+      expect(bridge.lock, isNull);
+
+      // The owner passes it, and chooses the lock.
+      screenLock.outcome = ScreenLockOutcome.confirmed;
+      await turnLockOn(tester);
+      expect(find.text('Turn on the app lock'), findsOneWidget);
+    });
+
+    testWidgets('a phone with no lock, or no key, sets its first lock as '
+        'before', (tester) async {
+      useTallSurface(tester);
+      final bridge = open();
+      final screenLock = FakeScreenLock(outcome: ScreenLockOutcome.unavailable);
+      await tester.pumpWidget(
+        premiumApp(
+          bridge,
+          screenLock: screenLock,
+          section: SettingsSection.security,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await turnLockOn(tester);
+      expect(find.text('Turn on the app lock'), findsOneWidget);
+
+      final plain = premiumBridge();
+      final untouched = FakeScreenLock(outcome: ScreenLockOutcome.refused);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpWidget(
+        premiumApp(
+          plain,
+          screenLock: untouched,
+          section: SettingsSection.security,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await turnLockOn(tester);
+      expect(untouched.asked, isEmpty);
+      expect(find.text('Turn on the app lock'), findsOneWidget);
+    });
   });
 
   group('what asks', () {
