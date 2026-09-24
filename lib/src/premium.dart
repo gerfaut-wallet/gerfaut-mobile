@@ -673,7 +673,15 @@ TxNotice deviceNotice(PremiumDevice device, {required bool locked}) {
 ///
 /// On a device that waits itself, the same rhythm asks the server
 /// where it stands, so that it opens on the whole account by itself
-/// once approved, or once its wait is over.
+/// once approved, or once its wait is over. A read that fails on the
+/// way changes nothing of that: only the server turning this device
+/// away ends the asking.
+///
+/// Only in front: out of sight, [pause] stops both rhythms, and
+/// [resume] looks at once on the way back, then starts them again. A
+/// Dart timer on Android keeps firing behind the launcher, and Live
+/// keeps the process alive for as long as it runs: without the pause,
+/// a phone in a pocket would ask the server every five minutes.
 ///
 /// Whoever reads the list — this watch, the banner, the Devices card —
 /// feeds the announcement, so a device seen anywhere is announced.
@@ -684,22 +692,14 @@ class DeviceWatch extends Notifier<void> {
   Timer? _waitTimer;
   bool _checking = false;
 
+  /// The app is out of sight: no rhythm runs, and none starts.
+  bool _away = false;
+
   @override
   void build() {
-    ref.onDispose(() {
-      _timer?.cancel();
-      _timer = null;
-      _waitTimer?.cancel();
-      _waitTimer = null;
-    });
+    ref.onDispose(_stopTimers);
     ref.listen(premiumMeProvider, (_, next) {
-      final me = next.valueOrNull;
-      if (me != null && !me.fullAccess && !next.hasError) {
-        _waitTimer ??= Timer.periodic(deviceCheckPeriod, (_) => _askMe());
-      } else if (!next.isLoading) {
-        _waitTimer?.cancel();
-        _waitTimer = null;
-      }
+      _followMe(next);
       // Turned away while nobody looked: the core dropped the token, or
       // found every device the key takes, and the vault read again says
       // so everywhere, the settings row included.
@@ -714,12 +714,7 @@ class DeviceWatch extends Notifier<void> {
     // and a provider nobody listens to is not rebuilt when what it
     // watches changes. A subscription keeps both answers coming.
     ref.listen(premiumFullAccessProvider, (_, next) {
-      if (next.valueOrNull ?? false) {
-        _timer ??= Timer.periodic(deviceCheckPeriod, (_) => check());
-      } else if (!next.isLoading) {
-        _timer?.cancel();
-        _timer = null;
-      }
+      _followAccess(next);
     }, fireImmediately: true);
     // Listening is what reads the list the first time: the check at
     // opening. Every list after it, whoever asked, passes here too.
@@ -737,6 +732,53 @@ class DeviceWatch extends Notifier<void> {
   }
 
   bool get _full => ref.read(premiumFullAccessProvider).valueOrNull ?? false;
+
+  /// Starts or stops asking where this device stands, from the last
+  /// answer about it: asked again while it waits, and while it could
+  /// not be read at all for a failure that says nothing about it, the
+  /// server out of reach at opening. A failed read keeps the last
+  /// answer, and the asking with it. Only the server turning the
+  /// device away ends it, or an answer with full access, which the
+  /// other rhythm takes over.
+  void _followMe(AsyncValue<PremiumDevice?> me) {
+    if (_away || me.isLoading) return;
+    final device = me.valueOrNull;
+    final asks =
+        !disowns(me.error) &&
+        (device != null ? !device.fullAccess : me.hasError);
+    if (asks) {
+      _waitTimer ??= Timer.periodic(deviceCheckPeriod, (_) => _askMe());
+    } else {
+      _waitTimer?.cancel();
+      _waitTimer = null;
+    }
+  }
+
+  /// Starts or stops reading the account's devices, as this device
+  /// gains or loses full access.
+  void _followAccess(AsyncValue<bool> full) {
+    if (_away) return;
+    if (full.valueOrNull ?? false) {
+      _timer ??= Timer.periodic(deviceCheckPeriod, (_) => check());
+    } else if (!full.isLoading) {
+      _timer?.cancel();
+      _timer = null;
+    }
+  }
+
+  void _stopTimers() {
+    _timer?.cancel();
+    _timer = null;
+    _waitTimer?.cancel();
+    _waitTimer = null;
+  }
+
+  /// The app went out of sight: nothing is asked about devices until it
+  /// comes back, whatever runs meanwhile.
+  void pause() {
+    _away = true;
+    _stopTimers();
+  }
 
   /// Tells the server about the connections this device left while it
   /// could not be reached: the core holds their tokens, and asks nothing
@@ -784,13 +826,17 @@ class DeviceWatch extends Notifier<void> {
     }
   }
 
-  /// The app is back in front: the list is read again. Only a real
-  /// return counts, from another app or from the phone's lock; the
-  /// notification shade pulled down over Gerfaut is not one.
+  /// The app is back in front: the list is read again, and the rhythms
+  /// paused out of sight start again. Only a real return counts, from
+  /// another app or from the phone's lock; the notification shade
+  /// pulled down over Gerfaut is not one.
   ///
   /// A connection whose answer was lost is sent again then too, and the
   /// logouts still owed to the server are told.
   void resume() {
+    _away = false;
+    _followMe(ref.read(premiumMeProvider));
+    _followAccess(ref.read(premiumFullAccessProvider));
     final state = ref.read(premiumStateProvider).valueOrNull;
     if (_waiting || (state?.connectPending ?? false)) {
       _askMe();

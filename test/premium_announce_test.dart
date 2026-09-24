@@ -217,6 +217,121 @@ void main() {
       expect(bridge.premiumCalls, contains('devices'));
     });
 
+    testWidgets('a waiting device keeps asking after a failed read', (
+      tester,
+    ) async {
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumMakeWaiting(bridge.premiumThisDeviceId!);
+      await tester.pumpWidget(wholeApp(bridge));
+      await tester.pumpAndSettle();
+
+      // A tunnel at the next check: the read fails, and says nothing of
+      // where this device stands.
+      bridge.onPremiumMe = () => throw const BridgeException(
+        'premium_unreachable',
+        'the premium server is unreachable: could not connect',
+      );
+      await tester.pump(deviceCheckPeriod);
+      await tester.pumpAndSettle();
+      final asked = bridge.premiumCalls.where((c) => c == 'me').length;
+
+      // Out of the tunnel, and approved meanwhile: the next check finds
+      // out, with no return to the app to prompt it.
+      bridge.onPremiumMe = null;
+      await bridge.premiumApproveDeviceOnServer(bridge.premiumThisDeviceId!);
+      await tester.pump(deviceCheckPeriod);
+      await tester.pumpAndSettle();
+      expect(
+        bridge.premiumCalls.where((c) => c == 'me').length,
+        greaterThan(asked),
+      );
+      expect(bridge.premiumCalls, contains('devices'));
+    });
+
+    testWidgets('a device the server turned away stops asking', (tester) async {
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumMakeWaiting(bridge.premiumThisDeviceId!);
+      await tester.pumpWidget(wholeApp(bridge));
+      await tester.pumpAndSettle();
+
+      // Refused from the computer.
+      bridge.premiumDeviceList.removeWhere(
+        (d) => d.id == bridge.premiumThisDeviceId,
+      );
+      await tester.pump(deviceCheckPeriod);
+      await tester.pumpAndSettle();
+      expect(bridge.premiumDisconnected, isTrue);
+      final asked = bridge.premiumCalls.length;
+      await tester.pump(deviceCheckPeriod * 3);
+      await tester.pumpAndSettle();
+      expect(
+        bridge.premiumCalls
+            .skip(asked)
+            .where((c) => c == 'me' || c == 'devices'),
+        isEmpty,
+      );
+    });
+
+    testWidgets('out of sight nothing is asked, and all of it on return', (
+      tester,
+    ) async {
+      final bridge = withWaitingComputer();
+      await tester.pumpWidget(wholeApp(bridge));
+      await tester.pumpAndSettle();
+      expect(find.text(newDeviceBanner), findsOneWidget);
+
+      /// The device calls made since [from].
+      List<String> since(int from) => [
+        for (final call in bridge.premiumCalls.skip(from))
+          if (call == 'me' || call == 'devices') call,
+      ];
+
+      // Behind the launcher, with Live keeping the process alive: the
+      // timers would go on firing every five minutes.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      final before = bridge.premiumCalls.length;
+      await tester.pump(deviceCheckPeriod * 3);
+      await tester.pumpAndSettle();
+      expect(since(before), isEmpty);
+
+      // Back in front: at once, then on the rhythm again.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(since(before), contains('devices'));
+      final back = bridge.premiumCalls.length;
+      await tester.pump(deviceCheckPeriod);
+      await tester.pumpAndSettle();
+      expect(since(back), contains('devices'));
+    });
+
+    testWidgets('a waiting device asks nothing out of sight either', (
+      tester,
+    ) async {
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumMakeWaiting(bridge.premiumThisDeviceId!);
+      await tester.pumpWidget(wholeApp(bridge));
+      await tester.pumpAndSettle();
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      final before = bridge.premiumCalls.length;
+      await tester.pump(deviceCheckPeriod * 3);
+      await tester.pumpAndSettle();
+      expect(bridge.premiumCalls.skip(before), isNot(contains('me')));
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(bridge.premiumCalls.skip(before), contains('me'));
+      final back = bridge.premiumCalls.length;
+      await tester.pump(deviceCheckPeriod);
+      await tester.pumpAndSettle();
+      expect(bridge.premiumCalls.skip(back), contains('me'));
+    });
+
     test('a list read under another connection raises nothing', () async {
       final bridge = withWaitingComputer();
       final container = ProviderContainer(

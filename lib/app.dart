@@ -268,6 +268,11 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
       case AppLifecycleState.hidden:
       case AppLifecycleState.detached:
         lock.noteHidden();
+        // Devices are looked at in front only: Dart timers go on firing
+        // behind the launcher, for as long as Live keeps the process.
+        if (ref.read(prefsHydratedProvider)) {
+          ref.read(deviceWatchProvider.notifier).pause();
+        }
       case AppLifecycleState.resumed:
         lock.noteResumed();
         // The launcher may have gained or lost a widget meanwhile. Only
@@ -275,8 +280,9 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
         // publish the defaults first.
         if (ref.read(prefsHydratedProvider)) {
           ref.read(widgetFeedProvider).resume();
-          // Timers sleep with the app: a beat older than the period is
-          // asked for again on the way back.
+          // A beat older than the period is asked for again on the way
+          // back, and the devices, whose rhythm stopped out of sight,
+          // are looked at at once.
           ref.read(watchMonitorProvider.notifier).resume();
           ref.read(deviceWatchProvider.notifier).resume();
           unawaited(ref.read(liveProvider.notifier).resume());
