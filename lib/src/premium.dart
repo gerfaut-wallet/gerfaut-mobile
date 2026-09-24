@@ -12,7 +12,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'bridge.dart';
+import 'disguise.dart';
 import 'models.dart';
+import 'notifications.dart';
 import 'state.dart';
 
 /// Where premium is bought and renewed. Opened in the browser, never
@@ -498,6 +500,138 @@ String waitingLabel(PremiumDevice device, {int? nowUnix}) {
   final days = waitingDaysLeft(device, nowUnix: nowUnix);
   return 'Waiting · $days ${days == 1 ? 'day' : 'days'} left';
 }
+
+/// How often the device list is read again while the app is open, for
+/// a device that connected meanwhile.
+const Duration deviceCheckPeriod = Duration(minutes: 5);
+
+/// What a notification says about a device that waits for approval.
+TxNotice deviceNotice(PremiumDevice device, {required bool locked}) {
+  return TxNotice(
+    id: noticeId('device:${device.id}'),
+    // Under an app lock the title is the app's own, as for every other
+    // notification: the body names no wallet and no amount already.
+    title: locked ? lockedTitle : 'Gerfaut Premium: new device',
+    body:
+        'A new ${device.label} asks for access to your Premium account. '
+        'Open Gerfaut to approve or refuse it.',
+  );
+}
+
+/// Keeps an eye on the account's devices while the app is open, on a
+/// device with full access: when it opens, when it comes back to the
+/// front, and every five minutes in between. A device that waits for
+/// approval raises the red banner of the home screen, and one
+/// notification of its own, once: the core keeps which ones were
+/// announced and hands each out a single time, so neither a restart
+/// nor two readers at once say anything twice.
+///
+/// Whoever reads the list — this watch, the banner, the Devices card —
+/// feeds the announcement, so a device seen anywhere is announced.
+class DeviceWatch extends Notifier<void> {
+  Timer? _timer;
+  bool _checking = false;
+
+  @override
+  void build() {
+    ref.onDispose(() {
+      _timer?.cancel();
+      _timer = null;
+    });
+    // Listened to, not watched: nothing listens to this watch itself,
+    // and a provider nobody listens to is not rebuilt when what it
+    // watches changes. A subscription keeps both answers coming.
+    ref.listen(premiumFullAccessProvider, (_, next) {
+      if (next.valueOrNull ?? false) {
+        _timer ??= Timer.periodic(deviceCheckPeriod, (_) => check());
+      } else if (!next.isLoading) {
+        _timer?.cancel();
+        _timer = null;
+      }
+    }, fireImmediately: true);
+    // Listening is what reads the list the first time: the check at
+    // opening. Every list after it, whoever asked, passes here too.
+    ref.listen(premiumDevicesProvider, (_, next) {
+      final devices = next.valueOrNull;
+      if (devices == null || next.isLoading || !_full) return;
+      unawaited(_announce(devices));
+    }, fireImmediately: true);
+  }
+
+  bool get _full => ref.read(premiumFullAccessProvider).valueOrNull ?? false;
+
+  /// Reads the list again, now.
+  Future<void> check() async {
+    if (_checking || !_full) return;
+    _checking = true;
+    try {
+      ref.invalidate(premiumDevicesProvider);
+      await ref.read(premiumDevicesProvider.future);
+    } on BridgeException catch (error) {
+      switch (error.kind) {
+        // The server no longer takes this device's token: the core
+        // dropped it, and the vault says so.
+        case 'premium_device_disconnected':
+          ref.invalidate(premiumStateProvider);
+        // The key was changed elsewhere and this device came back as a
+        // new one, or its access is not what it was.
+        case 'premium_device_pending':
+          ref.invalidate(premiumMeProvider);
+      }
+    } catch (_) {
+      // Out of reach: the next check tries again.
+    } finally {
+      _checking = false;
+    }
+  }
+
+  /// The app is back in front: the list is read again. Only a real
+  /// return counts, from another app or from the phone's lock; the
+  /// notification shade pulled down over Gerfaut is not one.
+  void resume() => unawaited(check());
+
+  Future<void> _announce(List<PremiumDevice> devices) async {
+    final waiting = [
+      for (final device in devices)
+        if (!device.fullAccess && !device.thisDevice) device,
+    ];
+    final List<String> fresh;
+    try {
+      // Handed the whole waiting list, the core keeps it and gives
+      // back the devices it had not seen: an empty list clears it.
+      fresh = await ref
+          .read(bridgeProvider)
+          .premiumMarkAnnounced([for (final device in waiting) device.id]);
+    } catch (_) {
+      // Nothing was taken: the next list asks again.
+      return;
+    }
+    if (fresh.isEmpty) return;
+    // Nothing is posted while disguised: a notification's header
+    // carries the app's name. The banner says it inside the app, and
+    // the device counts as announced all the same.
+    if (ref.read(disguiseProvider).disguised) return;
+    // Settings not read yet say nothing of a lock: said as if there
+    // were one.
+    final settings = ref.read(settingsProvider).valueOrNull;
+    final locked = settings == null || notifiesLocked(settings);
+    final service = ref.read(notificationServiceProvider);
+    for (final device in waiting) {
+      if (!fresh.contains(device.id)) continue;
+      final notice = deviceNotice(device, locked: locked);
+      try {
+        await service.show(notice.id, notice.title, notice.body);
+      } catch (_) {
+        // A notification the system will not post is not a failed
+        // check: the banner is still there.
+      }
+    }
+  }
+}
+
+final deviceWatchProvider = NotifierProvider<DeviceWatch, void>(
+  DeviceWatch.new,
+);
 
 // --- the heartbeat -------------------------------------------------------
 

@@ -159,6 +159,10 @@ class _Hydrated extends ConsumerWidget {
         // server at once when a wallet is watched, then every quarter
         // hour, from wherever the app is.
         ref.read(watchMonitorProvider);
+        // And the account's devices, on a device with full access: a
+        // new one waiting for approval is looked for now, then every
+        // five minutes.
+        ref.read(deviceWatchProvider);
         // Live watch: listen to the core, and see that the service runs
         // if the setting asks for it. The app is on screen, which is
         // when Android lets it start.
@@ -274,6 +278,7 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
           // Timers sleep with the app: a beat older than the period is
           // asked for again on the way back.
           ref.read(watchMonitorProvider.notifier).resume();
+          ref.read(deviceWatchProvider.notifier).resume();
           unawaited(ref.read(liveProvider.notifier).resume());
           _startUpdateSession(ref);
         }

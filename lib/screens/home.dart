@@ -136,6 +136,7 @@ class HomeScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const NewDeviceBanner(),
             const WatchOfflineBanner(),
             const UpdateNotice(),
             Expanded(
@@ -220,6 +221,36 @@ class HomeScreen extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The red banner at the head of the home screen while a device waits
+/// for approval on the Premium account: someone entered the key, and if
+/// it was not the owner, the owner has to refuse it and change the key.
+/// It goes by itself once nothing waits; "Review" opens the devices.
+class NewDeviceBanner extends ConsumerWidget {
+  const NewDeviceBanner({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final waiting = ref.watch(waitingDevicesProvider);
+    if (waiting.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        GerfautSpacing.md,
+        GerfautSpacing.sm,
+        GerfautSpacing.md,
+        0,
+      ),
+      child: AlertBanner(
+        message:
+            'A new device asks for access to your Premium account. If it is '
+            'not yours, refuse it and change your key.',
+        actionLabel: 'Review',
+        onAction: () =>
+            SettingsScreen.open(context, section: SettingsSection.premium),
       ),
     );
   }
