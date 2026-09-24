@@ -342,6 +342,7 @@ enum PremiumFailureKind {
   deviceDisconnected,
   tooManyDevices,
   noDevice,
+  keyChangePending,
   tor,
   other,
 }
@@ -361,6 +362,7 @@ PremiumFailureKind premiumFailureKind(String kind) => switch (kind) {
   'premium_device_disconnected' => PremiumFailureKind.deviceDisconnected,
   'premium_too_many_devices' => PremiumFailureKind.tooManyDevices,
   'premium_no_device' => PremiumFailureKind.noDevice,
+  'premium_key_change_pending' => PremiumFailureKind.keyChangePending,
   'tor' => PremiumFailureKind.tor,
   _ => PremiumFailureKind.other,
 };
@@ -457,6 +459,11 @@ PremiumFailure premiumFailure(BridgeException error, {String? refusal}) {
     PremiumFailureKind.noDevice => const PremiumFailure(
       'Connect this device with the Premium key first.',
     ),
+    // Logging out, or entering another key, would lose the new key a
+    // change drew: the server may hold it already, and nothing else does.
+    PremiumFailureKind.keyChangePending => const PremiumFailure(
+      keyChangePendingMessage,
+    ),
     // The call goes through Tor whenever the backend of the active
     // network does, and nothing falls back to the clear: a Tor that
     // cannot be reached is a call that never happened. The core's own
@@ -496,6 +503,10 @@ String? _sentence(String words) {
 }
 
 // --- devices -------------------------------------------------------------
+
+/// What the licence says while a key change waits for its answer.
+const String keyChangePendingMessage =
+    'The key change did not finish. Try again to complete it.';
 
 /// How long a new device waits without approval. Mirrors the server,
 /// which decides it.

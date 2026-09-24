@@ -40,14 +40,17 @@ class BridgeException implements Exception {
 
 /// Every kind a premium call can fail with, and the whole of it.
 ///
-/// Eleven, where the core has more: the bridge folds what a screen
+/// Twelve, where the core has more: the bridge folds what a screen
 /// cannot act on differently, the way the desktop app does. An answer
 /// that does not decode goes under `premium_unreachable` — on a phone
 /// that is a hotel's login page, not something to read out — and a
 /// certificate or a heartbeat that does not check out is
 /// `premium_invalid`, whichever of the two it was. A device the server
 /// wants connected first and a device with no token here are one case,
-/// `premium_no_device`: either way the key has to connect it.
+/// `premium_no_device`: either way the key has to connect it. A key
+/// change sent and not answered is `premium_key_change_pending`: what
+/// was asked would lose the new key, and trying the change again is
+/// what finishes it.
 ///
 /// This list is what holds the screens to a sentence for each: a kind
 /// added here and left unanswered fails the test that walks it.
@@ -63,6 +66,7 @@ const List<String> premiumErrorKinds = [
   'premium_device_disconnected',
   'premium_too_many_devices',
   'premium_no_device',
+  'premium_key_change_pending',
 ];
 
 /// Every operation the app can ask of the core.
@@ -251,11 +255,17 @@ abstract class GerfautBridge {
   /// the device's token together in the vault, then fetches the
   /// licence. The account's first device has full access at once; any
   /// later one waits. Kinds: premium_unreachable, premium_unknown_key,
-  /// premium_too_many_devices, premium_rate_limited.
+  /// premium_too_many_devices, premium_rate_limited, and
+  /// premium_key_change_pending for another key while a key change has
+  /// not finished. An answer lost on the way leaves the connection under
+  /// way, and the next try sends the same one.
   Future<PremiumDevice> premiumConnect(String key);
 
-  /// A key kept by a version that had no devices yet: connected now, as
-  /// any key typed in. Null when there is nothing to do.
+  /// A connection whose answer was lost, sent again as it was, or a key
+  /// kept by a version that had no devices yet, connected now as any
+  /// key typed in. Null when there is nothing to do. Never the key on
+  /// its own after the server said it has every device it takes, and
+  /// nothing sent while a rate limit's wait runs: premium_rate_limited.
   Future<PremiumDevice?> premiumEnsureDevice();
 
   /// This device as the server sees it: its access, and until when it
@@ -274,7 +284,9 @@ abstract class GerfautBridge {
 
   /// Draws a new key: the old one stops working everywhere and every
   /// other device is disconnected. Answers the new key as it is shown.
-  /// Full access only.
+  /// Full access only. An answer lost on the way leaves the change under
+  /// way ([PremiumView.keyChangePending]), and the next call sends the
+  /// same key.
   Future<String> premiumChangeKey();
 
   /// Records whether the user put the key in a password manager.
@@ -294,8 +306,15 @@ abstract class GerfautBridge {
 
   /// Tells the server this device is leaving, when it can, then drops
   /// the key, the token and the certificate from this device. The
-  /// server goes on watching; the consents stay.
+  /// server goes on watching; the consents stay. A server out of reach
+  /// is told later, by [premiumFlushLogouts]. Refused with
+  /// premium_key_change_pending while a key change has not finished.
   Future<void> premiumLogOut();
+
+  /// Tells the server about the connections this device left while it
+  /// could not be reached. Nothing queued costs no request. Answers how
+  /// many are still to tell.
+  Future<int> premiumFlushLogouts();
 
   /// Keeps the "watch is offline" banner quiet until [untilUnix], or
   /// lets it show again with null.
@@ -781,6 +800,11 @@ class RustBridge implements GerfautBridge {
   @override
   Future<void> premiumRemoveDevice(String id) async {
     _ok(await rust.premiumRemoveDevice(id: id));
+  }
+
+  @override
+  Future<int> premiumFlushLogouts() async {
+    return _object(await rust.premiumFlushLogouts())['left'] as int;
   }
 
   @override

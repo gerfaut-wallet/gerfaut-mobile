@@ -3032,6 +3032,9 @@ class PremiumView {
     this.acknowledgedOfflineUntil,
     this.device,
     this.disconnected = false,
+    this.disconnectedReason,
+    this.keyChangePending = false,
+    this.connectPending = false,
     this.keySaved = false,
     this.checklistHidden = false,
     this.ntfyBaseUrl = 'https://ntfy.gerfaut-wallet.com',
@@ -3054,6 +3057,9 @@ class PremiumView {
         _ => null,
       },
       disconnected: json['disconnected'] as bool? ?? false,
+      disconnectedReason: json['disconnected_reason'] as String?,
+      keyChangePending: json['key_change_pending'] as bool? ?? false,
+      connectPending: json['connect_pending'] as bool? ?? false,
       keySaved: json['key_saved'] as bool? ?? false,
       checklistHidden: json['checklist_hidden'] as bool? ?? false,
       ntfyBaseUrl:
@@ -3087,6 +3093,23 @@ class PremiumView {
   /// disconnected it, or the key was changed elsewhere. The key stays,
   /// for connecting again.
   final bool disconnected;
+
+  /// Why the server would not connect this device, in its own words,
+  /// when it said: the key already has every device it takes. Null for
+  /// a device disowned or a key changed elsewhere, which the screens
+  /// word themselves.
+  final String? disconnectedReason;
+
+  /// A key change was sent and not answered. The server may already
+  /// hold the new key, which the vault keeps: the key above may be dead.
+  /// The screens say the change did not finish, offer to try it again,
+  /// which sends that same key, and do not hand out the key meanwhile.
+  final bool keyChangePending;
+
+  /// A connection of this device was sent and not answered: the core
+  /// sends it again as it was, and the server answers it with the
+  /// device it already made.
+  final bool connectPending;
 
   /// The user said the key is in a password manager.
   final bool keySaved;

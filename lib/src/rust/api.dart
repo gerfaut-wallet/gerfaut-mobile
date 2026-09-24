@@ -326,14 +326,19 @@ Future<String> premiumState() => RustLib.instance.api.crateApiPremiumState();
 /// serialized `Device`: full access for the account's first, waiting
 /// for any later one. A key the server does not know, or one with every
 /// device it may have, comes back as the error the field shows; nothing
-/// is stored then.
+/// is stored then. An answer lost on the way keeps the connection under
+/// way, and trying again sends the same one. Another key is refused,
+/// `premium_key_change_pending`, while a key change has not finished.
 Future<String> premiumConnect({required String key}) =>
     RustLib.instance.api.crateApiPremiumConnect(key: key);
 
-/// Connects a key kept by a version that had no devices yet. Returns the
+/// Sends again, as it was, a connection whose answer was lost, and
+/// connects a key kept by a version that had no devices yet. Returns the
 /// serialized `Device` it connected, or `null` when there was nothing to
 /// do: no key, a device already, or one the server disconnected, which
-/// connects again only when the user asks.
+/// connects again only when the user asks. After a rate limit it sends
+/// nothing until the wait the server named is over, and answers
+/// `premium_rate_limited` with what is left of it.
 Future<String> premiumEnsureDevice() =>
     RustLib.instance.api.crateApiPremiumEnsureDevice();
 
@@ -357,12 +362,26 @@ Future<String> premiumRemoveDevice({required String id}) =>
 /// Logs this device out: the server is told as far as it can be reached,
 /// then the key, the token and the certificate leave the vault. The
 /// server goes on watching what it was told to; the consents stay, so
-/// the same key entered again asks nothing twice.
+/// the same key entered again asks nothing twice. A server out of reach
+/// is told later, by [`premium_flush_logouts`]. A key change that did
+/// not finish is refused, `premium_key_change_pending`: this vault may
+/// hold the only copy of the new key.
 Future<String> premiumLogOut() => RustLib.instance.api.crateApiPremiumLogOut();
+
+/// Tells the server about the connections this device dropped while it
+/// could not be reached. Nothing queued costs no request. Returns
+/// `{"left": n}`, how many are still to tell; a server out of reach is
+/// the error, and they wait for the next start or heartbeat.
+Future<String> premiumFlushLogouts() =>
+    RustLib.instance.api.crateApiPremiumFlushLogouts();
 
 /// Draws a new key for the account; full access only. The old key stops
 /// working everywhere and every other device is disconnected. Returns
 /// `{"key": "xxxx-xxxx-xxxx-xxxx"}`, the one time the new key is shown.
+///
+/// The core draws the key and keeps it before the request leaves: an
+/// answer lost on the way leaves the change under way, which the view
+/// says, and the next call sends that same key rather than a new one.
 Future<String> premiumChangeKey() =>
     RustLib.instance.api.crateApiPremiumChangeKey();
 

@@ -1575,6 +1575,21 @@ class FakeBridge implements GerfautBridge {
 
   /// The server disowned this device; the key stays.
   bool premiumDisconnected = false;
+
+  /// Why the server would not connect this device, in its words.
+  String? premiumDisconnectedReason;
+
+  /// A key change sent and not answered: the core keeps the new key and
+  /// sends it again, the same, on the next try.
+  bool premiumKeyChangePending = false;
+
+  /// The key of a connection sent and not answered, sent again as it
+  /// was by the next connection or [premiumEnsureDevice].
+  String? premiumConnectPending;
+
+  /// The devices this one logged out of while the server could not be
+  /// told, their ids standing for the tokens the core queues.
+  final List<String> premiumPendingLogouts = [];
   bool premiumKeySaved = false;
   bool premiumChecklistHidden = false;
 
@@ -1622,7 +1637,19 @@ class FakeBridge implements GerfautBridge {
   FutureOr<void> Function()? onPremiumDevices;
   FutureOr<void> Function(String id)? onPremiumApprove;
   FutureOr<void> Function(String id)? onPremiumRemoveDevice;
+
+  /// Asked before a key change reaches the server: throw
+  /// `premium_unreachable` for an answer lost on the way, which keeps
+  /// the change under way, or a refusal, which settles it.
   FutureOr<void> Function()? onPremiumChangeKey;
+
+  /// Asked before [premiumEnsureDevice] sends anything: throw
+  /// `premium_rate_limited` for the core holding back during a wait.
+  FutureOr<void> Function()? onPremiumEnsure;
+
+  /// Asked for every logout the server is to be told of, with the
+  /// device's id: throw for a server out of reach.
+  FutureOr<void> Function(String id)? onPremiumRevoke;
 
   /// Watch hook; throw a [BridgeException] to simulate a refusal. The
   /// default registers the wallet.
@@ -1827,9 +1854,41 @@ class FakeBridge implements GerfautBridge {
       acknowledgedOfflineUntil: premiumAcknowledgedUntil,
       device: link,
       disconnected: premiumDisconnected,
+      disconnectedReason: premiumDisconnectedReason,
+      keyChangePending: premiumKeyChangePending,
+      connectPending: premiumConnectPending != null,
       keySaved: premiumKeySaved,
       checklistHidden: premiumChecklistHidden,
     );
+  }
+
+  /// This device holds a token the server has not disowned.
+  bool get _holdsDevice => premiumThisDeviceId != null && !premiumDisconnected;
+
+  /// What a refused connection leaves, the way the core decides it: a
+  /// refusal that settles it drops the connection under way, and one
+  /// about the stored key leaves this device disconnected, with the
+  /// server's words when it gave them; an answer lost on the way keeps
+  /// it, to be sent again as it was.
+  void _afterRefusedConnect(BridgeException error, {required bool stored}) {
+    const settles = {
+      'premium_unknown_key',
+      'premium_too_many_devices',
+      'premium_rejected',
+      'premium_no_device',
+      'invalid_input',
+    };
+    if (!settles.contains(error.kind)) return;
+    premiumConnectPending = null;
+    if (!stored || _holdsDevice) return;
+    switch (error.kind) {
+      case 'premium_too_many_devices':
+        premiumDisconnected = true;
+        premiumDisconnectedReason = error.message;
+      case 'premium_unknown_key':
+        premiumDisconnected = true;
+        premiumDisconnectedReason = null;
+    }
   }
 
   /// The licence for [key], as the server would issue it.
@@ -1857,15 +1916,35 @@ class FakeBridge implements GerfautBridge {
   Future<PremiumDevice> premiumConnect(String key) async {
     premiumCalls.add('connect:$key');
     final normalized = _normalizeKey(key);
-    final hook = onPremiumConnect;
-    if (hook != null) await hook(normalized);
-    // The licence decides whether the key is known, as the server's
-    // answer to the connection does.
-    final licence = await _licence(normalized);
+    final stored = premiumKey == normalized;
+    // Moving on would lose the key a change drew.
+    if (premiumKey != null && !stored && premiumKeyChangePending) {
+      throw const BridgeException(
+        'premium_key_change_pending',
+        'the key change did not finish; try again to complete it',
+      );
+    }
+    // Stored before the request leaves: a lost answer sends it again.
+    // Not for the key this device is already connected with, which the
+    // core only checks.
+    if (!(stored && _holdsDevice)) premiumConnectPending = normalized;
+    final PremiumLicence licence;
+    try {
+      final hook = onPremiumConnect;
+      if (hook != null) await hook(normalized);
+      // The licence decides whether the key is known, as the server's
+      // answer to the connection does.
+      licence = await _licence(normalized);
+    } on BridgeException catch (error) {
+      _afterRefusedConnect(error, stored: stored);
+      rethrow;
+    }
+    premiumConnectPending = null;
+    premiumDisconnectedReason = null;
     // A key typed again on the device it connected comes back as that
     // device: nothing new to wait for.
     final me = _me();
-    if (me != null && premiumKey == normalized) {
+    if (me != null && stored) {
       premiumClaims = licence.claims;
       return me;
     }
@@ -1898,11 +1977,15 @@ class FakeBridge implements GerfautBridge {
   @override
   Future<PremiumDevice?> premiumEnsureDevice() async {
     premiumCalls.add('ensure');
+    final pending = premiumConnectPending;
     final key = premiumKey;
-    if (key == null || premiumThisDeviceId != null || premiumDisconnected) {
+    if (pending == null &&
+        (key == null || premiumThisDeviceId != null || premiumDisconnected)) {
       return null;
     }
-    return premiumConnect(key);
+    final hook = onPremiumEnsure;
+    if (hook != null) await hook();
+    return premiumConnect(pending ?? key!);
   }
 
   @override
@@ -1979,7 +2062,10 @@ class FakeBridge implements GerfautBridge {
     if (premiumDeviceList.length == before) {
       throw const BridgeException('premium_rejected', 'no such device');
     }
-    if (id == premiumThisDeviceId) premiumDisconnected = true;
+    if (id == premiumThisDeviceId) {
+      premiumDisconnected = true;
+      premiumDisconnectedReason = null;
+    }
   }
 
   /// The key a change draws, as the core shows it.
@@ -1988,12 +2074,29 @@ class FakeBridge implements GerfautBridge {
   @override
   Future<String> premiumChangeKey() async {
     premiumCalls.add('change-key');
-    final hook = onPremiumChangeKey;
-    if (hook != null) await hook();
-    _needKey();
+    // Drawn and kept before the request leaves, as the core does: the
+    // next try sends the same key.
+    premiumKeyChangePending = true;
+    try {
+      final hook = onPremiumChangeKey;
+      if (hook != null) await hook();
+      _needKey();
+    } on BridgeException catch (error) {
+      // A refusal settles it; an answer lost on the way may hide a
+      // change the server made, and the key is kept.
+      const settles = {
+        'premium_rejected',
+        'premium_device_pending',
+        'premium_no_device',
+        'invalid_input',
+      };
+      if (settles.contains(error.kind)) premiumKeyChangePending = false;
+      rethrow;
+    }
     final key = _normalizeKey(premiumNextKey);
     premiumServerKey = key;
     premiumKey = key;
+    premiumKeyChangePending = false;
     premiumKeySaved = false;
     premiumAnnounced = [];
     premiumDeviceList.removeWhere((d) => d.id != premiumThisDeviceId);
@@ -2043,18 +2146,49 @@ class FakeBridge implements GerfautBridge {
   @override
   Future<void> premiumLogOut() async {
     premiumCalls.add('log-out');
+    // The vault may hold the only copy of a new key the server took.
+    if (premiumKeyChangePending && _holdsDevice) {
+      throw const BridgeException(
+        'premium_key_change_pending',
+        'the key change did not finish; try again to complete it',
+      );
+    }
     final me = premiumThisDeviceId;
     if (me != null && !premiumDisconnected) {
-      premiumDeviceList.removeWhere((d) => d.id == me);
+      try {
+        final hook = onPremiumRevoke;
+        if (hook != null) await hook(me);
+        premiumDeviceList.removeWhere((d) => d.id == me);
+      } on BridgeException {
+        // Out of reach: the token waits for the next start or beat.
+        premiumPendingLogouts.add(me);
+      }
     }
     premiumKey = null;
     premiumClaims = null;
     premiumAcknowledgedUntil = null;
     premiumThisDeviceId = null;
     premiumDisconnected = false;
+    premiumDisconnectedReason = null;
+    premiumKeyChangePending = false;
+    premiumConnectPending = null;
     premiumKeySaved = false;
     premiumChecklistHidden = false;
     premiumAnnounced = [];
+  }
+
+  @override
+  Future<int> premiumFlushLogouts() async {
+    premiumCalls.add('flush-logouts');
+    while (premiumPendingLogouts.isNotEmpty) {
+      final id = premiumPendingLogouts.first;
+      // Out of reach: the rest waits, and the first failure is said.
+      final hook = onPremiumRevoke;
+      if (hook != null) await hook(id);
+      premiumDeviceList.removeWhere((d) => d.id == id);
+      premiumPendingLogouts.removeAt(0);
+    }
+    return 0;
   }
 
   @override
@@ -2285,6 +2419,9 @@ class FakeBridge implements GerfautBridge {
     premiumAcknowledgedUntil = null;
     premiumThisDeviceId = null;
     premiumDisconnected = false;
+    premiumDisconnectedReason = null;
+    premiumKeyChangePending = false;
+    premiumConnectPending = null;
   }
 
   @override
@@ -2317,6 +2454,13 @@ class FakeBridge implements GerfautBridge {
   Future<HeartbeatReport> premiumHeartbeat() async {
     premiumHeartbeatCalls += 1;
     premiumCalls.add('heartbeat');
+    // The bridge tells the server the logouts it still owes first, as
+    // it does the removed wallets; what fails waits for the next beat.
+    try {
+      await premiumFlushLogouts();
+    } on BridgeException {
+      // Only the beat says whether the watch is alive.
+    }
     final hook = onPremiumHeartbeat;
     if (hook != null) return hook();
     return HeartbeatReport(

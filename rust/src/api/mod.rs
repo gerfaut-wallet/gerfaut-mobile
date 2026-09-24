@@ -804,7 +804,11 @@ fn now_unix() -> i64 {
 /// certificate that no longer verifies reads as no certificate.
 ///
 /// This device's connection goes as its id and date alone: the token
-/// never leaves the core, and the screens have no use for it.
+/// never leaves the core, and the screens have no use for it. What was
+/// sent and not answered goes the same way, as whether it was: a key
+/// change under way hides the key the vault holds, which may already be
+/// dead, and the connection under way is sent again by
+/// [`premium_ensure_device`]; neither secret is the screens' to read.
 fn premium_view(state: &PremiumState) -> serde_json::Value {
     let public_key = premium_public_key();
     let claims = state
@@ -822,6 +826,9 @@ fn premium_view(state: &PremiumState) -> serde_json::Value {
             "connected_at": device.connected_at,
         })),
         "disconnected": state.disconnected,
+        "disconnected_reason": state.disconnected_reason,
+        "key_change_pending": state.key_change_pending(),
+        "connect_pending": state.connect_pending(),
         "key_saved": state.key_saved,
         "checklist_hidden": state.checklist_hidden,
         "ntfy_base_url": NTFY_BASE_URL,
@@ -865,7 +872,9 @@ async fn store_premium(
 /// serialized `Device`: full access for the account's first, waiting
 /// for any later one. A key the server does not know, or one with every
 /// device it may have, comes back as the error the field shows; nothing
-/// is stored then.
+/// is stored then. An answer lost on the way keeps the connection under
+/// way, and trying again sends the same one. Another key is refused,
+/// `premium_key_change_pending`, while a key change has not finished.
 pub async fn premium_connect(key: String) -> String {
     let manager = try_json!(manager());
     match manager
@@ -877,10 +886,13 @@ pub async fn premium_connect(key: String) -> String {
     }
 }
 
-/// Connects a key kept by a version that had no devices yet. Returns the
+/// Sends again, as it was, a connection whose answer was lost, and
+/// connects a key kept by a version that had no devices yet. Returns the
 /// serialized `Device` it connected, or `null` when there was nothing to
 /// do: no key, a device already, or one the server disconnected, which
-/// connects again only when the user asks.
+/// connects again only when the user asks. After a rate limit it sends
+/// nothing until the wait the server named is over, and answers
+/// `premium_rate_limited` with what is left of it.
 pub async fn premium_ensure_device() -> String {
     let manager = try_json!(manager());
     match manager
@@ -939,7 +951,10 @@ pub async fn premium_remove_device(id: String) -> String {
 /// Logs this device out: the server is told as far as it can be reached,
 /// then the key, the token and the certificate leave the vault. The
 /// server goes on watching what it was told to; the consents stay, so
-/// the same key entered again asks nothing twice.
+/// the same key entered again asks nothing twice. A server out of reach
+/// is told later, by [`premium_flush_logouts`]. A key change that did
+/// not finish is refused, `premium_key_change_pending`: this vault may
+/// hold the only copy of the new key.
 pub async fn premium_log_out() -> String {
     let manager = try_json!(manager());
     match manager.premium_log_out(&premium_base_url()).await {
@@ -948,9 +963,25 @@ pub async fn premium_log_out() -> String {
     }
 }
 
+/// Tells the server about the connections this device dropped while it
+/// could not be reached. Nothing queued costs no request. Returns
+/// `{"left": n}`, how many are still to tell; a server out of reach is
+/// the error, and they wait for the next start or heartbeat.
+pub async fn premium_flush_logouts() -> String {
+    let manager = try_json!(manager());
+    match manager.premium_flush_logouts(&premium_base_url()).await {
+        Ok(left) => json!({ "left": left }).to_string(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
 /// Draws a new key for the account; full access only. The old key stops
 /// working everywhere and every other device is disconnected. Returns
 /// `{"key": "xxxx-xxxx-xxxx-xxxx"}`, the one time the new key is shown.
+///
+/// The core draws the key and keeps it before the request leaves: an
+/// answer lost on the way leaves the change under way, which the view
+/// says, and the next call sends that same key rather than a new one.
 pub async fn premium_change_key() -> String {
     let manager = try_json!(manager());
     match manager.premium_change_key(&premium_base_url()).await {
@@ -1222,10 +1253,12 @@ pub async fn premium_recent_events() -> String {
 pub async fn premium_heartbeat() -> String {
     let manager = try_json!(manager());
     // A wallet removed while the server was out of reach leaves at the
-    // next pulse: the queue is tried before the beat, and what still
-    // cannot be told waits for the one after. Only the beat says
-    // whether the watch is alive; a queue that will not flush does not.
+    // next pulse, and so does a connection logged out meanwhile: the
+    // queues are tried before the beat, and what still cannot be told
+    // waits for the one after. Only the beat says whether the watch is
+    // alive; a queue that will not flush does not.
     let _ = manager.premium_flush_unwatch(&premium_base_url()).await;
+    let _ = manager.premium_flush_logouts(&premium_base_url()).await;
     let client = try_json!(premium_client(manager).await);
     match client.heartbeat(now_unix()).await {
         Ok(report) => to_json(&report),
@@ -1503,6 +1536,48 @@ mod tests {
         }
         let gone = payload(&CoreError::Premium(PremiumError::DeviceDisconnected));
         assert_eq!(gone["error"]["kind"], "premium_device_disconnected");
+    }
+
+    /// A key change that did not finish is its own case: the screen
+    /// offers to try it again, and a logout or another key waits for it.
+    #[test]
+    fn an_unfinished_key_change_is_its_own_kind() {
+        let value = payload(&CoreError::Premium(PremiumError::KeyChangePending));
+        assert_eq!(value["error"]["kind"], "premium_key_change_pending");
+    }
+
+    /// What was sent and not answered reaches the screens as whether it
+    /// was, and why the server would not connect this device in its own
+    /// words; the key drawn for the change and the token of the
+    /// connection stay in the core.
+    #[test]
+    fn the_view_says_what_is_under_way_and_hides_its_secrets() {
+        let state: PremiumState = serde_json::from_value(json!({
+            "key": "abcdefghijkmnpqr",
+            "disconnected": true,
+            "disconnected_reason": "this key already has 10 devices; disconnect one from a device with full access",
+            "pending_connect": { "key": "wxyz23456789abcd", "token": "gdt1_pending", "platform": "android" },
+            "pending_key": "mnpq23456789abcd",
+            "pending_logouts": ["gdt1_gone"],
+        }))
+        .expect("a stored state reads");
+        let view = premium_view(&state);
+        assert_eq!(view["key_change_pending"], true);
+        assert_eq!(view["connect_pending"], true);
+        assert_eq!(view["disconnected"], true);
+        assert_eq!(
+            view["disconnected_reason"],
+            "this key already has 10 devices; disconnect one from a device with full access"
+        );
+        let text = view.to_string();
+        for secret in ["mnpq23456789abcd", "wxyz23456789abcd", "gdt1_"] {
+            assert!(!text.contains(secret), "{secret} reached the view");
+        }
+
+        let settled = premium_view(&PremiumState::default());
+        assert_eq!(settled["key_change_pending"], false);
+        assert_eq!(settled["connect_pending"], false);
+        assert_eq!(settled["disconnected_reason"], Value::Null);
     }
 
     /// What the screens are handed of this device's connection: its id
