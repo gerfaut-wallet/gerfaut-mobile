@@ -795,9 +795,9 @@ fn now_unix() -> i64 {
 }
 
 /// The stored account with what the screen reads off it: the claims of
-/// the certificate, verified offline against the embedded key, so the
-/// licence state shows without a network. A certificate that no longer
-/// verifies reads as no certificate.
+/// the certificate, verified offline against the key of the server it
+/// came from, so the licence state shows without a network. A
+/// certificate that no longer verifies reads as no certificate.
 ///
 /// This device's connection goes as its id and date alone: the token
 /// never leaves the core, and the screens have no use for it.
@@ -1464,6 +1464,61 @@ mod tests {
         for error in [certificate, heartbeat, stale] {
             assert_eq!(payload(&error)["error"]["kind"], "premium_invalid");
         }
+    }
+
+    /// A device that waits says until when, for the screen to count from.
+    #[test]
+    fn a_waiting_device_carries_the_end_of_its_wait() {
+        let pending = CoreError::Premium(PremiumError::DevicePending {
+            until: 1_790_864_000,
+        });
+        let value = payload(&pending);
+        assert_eq!(value["error"]["kind"], "premium_device_pending");
+        assert_eq!(value["error"]["pending_until"], 1_790_864_000);
+    }
+
+    /// The server's sentence about a key with every device it may have
+    /// reaches the screen as it was written, and nothing else.
+    #[test]
+    fn a_full_key_says_so_in_the_servers_words() {
+        let words =
+            "this key already has 10 devices; disconnect one from a device with full access";
+        let full = CoreError::Premium(PremiumError::TooManyDevices(words.to_owned()));
+        let value = payload(&full);
+        assert_eq!(value["error"]["kind"], "premium_too_many_devices");
+        assert_eq!(value["error"]["message"], words);
+    }
+
+    /// A device with no token here and a device the server wants
+    /// connected first are one case: the key has to connect it.
+    #[test]
+    fn a_device_to_connect_is_one_kind() {
+        for error in [PremiumError::NoDevice, PremiumError::DeviceRequired] {
+            let value = payload(&CoreError::Premium(error));
+            assert_eq!(value["error"]["kind"], "premium_no_device");
+        }
+        let gone = payload(&CoreError::Premium(PremiumError::DeviceDisconnected));
+        assert_eq!(gone["error"]["kind"], "premium_device_disconnected");
+    }
+
+    /// What the screens are handed of this device's connection: its id
+    /// and its date, never the token.
+    #[test]
+    fn the_view_leaves_the_token_behind() {
+        let state: PremiumState = serde_json::from_value(json!({
+            "key": "abcdefghijkmnpqr",
+            "device": { "id": "dev-1", "token": "gdt1_secret", "connected_at": 1_790_000_000 },
+            "key_saved": true,
+        }))
+        .expect("a stored state reads");
+        let view = premium_view(&state);
+        assert_eq!(
+            view["device"],
+            json!({ "id": "dev-1", "connected_at": 1_790_000_000 })
+        );
+        assert_eq!(view["key_saved"], true);
+        assert_eq!(view["disconnected"], false);
+        assert!(!view.to_string().contains("gdt1_"));
     }
 
     /// A 5xx keeps its wrapper: the status is the only sign that the
