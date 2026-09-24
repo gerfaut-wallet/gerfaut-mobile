@@ -33,7 +33,15 @@ const String appLockNeededMessage =
 /// lock accepts them. Without one, the phone's screen lock. A phone
 /// with neither gets the way to set an app lock, and a no: the action
 /// waits until one exists.
-Future<bool> confirmIdentity(BuildContext context, WidgetRef ref) async {
+///
+/// [appLockOnly] asks only where an app lock stands, and says yes
+/// without one: for an action worth guarding behind a lock the owner
+/// chose, and not worth sending anyone to set one for.
+Future<bool> confirmIdentity(
+  BuildContext context,
+  WidgetRef ref, {
+  bool appLockOnly = false,
+}) async {
   final AppLock? lock;
   try {
     // The vault's answer, not the settings in hand: a lock turned off a
@@ -43,6 +51,7 @@ Future<bool> confirmIdentity(BuildContext context, WidgetRef ref) async {
     return false;
   }
   if (!context.mounted) return false;
+  if (lock == null && appLockOnly) return true;
   if (lock != null) {
     final yes = await showModalBottomSheet<bool>(
       context: context,

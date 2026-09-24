@@ -381,6 +381,11 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   Future<void> _addChannelFlow(PremiumView view) async {
     final kind = await showAddChannelSheet(context);
     if (kind == null || !mounted) return;
+    // A channel is where every alert goes: behind an app lock, whoever
+    // holds the phone proves they own it before adding one of theirs.
+    // Without a lock nobody is sent to set one for this.
+    if (!await confirmIdentity(context, ref, appLockOnly: true)) return;
+    if (!mounted) return;
     final before = ref.read(premiumChannelsProvider).valueOrNull?.length ?? 0;
     setState(() => _channelsError = null);
     CreatedChannel? created;

@@ -413,6 +413,39 @@ void main() {
       expect(bridge.wallets.map((w) => w.id), isNot(contains('w2')));
     });
 
+    testWidgets('adding a channel asks under an app lock only', (tester) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      final screenLock = FakeScreenLock();
+      await tester.pumpWidget(premiumApp(bridge, screenLock: screenLock));
+      await tester.pumpAndSettle();
+
+      // No lock: nothing is asked, and nobody is sent to set one.
+      await tester.tap(find.text('Add a channel'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Telegram'));
+      await tester.pumpAndSettle();
+      expect(screenLock.asked, isEmpty);
+      expect(bridge.premiumCalls, contains('create:telegram:'));
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      // With a lock, its secret first.
+      bridge.lock = const AppLock(kind: LockKind.pin, biometric: false);
+      await tester.tap(find.text('Add a channel'));
+      await tester.pumpAndSettle();
+      // The sheet's entry, over the row of the channel made above.
+      await tester.tap(find.text('Telegram').last);
+      await tester.pumpAndSettle();
+      expect(find.byType(ConfirmItsYouSheet), findsOneWidget);
+      await tester.tap(find.widgetWithText(GhostButton, 'Cancel').last);
+      await tester.pumpAndSettle();
+      expect(
+        bridge.premiumCalls.where((c) => c == 'create:telegram:'),
+        hasLength(1),
+      );
+    });
+
     testWidgets('unwatching a wallet asks', (tester) async {
       useTallSurface(tester);
       final bridge = premiumBridge(activated: true);
