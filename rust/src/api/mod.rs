@@ -8,12 +8,14 @@
 //! the Dart side as an error of its own, outside this shape, so the Dart
 //! code must be ready for a failure that carries no `kind`.
 
+use crate::frb_generated::StreamSink;
 use gerfaut_core::backup::{BackupOptions, ImportChoices};
 use gerfaut_core::chain::BackendConfig;
 use gerfaut_core::chain::tor::TorSettings;
 use gerfaut_core::error::PremiumError;
 use gerfaut_core::export::ExportOptions;
 use gerfaut_core::input::{ImportOptions, ParsedInput, ScriptKind};
+use gerfaut_core::live::LiveEvent;
 use gerfaut_core::lock::LockKind;
 use gerfaut_core::premium::client::{
     NTFY_BASE_URL, TELEGRAM_BOT, new_ntfy_topic, ntfy_subscribe_url, telegram_link_url,
@@ -25,10 +27,8 @@ use gerfaut_core::premium::{
 use gerfaut_core::price::{FiatCurrency, PriceSource};
 use gerfaut_core::store::VaultKey;
 use gerfaut_core::wallet::meta::{WalletIcon, WalletKind};
-use gerfaut_core::{CoreError, Network, WalletManager};
-use crate::frb_generated::StreamSink;
-use gerfaut_core::live::LiveEvent;
 use gerfaut_core::wallet::snapshot::SyncReport;
+use gerfaut_core::{CoreError, Network, WalletManager};
 use serde_json::json;
 use std::sync::LazyLock;
 use std::time::{SystemTime, UNIX_EPOCH};
