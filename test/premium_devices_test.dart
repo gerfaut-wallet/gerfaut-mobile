@@ -253,7 +253,14 @@ void main() {
 
       await tester.tap(find.text('Forget this key'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('not on the server'), findsOneWidget);
+      expect(
+        find.text(
+          'Forgetting the key disconnects this device from your Premium '
+          'account. To use Premium here again, enter the key, then approve '
+          'this device from another one or wait 10 days.',
+        ),
+        findsOneWidget,
+      );
       // A waiting device cannot delete the account: no box to tick.
       expect(find.text('Also delete everything on the server'), findsNothing);
       await tester.tap(find.widgetWithText(DangerButton, 'Forget key'));

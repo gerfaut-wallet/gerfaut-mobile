@@ -508,12 +508,12 @@ void main() {
 
       await tester.tap(find.text('Forget this key'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('not on the server'), findsOneWidget);
+      expect(find.textContaining('disconnects this device'), findsOneWidget);
       expect(bridge.premiumKey, isNotNull);
 
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('not on the server'), findsNothing);
+      expect(find.textContaining('disconnects this device'), findsNothing);
 
       await tester.tap(find.text('Forget this key'));
       await tester.pumpAndSettle();

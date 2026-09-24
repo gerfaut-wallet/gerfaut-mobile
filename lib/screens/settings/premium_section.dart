@@ -1024,9 +1024,10 @@ class _ForgetQuestion extends StatelessWidget {
                     'channels it tells and the key itself from the server. '
                     'This cannot be undone, and whatever paid time the key '
                     'had left goes with it.'
-              : 'Forgetting the key stops the watch on this device, not '
-                    'on the server. It is your only proof of purchase: '
-                    'keep a copy before you forget it here.',
+              : 'Forgetting the key disconnects this device from your '
+                    'Premium account. To use Premium here again, enter the '
+                    'key, then approve this device from another one or wait '
+                    '10 days.',
         ),
         if (canDelete) ...[
           const SizedBox(height: GerfautSpacing.xs),
