@@ -1508,5 +1508,107 @@ void main() {
       expect(find.text('Change key'), findsNothing);
       expect(find.text('Linux computer'), findsNothing);
     });
+
+    testWidgets('a key change cut short by a key changed elsewhere leaves '
+        'a way on, and a way out', (tester) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      final screenLock = FakeScreenLock();
+      // This phone's change lost its answer. Meanwhile the key was
+      // changed on the computer, which disconnected every other device.
+      bridge.premiumKeyChangePending = true;
+      bridge.premiumAddDevice(platform: DevicePlatform.windows, waiting: false);
+      bridge.premiumDeviceList.removeWhere(
+        (d) => d.id == bridge.premiumThisDeviceId,
+      );
+      bridge.premiumServerKey = 'mnpq23456789abcd';
+      await tester.pumpWidget(premiumApp(bridge, screenLock: screenLock));
+      await tester.pumpAndSettle();
+
+      // The token went, and the change with it: it can no longer finish,
+      // so nothing offers to finish it.
+      expect(bridge.premiumKeyChangePending, isFalse);
+      expect(find.text(unfinishedChange), findsNothing);
+      expect(find.text(plainNote), findsOneWidget);
+      expect(find.text('Forget this key'), findsOneWidget);
+
+      await tester.tap(find.text('Connect again'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('This key no longer works. Enter the new one.'),
+        findsOneWidget,
+      );
+      // Whoever does not have the new key can still leave from here.
+      expect(find.text('Forget this key'), findsOneWidget);
+
+      // Whoever has it connects, as a device that waits.
+      await tester.enterText(find.byType(TextField), 'mnpq-2345-6789-abcd');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Activate'));
+      await tester.pumpAndSettle();
+      expect(bridge.premiumCalls, contains('connect:mnpq-2345-6789-abcd'));
+      expect(find.text(waitingTitle), findsOneWidget);
+      // A disconnected phone leaves nothing behind: nobody was asked.
+      expect(screenLock.asked, isEmpty);
+    });
+
+    testWidgets('a vault left disconnected with a change under way is not '
+        'stuck', (tester) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      // Both at once, as a vault written before this core could hold.
+      bridge.premiumKeyChangePending = true;
+      bridge.premiumDisconnected = true;
+      bridge.premiumServerKey = 'mnpq23456789abcd';
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+      expect(find.text(unfinishedChange), findsNothing);
+
+      await tester.tap(find.text('Connect again'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'mnpq-2345-6789-abcd');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Activate'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('did not finish'), findsNothing);
+      expect(find.text(waitingTitle), findsOneWidget);
+      expect(bridge.premiumKeyChangePending, isFalse);
+    });
+
+    testWidgets('a key typed over a refused one can be forgotten there', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumDisconnected = true;
+      bridge.premiumServerKey = 'mnpq23456789abcd';
+      final screenLock = FakeScreenLock();
+      await tester.pumpWidget(premiumApp(bridge, screenLock: screenLock));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Connect again'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Forget this key'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Forgetting the key disconnects this device from your Premium '
+          'account. To use Premium here again, enter the key, then approve '
+          'this device from another one or wait 10 days.',
+        ),
+        findsOneWidget,
+      );
+      // A device the server let go has no account to delete.
+      expect(find.text('Also delete everything on the server'), findsNothing);
+      await tester.tap(find.widgetWithText(DangerButton, 'Forget key'));
+      await tester.pumpAndSettle();
+      expect(screenLock.asked, isEmpty);
+      expect(bridge.premiumKey, isNull);
+      expect(
+        find.text('This key no longer works. Enter the new one.'),
+        findsNothing,
+      );
+      expect(find.text('Forget this key'), findsNothing);
+    });
   });
 }

@@ -978,6 +978,13 @@ class _LicenceCard extends StatelessWidget {
   List<Widget> _withoutKey(GerfautTokens tokens) {
     final wellFormed = isWellFormedKey(controller.text);
     final strangers = keyStrangers(controller.text);
+    // A key is kept, and the field is back over it: changed on another
+    // device, or never paid for. Typing the new one is one way on, not
+    // the only one: whoever does not have it can still leave. Not on a
+    // device that waits, whose card offers it, nor while a change this
+    // device can still finish holds the only copy of the new key.
+    final canForget =
+        view.hasKey && !waiting && !(view.keyChangePending && view.connected);
     return [
       Text(
         'ACCOUNT KEY',
@@ -1049,8 +1056,18 @@ class _LicenceCard extends StatelessWidget {
             icon: LucideIcons.externalLink,
             onPressed: () => openExternal(premiumSiteUrl),
           ),
+          if (canForget)
+            GhostButton(
+              label: 'Forget this key',
+              icon: LucideIcons.eraser,
+              onPressed: confirmingForget || activating ? null : onForgetStart,
+            ),
         ],
       ),
+      if (confirmingForget && canForget) ...[
+        const SizedBox(height: GerfautSpacing.sm),
+        forget,
+      ],
     ];
   }
 
