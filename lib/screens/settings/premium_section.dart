@@ -1116,9 +1116,10 @@ class _WaitingCard extends StatelessWidget {
       children: [
         Text(
           'This device connected to your Premium account on '
-          '${formatDate(device.connectedAt)}. It shows your watched wallets, '
+          '${formatDayMonthYear(device.connectedAt)}. It shows your watched '
+          'wallets, '
           'channels and alerts once one of your other devices approves it, '
-          'or on ${formatDate(until)} without approval.',
+          'or on ${formatDayMonthYear(until)} without approval.',
           style: text,
         ),
         const SizedBox(height: GerfautSpacing.sm),

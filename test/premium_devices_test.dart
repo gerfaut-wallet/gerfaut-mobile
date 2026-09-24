@@ -67,6 +67,13 @@ void main() {
       expect(waitingDaysLeft(waiting, nowUnix: 1000 + 20 * 86400), 1);
     });
 
+    test('a device date is written day first', () {
+      final fourth = DateTime(2026, 9, 4, 12).millisecondsSinceEpoch ~/ 1000;
+      expect(formatDayMonthYear(fourth), '4 Sep 2026');
+      final last = DateTime(2027, 12, 31, 12).millisecondsSinceEpoch ~/ 1000;
+      expect(formatDayMonthYear(last), '31 Dec 2027');
+    });
+
     test('every platform has its label and its glyph', () {
       expect(DevicePlatform.android.label, 'Android phone');
       expect(DevicePlatform.ios.label, 'iPhone');
@@ -169,9 +176,10 @@ void main() {
       expect(
         find.text(
           'This device connected to your Premium account on '
-          '${formatDate(now)}. It shows your watched wallets, channels and '
+          '${formatDayMonthYear(now)}. It shows your watched wallets, channels '
+          'and '
           'alerts once one of your other devices approves it, or on '
-          '${formatDate(now + 10 * 86400)} without approval.',
+          '${formatDayMonthYear(now + 10 * 86400)} without approval.',
         ),
         findsOneWidget,
       );

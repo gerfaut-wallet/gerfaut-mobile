@@ -263,7 +263,7 @@ class _DeviceRow extends StatelessWidget {
             ],
           ),
           Text(
-            'Connected ${formatDate(device.connectedAt)}',
+            'Connected ${formatDayMonthYear(device.connectedAt)}',
             style: tokens.label.copyWith(
               letterSpacing: 0,
               color: tokens.textMuted,

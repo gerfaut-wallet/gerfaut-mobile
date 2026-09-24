@@ -192,6 +192,15 @@ String formatDate(int unixSeconds) {
   return '${_months[local.month - 1]} $day, ${local.year}';
 }
 
+/// A day written day first, `24 Sep 2026`: the form the Premium device
+/// texts use on both apps, beside the alerts the server sends about the
+/// same devices.
+String formatDayMonthYear(int unixSeconds) {
+  final local = DateTime.fromMillisecondsSinceEpoch(unixSeconds * 1000)
+      .toLocal();
+  return '${local.day} ${_months[local.month - 1]} ${local.year}';
+}
+
 /// A clock time in the reader's zone, 24-hour, no date: `12:40`. For a
 /// figure whose freshness matters more than its day.
 String formatClock(int unixSeconds) {
