@@ -160,7 +160,9 @@ class _DevicesCardState extends ConsumerState<DevicesCard> {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final muted = tokens.bodySmall.copyWith(color: tokens.textMuted);
     final devices = ref.watch(premiumDevicesProvider);
-    final list = devices.valueOrNull;
+    // Only a list read with this connection: one from before the key was
+    // changed, or from another key, reads as loading meanwhile.
+    final list = ref.watch(accountDevicesProvider);
     final readError = devices.hasError && !devices.isLoading
         ? devices.error
         : null;

@@ -566,8 +566,9 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
       });
     }
     // A server out of reach leaves the last answer standing, the note
-    // under the licence saying why it could not be checked again.
-    final device = turnedAway ? null : me?.valueOrNull;
+    // under the licence saying why it could not be checked again. An
+    // answer about another connection stands for nothing.
+    final device = turnedAway ? null : currentDevice(view, me?.valueOrNull);
     final full = device?.fullAccess ?? false;
     final waiting = device != null && !device.fullAccess;
 
@@ -603,7 +604,7 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
       onConfirm: () => _forget(full: full),
       onDeleteAccountChanged: (on) => setState(() => _deleteAccount = on),
     );
-    final devices = full ? ref.watch(premiumDevicesProvider).valueOrNull : null;
+    final devices = full ? ref.watch(accountDevicesProvider) : null;
     final lock = ref.watch(settingsProvider).valueOrNull?.appLock;
     final steps = devices == null
         ? null

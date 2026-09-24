@@ -190,7 +190,10 @@ class SettingsScreen extends ConsumerWidget {
             // nothing of the account: the line says where it stands
             // rather than a count it cannot have.
             if (premium.disconnected) return '$until · disconnected';
-            final me = ref.watch(premiumMeProvider).valueOrNull;
+            final me = currentDevice(
+              premium,
+              ref.watch(premiumMeProvider).valueOrNull,
+            );
             if (me != null && !me.fullAccess) {
               return '$until · waiting for approval';
             }

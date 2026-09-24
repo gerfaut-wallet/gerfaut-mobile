@@ -66,6 +66,16 @@ final premiumMeProvider = FutureProvider<PremiumDevice?>((ref) async {
   return bridge.premiumDevice();
 });
 
+/// [me] as the screens may show it: only while it is the device the
+/// vault is connected as. An answer read before a logout, a key entered
+/// again or another key says nothing of this connection, and stands for
+/// nothing while the next one is read.
+PremiumDevice? currentDevice(PremiumView view, PremiumDevice? me) {
+  final link = view.device;
+  if (me == null || link == null || view.disconnected) return null;
+  return me.id == link.id ? me : null;
+}
+
 /// Whether this device sees the account: everything past the licence
 /// waits on it, so a device still waiting asks the server for nothing
 /// it would refuse.
@@ -82,27 +92,77 @@ final premiumAccountProvider = FutureProvider<PremiumAccount?>((ref) async {
   return ref.watch(bridgeProvider).premiumAccount();
 });
 
+/// This device's connection to the account, as the vault holds it: the
+/// key, and the id the server knows this device by. What the server
+/// says about devices holds for one connection, and for no other.
+typedef PremiumConnection = ({String key, String device});
+
+/// The connection [view] holds; null without a key, without a device,
+/// and once the server has disconnected it.
+PremiumConnection? premiumConnection(PremiumView? view) {
+  final key = view?.key;
+  final device = view?.device;
+  if (view == null || key == null || device == null || view.disconnected) {
+    return null;
+  }
+  return (key: key, device: device.id);
+}
+
+/// The account's devices as the server listed them, oldest first, with
+/// the connection they were read with.
+class DeviceList {
+  const DeviceList(this.connection, this.devices);
+
+  final PremiumConnection? connection;
+  final List<PremiumDevice> devices;
+}
+
 /// Every device of the account, oldest first. Empty unless this one
 /// has full access: only such a device may see the others.
-final premiumDevicesProvider = FutureProvider<List<PremiumDevice>>((ref) async {
-  if (!await ref.watch(premiumFullAccessProvider.future)) return const [];
-  return ref.watch(bridgeProvider).premiumDevices();
+final premiumDevicesProvider = FutureProvider<DeviceList>((ref) async {
+  final connection = premiumConnection(
+    await ref.watch(premiumStateProvider.future),
+  );
+  if (connection == null ||
+      !await ref.watch(premiumFullAccessProvider.future)) {
+    return DeviceList(connection, const []);
+  }
+  final devices = await ref.watch(bridgeProvider).premiumDevices();
+  return DeviceList(connection, devices);
+});
+
+/// The account's devices for the connection the vault holds now; null
+/// until a list was read with it.
+///
+/// A list read before the key was forgotten, changed, or replaced by
+/// another one is a list of devices this connection may not have: the
+/// server disconnected them with the old key, or they belong to another
+/// account. It is never shown, nor announced, while the next one loads.
+final accountDevicesProvider = Provider<List<PremiumDevice>?>((ref) {
+  final connection = premiumConnection(
+    ref.watch(premiumStateProvider).valueOrNull,
+  );
+  final list = ref.watch(premiumDevicesProvider).valueOrNull;
+  if (connection == null || list == null || list.connection != connection) {
+    return null;
+  }
+  return list.devices;
 });
 
 /// The other devices that wait for approval, from the last list read.
 /// What the red banner of the home screen is about.
 ///
-/// Only on a device that sees the account, and never from a list the
-/// server has since disowned: a device disconnected, or waiting again
-/// behind a changed key, has no business raising the banner.
+/// Only on a device connected with full access, and never from a list
+/// the server has since disowned, or one read under another connection:
+/// a device disconnected, waiting again behind a changed key, or moved
+/// to another account has no business raising the banner.
 final waitingDevicesProvider = Provider<List<PremiumDevice>>((ref) {
   if (!(ref.watch(premiumFullAccessProvider).valueOrNull ?? false)) {
     return const [];
   }
-  final devices = ref.watch(premiumDevicesProvider);
-  if (_turnedAway(devices.error)) return const [];
+  if (_turnedAway(ref.watch(premiumDevicesProvider).error)) return const [];
   return [
-    for (final device in devices.valueOrNull ?? const <PremiumDevice>[])
+    for (final device in ref.watch(accountDevicesProvider) ?? const [])
       if (!device.fullAccess && !device.thisDevice) device,
   ];
 });
@@ -612,9 +672,13 @@ class DeviceWatch extends Notifier<void> {
     // Listening is what reads the list the first time: the check at
     // opening. Every list after it, whoever asked, passes here too.
     ref.listen(premiumDevicesProvider, (_, next) {
-      final devices = next.valueOrNull;
-      if (devices == null || next.isLoading || !_full) return;
-      unawaited(_announce(devices));
+      final list = next.valueOrNull;
+      if (list == null || next.isLoading || !_full) return;
+      // A list read under a connection this device no longer holds
+      // announces nothing: its devices are not this account's news.
+      final now = premiumConnection(ref.read(premiumStateProvider).valueOrNull);
+      if (now == null || list.connection != now) return;
+      unawaited(_announce(list.devices));
     }, fireImmediately: true);
   }
 
