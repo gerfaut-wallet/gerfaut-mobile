@@ -245,12 +245,14 @@ class LockController extends Notifier<LockState> {
   /// trip was one Gerfaut sent the user on, and a short one. Picking a
   /// file takes a minute; a phone that came back an hour after its
   /// picker opened was put down on the way, and whoever holds it now
-  /// meets the lock.
+  /// meets the lock. So does one whose clock went back during the trip:
+  /// setting the date back would otherwise make any trip look short.
   void noteResumed() {
     final away = _away;
     final at = _excursionAt;
+    final elapsed = at == null ? null : clock().difference(at);
     final excursion =
-        at != null && clock().difference(at) <= excursionAllowance;
+        elapsed != null && !elapsed.isNegative && elapsed <= excursionAllowance;
     _away = false;
     _excursionAt = null;
     if (!away || excursion || state.locked) return;

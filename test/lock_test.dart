@@ -761,6 +761,21 @@ void main() {
       expect(app.container.read(lockProvider).locked, isTrue);
     });
 
+    test('a clock set back during the trip locks as well', () async {
+      final app = lockedApp();
+      await app.lock.unlock('1234');
+      var now = DateTime(2026, 9, 25, 14);
+      app.lock.clock = () => now;
+
+      // Put down in front of the picker; an hour later somebody sets
+      // the date back so the trip looks short.
+      app.lock.expectExcursion();
+      app.lock.noteHidden();
+      now = now.subtract(const Duration(minutes: 1));
+      app.lock.noteResumed();
+      expect(app.container.read(lockProvider).locked, isTrue);
+    });
+
     test('a trip within the allowance does not', () async {
       final app = lockedApp();
       await app.lock.unlock('1234');
