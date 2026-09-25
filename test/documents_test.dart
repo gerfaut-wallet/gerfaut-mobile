@@ -62,4 +62,60 @@ void main() {
       expect((await refusal()).dialogOpened, isFalse);
     });
   });
+
+  group('the open channel', () {
+    void answer(Object? Function(MethodCall call) reply) {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async => reply(call));
+    }
+
+    test('asks for no more than the limit, of the types given', () async {
+      MethodCall? asked;
+      answer((call) {
+        asked = call;
+        return {
+          'name': 'wallet.json',
+          'size': 3,
+          'bytes': Uint8List.fromList([1, 2, 3]),
+        };
+      });
+      final file = await openBoundedFile(
+        maxBytes: 64,
+        mimeTypes: const ['text/plain'],
+      );
+      expect(asked!.method, 'openDocument');
+      expect(asked!.arguments, {
+        'mimeTypes': ['text/plain'],
+        'maxBytes': 64,
+      });
+      expect(file!.name, 'wallet.json');
+      expect(await file.length(), 3);
+      expect(await file.readAsBytes(), [1, 2, 3]);
+    });
+
+    test('a file past the limit comes as its size alone', () async {
+      answer((_) => {'name': 'holiday.mp4', 'size': 314572800, 'bytes': null});
+      final file = await openBoundedFile(maxBytes: 64);
+      expect(await file!.length(), 314572800);
+      expect(await file.readAsBytes(), isEmpty);
+    });
+
+    test('a dismissed dialog picks nothing', () async {
+      answer((_) => null);
+      expect(await openBoundedFile(maxBytes: 64), isNull);
+    });
+
+    test('a file that could not be read says so', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            throw PlatformException(code: 'read_failed', message: 'EIO');
+          });
+      expect(openBoundedFile(maxBytes: 64), throwsA(isA<FileReadException>()));
+    });
+
+    test('no dialog to open is left to the caller', () async {
+      refuseWith('unavailable', 'no app on this device can open a file');
+      expect(openBoundedFile(maxBytes: 64), throwsA(isA<PlatformException>()));
+    });
+  });
 }

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/bridge.dart';
+import '../src/documents.dart';
 import '../src/explorer.dart';
 import '../src/format.dart';
 import '../src/lock.dart';
@@ -105,8 +106,9 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     }
   }
 
-  /// The most text the core reads as a transaction; a binary file
-  /// goes to it as hex, twice its size, so this is also the limit there.
+  /// The most text the core reads as a transaction. A binary PSBT goes
+  /// to it as hex, twice its size: past half of this the core refuses
+  /// it and says so.
   static const int _maxTransactionBytes = 4000000;
 
   Future<void> _importFile() async {
@@ -118,7 +120,13 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     lock.expectExcursion();
     final XFile? file;
     try {
-      file = await (widget.filePicker ?? openFile)();
+      file =
+          await (widget.filePicker ??
+              () => openBoundedFile(maxBytes: _maxTransactionBytes))();
+    } on FileReadException catch (error) {
+      // Picked, then not read: the trip did happen.
+      if (mounted) setState(() => _inputError = error.message);
+      return;
     } catch (_) {
       // No picker came up: the trip goes back, or it would be spent on
       // a real absence hours from now.
@@ -131,9 +139,9 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
       return;
     }
     if (file == null) return;
-    // Checked before reading: the core reads no more than this much, and
-    // a file picked by mistake must cost a sentence, not the memory of
-    // the whole file.
+    // The core reads no more than this much. The picker has read no
+    // further than that: a larger file comes with its size and nothing
+    // else.
     if (await file.length() > _maxTransactionBytes) {
       if (mounted) {
         setState(

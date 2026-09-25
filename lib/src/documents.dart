@@ -3,6 +3,7 @@
 // what "Save file" promises; the share sheet, which can also end in a
 // file, stays a separate action under its own name.
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -86,3 +87,57 @@ class SystemDocumentSaver implements DocumentSaver {
 final documentSaverProvider = Provider<DocumentSaver>(
   (ref) => const SystemDocumentSaver(),
 );
+
+/// A file was picked and could not be read, in words fit for the
+/// screen. The dialog did open: the trip it made is not taken back.
+class FileReadException implements Exception {
+  const FileReadException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// Picks a file with the system's open-document dialog and reads no
+/// more than [maxBytes] of it. Null when the dialog was dismissed.
+///
+/// The file_selector plugin reads the whole file into memory, twice,
+/// before its caller can ask how large it is: a video picked by mistake
+/// ends the app. Here a file past the limit comes back with its size
+/// and no bytes, and [XFile.length] is what the caller refuses it by.
+/// [mimeTypes] narrows the dialog; empty offers every file.
+///
+/// Throws [FileReadException] when the file was picked and could not be
+/// read, and [PlatformException] when no dialog could open.
+Future<XFile?> openBoundedFile({
+  required int maxBytes,
+  List<String> mimeTypes = const [],
+}) async {
+  final Map<Object?, Object?>? picked;
+  try {
+    picked = await SystemDocumentSaver._channel
+        .invokeMethod<Map<Object?, Object?>>('openDocument', {
+          'mimeTypes': mimeTypes,
+          'maxBytes': maxBytes,
+        });
+  } on PlatformException catch (error) {
+    if (error.code == 'read_failed') {
+      throw const FileReadException('This file could not be read.');
+    }
+    if (error.code == 'busy') {
+      throw const FileReadException('A file is already being opened.');
+    }
+    rethrow;
+  }
+  if (picked == null) return null;
+  final name = picked['name'] as String?;
+  final size = picked['size'] as int;
+  final bytes = picked['bytes'] as Uint8List?;
+  return XFile.fromData(
+    bytes ?? Uint8List(0),
+    length: size,
+    // The name an XFile reports is the last part of its path.
+    path: name?.replaceAll('/', '_'),
+  );
+}

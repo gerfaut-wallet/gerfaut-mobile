@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io' show FileSystemException;
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -495,6 +494,30 @@ void main() {
     expect(parsed, isEmpty);
   });
 
+  testWidgets('a file is read as UTF-8, accents and all', (tester) async {
+    final parsed = <String>[];
+    final bridge = FakeBridge(
+      onParse: (input) {
+        parsed.add(input);
+        return makeParsedInput();
+      },
+    );
+    const material = '{"label": "Épargne", "descriptor": "wpkh(tpub.../0/*)"}';
+    await tester.pumpWidget(
+      screen(
+        bridge,
+        filePicker: () async => XFile.fromData(
+          Uint8List.fromList(utf8.encode(material)),
+          path: 'wallet.json',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Import a file'));
+    await tester.pumpAndSettle();
+    expect(parsed, [material]);
+  });
+
   testWidgets('a file that is not text says so', (tester) async {
     final parsed = <String>[];
     final bridge = FakeBridge(
@@ -504,7 +527,13 @@ void main() {
       },
     );
     await tester.pumpWidget(
-      screen(bridge, filePicker: () async => _NotText('wallet.txt')),
+      screen(
+        bridge,
+        filePicker: () async => XFile.fromData(
+          Uint8List.fromList([0xff, 0xfe, 0x00, 0x9f]),
+          path: 'wallet.txt',
+        ),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Import a file'));
@@ -546,19 +575,4 @@ void main() {
       ..noteResumed();
     expect(lock.state.locked, isTrue);
   });
-}
-
-/// A picked file whose bytes are not UTF-8, as the phone's file system
-/// reports one.
-class _NotText extends XFile {
-  _NotText(super.path);
-
-  @override
-  Future<int> length() async => 5;
-
-  @override
-  Future<String> readAsString({Encoding encoding = utf8}) async =>
-      throw const FileSystemException(
-        "Failed to decode data using encoding 'utf-8'",
-      );
 }

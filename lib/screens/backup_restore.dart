@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/bridge.dart';
+import '../src/documents.dart';
 import '../src/format.dart';
 import '../src/lock.dart';
 import '../src/models.dart';
@@ -107,16 +108,10 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
     _passwordFocus.requestFocus();
   }
 
-  static Future<XFile?> _pickBackupFile() {
-    return openFile(
-      acceptedTypeGroups: const [
-        XTypeGroup(label: 'Gerfaut backup', extensions: ['gerfaut']),
-        // A backup renamed or saved by another app still opens; the core
-        // says what is not one.
-        XTypeGroup(label: 'Any file'),
-      ],
-    );
-  }
+  /// Any file: a backup renamed or saved by another app still opens,
+  /// and the core says what is not one.
+  static Future<XFile?> _pickBackupFile() =>
+      openBoundedFile(maxBytes: _maxBackupBytes);
 
   /// Largest file worth reading, mirroring the core's own cap: a
   /// backup of a hundred wallets weighs a few tens of kilobytes.
@@ -132,6 +127,10 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
     final XFile? file;
     try {
       file = await (widget.filePicker ?? _pickBackupFile)();
+    } on FileReadException catch (error) {
+      // Picked, then not read: the trip did happen.
+      if (mounted) setState(() => _error = error.message);
+      return;
     } catch (_) {
       // No picker came up: the trip goes back, or it would be spent on
       // a real absence hours from now.
@@ -143,8 +142,8 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
       return;
     }
     if (file == null) return;
-    // Checked before reading: picking a video by mistake must cost a
-    // sentence, not the memory of the whole file.
+    // The picker has read no further than this: a larger file comes
+    // with its size and nothing else.
     if (await file.length() > _maxBackupBytes) {
       if (!mounted) return;
       setState(

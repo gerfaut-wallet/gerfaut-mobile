@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/bridge.dart';
+import '../src/documents.dart';
 import '../src/lock.dart';
 import '../src/models.dart';
 import '../src/state.dart';
@@ -134,10 +137,6 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
   }
 
   Future<void> _importFile() async {
-    const typeGroup = XTypeGroup(
-      label: 'Wallet material',
-      extensions: ['txt', 'json', 'desc', 'bsms'],
-    );
     final lock = ref.read(lockProvider.notifier);
     // The picker is a screen of the system's: Android pauses Gerfaut
     // behind it, and coming back from a picker the user opened here is
@@ -149,7 +148,14 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
       final picker = widget.filePicker;
       file = picker != null
           ? await picker()
-          : await openFile(acceptedTypeGroups: const [typeGroup]);
+          : await openBoundedFile(
+              maxBytes: _maxMaterialBytes,
+              mimeTypes: const ['text/plain', 'application/json'],
+            );
+    } on FileReadException catch (error) {
+      // Picked, then not read: the trip did happen.
+      if (mounted) setState(() => _error = error.message);
+      return;
     } catch (_) {
       // No picker came up: the trip goes back, or it would be spent on
       // a real absence hours from now.
@@ -162,9 +168,9 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
       return;
     }
     if (file == null) return;
-    // Checked before reading: the core reads no more than this much
-    // wallet material, and a video picked by mistake must cost a
-    // sentence, not the memory of the whole file.
+    // The core reads no more than this much wallet material. The
+    // picker has read no further than that: a larger file comes with
+    // its size and nothing else.
     if (await file.length() > _maxMaterialBytes) {
       if (mounted) {
         setState(() => _error = 'This file is too large to be a wallet.');
@@ -173,10 +179,11 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
     }
     final String text;
     try {
-      text = (await file.readAsString()).trim();
+      // Decoded here: an XFile made of bytes reads them as Latin-1,
+      // which garbles every accent in a label and never fails.
+      text = utf8.decode(await file.readAsBytes()).trim();
     } on Exception {
-      // Not UTF-8: a file read from disk says so as a file system
-      // error, bytes already in memory as a format error.
+      // Not UTF-8, or not readable at all.
       if (mounted) {
         setState(() => _error = 'This file is not text Gerfaut can read.');
       }

@@ -21,10 +21,12 @@ import android.os.Bundle
 import android.os.PersistableBundle
 import android.os.PowerManager
 import android.provider.DocumentsContract
+import android.provider.OpenableColumns
 import android.provider.Settings
 import android.view.WindowManager
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import java.io.ByteArrayOutputStream
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -68,6 +70,38 @@ class MainActivity : FlutterFragmentActivity() {
                 discardDocument(uri)
                 save.result.error("write_failed", error.message, null)
             }
+        }
+
+    // The file being picked: the call waiting for its bytes, and how
+    // many it may have. One at a time.
+    private var pendingOpen: PendingOpen? = null
+
+    private val openDialog: ActivityResultLauncher<Intent> =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { outcome ->
+            val uri = if (outcome.resultCode == Activity.RESULT_OK) outcome.data?.data else null
+            val open = pendingOpen
+            pendingOpen = null
+            if (open == null) return@registerForActivityResult
+            if (uri == null) {
+                // Waved away: nothing was picked.
+                open.result.success(null)
+                return@registerForActivityResult
+            }
+            // A provider may fetch the file over the network: read off
+            // the main thread, answer on it.
+            Thread {
+                val answer = try {
+                    Result.success(readBounded(uri, open.maxBytes))
+                } catch (error: Exception) {
+                    Result.failure(error)
+                }
+                runOnUiThread {
+                    answer.fold(
+                        { open.result.success(it) },
+                        { open.result.error("read_failed", it.message, null) },
+                    )
+                }
+            }.start()
         }
 
     // The call waiting for the battery question to be answered.
@@ -137,6 +171,19 @@ class MainActivity : FlutterFragmentActivity() {
                         )
                     } else {
                         createDocument(filename, mimeType, bytes, result)
+                    }
+                }
+                "openDocument" -> {
+                    val mimeTypes = call.argument<List<String>>("mimeTypes")
+                    val maxBytes = call.argument<Int>("maxBytes")
+                    if (mimeTypes == null || maxBytes == null || maxBytes < 0) {
+                        result.error(
+                            "bad_argument",
+                            "openDocument takes mimeTypes and maxBytes",
+                            null,
+                        )
+                    } else {
+                        openDocument(mimeTypes, maxBytes, result)
                     }
                 }
                 else -> result.notImplemented()
@@ -351,6 +398,82 @@ class MainActivity : FlutterFragmentActivity() {
         }
     }
 
+    // Opens the system's open-document dialog and answers with the file
+    // it names: its name, its size, and its bytes when there are no more
+    // than maxBytes of them. A larger file comes back without its bytes,
+    // having been read no further than the limit: the file picker plugin
+    // reads every byte into memory before its caller sees the size, and
+    // a video picked by mistake is enough to end the app. Answers null
+    // when the dialog was dismissed.
+    private fun openDocument(
+        mimeTypes: List<String>,
+        maxBytes: Int,
+        result: MethodChannel.Result,
+    ) {
+        if (pendingOpen != null) {
+            result.error("busy", "a file is already being picked", null)
+            return
+        }
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            when (mimeTypes.size) {
+                0 -> type = "*/*"
+                1 -> type = mimeTypes.first()
+                else -> {
+                    type = "*/*"
+                    putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes.toTypedArray())
+                }
+            }
+        }
+        pendingOpen = PendingOpen(maxBytes, result)
+        try {
+            openDialog.launch(intent)
+        } catch (error: Exception) {
+            pendingOpen = null
+            if (error is ActivityNotFoundException) {
+                result.error("unavailable", "no app on this device can open a file", null)
+            } else {
+                result.error("failed", error.message ?: "the file dialog could not be opened", null)
+            }
+        }
+    }
+
+    // What openDocument answers for one file. The size the provider
+    // states is trusted only to refuse early: the bytes are counted as
+    // they come, and the reading stops one past the limit.
+    private fun readBounded(uri: Uri, maxBytes: Int): Map<String, Any?> {
+        var name: String? = null
+        var stated: Long? = null
+        contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (nameIndex >= 0 && !cursor.isNull(nameIndex)) name = cursor.getString(nameIndex)
+                val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) stated = cursor.getLong(sizeIndex)
+            }
+        }
+        val statedSize = stated
+        if (statedSize != null && statedSize > maxBytes) {
+            return mapOf("name" to name, "size" to statedSize, "bytes" to null)
+        }
+        val stream = contentResolver.openInputStream(uri)
+            ?: throw IOException("the file could not be opened")
+        val out = ByteArrayOutputStream()
+        stream.use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (out.size() <= maxBytes) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                out.write(buffer, 0, read)
+            }
+        }
+        if (out.size() > maxBytes) {
+            return mapOf("name" to name, "size" to out.size().toLong(), "bytes" to null)
+        }
+        val bytes = out.toByteArray()
+        return mapOf("name" to name, "size" to bytes.size.toLong(), "bytes" to bytes)
+    }
+
     // Removes a document the picker created for a save that did not
     // happen. Best effort: a provider that will not delete leaves an
     // empty file behind, and the error already reported says the save
@@ -540,6 +663,8 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     private class PendingSave(val bytes: ByteArray, val result: MethodChannel.Result)
+
+    private class PendingOpen(val maxBytes: Int, val result: MethodChannel.Result)
 
     private companion object {
         const val WINDOW_CHANNEL = "gerfaut/window"
