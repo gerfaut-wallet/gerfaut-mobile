@@ -174,11 +174,13 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
 
   /// What a refused file says. The vault kind is the seal not opening,
   /// which the core cannot tell from a wrong password, so it gets the
-  /// plain sentence; everything else is the core's own words, verbatim.
+  /// plain sentence; a private key in it gets its own, and everything
+  /// else is the core's own words, verbatim.
   /// A file from a newer Gerfaut is one of those: the seal opened, the
   /// schema is refused by name, and that name is the whole answer.
-  String _messageOf(BridgeException error) =>
-      error.kind == 'vault' ? wrongPasswordMessage : error.message;
+  String _messageOf(BridgeException error) => error.kind == 'vault'
+      ? wrongPasswordMessage
+      : materialRefusal(error, backup: true);
 
   Future<void> _open() async {
     final source = _source;

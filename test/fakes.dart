@@ -700,6 +700,10 @@ class FakeBridge implements GerfautBridge {
     return parse(input);
   }
 
+  /// What the core answers to the next adds instead of a wallet, when
+  /// set: the check it runs again on every wallet as it is created.
+  BridgeException? addWalletRefusal;
+
   @override
   Future<WalletMeta> addWallet(
     String name,
@@ -707,6 +711,8 @@ class FakeBridge implements GerfautBridge {
     Network network,
   ) async {
     addWalletCalls += 1;
+    final refusal = addWalletRefusal;
+    if (refusal != null) throw refusal;
     final meta = makeMeta(
       id: 'w${wallets.length + 1}',
       name: name,

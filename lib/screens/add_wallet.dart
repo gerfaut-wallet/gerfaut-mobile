@@ -107,7 +107,7 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
       });
       _seedDerivation(parsed);
     } on BridgeException catch (error) {
-      setState(() => _error = error.message);
+      setState(() => _error = materialRefusal(error));
     } catch (error) {
       setState(() => _error = '$error');
     }
@@ -247,7 +247,7 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
       );
     } on BridgeException catch (error) {
       setState(() {
-        _error = error.message;
+        _error = materialRefusal(error);
         _adding = false;
       });
     } catch (error) {

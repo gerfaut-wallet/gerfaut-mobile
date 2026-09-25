@@ -251,7 +251,7 @@ void main() {
     expect(bridge.wallets.single.network, Network.testnet4);
   });
 
-  testWidgets('private material rejection shows the core message', (
+  testWidgets('private material is refused in words that say what to bring', (
     tester,
   ) async {
     const message = 'input contains private key material and was rejected';
@@ -266,9 +266,47 @@ void main() {
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
 
-    expect(find.text(message), findsOneWidget);
+    expect(find.text(message), findsNothing);
+    expect(
+      find.text(
+        'This holds a private key, and Gerfaut only watches: nothing was '
+        'saved. Bring the public descriptor or extended public key instead.',
+      ),
+      findsOneWidget,
+    );
     // Still on the input step.
     expect(find.text('NAME'), findsNothing);
+  });
+
+  testWidgets('a wallet the core refuses at the add step says why', (
+    tester,
+  ) async {
+    final bridge = FakeBridge(onParse: (_) => makeParsedInput())
+      ..addWalletRefusal = const BridgeException(
+        'descriptor',
+        "descriptor error: Key too short (<66 char), doesn't match any format",
+      );
+    await tester.pumpWidget(screen(bridge));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'wpkh(tpub.../0/*)');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Cold');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Add wallet'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add wallet'));
+    await tester.pumpAndSettle();
+
+    expect(bridge.wallets, isEmpty);
+    expect(
+      find.text(
+        'This descriptor could not be used: Key too short (<66 char), '
+        "doesn't match any format",
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a descriptor offers no derivation to change', (tester) async {

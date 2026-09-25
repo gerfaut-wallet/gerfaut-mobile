@@ -38,6 +38,30 @@ class BridgeException implements Exception {
   String toString() => message;
 }
 
+/// What the page says when the core refuses wallet material handed to
+/// it: pasted, scanned, read from a file or from a backup.
+///
+/// The core's own words, verbatim, except for two refusals whose words
+/// name a layer instead of the thing refused. A private key is refused
+/// wherever it comes from, and the sentence says what to bring instead.
+/// A descriptor the wallet engine will not take is said to be that,
+/// with the engine's reason after it.
+String materialRefusal(BridgeException error, {bool backup = false}) {
+  return switch (error.kind) {
+    'private_material' when backup =>
+      'This backup holds a private key, and Gerfaut only watches: nothing '
+          'was restored.',
+    'private_material' =>
+      'This holds a private key, and Gerfaut only watches: nothing was '
+          'saved. Bring the public descriptor or extended public key '
+          'instead.',
+    'descriptor' =>
+      'This descriptor could not be used: '
+          '${error.message.replaceFirst('descriptor error: ', '')}',
+    _ => error.message,
+  };
+}
+
 /// Every kind a premium call can fail with, and the whole of it.
 ///
 /// Twelve, where the core has more: the bridge folds what a screen

@@ -872,6 +872,30 @@ void main() {
       expect(find.textContaining('Wrong password'), findsNothing);
     });
 
+    testWidgets('a backup holding a private key is refused in words', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge();
+      bridge.onPreviewBackup = (_, _) => preview();
+      bridge.onImportBackup = (_, _, _) => throw const BridgeException(
+        'private_material',
+        'input contains private key material and was rejected',
+      );
+      await openBackup(tester, bridge);
+      await tester.tap(find.text('Restore 2 wallets'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'This backup holds a private key, and Gerfaut only watches: '
+          'nothing was restored.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Wrong password'), findsNothing);
+    });
+
     testWidgets('a watched wallet is listed but cannot be chosen', (
       tester,
     ) async {
