@@ -58,6 +58,10 @@ class LiveService : Service() {
     // Set once a stop is under way, so nothing restarts what is leaving.
     private var leaving: Boolean = false
 
+    // A start came while the stop was under way: once this service is
+    // gone, another one starts.
+    private var restartWhenGone: Boolean = false
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -67,8 +71,16 @@ class LiveService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (!isWanted(this) || leaving) {
+        if (!isWanted(this)) {
             shutdown()
+            return START_NOT_STICKY
+        }
+        if (leaving) {
+            // Turned back on while the last stop is still saying what
+            // its watch held: that stop ends this service in a moment,
+            // and a fresh one starts once it is gone. Shutting down here
+            // instead would leave Live wanted and running nowhere.
+            restartWhenGone = true
             return START_NOT_STICKY
         }
         instance = this
@@ -113,6 +125,13 @@ class LiveService : Service() {
         // the service. The heartbeat stays armed and tries to bring it
         // back.
         if (isWanted(this) && !leaving) armHeartbeat(this, RESTART_MS)
+        // Asked for again during the stop: started now that it is over,
+        // from the app on screen that asked, which is what lets a
+        // foreground service start at all.
+        if (restartWhenGone && isWanted(this)) {
+            val app = applicationContext
+            Handler(Looper.getMainLooper()).post { start(app) }
+        }
         super.onDestroy()
     }
 
