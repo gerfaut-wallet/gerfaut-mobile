@@ -197,9 +197,16 @@ enum PhoneMaker {
 /// maker whose battery manager it runs.
 @immutable
 class PhoneBrand {
-  const PhoneBrand._(this.label, this.maker, this.slug);
+  const PhoneBrand._(this.label, this.maker, this.slug, {this.an = false});
 
   final String label;
+
+  /// The name is said with a vowel first, "an Oppo", "an Honor": the
+  /// spelling alone would get "a OnePlus" wrong.
+  final bool an;
+
+  /// The card's title.
+  String get heading => 'On ${an ? 'an' : 'a'} $label phone';
   final PhoneMaker maker;
 
   /// Its page on dontkillmyapp.com: a sister brand without one of its
@@ -214,10 +221,20 @@ class PhoneBrand {
       'redmi' => const PhoneBrand._('Redmi', PhoneMaker.xiaomi, 'xiaomi'),
       'poco' => const PhoneBrand._('POCO', PhoneMaker.xiaomi, 'xiaomi'),
       'huawei' => const PhoneBrand._('Huawei', PhoneMaker.huawei, 'huawei'),
-      'honor' => const PhoneBrand._('Honor', PhoneMaker.huawei, 'huawei'),
+      'honor' => const PhoneBrand._(
+        'Honor',
+        PhoneMaker.huawei,
+        'huawei',
+        an: true,
+      ),
       'samsung' => const PhoneBrand._('Samsung', PhoneMaker.samsung, 'samsung'),
       'oneplus' => const PhoneBrand._('OnePlus', PhoneMaker.onePlus, 'oneplus'),
-      'oppo' => const PhoneBrand._('Oppo', PhoneMaker.onePlus, 'oppo'),
+      'oppo' => const PhoneBrand._(
+        'Oppo',
+        PhoneMaker.onePlus,
+        'oppo',
+        an: true,
+      ),
       'realme' => const PhoneBrand._('realme', PhoneMaker.onePlus, 'realme'),
       _ => null,
     };

@@ -1101,7 +1101,7 @@ void main() {
       final platform = FakeLivePlatform(batteryExempt: true, maker: 'OPPO');
       await reachMakerCard(tester, platform);
 
-      expect(find.text('On a Oppo phone'), findsOneWidget);
+      expect(find.text('On an Oppo phone'), findsOneWidget);
       expect(find.textContaining('Allow auto launch'), findsOne);
       await tester.tap(find.text('Open dontkillmyapp.com'));
       await tester.pumpAndSettle();
@@ -1181,6 +1181,8 @@ void main() {
       expect(PhoneMaker.of('Google'), isNull);
       expect(PhoneMaker.of(''), isNull);
       expect(PhoneBrand.of('HONOR')!.label, 'Honor');
+      expect(PhoneBrand.of('HONOR')!.heading, 'On an Honor phone');
+      expect(PhoneBrand.of('OnePlus')!.heading, 'On a OnePlus phone');
       expect(
         PhoneBrand.of('HONOR')!.helpUrl,
         'https://dontkillmyapp.com/huawei',

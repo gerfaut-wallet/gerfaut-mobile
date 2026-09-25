@@ -266,10 +266,7 @@ class _LiveSheetState extends ConsumerState<LiveSheet> {
     final steps = brand.maker.stepsFor(exempt: _exempt);
     final muted = tokens.bodySmall.copyWith(color: tokens.textMuted);
     return [
-      Semantics(
-        header: true,
-        child: Text('On a ${brand.label} phone', style: tokens.h2),
-      ),
+      Semantics(header: true, child: Text(brand.heading, style: tokens.h2)),
       const SizedBox(height: GerfautSpacing.sm),
       Text(
         'This phone runs its own battery manager, and it stops background '
