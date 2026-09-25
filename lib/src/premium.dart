@@ -579,16 +579,16 @@ PremiumFailure premiumFailure(BridgeException error, {String? refusal}) {
     PremiumFailureKind.keyChangePending => const PremiumFailure(
       keyChangePendingMessage,
     ),
-    // The call goes through Tor whenever the backend of the active
-    // network does, and nothing falls back to the clear: a Tor that
+    // The call goes through Tor as soon as the backend of any network
+    // is an onion, and nothing falls back to the clear: a Tor that
     // cannot be reached is a call that never happened. The core's own
     // sentence names the proxy it wanted, which is not what a person
     // reading this card can act on.
     PremiumFailureKind.tor => const PremiumFailure(
       'Tor is not available on this phone.',
       hint:
-          'These calls go through Tor and never around it. The Tor card '
-          'is under Network.',
+          'With a server on Tor for any network, these calls go through Tor '
+          'too, and never around it. The Tor card is under Network.',
       retry: true,
     ),
     PremiumFailureKind.other => PremiumFailure(

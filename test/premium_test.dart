@@ -134,6 +134,30 @@ void main() {
       }
     });
 
+    test('what the client now refuses reads as the server out of reach', () {
+      // A redirect is not followed, and an answer past 2 MiB is not
+      // read: either way, the server did not answer as it does.
+      for (final message in [
+        'the premium server is unreachable: HTTP 307',
+        'unexpected answer from the premium server: an answer over 2 MiB',
+      ]) {
+        final failure = premiumFailure(
+          BridgeException('premium_unreachable', message),
+        );
+        expect(failure.message, 'Could not reach the Gerfaut server.');
+        expect(failure.retry, isTrue);
+      }
+    });
+
+    test('a Tor out of reach says where to look, not the proxy', () {
+      final failure = premiumFailure(
+        const BridgeException('tor', 'tor: no Tor proxy to reach x through'),
+      );
+      expect(failure.message, 'Tor is not available on this phone.');
+      expect(failure.hint, contains('any network'));
+      expect(failure.hint, isNot(contains('proxy')));
+    });
+
     test('a request to slow down is calm, and counts the wait', () {
       final named = premiumFailure(
         const BridgeException(
@@ -1315,8 +1339,8 @@ void main() {
       expect(find.text('Tor is not available on this phone.'), findsOneWidget);
       expect(
         find.text(
-          'These calls go through Tor and never around it. The Tor card '
-          'is under Network.',
+          'With a server on Tor for any network, these calls go through Tor '
+          'too, and never around it. The Tor card is under Network.',
         ),
         findsOneWidget,
       );

@@ -805,9 +805,9 @@ pub async fn import_backup(source: String, password: String, choices_json: Strin
 ///
 /// Clearnet, which does not settle how the call travels: the manager
 /// sends it through Tor when the base URL is an onion and also when the
-/// backend of the active network is one, since a person who reaches
-/// their own node through Tor did not choose to show their address to
-/// this server instead. A Tor that cannot be reached then is a call
+/// backend of any network is one, since a person who reaches their own
+/// node through Tor did not choose to show their address to this server
+/// instead, whichever network is on screen. A Tor that cannot be reached then is a call
 /// that does not happen, reported as `tor`; nothing falls back to the
 /// clear.
 fn premium_base_url() -> String {
