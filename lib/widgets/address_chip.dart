@@ -30,11 +30,23 @@ class AddressChip extends StatefulWidget {
     this.head = 6,
     this.tail = 4,
     this.emphasis = false,
+    this.kind,
+    this.spoken,
   });
 
   final String value;
   final int head;
   final int tail;
+
+  /// What the value is, said before it to a screen reader: "address",
+  /// "outpoint". Null says the value alone.
+  final String? kind;
+
+  /// What a screen reader says in place of the whole value, when the
+  /// whole of it is noise rather than something to check: the 64 hex
+  /// characters of a txid, read one by one. An address is always said
+  /// in full, since hearing it is how it is checked.
+  final String? spoken;
 
   /// Wallet-owned address: primary wash and full-strength medium text,
   /// so "mine" reads against the muted external gray (desktop mirror).
@@ -123,7 +135,11 @@ class _AddressChipState extends State<AddressChip> {
         : double.infinity;
     return Semantics(
       button: true,
-      label: 'Copy ${widget.value}',
+      label: [
+        'Copy',
+        if (widget.kind != null) widget.kind!,
+        widget.spoken ?? widget.value,
+      ].join(' '),
       child: InkWell(
         borderRadius: BorderRadius.circular(GerfautRadius.sm),
         onTap: _copy,

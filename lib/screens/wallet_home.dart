@@ -593,64 +593,88 @@ class _UtxoList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final utxos = ref.watch(utxosProvider(walletId));
+    // Every sync reads the list again: the rows already on screen stay
+    // there meanwhile, as the balance above does, rather than giving
+    // way to a loading line each time.
+    final value = utxos.isLoading || !utxos.hasError ? utxos.valueOrNull : null;
 
-    return switch (utxos) {
-      AsyncData(:final value) when value.isEmpty => const EmptyState(
+    if (value == null) {
+      return Center(
+        child: Text(
+          utxos.hasError ? 'UTXOs could not be loaded.' : 'Loading UTXOs…',
+          style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+        ),
+      );
+    }
+    if (value.isEmpty) {
+      return const EmptyState(
         title: 'No unspent outputs',
         hint: 'UTXOs appear here as soon as the wallet holds coins.',
-      ),
-      AsyncData(:final value) => ListView.separated(
-        itemCount: value.length,
-        separatorBuilder: (_, _) =>
-            Divider(height: 1, thickness: 1, color: tokens.border),
-        itemBuilder: (context, index) {
-          final utxo = value[index];
-          return Container(
-            constraints: const BoxConstraints(minHeight: 44),
-            padding: const EdgeInsets.symmetric(
-              horizontal: GerfautSpacing.md,
-              vertical: GerfautSpacing.sm,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      AddressChip(value: utxo.outpoint, head: 8, tail: 6),
-                      if (utxo.address != null) ...[
-                        const SizedBox(height: GerfautSpacing.xs),
-                        AddressChip(value: utxo.address!),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(width: GerfautSpacing.sm),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+      );
+    }
+    return ListView.separated(
+      itemCount: value.length,
+      separatorBuilder: (_, _) =>
+          Divider(height: 1, thickness: 1, color: tokens.border),
+      itemBuilder: (context, index) {
+        final utxo = value[index];
+        return Container(
+          constraints: const BoxConstraints(minHeight: 48),
+          padding: const EdgeInsets.symmetric(
+            horizontal: GerfautSpacing.md,
+            vertical: GerfautSpacing.sm,
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    StatusPill(status: utxo.status),
+                    AddressChip(
+                      value: utxo.outpoint,
+                      head: 8,
+                      tail: 6,
+                      kind: 'outpoint',
+                      // The start of the txid and the output: enough to
+                      // tell two coins apart by ear.
+                      spoken:
+                          '${utxo.txid.substring(0, 8)}, output ${utxo.vout}',
+                    ),
                     const SizedBox(height: GerfautSpacing.xs),
-                    StackedAmount(sats: utxo.valueSats),
+                    if (utxo.address != null)
+                      AddressChip(value: utxo.address!, kind: 'address')
+                    else
+                      // A script with no address form: said, as on
+                      // desktop, rather than left as a gap.
+                      Semantics(
+                        container: true,
+                        label: 'No address',
+                        child: ExcludeSemantics(
+                          child: Text(
+                            'n/a',
+                            style: tokens.data.copyWith(
+                              fontSize: 12,
+                              color: tokens.textMuted,
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
-              ],
-            ),
-          );
-        },
-      ),
-      AsyncError() => Center(
-        child: Text(
-          'UTXOs could not be loaded.',
-          style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-        ),
-      ),
-      _ => Center(
-        child: Text(
-          'Loading UTXOs…',
-          style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-        ),
-      ),
-    };
+              ),
+              const SizedBox(width: GerfautSpacing.sm),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  StatusPill(status: utxo.status),
+                  const SizedBox(height: GerfautSpacing.xs),
+                  StackedAmount(sats: utxo.valueSats),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }

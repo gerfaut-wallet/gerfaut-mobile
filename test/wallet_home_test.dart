@@ -20,6 +20,8 @@ import 'menu.dart';
 import 'policy_fixtures.dart';
 
 void main() {
+  _utxoTests();
+
   testWidgets('wallet home shows the balance and masks it on demand', (
     tester,
   ) async {
@@ -666,5 +668,160 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(GerfautNotice), findsOneWidget);
     expect(find.text('the policy cannot be read'), findsOneWidget);
+  });
+}
+
+/// The bridge of [FakeBridge], whose UTXO reads can be held or refused.
+class _UtxoBridge extends FakeBridge {
+  _UtxoBridge({required super.wallets, required super.snapshots, super.utxos});
+
+  Completer<void>? gate;
+  bool fails = false;
+  int reads = 0;
+
+  @override
+  Future<List<UtxoInfo>> utxos(String id) async {
+    reads++;
+    await gate?.future;
+    if (fails) throw const BridgeException('internal', 'vault read failed');
+    return super.utxos(id);
+  }
+}
+
+const _txid =
+    'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
+
+Future<_UtxoBridge> _openUtxos(
+  WidgetTester tester, {
+  List<UtxoInfo>? utxos,
+  bool fails = false,
+}) async {
+  final meta = makeMeta(totalSats: 150000);
+  final bridge = _UtxoBridge(
+    wallets: [meta],
+    snapshots: {'w1': makeSnapshot(meta: meta, totalSats: 150000)},
+    utxos: {
+      'w1':
+          utxos ??
+          const [
+            UtxoInfo(
+              txid: _txid,
+              vout: 1,
+              address: 'tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl',
+              valueSats: 100000,
+              status: TxStatus.confirmed(height: 200000),
+              keychain: 'external',
+              derivationIndex: 0,
+            ),
+            UtxoInfo(
+              txid: _txid,
+              vout: 0,
+              address: null,
+              valueSats: 50000,
+              status: TxStatus.pending(),
+              keychain: null,
+              derivationIndex: null,
+            ),
+          ],
+    },
+  )..fails = fails;
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [bridgeProvider.overrideWithValue(bridge)],
+      child: MaterialApp(
+        theme: themeFrom(GerfautTokens.light, Brightness.light),
+        home: const WalletHomeScreen(walletId: 'w1'),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('UTXOs'));
+  await tester.pumpAndSettle();
+  return bridge;
+}
+
+void _utxoTests() {
+  group('the UTXOs tab', () {
+    testWidgets('one row per coin: outpoint, address, state, amount', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      await _openUtxos(tester);
+
+      expect(find.textContaining('a1b2c3d4'), findsNWidgets(2));
+      expect(find.text('Confirmed'), findsOneWidget);
+      expect(find.text('Pending'), findsOneWidget);
+      expect(find.textContaining('0.00100000', findRichText: true), findsOne);
+      // A coin with no address says so rather than leaving a gap.
+      expect(find.text('n/a'), findsOneWidget);
+      expect(find.bySemanticsLabel('No address'), findsOneWidget);
+      // TalkBack hears what each chip is; the outpoint shortened, the
+      // address in full, since hearing it is how it is checked.
+      expect(
+        find.bySemanticsLabel(RegExp(r'^Copy outpoint a1b2c3d4, output 1')),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsLabel(RegExp(r'^Copy outpoint a1b2c3d4, output 0')),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsLabel(
+          RegExp(r'^Copy address tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl'),
+        ),
+        findsOneWidget,
+      );
+      semantics.dispose();
+    });
+
+    testWidgets('hidden balances hide the coins too', (tester) async {
+      await _openUtxos(tester);
+      await pickFromMenu(tester, 'Hide balances');
+      await tester.tap(find.text('UTXOs'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('0.00100000', findRichText: true),
+        findsNothing,
+      );
+      expect(
+        find.textContaining('0.00050000', findRichText: true),
+        findsNothing,
+      );
+      expect(find.text('Confirmed'), findsOneWidget);
+    });
+
+    testWidgets('the rows stay on screen while a sync reads them again', (
+      tester,
+    ) async {
+      final bridge = await _openUtxos(tester);
+      final gate = bridge.gate = Completer<void>();
+      final container = ProviderScope.containerOf(
+        tester.element(find.text('Confirmed')),
+      );
+      container.invalidate(utxosProvider('w1'));
+      await tester.pump();
+      await tester.pump();
+      expect(bridge.reads, 2);
+      expect(find.text('Loading UTXOs…'), findsNothing);
+      expect(find.text('Confirmed'), findsOneWidget);
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Confirmed'), findsOneWidget);
+    });
+
+    testWidgets('a list that cannot be read says so', (tester) async {
+      await _openUtxos(tester, fails: true);
+      expect(find.text('UTXOs could not be loaded.'), findsOneWidget);
+      expect(find.text('No unspent outputs'), findsNothing);
+    });
+
+    testWidgets('no coins: says what the tab is for', (tester) async {
+      await _openUtxos(tester, utxos: const []);
+      expect(find.text('No unspent outputs'), findsOneWidget);
+      expect(
+        find.text('UTXOs appear here as soon as the wallet holds coins.'),
+        findsOneWidget,
+      );
+    });
   });
 }
