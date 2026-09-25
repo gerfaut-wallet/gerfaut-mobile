@@ -214,8 +214,10 @@ The first release: Gerfaut for Android.
   and TalkBack says which chip holds the outpoint and which the address.
 - A QR code that announces more than 10,000 parts is refused before it is
   read. One such frame used to make the app quit.
-- Importing a wallet or a transaction from a file that is too large, or not
-  text, now says so instead of failing silently.
+- Importing a wallet, a transaction or a backup from a file that is too
+  large, such as a video, now says so. The app used to read the whole file
+  first, which could make it quit. A wallet file that is not text says so
+  too.
 - Turning Live off and on again within a few seconds now starts it again.
   It used to stay off until the app came back to the screen.
 - Leaving Settings › Premium before the server answers no longer leaves the
