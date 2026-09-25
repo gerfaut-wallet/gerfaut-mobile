@@ -13,6 +13,7 @@ import 'format.dart';
 import 'home_widgets.dart';
 import 'models.dart';
 import 'notifications.dart';
+import 'quiet_errors.dart';
 import 'vault_key.dart';
 
 /// The one task Gerfaut registers. A stable name: registering again
@@ -74,6 +75,7 @@ Future<void> registerWidgetRefresh(bool wanted) async {
 /// annotated, or the tree shaker drops it from a release build.
 @pragma('vm:entry-point')
 void callbackDispatcher() {
+  quietErrorsInRelease();
   Workmanager().executeTask(
     (task, _) =>
         task == widgetsTaskName ? refreshWidgets() : runBackgroundCheck(),
