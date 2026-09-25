@@ -191,6 +191,7 @@ The first release: Gerfaut for Android.
 
 ### Changed
 
+- Syncs use far less data. Gerfaut now downloads only what a wallet does not have yet, and a payment that Live notices costs a few kilobytes instead of the wallet's whole history. A wallet is still read in full when the vault opens and once a day.
 - Broadcast warns in red when a signature leaves the outputs open
   (SIGHASH_NONE or SIGHASH_SINGLE). Whoever relays such a transaction can
   send that money elsewhere, so the page tells you not to send it as it is.
