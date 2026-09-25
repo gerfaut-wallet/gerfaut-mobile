@@ -12,7 +12,7 @@ use crate::frb_generated::StreamSink;
 use gerfaut_core::backup::{BackupOptions, ImportChoices};
 use gerfaut_core::chain::BackendConfig;
 use gerfaut_core::chain::tor::TorSettings;
-use gerfaut_core::error::PremiumError;
+use gerfaut_core::error::{PremiumError, VaultError};
 use gerfaut_core::export::ExportOptions;
 use gerfaut_core::input::{ImportOptions, ParsedInput, ScriptKind};
 use gerfaut_core::live::LiveEvent;
@@ -74,6 +74,10 @@ fn core_error_kind(error: &CoreError) -> &'static str {
         CoreError::NetworkMismatch { .. } => "network_mismatch",
         CoreError::WalletNotFound(_) => "wallet_not_found",
         CoreError::DuplicateWallet(_) => "duplicate_wallet",
+        // Another open holds the vault, and nothing was read: the vault
+        // is healthy. A kind of its own, so no screen ever takes it for
+        // one that cannot be opened and offers to set it aside.
+        CoreError::Vault(VaultError::AlreadyOpen) => "vault_in_use",
         CoreError::Vault(_) => "vault",
         CoreError::Sync { .. } => "sync",
         CoreError::BackendUnavailable(_) => "backend_unavailable",
@@ -282,18 +286,20 @@ fn refuse_oversized_nested_ur(text: &str) -> Result<(), String> {
 /// Opens (or creates) the vault under `data_dir` with a 32-byte key given
 /// as 64 hex characters. Idempotent: once initialized, later calls (hot
 /// restarts) succeed without reopening.
+///
+/// The screens, the periodic task and the live watch each run in an
+/// isolate of their own, in this one process, and each calls this when
+/// it starts: two of them can call it at once. The vault takes one
+/// opener at a time, within a process as between two, so a second open
+/// would fail with `vault_in_use` instead of finding the first. One
+/// call opens, and any other waits for it and shares its manager.
 pub async fn init_manager(data_dir: String, key_hex: String) -> String {
     let key = try_json!(decode_key(&key_hex));
-    if MANAGER.initialized() {
-        return ok_json();
-    }
-    match WalletManager::open(data_dir, VaultKey::Raw(key)) {
-        Ok(manager) => {
-            // A concurrent call may have won the race; both used the same
-            // key and directory, so either instance is fine.
-            let _ = MANAGER.set(manager);
-            ok_json()
-        }
+    let opened = MANAGER
+        .get_or_try_init(|| async move { WalletManager::open(data_dir, VaultKey::Raw(key)) })
+        .await;
+    match opened {
+        Ok(_) => ok_json(),
         Err(e) => core_error_json(&e),
     }
 }
@@ -1610,6 +1616,55 @@ mod tests {
     fn a_release_build_logs_nothing() {
         assert_eq!(console_log_level(false), None);
         assert_eq!(console_log_level(true), Some(log::LevelFilter::Trace));
+    }
+
+    /// A vault another open holds is its own kind: a healthy vault,
+    /// which no screen may take for one that cannot be opened.
+    #[test]
+    fn a_vault_held_elsewhere_is_its_own_kind() {
+        let held = CoreError::Vault(VaultError::AlreadyOpen);
+        assert_eq!(payload(&held)["error"]["kind"], "vault_in_use");
+        let broken = CoreError::Vault(VaultError::NotAVault);
+        assert_eq!(payload(&broken)["error"]["kind"], "vault");
+    }
+
+    /// The isolates of the app call `init_manager` together at a cold
+    /// start: every one of them gets the manager, none `vault_in_use`,
+    /// and the vault is opened once, so a second opener is still kept
+    /// out.
+    #[test]
+    fn isolates_opening_the_vault_together_share_one_manager() {
+        let dir = std::env::temp_dir().join(format!(
+            "gerfaut-mobile-init-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let key_hex = "07".repeat(32);
+        let start = std::sync::Arc::new(std::sync::Barrier::new(8));
+        let callers: Vec<_> = (0..8)
+            .map(|_| {
+                let (dir, key_hex, start) = (dir.clone(), key_hex.clone(), start.clone());
+                std::thread::spawn(move || {
+                    let runtime = tokio::runtime::Builder::new_current_thread()
+                        .build()
+                        .unwrap();
+                    start.wait();
+                    runtime.block_on(init_manager(dir.to_string_lossy().into_owned(), key_hex))
+                })
+            })
+            .collect();
+        for caller in callers {
+            let answer: Value = serde_json::from_str(&caller.join().unwrap()).unwrap();
+            assert_eq!(answer, json!({ "ok": true }), "{answer}");
+        }
+        let second = WalletManager::open(&dir, VaultKey::Raw([7u8; 32]))
+            .err()
+            .expect("the vault is held");
+        assert_eq!(payload(&second)["error"]["kind"], "vault_in_use");
     }
 
     /// The words of a refusal are the server's own, and nothing else:
