@@ -2264,6 +2264,43 @@ void main() {
       expect(find.byType(AlertBanner), findsNothing);
     });
 
+    Future<FakeBridge> offline(WidgetTester tester) async {
+      final bridge = watching();
+      bridge.onPremiumHeartbeat = () => throw const BridgeException(
+        'premium_unreachable',
+        'the premium server is unreachable: could not connect',
+      );
+      await tester.pumpWidget(wholeApp(bridge));
+      await tester.pumpAndSettle();
+      await tester.pump(heartbeatPeriod);
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertBanner), findsOneWidget);
+      return bridge;
+    }
+
+    testWidgets('the banner goes with the last watched wallet', (tester) async {
+      final bridge = await offline(tester);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(AlertBanner)),
+      );
+
+      // The last wallet unwatched in the middle of the outage.
+      bridge.premiumConsents.clear();
+      container.invalidate(premiumStateProvider);
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertBanner), findsNothing);
+      expect(container.read(watchMonitorProvider).failures, 0);
+
+      // Watched again: a new watch, which one missed beat does not
+      // make offline.
+      bridge.premiumConsents.add(
+        const WatchConsent(walletId: 'w1', consentedAt: 2),
+      );
+      container.invalidate(premiumStateProvider);
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertBanner), findsNothing);
+    });
+
     testWidgets('nothing beats while no wallet is watched', (tester) async {
       final bridge = premiumBridge(activated: true);
       await tester.pumpWidget(wholeApp(bridge));

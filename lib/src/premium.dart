@@ -991,6 +991,11 @@ class WatchMonitor extends Notifier<WatchStatus> {
     if (!active) {
       _timer?.cancel();
       _timer = null;
+      // Nothing is handed to the server any more, by a forgotten key or
+      // the last wallet unwatched: the outage of a watch that no longer
+      // exists says nothing, and a new watch starts from a clean slate.
+      _status = const WatchStatus();
+      _lastCheckAt = null;
       return _status;
     }
     _timer ??= Timer.periodic(heartbeatPeriod, (_) => check());
@@ -1041,6 +1046,8 @@ class WatchMonitor extends Notifier<WatchStatus> {
       );
     } finally {
       _checking = false;
+      // The watch may have ended while the beat was out.
+      if (!_active) _status = const WatchStatus();
       state = _status;
     }
   }
