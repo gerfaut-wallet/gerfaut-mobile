@@ -196,15 +196,15 @@ void main() {
 
       await tester.tap(find.text('Next address'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Beyond the gap limit'), findsNothing);
+      expect(find.textContaining('beyond the gap limit'), findsNothing);
 
       await tester.tap(find.text('Next address'));
       await tester.pumpAndSettle();
 
       expect(
         find.text(
-          'This is 2 addresses past the next unused one. Beyond the gap '
-          'limit of 2, other wallet software may not detect funds received '
+          '2 unused addresses in a row come before this one, beyond the gap '
+          'limit of 2: other wallet software may not detect funds received '
           'here.',
         ),
         findsOneWidget,
@@ -223,10 +223,10 @@ void main() {
 
       await tester.tap(find.text('First unused'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Beyond the gap limit'), findsNothing);
+      expect(find.textContaining('beyond the gap limit'), findsNothing);
     });
 
-    testWidgets('an address a payment reached is skipped, and counted', (
+    testWidgets('an address a payment reached is skipped, and ends the run', (
       tester,
     ) async {
       useTallSurface(tester);
@@ -240,12 +240,34 @@ void main() {
 
       await tester.tap(find.text('Next address'));
       await tester.pumpAndSettle();
-      // Indexes 1 and 2 were paid: the next on offer is 3, three past
-      // the next unused on the derivation path, which is what the gap
-      // limit counts.
+      // Indexes 1 and 2 were paid: the next on offer is 3. Software that
+      // scans finds those two, so only index 0 is unused before it, and
+      // the gap limit of 3 is nowhere near.
       expect(find.text('UNUSED ADDRESS · INDEX 3'), findsOneWidget);
+      expect(find.textContaining('beyond the gap limit'), findsNothing);
+    });
+
+    testWidgets('the longest unused run counts, wherever it lies', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final meta = makeMeta(gapLimit: 3);
+      final bridge = FakeBridge(
+        wallets: [meta],
+        snapshots: {'w1': makeSnapshot(meta: meta)},
+      )..paidAhead['w1'] = {4};
+      await tester.pumpWidget(receiveApp(bridge));
+      await tester.pumpAndSettle();
+
+      for (var i = 0; i < 4; i++) {
+        await tester.tap(find.text('Next address'));
+        await tester.pumpAndSettle();
+      }
+      // 0 to 3 unused, 4 paid, then 5: the run of four before the paid
+      // one is where a scan with a gap limit of 3 stops.
+      expect(find.text('UNUSED ADDRESS · INDEX 5'), findsOneWidget);
       expect(
-        find.textContaining('This is 3 addresses past the next unused one.'),
+        find.textContaining('4 unused addresses in a row come before this'),
         findsOneWidget,
       );
     });

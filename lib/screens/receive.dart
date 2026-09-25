@@ -28,6 +28,25 @@ const int _collapsedRows = 5;
 /// derives no more upcoming addresses than this at once.
 const int maxReceivePeek = 200;
 
+/// The longest run of unused addresses, one after the other on the
+/// derivation path, before the one at [position] in [entries].
+///
+/// This is what the gap limit counts: software that scans stops after
+/// that many unused addresses in a row. The core skips an upcoming
+/// address a payment already reached, so a jump in the indexes is a
+/// used address, and the run starts over after it. Every address
+/// before the first entry, the next unused one, is used.
+int unusedInARow(List<AddressEntry> entries, int position) {
+  var longest = 0;
+  var run = 0;
+  for (var k = 0; k < position; k++) {
+    if (k > 0 && entries[k].index != entries[k - 1].index + 1) run = 0;
+    run += 1;
+    if (run > longest) longest = run;
+  }
+  return longest;
+}
+
 /// Receive: the next unused address first, with its QR code, copy with
 /// explicit feedback and a way to skip ahead; then the audit of every
 /// revealed address, external and change in their own cards. The whole
@@ -119,10 +138,7 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
                     single: single,
                     oneAddress: oneAddress,
                     offset: _offset,
-                    // Counted on the derivation path, the way the gap
-                    // limit is: skipped addresses a payment reached
-                    // count too.
-                    distance: entry.index - list!.first.index,
+                    gap: unusedInARow(list!, min(_offset, list.length - 1)),
                     hasNext: hasNext,
                     gapLimit: gapLimit,
                     copied: _copied,
@@ -199,7 +215,7 @@ class _AddressBlock extends StatelessWidget {
     required this.single,
     required this.oneAddress,
     required this.offset,
-    required this.distance,
+    required this.gap,
     required this.hasNext,
     required this.gapLimit,
     required this.copied,
@@ -217,8 +233,8 @@ class _AddressBlock extends StatelessWidget {
   final bool oneAddress;
   final int offset;
 
-  /// How many indexes the address on offer lies past the next unused.
-  final int distance;
+  /// The longest run of unused addresses before the one on offer.
+  final int gap;
 
   /// Whether the core has another address past this one to offer.
   final bool hasNext;
@@ -332,15 +348,15 @@ class _AddressBlock extends StatelessWidget {
             ),
           ],
         ],
-        if (!oneAddress && distance >= gapLimit) ...[
+        if (!oneAddress && gap >= gapLimit) ...[
           const SizedBox(height: GerfautSpacing.md),
           // Peeking this far outruns what scanning software derives:
           // state it in the pending tint, not as an alarm.
           GerfautNotice(
             tone: NoticeTone.info,
             message:
-                'This is $distance addresses past the next unused one. '
-                'Beyond the gap limit of $gapLimit, other wallet software may '
+                '$gap unused addresses in a row come before this one, '
+                'beyond the gap limit of $gapLimit: other wallet software may '
                 'not detect funds received here.',
           ),
         ],

@@ -222,9 +222,9 @@ The first release: Gerfaut for Android.
   is already open and offers to try again. It never sets that vault aside,
   and a background check quietly skips its turn.
 - Receive offers only addresses nobody has paid yet, and stops 200
-  addresses past the next unused one. The gap limit warning counts along
-  the derivation path, and a descriptor with a single address offers no
-  next one.
+  addresses past the next unused one. The gap limit warning counts unused
+  addresses in a row, as scanning software does, and a descriptor with a
+  single address offers no next one.
 - The wallet file picker shows every file, so a .bsms or .desc file can be
   picked. It used to grey them out.
 - When the app refuses a backend, for example a host with a port still in
