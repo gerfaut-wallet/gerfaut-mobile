@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../src/live.dart';
+import '../../src/lock.dart';
 import '../../src/models.dart';
 import '../../src/notifications.dart';
 import '../../src/state.dart';
@@ -40,7 +41,11 @@ class _LiveSheetState extends ConsumerState<LiveSheet> {
   _Step _step = _Step.explain;
   bool _busy = false;
   bool _throughTor = false;
-  PhoneMaker? _maker;
+  PhoneBrand? _brand;
+
+  /// Whether Android's battery exemption is granted, as last answered:
+  /// the maker card leaves out the step that only grants it again.
+  bool _exempt = false;
 
   @override
   void initState() {
@@ -68,7 +73,8 @@ class _LiveSheetState extends ConsumerState<LiveSheet> {
           .set(BackgroundCheck.live);
       final platform = ref.read(livePlatformProvider);
       final exempt = await platform.isBatteryExempt();
-      _maker = PhoneMaker.of(await platform.manufacturer());
+      _exempt = exempt;
+      _brand = PhoneBrand.of(await platform.manufacturer());
       if (!mounted) return;
       if (!exempt) {
         setState(() => _step = _Step.battery);
@@ -83,7 +89,7 @@ class _LiveSheetState extends ConsumerState<LiveSheet> {
   Future<void> _askBattery() async {
     setState(() => _busy = true);
     try {
-      await ref.read(liveProvider.notifier).requestBatteryExemption();
+      _exempt = await ref.read(liveProvider.notifier).requestBatteryExemption();
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -93,7 +99,7 @@ class _LiveSheetState extends ConsumerState<LiveSheet> {
   }
 
   void _afterBattery() {
-    if (_maker != null) {
+    if (_brand != null) {
       setState(() => _step = _Step.phoneMaker);
     } else {
       Navigator.of(context).pop(true);
@@ -245,30 +251,61 @@ class _LiveSheetState extends ConsumerState<LiveSheet> {
     ];
   }
 
+  /// Opens Gerfaut's page in the system settings. The trip is one the
+  /// sheet sends the user on, and the steps are still to be read on the
+  /// way back: it does not count as leaving the app.
+  Future<void> _openAppSettings() async {
+    final lock = ref.read(lockProvider.notifier)..expectExcursion();
+    final opened = await ref.read(livePlatformProvider).openAppSettings();
+    if (!opened) lock.forgetExcursion();
+  }
+
   List<Widget> _phoneMaker(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final maker = _maker!;
+    final brand = _brand!;
+    final steps = brand.maker.stepsFor(exempt: _exempt);
     final muted = tokens.bodySmall.copyWith(color: tokens.textMuted);
     return [
-      Text('On a ${maker.label} phone', style: tokens.h2),
+      Semantics(
+        header: true,
+        child: Text('On a ${brand.label} phone', style: tokens.h2),
+      ),
       const SizedBox(height: GerfautSpacing.sm),
       Text(
-        'This phone has a battery manager of its own that stops '
-        'background apps whatever Android says. To keep Live running:',
+        'This phone runs its own battery manager, and it stops background '
+        'apps whatever Android allows. Gerfaut cannot change these settings '
+        'for you. To keep Live running:',
         style: tokens.body,
       ),
       const SizedBox(height: GerfautSpacing.sm),
-      for (final (index, step) in maker.steps.indexed)
+      for (final (index, step) in steps.indexed)
         Padding(
           padding: const EdgeInsets.only(bottom: GerfautSpacing.xs),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(width: 20, child: Text('${index + 1}.', style: muted)),
-              Expanded(child: Text(step, style: muted)),
-            ],
+          // One node per step, its place in the list said first.
+          child: MergeSemantics(
+            child: Semantics(
+              label: 'Step ${index + 1} of ${steps.length}.',
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ExcludeSemantics(
+                    child: SizedBox(
+                      width: 20,
+                      child: Text('${index + 1}.', style: muted),
+                    ),
+                  ),
+                  Expanded(child: Text(step, style: muted)),
+                ],
+              ),
+            ),
           ),
         ),
+      const SizedBox(height: GerfautSpacing.sm),
+      SecondaryButton(
+        label: 'Open Gerfaut’s app info',
+        icon: LucideIcons.settings,
+        onPressed: _openAppSettings,
+      ),
       const SizedBox(height: GerfautSpacing.sm),
       Text(
         'Menus move from one version to the next. dontkillmyapp.com keeps '
@@ -286,7 +323,7 @@ class _LiveSheetState extends ConsumerState<LiveSheet> {
         label: 'Open dontkillmyapp.com',
         icon: LucideIcons.externalLink,
         onPressed: () => launchUrl(
-          Uri.parse(maker.helpUrl),
+          Uri.parse(brand.helpUrl),
           mode: LaunchMode.externalApplication,
         ),
       ),

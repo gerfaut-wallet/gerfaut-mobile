@@ -72,6 +72,7 @@ class FakeLivePlatform implements LivePlatform {
     this.grantsExemption = true,
     this.startSucceeds = true,
     this.maker = 'Google',
+    this.opensAppSettings = true,
   });
 
   bool running;
@@ -80,6 +81,7 @@ class FakeLivePlatform implements LivePlatform {
   bool grantsExemption;
   bool startSucceeds;
   String maker;
+  bool opensAppSettings;
 
   /// Every call, in order, for assertions.
   final List<String> calls = [];
@@ -117,6 +119,12 @@ class FakeLivePlatform implements LivePlatform {
 
   @override
   Future<String> manufacturer() async => maker;
+
+  @override
+  Future<bool> openAppSettings() async {
+    calls.add('appSettings');
+    return opensAppSettings;
+  }
 }
 
 class FakeDisguise implements Disguise {

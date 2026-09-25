@@ -160,6 +160,7 @@ class MainActivity : FlutterFragmentActivity() {
                     "isBatteryExempt" -> result.success(isBatteryExempt())
                     "requestBatteryExemption" -> requestBatteryExemption(result)
                     "manufacturer" -> result.success(Build.MANUFACTURER ?: "")
+                    "openAppSettings" -> result.success(openAppSettings())
                     else -> result.notImplemented()
                 }
             } catch (error: Exception) {
@@ -231,6 +232,24 @@ class MainActivity : FlutterFragmentActivity() {
             }
         }
         result.success(false)
+    }
+
+    // Opens this app's own page in the system settings. Every maker
+    // keeps its per-app battery switches there or one tap away, and no
+    // app may flip them itself: the most it can do is open the page.
+    // The one intent every Android has for it. Answers false when the
+    // page did not open.
+    private fun openAppSettings(): Boolean {
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", packageName, null),
+        )
+        return try {
+            startActivity(intent)
+            true
+        } catch (_: ActivityNotFoundException) {
+            false
+        }
     }
 
     // FLAG_SECURE blanks this window in screenshots, in screen

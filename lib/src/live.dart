@@ -59,6 +59,10 @@ abstract class LivePlatform {
 
   /// `Build.MANUFACTURER`, as the phone spells it.
   Future<String> manufacturer();
+
+  /// Opens Gerfaut's own page in the system settings, where every maker
+  /// keeps its per-app battery switches. False when it did not open.
+  Future<bool> openAppSettings();
 }
 
 /// The real thing: a method channel the Android activity answers.
@@ -98,55 +102,123 @@ class SystemLivePlatform implements LivePlatform {
 
   @override
   Future<String> manufacturer() => _ask('manufacturer', '');
+
+  @override
+  Future<bool> openAppSettings() => _ask('openAppSettings', false);
 }
 
 final livePlatformProvider = Provider<LivePlatform>(
   (ref) => const SystemLivePlatform(),
 );
 
+/// One change to make in a maker's own settings.
+@immutable
+class MakerStep {
+  const MakerStep(this.text, {this.exemption = false});
+
+  final String text;
+
+  /// The step is the maker's own door to Android's battery exemption.
+  /// Once the exemption is granted it is already done, and saying it
+  /// again would send the user to a switch that is on.
+  final bool exemption;
+}
+
 /// Phones whose own battery managers stop background apps whatever
 /// Android says, with what to change on each. Short on purpose: the
 /// menus move between versions, and dontkillmyapp.com keeps up with
-/// them better than an app can.
+/// them better than an app can. Every menu name here comes from there,
+/// or from the phone itself: none is guessed.
+///
+/// None of these switches can be flipped by an app. The most Gerfaut
+/// can do is open its own page in the system settings, where the
+/// per-app ones live.
 enum PhoneMaker {
-  xiaomi('Xiaomi', [
-    'Settings › Apps › Gerfaut › Autostart: on.',
-    'Settings › Apps › Gerfaut › Battery saver: No restrictions.',
-    'In the recent apps, hold Gerfaut and tap the padlock.',
-  ], 'xiaomi'),
-  huawei('Huawei', [
-    'Settings › Battery › App launch › Gerfaut: Manage manually.',
-    'Leave the three switches on: Auto-launch, Secondary launch, '
-        'Run in background.',
-  ], 'huawei'),
-  samsung('Samsung', [
-    'Settings › Apps › Gerfaut › Battery: Unrestricted.',
-    'Settings › Battery › Background usage limits › Never sleeping '
-        'apps: add Gerfaut.',
-  ], 'samsung'),
-  onePlus('OnePlus', [
-    'Settings › Apps › Gerfaut › Battery usage: Allow background activity.',
-    'Settings › Battery › Battery optimisation › Gerfaut: Don’t optimise.',
-    'In the recent apps, open the menu of Gerfaut and tap Lock.',
-  ], 'oneplus');
+  xiaomi([
+    MakerStep('Settings › Apps › Gerfaut › Autostart: on.'),
+    MakerStep('Settings › Apps › Gerfaut › Battery saver: No restrictions.'),
+    MakerStep('In the recent apps, hold Gerfaut and tap the padlock.'),
+  ]),
+  huawei([
+    MakerStep(
+      'Settings › Battery › App launch › Gerfaut: Manage manually, and '
+      'leave every switch on.',
+    ),
+    MakerStep(
+      'In Settings, search for Battery optimisation, then set Gerfaut '
+      'to Don’t allow.',
+      exemption: true,
+    ),
+  ]),
+  samsung([
+    MakerStep(
+      'Settings › Apps › Gerfaut › Battery: Unrestricted.',
+      exemption: true,
+    ),
+    MakerStep(
+      'Settings › Battery › Background usage limits › Never sleeping '
+      'apps: add Gerfaut.',
+    ),
+  ]),
+  onePlus([
+    MakerStep(
+      'Settings › Apps › Gerfaut › Battery usage: turn on Allow '
+      'background activity.',
+    ),
+    MakerStep(
+      'On the same page, turn on Allow auto launch, so Live can start '
+      'again after Android stops it or after a restart.',
+    ),
+    MakerStep(
+      'Settings › Battery › Battery optimisation › Gerfaut: Don’t optimise.',
+      exemption: true,
+    ),
+    MakerStep('In the recent apps, open the menu of Gerfaut and tap Lock.'),
+  ]);
 
-  const PhoneMaker(this.label, this.steps, this.slug);
+  const PhoneMaker(this.steps);
 
-  final String label;
-  final List<String> steps;
-  final String slug;
+  final List<MakerStep> steps;
 
-  /// The page of dontkillmyapp.com for this maker.
-  String get helpUrl => 'https://dontkillmyapp.com/$slug';
+  /// What is left to do. With the exemption granted, the step that
+  /// only grants it again goes.
+  List<String> stepsFor({required bool exempt}) => [
+    for (final step in steps)
+      if (!(exempt && step.exemption)) step.text,
+  ];
 
   /// Reads `Build.MANUFACTURER`. The sister brands share a system with
   /// their parent, and its battery manager with it.
-  static PhoneMaker? of(String manufacturer) {
+  static PhoneMaker? of(String manufacturer) =>
+      PhoneBrand.of(manufacturer)?.maker;
+}
+
+/// The brand a phone wears, which is what its owner calls it, and the
+/// maker whose battery manager it runs.
+@immutable
+class PhoneBrand {
+  const PhoneBrand._(this.label, this.maker, this.slug);
+
+  final String label;
+  final PhoneMaker maker;
+
+  /// Its page on dontkillmyapp.com: a sister brand without one of its
+  /// own reads its parent's.
+  final String slug;
+
+  String get helpUrl => 'https://dontkillmyapp.com/$slug';
+
+  static PhoneBrand? of(String manufacturer) {
     return switch (manufacturer.trim().toLowerCase()) {
-      'xiaomi' || 'redmi' || 'poco' => PhoneMaker.xiaomi,
-      'huawei' || 'honor' => PhoneMaker.huawei,
-      'samsung' => PhoneMaker.samsung,
-      'oneplus' || 'oppo' || 'realme' => PhoneMaker.onePlus,
+      'xiaomi' => const PhoneBrand._('Xiaomi', PhoneMaker.xiaomi, 'xiaomi'),
+      'redmi' => const PhoneBrand._('Redmi', PhoneMaker.xiaomi, 'xiaomi'),
+      'poco' => const PhoneBrand._('POCO', PhoneMaker.xiaomi, 'xiaomi'),
+      'huawei' => const PhoneBrand._('Huawei', PhoneMaker.huawei, 'huawei'),
+      'honor' => const PhoneBrand._('Honor', PhoneMaker.huawei, 'huawei'),
+      'samsung' => const PhoneBrand._('Samsung', PhoneMaker.samsung, 'samsung'),
+      'oneplus' => const PhoneBrand._('OnePlus', PhoneMaker.onePlus, 'oneplus'),
+      'oppo' => const PhoneBrand._('Oppo', PhoneMaker.onePlus, 'oppo'),
+      'realme' => const PhoneBrand._('realme', PhoneMaker.onePlus, 'realme'),
       _ => null,
     };
   }

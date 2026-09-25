@@ -9,6 +9,7 @@ import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/live.dart';
+import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/notifications.dart';
 import 'package:gerfaut/src/state.dart';
@@ -1047,6 +1048,130 @@ void main() {
       expect(find.text('On a Xiaomi phone'), findsNothing);
     });
 
+    Future<void> reachMakerCard(
+      WidgetTester tester,
+      FakeLivePlatform platform,
+    ) async {
+      await _open(
+        tester,
+        _settings(_bridge(prefs: onPrefs), platform: platform),
+      );
+      await _pick(tester, 'Live');
+      await tester.tap(find.text('Turn on Live'));
+      await tester.pumpAndSettle();
+      if (find.text('Ask Android').evaluate().isNotEmpty) {
+        await tester.tap(find.text('Ask Android'));
+        await tester.pumpAndSettle();
+      }
+    }
+
+    testWidgets('a OnePlus with the exemption: its own switches, and no '
+        'step the exemption already took', (tester) async {
+      final platform = FakeLivePlatform(batteryExempt: true, maker: 'OnePlus');
+      await reachMakerCard(tester, platform);
+
+      expect(find.text('On a OnePlus phone'), findsOneWidget);
+      expect(find.textContaining('Allow background activity'), findsOne);
+      expect(find.textContaining('Allow auto launch'), findsOne);
+      expect(find.textContaining('tap Lock'), findsOne);
+      expect(find.textContaining('Battery optimisation'), findsNothing);
+      // Each step is one node for TalkBack, its place said first.
+      expect(find.bySemanticsLabel(RegExp(r'^Step 3 of 3\.')), findsOneWidget);
+    });
+
+    testWidgets('a refused exemption keeps the step that grants it', (
+      tester,
+    ) async {
+      final platform = FakeLivePlatform(
+        maker: 'OnePlus',
+        grantsExemption: false,
+      );
+      await reachMakerCard(tester, platform);
+
+      expect(find.text('On a OnePlus phone'), findsOneWidget);
+      expect(find.textContaining('Don’t optimise'), findsOne);
+      expect(find.bySemanticsLabel(RegExp(r'^Step 4 of 4\.')), findsOne);
+    });
+
+    testWidgets('a sister brand is called by its own name and page', (
+      tester,
+    ) async {
+      final launcher = FakeUrlLauncher();
+      UrlLauncherPlatform.instance = launcher;
+      final platform = FakeLivePlatform(batteryExempt: true, maker: 'OPPO');
+      await reachMakerCard(tester, platform);
+
+      expect(find.text('On a Oppo phone'), findsOneWidget);
+      expect(find.textContaining('Allow auto launch'), findsOne);
+      await tester.tap(find.text('Open dontkillmyapp.com'));
+      await tester.pumpAndSettle();
+      expect(launcher.launched, ['https://dontkillmyapp.com/oppo']);
+    });
+
+    testWidgets('Samsung and Huawei lose their exemption step once granted', (
+      tester,
+    ) async {
+      await reachMakerCard(
+        tester,
+        FakeLivePlatform(batteryExempt: true, maker: 'samsung'),
+      );
+      expect(find.textContaining('Never sleeping apps'), findsOne);
+      expect(find.textContaining('Unrestricted'), findsNothing);
+      expect(
+        PhoneMaker.huawei.stepsFor(exempt: true),
+        isNot(contains(contains('Battery optimisation'))),
+      );
+      expect(
+        PhoneMaker.huawei.stepsFor(exempt: false),
+        contains(contains('Battery optimisation')),
+      );
+    });
+
+    testWidgets('the card opens the app info page, as a trip that does '
+        'not lock the app', (tester) async {
+      final platform = FakeLivePlatform(batteryExempt: true, maker: 'OnePlus');
+      await reachMakerCard(tester, platform);
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.text('On a OnePlus phone')),
+      );
+      final lock = container.read(lockProvider.notifier)
+        ..syncFromSettings(null)
+        ..syncFromSettings(const AppLock(kind: LockKind.pin, biometric: false));
+
+      await tester.tap(find.text('Open Gerfaut’s app info'));
+      await tester.pumpAndSettle();
+      expect(platform.calls.last, 'appSettings');
+
+      // Away in the system settings, and back.
+      lock.noteHidden();
+      lock.noteResumed();
+      expect(container.read(lockProvider).locked, isFalse);
+    });
+
+    testWidgets('an app info page that does not open leaves the lock alone', (
+      tester,
+    ) async {
+      final platform = FakeLivePlatform(
+        batteryExempt: true,
+        maker: 'OnePlus',
+        opensAppSettings: false,
+      );
+      await reachMakerCard(tester, platform);
+      final container = ProviderScope.containerOf(
+        tester.element(find.text('On a OnePlus phone')),
+      );
+      final lock = container.read(lockProvider.notifier)
+        ..syncFromSettings(null)
+        ..syncFromSettings(const AppLock(kind: LockKind.pin, biometric: false));
+
+      await tester.tap(find.text('Open Gerfaut’s app info'));
+      await tester.pumpAndSettle();
+      lock.noteHidden();
+      lock.noteResumed();
+      expect(container.read(lockProvider).locked, isTrue);
+    });
+
     test('only the four makers get a card, sister brands included', () {
       expect(PhoneMaker.of('Xiaomi'), PhoneMaker.xiaomi);
       expect(PhoneMaker.of('POCO'), PhoneMaker.xiaomi);
@@ -1055,6 +1180,28 @@ void main() {
       expect(PhoneMaker.of('realme'), PhoneMaker.onePlus);
       expect(PhoneMaker.of('Google'), isNull);
       expect(PhoneMaker.of(''), isNull);
+      expect(PhoneBrand.of('HONOR')!.label, 'Honor');
+      expect(
+        PhoneBrand.of('HONOR')!.helpUrl,
+        'https://dontkillmyapp.com/huawei',
+      );
+      expect(
+        PhoneBrand.of('realme')!.helpUrl,
+        'https://dontkillmyapp.com/realme',
+      );
+    });
+
+    test('no maker keeps a step the exemption covers once it is granted', () {
+      for (final maker in PhoneMaker.values) {
+        final covered = {
+          for (final step in maker.steps)
+            if (step.exemption) step.text,
+        };
+        final left = maker.stepsFor(exempt: true);
+        expect(left.where(covered.contains), isEmpty, reason: '$maker');
+        expect(left, isNotEmpty, reason: '$maker');
+        expect(maker.stepsFor(exempt: false).length, maker.steps.length);
+      }
     });
 
     testWidgets('over Tor, the sheet adds its caution', (tester) async {
