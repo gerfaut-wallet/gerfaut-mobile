@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../src/bridge.dart';
 import '../../src/electrum.dart';
 import '../../src/models.dart';
 import '../../src/state.dart';
@@ -66,6 +67,11 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
   /// Why the core refused the last scanned code, in its own words. Shown
   /// under the field the scan was meant to fill.
   String? _scanError;
+
+  /// Why the core refused the last save, in its own words: an address
+  /// it cannot read, such as a host with a port still in it. Shown under
+  /// the button that asked, until the form changes.
+  String? _saveError;
 
   /// The last scanned address names a Tor hidden service. Said under the
   /// fields for as long as they hold what was scanned: a keystroke or
@@ -142,6 +148,7 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
       _backendKind = kind;
       _certificateNote = null;
       _scanError = null;
+      _saveError = null;
       _scannedOnion = false;
     });
   }
@@ -152,6 +159,7 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
   void _onBackendFieldChanged() {
     setState(() {
       _scanError = null;
+      _saveError = null;
       _scannedOnion = false;
     });
   }
@@ -210,6 +218,7 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
     setState(() {
       _savingBackend = true;
       _certificateNote = null;
+      _saveError = null;
     });
     final config = switch (_backendKind) {
       'custom_esplora' => CustomEsplora(url: _esploraController.text.trim()),
@@ -224,6 +233,15 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
       await ref.read(bridgeProvider).setBackend(network, config);
       ref.invalidate(settingsProvider);
       if (mounted) _toast('Setting saved');
+    } on BridgeException catch (error) {
+      // Nothing was saved. A note about a certificate the check could
+      // not look at says nothing next to an address that was refused.
+      if (mounted) {
+        setState(() {
+          _certificateNote = null;
+          _saveError = error.message;
+        });
+      }
     } finally {
       if (mounted) setState(() => _savingBackend = false);
     }
@@ -522,6 +540,10 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
                     : () => _saveBackend(network),
               ),
             ),
+            if (_saveError != null) ...[
+              const SizedBox(height: GerfautSpacing.sm),
+              _ScanRefusal(reason: _saveError!, tokens: tokens),
+            ],
             if (_certificateNote != null) ...[
               const SizedBox(height: GerfautSpacing.sm),
               Text(

@@ -1067,9 +1067,14 @@ class FakeBridge implements GerfautBridge {
 
   @override
   Future<void> setBackend(Network network, BackendConfig config) async {
+    onSetBackend?.call(network, config);
     savedBackends[network] = config;
     _store(backends: {...settings.backends, network: config});
   }
+
+  /// Save hook; throw a [BridgeException] to have the core refuse the
+  /// backend. Nothing is saved then.
+  void Function(Network network, BackendConfig config)? onSetBackend;
 
   /// Catalogue hook; throw a [BridgeException] to simulate a bridge
   /// that cannot answer. The default serves [defaultPublicServers].

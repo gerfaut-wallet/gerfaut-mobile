@@ -512,10 +512,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(
-      find.widgetWithText(DangerButton, 'Remove wallet'),
-      findsOneWidget,
-    );
+    expect(find.widgetWithText(DangerButton, 'Remove wallet'), findsOneWidget);
   });
 
   testWidgets(
@@ -1112,6 +1109,35 @@ void main() {
       subject: 'CN=node.local',
       expires: 1893456000,
     );
+
+    testWidgets('an address the core refuses is said, and nothing saved', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      const reason =
+          'invalid server address: x.onion:50001 is not a server name';
+      final bridge = ownElectrum();
+      bridge.onInspectCertificate = (_) =>
+          const UnreachableCertificate(detail: 'not a server name');
+      bridge.onSetBackend = (_, _) =>
+          throw const BridgeException('invalid_input', reason);
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
+      await tester.pumpAndSettle();
+      await save(tester);
+
+      expect(find.text(reason), findsOneWidget);
+      expect(find.text('Setting saved'), findsNothing);
+      expect(bridge.savedBackends, isEmpty);
+      // Announced: nothing else on screen says the save was turned down.
+      final handle = tester.ensureSemantics();
+      expect(
+        tester.getSemantics(find.text(reason)).flagsCollection.isLiveRegion,
+        isTrue,
+      );
+      handle.dispose();
+    });
 
     testWidgets('an unvouched certificate is shown before anything is saved', (
       tester,
