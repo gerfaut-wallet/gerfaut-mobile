@@ -110,12 +110,21 @@ class LockState {
   }
 }
 
+/// How long a trip to a system screen Gerfaut opened itself may last
+/// and still not count as leaving the app.
+const Duration excursionAllowance = Duration(minutes: 10);
+
 class LockController extends Notifier<LockState> {
   /// Gerfaut has been out of sight since the last time it came back.
   bool _away = false;
 
-  /// The next return comes from a system screen Gerfaut opened itself.
-  bool _excursion = false;
+  /// When Gerfaut last sent the user to a system screen of its own;
+  /// null when no such trip is under way.
+  DateTime? _excursionAt;
+
+  /// The clock the trips are timed with. Tests move it.
+  @visibleForTesting
+  DateTime Function() clock = DateTime.now;
 
   /// What the window was last asked to be; null before the first ask.
   bool? _secure;
@@ -215,10 +224,11 @@ class LockController extends Notifier<LockState> {
   /// screen and nothing earlier, and taken back with [forgetExcursion]
   /// the moment it turns out no screen came up. A return spends it,
   /// picked or waved away alike; but a screen that never opens produces
-  /// no return, and an announcement nobody takes back then waits — for
-  /// minutes or for hours — to be spent by the next real absence,
-  /// which is the one that had to lock.
-  void expectExcursion() => _excursion = true;
+  /// no return, and an announcement nobody takes back then waits to be
+  /// spent by the next real absence, which is the one that had to lock.
+  /// It waits no longer than [excursionAllowance], which is also as
+  /// long as any trip may last.
+  void expectExcursion() => _excursionAt = clock();
 
   /// The announced screen did not open: no app on the phone can show
   /// it, a save was already under way, the platform has none to give.
@@ -229,15 +239,20 @@ class LockController extends Notifier<LockState> {
   /// system hands the result back before Flutter says `resumed` — and
   /// forgetting the excursion there would put the lock in front of
   /// someone who never left.
-  void forgetExcursion() => _excursion = false;
+  void forgetExcursion() => _excursionAt = null;
 
   /// Gerfaut is back: having been away is the whole rule, unless the
-  /// trip was one Gerfaut sent the user on.
+  /// trip was one Gerfaut sent the user on, and a short one. Picking a
+  /// file takes a minute; a phone that came back an hour after its
+  /// picker opened was put down on the way, and whoever holds it now
+  /// meets the lock.
   void noteResumed() {
     final away = _away;
-    final excursion = _excursion;
+    final at = _excursionAt;
+    final excursion =
+        at != null && clock().difference(at) <= excursionAllowance;
     _away = false;
-    _excursion = false;
+    _excursionAt = null;
     if (!away || excursion || state.locked) return;
     lockNow();
   }

@@ -747,11 +747,37 @@ void main() {
       expect(app.container.read(lockProvider).locked, isTrue);
     });
 
+    test('a trip that lasts too long locks all the same', () async {
+      final app = lockedApp();
+      await app.lock.unlock('1234');
+      var now = DateTime(2026, 9, 25, 14);
+      app.lock.clock = () => now;
+
+      // The picker opened, and the phone was put down in front of it.
+      app.lock.expectExcursion();
+      app.lock.noteHidden();
+      now = now.add(excursionAllowance + const Duration(seconds: 1));
+      app.lock.noteResumed();
+      expect(app.container.read(lockProvider).locked, isTrue);
+    });
+
+    test('a trip within the allowance does not', () async {
+      final app = lockedApp();
+      await app.lock.unlock('1234');
+      var now = DateTime(2026, 9, 25, 14);
+      app.lock.clock = () => now;
+
+      app.lock.expectExcursion();
+      app.lock.noteHidden();
+      now = now.add(excursionAllowance);
+      app.lock.noteResumed();
+      expect(app.container.read(lockProvider).locked, isFalse);
+    });
+
     test('one nobody takes back is spent by whatever comes next', () async {
       // Why every branch that does not leave has to take it back: an
-      // announcement waits, without a clock and without a deadline,
-      // and the trip it ends up covering is the next one — a phone put
-      // down for the afternoon and picked up by somebody else.
+      // announcement waits, and the trip it ends up covering is the
+      // next one, if that one comes back within the allowance.
       final app = lockedApp();
       await app.lock.unlock('1234');
 
