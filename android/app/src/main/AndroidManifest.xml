@@ -216,5 +216,6 @@
         <!-- Telegram, for the same reason: a start link carries the code
              that links a chat to the account's alerts. -->
         <package android:name="org.telegram.messenger" />
+        <package android:name="org.telegram.messenger.web" />
     </queries>
 </manifest>

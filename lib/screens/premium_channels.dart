@@ -45,17 +45,28 @@ String ntfyAppUrl(String subscribeUrl) =>
 /// anyone's to declare; the package is one app.
 const String ntfyPackage = 'io.heckel.ntfy';
 
-/// Telegram's own app, which a start link is handed to by name.
-const String telegramPackage = 'org.telegram.messenger';
+/// Telegram's own apps, which a start link is handed to by name: the
+/// one from Google Play, then the one telegram.org hands out as an APK.
+const List<String> telegramPackages = [
+  'org.telegram.messenger',
+  'org.telegram.messenger.web',
+];
 
 /// Opens a Telegram start link. The code in it links a chat to the
 /// account's alerts, so it goes to Telegram by name, or else to a
 /// browser tab: before Android 12 a plain `t.me` link is offered to any
 /// app that declared it, and whichever app took the code would get the
 /// alerts. The page in the tab has its own button to open Telegram.
+///
+/// Only ever a `t.me` link: the URL comes from the server, and nothing
+/// else has any business being started by name in Telegram.
 Future<void> openTelegramLink(AppOpener opener, String url) async {
-  if (await opener.openIn(package: telegramPackage, url: url)) return;
-  await launchUrl(Uri.parse(url), mode: LaunchMode.inAppBrowserView);
+  final uri = Uri.tryParse(url);
+  if (uri == null || uri.scheme != 'https' || uri.host != 't.me') return;
+  for (final package in telegramPackages) {
+    if (await opener.openIn(package: package, url: url)) return;
+  }
+  await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
 }
 
 /// Opens a link in the app that claims it, or the browser.

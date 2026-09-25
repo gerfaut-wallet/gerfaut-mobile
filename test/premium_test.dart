@@ -1638,6 +1638,34 @@ void main() {
       expect(launcher.launched, isEmpty);
     });
 
+    test('telegram: the APK from telegram.org is asked next', () async {
+      final launcher = FakeUrlLauncher();
+      UrlLauncherPlatform.instance = launcher;
+      final opener = FakeAppOpener(installed: false);
+      await openTelegramLink(opener, 'https://t.me/GerfautAlertsBot?start=c');
+      expect(opener.opened, [
+        'org.telegram.messenger https://t.me/GerfautAlertsBot?start=c',
+        'org.telegram.messenger.web https://t.me/GerfautAlertsBot?start=c',
+      ]);
+      expect(launcher.launched, ['https://t.me/GerfautAlertsBot?start=c']);
+    });
+
+    test('telegram: a link that is not t.me opens nothing', () async {
+      final launcher = FakeUrlLauncher();
+      UrlLauncherPlatform.instance = launcher;
+      final opener = FakeAppOpener();
+      for (final url in [
+        'tg://resolve?domain=GerfautAlertsBot&start=c',
+        'http://t.me/GerfautAlertsBot?start=c',
+        'https://t.me.example.com/GerfautAlertsBot?start=c',
+        'intent://t.me#Intent;end',
+      ]) {
+        await openTelegramLink(opener, url);
+      }
+      expect(opener.opened, isEmpty);
+      expect(launcher.launched, isEmpty);
+    });
+
     testWidgets('telegram: the row names the chat the bot answers', (
       tester,
     ) async {
