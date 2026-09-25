@@ -472,6 +472,47 @@ void main() {
     });
   });
 
+  testWidgets('the picker greys out no wallet file, a .bsms included', (
+    tester,
+  ) async {
+    const channel = MethodChannel('gerfaut/files');
+    const bsms =
+        'BSMS 1.0\n'
+        'wsh(sortedmulti(2,[73c5da0a/48h/1h/0h/2h]tpubA/<0;1>/*,'
+        '[0f056943/48h/1h/0h/2h]tpubB/<0;1>/*))\n'
+        '/0/*,/1/*\n'
+        'tb1qexampleaddress';
+    final calls = <MethodCall>[];
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      final bytes = Uint8List.fromList(utf8.encode(bsms));
+      return {'name': 'multisig.bsms', 'size': bytes.length, 'bytes': bytes};
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    final parsed = <String>[];
+    final bridge = FakeBridge(
+      onParse: (input) {
+        parsed.add(input);
+        return makeParsedInput();
+      },
+    );
+    await tester.pumpWidget(screen(bridge));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Import a file'));
+    await tester.pumpAndSettle();
+
+    // No type filter: a provider names a .bsms or a .desc file
+    // application/octet-stream at best, and a filter hid it.
+    expect(calls.single.method, 'openDocument');
+    final arguments = calls.single.arguments as Map<Object?, Object?>;
+    expect(arguments['mimeTypes'], isEmpty);
+    expect(arguments['maxBytes'], 64 * 1024);
+    expect(parsed, [bsms]);
+  });
+
   testWidgets('a file picked here survives the way back', (tester) async {
     final parsed = <String>[];
     final bridge = FakeBridge(

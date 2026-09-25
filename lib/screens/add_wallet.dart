@@ -148,10 +148,7 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
       final picker = widget.filePicker;
       file = picker != null
           ? await picker()
-          : await openBoundedFile(
-              maxBytes: _maxMaterialBytes,
-              mimeTypes: const ['text/plain', 'application/json'],
-            );
+          : await openBoundedFile(maxBytes: _maxMaterialBytes);
     } on FileReadException catch (error) {
       // Picked, then not read: the trip did happen.
       if (mounted) setState(() => _error = error.message);
@@ -195,6 +192,14 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
   }
 
   /// The most wallet material the core reads, in bytes.
+  ///
+  /// The picker offers every file. A wallet comes as `.txt`, `.json`,
+  /// `.bsms`, `.desc` or no extension at all, and a phone's file
+  /// providers have no type for the last three: they call them
+  /// `application/octet-stream`, or nothing, so a filter on text and
+  /// JSON greyed out the very files a coordinator or a signer writes.
+  /// What was picked is held to this size and to UTF-8 instead, and the
+  /// core says what the text is.
   static const int _maxMaterialBytes = 64 * 1024;
 
   Future<void> _scan() async {
