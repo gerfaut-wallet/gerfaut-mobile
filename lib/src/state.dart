@@ -69,9 +69,10 @@ final addressListProvider = FutureProvider.family<AddressList, String>((
   return ref.watch(bridgeProvider).addressList(id);
 });
 
-/// The next unused receive address of one wallet, plus `lookahead`
-/// addresses peeked past it. The entry at index `lookahead` is the one
-/// on display; peeking retires nothing.
+/// The next unused receive address of one wallet, plus up to
+/// `lookahead` unused addresses past it, 200 at most: the core skips
+/// one a payment already reached, and a descriptor without a wildcard
+/// gives its one address alone. Peeking retires nothing.
 final receiveProvider =
     FutureProvider.family<
       List<AddressEntry>,

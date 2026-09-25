@@ -24,6 +24,10 @@ const double _qrSide = 140;
 /// Rows an address card shows before "Show all".
 const int _collapsedRows = 5;
 
+/// How far past the next unused address the screen peeks: the core
+/// derives no more upcoming addresses than this at once.
+const int maxReceivePeek = 200;
+
 /// Receive: the next unused address first, with its QR code, copy with
 /// explicit feedback and a way to skip ahead; then the audit of every
 /// revealed address, external and change in their own cards. The whole
@@ -41,8 +45,10 @@ class ReceiveScreen extends ConsumerStatefulWidget {
 class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
   bool _copied = false;
 
-  /// Peek distance past the next unused address. Skipping retires
-  /// nothing, and leaving the screen returns to the first unused one.
+  /// Peek distance past the next unused address, in addresses offered:
+  /// the core skips one a payment already reached, so this is not an
+  /// index. Skipping retires nothing, and leaving the screen returns to
+  /// the first unused one.
   int _offset = 0;
 
   Future<void> _copy(String address) async {
@@ -69,13 +75,23 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
     final meta = ref.watch(snapshotProvider(widget.walletId)).valueOrNull?.meta;
     final single = meta?.isSingleAddress ?? false;
     final gapLimit = meta?.gapLimit ?? 20;
+    // One more than the address on display: whether the core has a next
+    // one to give is then known before the button is pressed.
     final addresses = ref.watch(
-      receiveProvider((walletId: widget.walletId, lookahead: _offset)),
+      receiveProvider((
+        walletId: widget.walletId,
+        lookahead: min(_offset + 1, maxReceivePeek),
+      )),
     );
     final list = addresses.valueOrNull;
     final entry = list == null || list.isEmpty
         ? null
         : list[min(_offset, list.length - 1)];
+    // A descriptor without a wildcard has one address, and the core
+    // gives it once: nothing to skip to, ever.
+    final oneAddress = single || (list != null && list.length == 1);
+    final hasNext =
+        list != null && list.length > _offset + 1 && _offset < maxReceivePeek;
     final audit = ref.watch(addressListProvider(widget.walletId));
 
     return Scaffold(
@@ -101,12 +117,20 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
                   _AddressBlock(
                     entry: entry,
                     single: single,
+                    oneAddress: oneAddress,
                     offset: _offset,
+                    // Counted on the derivation path, the way the gap
+                    // limit is: skipped addresses a payment reached
+                    // count too.
+                    distance: entry.index - list!.first.index,
+                    hasNext: hasNext,
                     gapLimit: gapLimit,
                     copied: _copied,
                     onCopy: () => _copy(entry.address),
                     onEnlarge: () => _enlarge(entry.address),
-                    onNext: () => setState(() => _offset += 1),
+                    onNext: () => setState(
+                      () => _offset = min(_offset + 1, maxReceivePeek),
+                    ),
                     onFirst: () => setState(() => _offset = 0),
                   ),
                   const SizedBox(height: GerfautSpacing.lg),
@@ -173,7 +197,10 @@ class _AddressBlock extends StatelessWidget {
   const _AddressBlock({
     required this.entry,
     required this.single,
+    required this.oneAddress,
     required this.offset,
+    required this.distance,
+    required this.hasNext,
     required this.gapLimit,
     required this.copied,
     required this.onCopy,
@@ -184,7 +211,17 @@ class _AddressBlock extends StatelessWidget {
 
   final AddressEntry entry;
   final bool single;
+
+  /// Only one address to give, a watched one or a descriptor without a
+  /// wildcard: no way to skip ahead.
+  final bool oneAddress;
   final int offset;
+
+  /// How many indexes the address on offer lies past the next unused.
+  final int distance;
+
+  /// Whether the core has another address past this one to offer.
+  final bool hasNext;
   final int gapLimit;
   final bool copied;
   final VoidCallback onCopy;
@@ -265,7 +302,7 @@ class _AddressBlock extends StatelessWidget {
           expand: true,
           onPressed: onCopy,
         ),
-        if (!single) ...[
+        if (!oneAddress) ...[
           const SizedBox(height: GerfautSpacing.sm),
           Row(
             children: [
@@ -273,7 +310,7 @@ class _AddressBlock extends StatelessWidget {
                 child: SecondaryButton(
                   label: 'Next address',
                   icon: LucideIcons.skipForward,
-                  onPressed: onNext,
+                  onPressed: hasNext ? onNext : null,
                 ),
               ),
               if (offset > 0) ...[
@@ -286,17 +323,25 @@ class _AddressBlock extends StatelessWidget {
               ],
             ],
           ),
+          if (!hasNext && offset > 0) ...[
+            const SizedBox(height: GerfautSpacing.sm),
+            Text(
+              'Gerfaut offers at most $maxReceivePeek addresses past the '
+              'next unused one.',
+              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+            ),
+          ],
         ],
-        if (!single && offset >= gapLimit) ...[
+        if (!oneAddress && distance >= gapLimit) ...[
           const SizedBox(height: GerfautSpacing.md),
           // Peeking this far outruns what scanning software derives:
           // state it in the pending tint, not as an alarm.
           GerfautNotice(
             tone: NoticeTone.info,
             message:
-                'This is $offset addresses past the next unused one. Beyond '
-                'the gap limit of $gapLimit, other wallet software may not '
-                'detect funds received here.',
+                'This is $distance addresses past the next unused one. '
+                'Beyond the gap limit of $gapLimit, other wallet software may '
+                'not detect funds received here.',
           ),
         ],
         const SizedBox(height: GerfautSpacing.md),

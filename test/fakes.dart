@@ -798,6 +798,13 @@ class FakeBridge implements GerfautBridge {
   /// Lookahead of every receiveAddresses call, for assertions.
   final List<int> receiveLookaheads = [];
 
+  /// Upcoming indexes a payment already reached, by wallet: the core
+  /// skips them.
+  final Map<String, Set<int>> paidAhead = {};
+
+  /// Wallets whose descriptor has no wildcard: one address, given once.
+  final Set<String> withoutWildcard = {};
+
   @override
   Future<List<AddressEntry>> receiveAddresses(String id, int lookahead) async {
     receiveLookaheads.add(lookahead);
@@ -805,18 +812,26 @@ class FakeBridge implements GerfautBridge {
         addresses[id] ??
         const [AddressEntry(index: 0, address: 'tb1qexample', used: false)];
     final first = base.first;
-    // Mirrors the core: the next unused entry plus `lookahead` peeked
-    // ones, continuing past the configured list when it runs short.
-    return [
-      for (var i = 0; i <= lookahead; i++)
-        i < base.length
-            ? base[i]
+    // Mirrors the core: the next unused entry plus up to `lookahead`
+    // upcoming unused ones, 200 at most, continuing past the configured
+    // list when it runs short.
+    final entries = [first];
+    if (withoutWildcard.contains(id)) return entries;
+    final paid = paidAhead[id] ?? const <int>{};
+    final wanted = (lookahead < 200 ? lookahead : 200) + 1;
+    for (var step = 1; entries.length < wanted; step++) {
+      if (paid.contains(first.index + step)) continue;
+      entries.add(
+        step < base.length
+            ? base[step]
             : AddressEntry(
-                index: first.index + i,
-                address: '${first.address}$i',
+                index: first.index + step,
+                address: '${first.address}$step',
                 used: false,
               ),
-    ];
+      );
+    }
+    return entries;
   }
 
   @override

@@ -7,6 +7,7 @@ import 'package:gerfaut/screens/receive.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/buttons.dart';
 import 'package:gerfaut/widgets/status_pill.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -80,7 +81,8 @@ void main() {
       // One step further down the derivation path, nothing retired.
       expect(find.text('UNUSED ADDRESS · INDEX 5'), findsOneWidget);
       expect(find.text('tb1qfirst1'), findsOneWidget);
-      expect(bridge.receiveLookaheads.last, 1);
+      // One past the address on display, to know whether there is a next.
+      expect(bridge.receiveLookaheads.last, 2);
 
       await tester.tap(find.text('Next address'));
       await tester.pumpAndSettle();
@@ -222,6 +224,78 @@ void main() {
       await tester.tap(find.text('First unused'));
       await tester.pumpAndSettle();
       expect(find.textContaining('Beyond the gap limit'), findsNothing);
+    });
+
+    testWidgets('an address a payment reached is skipped, and counted', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final meta = makeMeta(gapLimit: 3);
+      final bridge = FakeBridge(
+        wallets: [meta],
+        snapshots: {'w1': makeSnapshot(meta: meta)},
+      )..paidAhead['w1'] = {1, 2};
+      await tester.pumpWidget(receiveApp(bridge));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Next address'));
+      await tester.pumpAndSettle();
+      // Indexes 1 and 2 were paid: the next on offer is 3, three past
+      // the next unused on the derivation path, which is what the gap
+      // limit counts.
+      expect(find.text('UNUSED ADDRESS · INDEX 3'), findsOneWidget);
+      expect(
+        find.textContaining('This is 3 addresses past the next unused one.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('skipping stops at the most the core offers', (tester) async {
+      useTallSurface(tester);
+      final meta = makeMeta(gapLimit: 500);
+      final bridge = FakeBridge(
+        wallets: [meta],
+        snapshots: {'w1': makeSnapshot(meta: meta)},
+      );
+      await tester.pumpWidget(receiveApp(bridge));
+      await tester.pumpAndSettle();
+
+      for (var i = 0; i < maxReceivePeek; i++) {
+        await tester.tap(find.text('Next address'));
+        await tester.pumpAndSettle();
+      }
+      expect(find.text('UNUSED ADDRESS · INDEX 200'), findsOneWidget);
+      expect(bridge.receiveLookaheads.every((n) => n <= 200), isTrue);
+      final next = tester.widget<SecondaryButton>(
+        find.widgetWithText(SecondaryButton, 'Next address'),
+      );
+      expect(next.onPressed, isNull);
+      expect(
+        find.text(
+          'Gerfaut offers at most 200 addresses past the next unused one.',
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('First unused'));
+      await tester.pumpAndSettle();
+      expect(find.text('NEXT UNUSED ADDRESS · INDEX 0'), findsOneWidget);
+    });
+
+    testWidgets('a descriptor without a wildcard offers no next address', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final meta = makeMeta();
+      final bridge = FakeBridge(
+        wallets: [meta],
+        snapshots: {'w1': makeSnapshot(meta: meta)},
+      )..withoutWildcard.add('w1');
+      await tester.pumpWidget(receiveApp(bridge));
+      await tester.pumpAndSettle();
+
+      expect(find.text('NEXT UNUSED ADDRESS · INDEX 0'), findsOneWidget);
+      expect(find.text('Next address'), findsNothing);
     });
 
     testWidgets('the small QR code opens large and closes on a tap', (
