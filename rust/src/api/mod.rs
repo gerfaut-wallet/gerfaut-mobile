@@ -223,6 +223,60 @@ macro_rules! try_json {
     };
 }
 
+// --- oversized QR envelopes --------------------------------------------
+
+/// The most parts a multi-part UR may announce. The decoder the core
+/// uses sizes its tables on that count before it has checked anything
+/// else, so a single frame claiming four billion parts asks for tens of
+/// gigabytes at once, and an allocation that fails ends the process:
+/// nothing on the Dart side can catch it. No wallet export, PSBT or
+/// Gerfaut backup comes near this many parts.
+const MAX_UR_PARTS: usize = 10_000;
+
+/// Turns away a UR frame that announces more parts than [`MAX_UR_PARTS`],
+/// before it reaches the decoder. Reads the header the way the decoder
+/// does, so the count checked is the count it would use; anything it
+/// would refuse on its own is left for it to refuse.
+fn refuse_oversized_ur(frame: &str) -> Result<(), String> {
+    let lower = frame.trim().to_ascii_lowercase();
+    let total = lower
+        .strip_prefix("ur:")
+        .and_then(|rest| rest.split_once('/'))
+        .and_then(|(_, rest)| rest.rsplit_once('/'))
+        .and_then(|(indices, _)| indices.split_once('-'))
+        .and_then(|(_, total)| total.parse::<usize>().ok());
+    match total {
+        Some(total) if total > MAX_UR_PARTS => Err(error_json(
+            "invalid_input",
+            format!("this QR code announces {total} parts, more than Gerfaut reads"),
+        )),
+        _ => Ok(()),
+    }
+}
+
+/// The same for text that is opened as an envelope and whose content
+/// may be one again: the transaction decoder opens a UR, then reads
+/// what it held the same way. Each layer is checked before the core
+/// opens it, and each is shorter than the one around it.
+fn refuse_oversized_nested_ur(text: &str) -> Result<(), String> {
+    let mut text: String = text.split_whitespace().collect();
+    loop {
+        refuse_oversized_ur(&text)?;
+        if !gerfaut_core::input::qr::is_envelope(&text) {
+            return Ok(());
+        }
+        match gerfaut_core::input::qr::assemble(std::slice::from_ref(&text)) {
+            Ok(progress) => match progress.text {
+                Some(inner) => text = inner.split_whitespace().collect(),
+                None => return Ok(()),
+            },
+            // Refused on its own terms: the core says why when it
+            // meets it again.
+            Err(_) => return Ok(()),
+        }
+    }
+}
+
 // --- lifecycle ---------------------------------------------------------
 
 /// Opens (or creates) the vault under `data_dir` with a 32-byte key given
@@ -251,6 +305,7 @@ pub async fn init_manager(data_dir: String, key_hex: String) -> String {
 /// `script` is the user's script type choice for a lone extended key
 /// (`legacy`, `nested_segwit`, `segwit`, `taproot`), ignored otherwise.
 pub async fn parse_input(input: String, script: Option<String>) -> String {
+    try_json!(refuse_oversized_ur(&input));
     let script: Option<ScriptKind> = match script {
         None => None,
         Some(id) => match serde_json::from_value(json!(id)) {
@@ -269,6 +324,7 @@ pub async fn parse_input(input: String, script: Option<String>) -> String {
 /// and derivation paths), both parts optional. Everything the input
 /// fixes by itself ignores them.
 pub async fn parse_input_with_options(input: String, options_json: String) -> String {
+    try_json!(refuse_oversized_ur(&input));
     let options: ImportOptions = try_json!(from_json(&options_json, "ImportOptions"));
     match gerfaut_core::input::parse_input_with_options(&input, &options) {
         Ok(parsed) => to_json(&parsed),
@@ -297,6 +353,9 @@ pub async fn assemble_qr(frames_json: String) -> String {
         serde_json::from_str(&frames_json)
             .map_err(|e| error_json("bad_json", format!("invalid frames JSON: {e}")))
     );
+    for frame in &frames {
+        try_json!(refuse_oversized_ur(frame));
+    }
     match gerfaut_core::input::qr::assemble(&frames) {
         Ok(progress) => to_json(&progress),
         Err(e) => core_error_json(&e),
@@ -585,6 +644,7 @@ pub async fn set_app_pref(key: String, value: String) -> String {
 /// or BBQr envelope) and previews what it does on `network`. Returns a
 /// serialized `TxPreview`; nothing is signed, nothing is sent.
 pub async fn preview_transaction(input: String, network: String) -> String {
+    try_json!(refuse_oversized_nested_ur(&input));
     let manager = try_json!(manager());
     let network = try_json!(parse_network(&network));
     match manager.preview_transaction(&input, network).await {
@@ -1464,6 +1524,83 @@ mod tests {
 
     fn payload(error: &CoreError) -> Value {
         serde_json::from_str(&core_error_json(error)).expect("the payload is JSON")
+    }
+
+    fn frame_of(total: usize) -> String {
+        format!(
+            "ur:bytes/{}-{total}/lpadascfadaxcywenbpljkhdcahkadaemej",
+            total + 1
+        )
+    }
+
+    fn refused(payload: &str) -> bool {
+        serde_json::from_str::<Value>(payload).expect("JSON")["error"]["kind"] == "invalid_input"
+    }
+
+    /// One frame announcing four billion parts would make the decoder
+    /// ask for tens of gigabytes, and the app would die on the spot.
+    /// It is turned away by what it says, before it is decoded.
+    #[tokio::test]
+    async fn a_frame_announcing_billions_of_parts_is_turned_away() {
+        let hostile = frame_of(4_294_967_295);
+        assert!(refuse_oversized_ur(&hostile).is_err());
+        assert!(refuse_oversized_ur(&hostile.to_uppercase()).is_err());
+        assert!(
+            refuse_oversized_ur(&format!(
+                "  {hostile}
+"
+            ))
+            .is_err()
+        );
+        let frames =
+            serde_json::to_string(&["ur:bytes/1-2/lpadaocfadaxcywenbpljkhdcahkadaemej", &hostile])
+                .unwrap();
+        assert!(refused(&assemble_qr(frames).await));
+        assert!(refused(&parse_input(hostile.clone(), None).await));
+        assert!(refused(
+            &parse_input_with_options(hostile.clone(), "{}".into()).await
+        ));
+    }
+
+    #[test]
+    fn an_ordinary_frame_goes_through() {
+        assert!(refuse_oversized_ur(&frame_of(3)).is_ok());
+        assert!(refuse_oversized_ur(&frame_of(MAX_UR_PARTS)).is_ok());
+        assert!(refuse_oversized_ur(&frame_of(MAX_UR_PARTS + 1)).is_err());
+        // Not a multi-part UR, or not a UR at all: nothing to check.
+        assert!(refuse_oversized_ur("ur:bytes/hdcxlkahssqzwfvslofzoxwkrewngotktbmwjkwdcmnefsaaehrlolkskncnktlbaypkvoonhknt").is_ok());
+        assert!(refuse_oversized_ur("wpkh([73c5da0a/84h/1h/0h]tpub/0/*)").is_ok());
+        assert!(refuse_oversized_ur("ur:bytes/1-x/abc").is_ok());
+    }
+
+    /// A transaction pasted as a UR is opened, and what it held is read
+    /// again: a hostile frame inside a harmless one is found too.
+    #[test]
+    fn a_hostile_frame_inside_a_harmless_one_is_found() {
+        let hostile = frame_of(4_294_967_295);
+        let cbor = {
+            let mut bytes = Vec::new();
+            ciborium_like_bytes(hostile.as_bytes(), &mut bytes);
+            bytes
+        };
+        let outer = ur::ur::encode(&cbor, &ur::ur::Type::Bytes);
+        assert!(refuse_oversized_ur(&outer).is_ok());
+        assert!(refuse_oversized_nested_ur(&outer).is_err());
+        assert!(refuse_oversized_nested_ur("70736274ff01").is_ok());
+    }
+
+    /// A CBOR byte string: the head for its length, then the bytes.
+    fn ciborium_like_bytes(data: &[u8], out: &mut Vec<u8>) {
+        let len = data.len();
+        if len < 24 {
+            out.push(0x40 | len as u8);
+        } else if len < 256 {
+            out.extend([0x58, len as u8]);
+        } else {
+            out.push(0x59);
+            out.extend((len as u16).to_be_bytes());
+        }
+        out.extend_from_slice(data);
     }
 
     /// A release build writes nothing to logcat: what the Electrum
