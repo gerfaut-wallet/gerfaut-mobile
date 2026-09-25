@@ -70,6 +70,11 @@ The first release: Gerfaut for Android.
   is announced then. Turning the calculator disguise on turns Live off and
   clears Gerfaut's notifications from the shade. Battery use has not been
   measured on a phone yet.
+- On a phone whose maker adds a battery manager of its own (Xiaomi, Huawei,
+  Samsung, OnePlus, Oppo, realme), the Live sheet lists the switches to turn
+  on there and opens Gerfaut's app info page, where most of them live. No
+  app can flip those switches for you. A step that only repeats Android's
+  battery exemption is left out once you have granted it.
 - A transaction is announced once when it appears and once when it confirms,
   whichever part of the app saw it first. A fee bump brings no second
   notice, and its confirmation takes the place of the pending one. An
@@ -186,6 +191,14 @@ The first release: Gerfaut for Android.
 
 ### Changed
 
+- A Telegram link now opens in Telegram itself, or in a browser tab when
+  Telegram is not installed. On older Android versions any app that claimed
+  t.me links could receive the code that connects a chat to your alerts.
+- Coming back from a file picker, a save dialog or a share sheet more than
+  ten minutes after it opened asks for the app lock again. Before, that trip
+  never locked the app, however long it lasted.
+- A release build no longer writes the text of an unexpected error to the
+  system log, where it could quote an address.
 - Premium controls and the Premium settings row now use the Premium colour,
   so what belongs to the paid service reads as such at a glance: the card
   icons, the switch that hands a wallet to the server, and the buttons that
@@ -193,6 +206,18 @@ The first release: Gerfaut for Android.
 
 ### Fixed
 
+- The "watch is offline" banner now goes away when you forget the Premium
+  key or stop watching the last wallet during an outage. Tapping
+  Acknowledge twice writes it once, and a failed write leaves the banner up.
+- The UTXOs tab keeps its rows on screen while a sync reads them again,
+  instead of flashing "Loading UTXOs…". A coin with no address says "n/a",
+  and TalkBack says which chip holds the outpoint and which the address.
+- A QR code that announces more than 10,000 parts is refused before it is
+  read. One such frame used to make the app quit.
+- Importing a wallet or a transaction from a file that is too large, or not
+  text, now says so instead of failing silently.
+- Turning Live off and on again within a few seconds now starts it again.
+  It used to stay off until the app came back to the screen.
 - Leaving Settings › Premium before the server answers no longer leaves the
   app out of date. Forget the key and go back right away: the Premium row in
   Settings now reads "Not activated" as soon as the server answers, instead
