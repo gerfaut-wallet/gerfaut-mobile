@@ -45,6 +45,19 @@ String ntfyAppUrl(String subscribeUrl) =>
 /// anyone's to declare; the package is one app.
 const String ntfyPackage = 'io.heckel.ntfy';
 
+/// Telegram's own app, which a start link is handed to by name.
+const String telegramPackage = 'org.telegram.messenger';
+
+/// Opens a Telegram start link. The code in it links a chat to the
+/// account's alerts, so it goes to Telegram by name, or else to a
+/// browser tab: before Android 12 a plain `t.me` link is offered to any
+/// app that declared it, and whichever app took the code would get the
+/// alerts. The page in the tab has its own button to open Telegram.
+Future<void> openTelegramLink(AppOpener opener, String url) async {
+  if (await opener.openIn(package: telegramPackage, url: url)) return;
+  await launchUrl(Uri.parse(url), mode: LaunchMode.inAppBrowserView);
+}
+
 /// Opens a link in the app that claims it, or the browser.
 Future<bool> openExternal(String url) {
   return launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
@@ -422,7 +435,10 @@ class _TelegramChannelScreenState extends ConsumerState<TelegramChannelScreen> {
                     label: 'Open Telegram',
                     icon: LucideIcons.externalLink,
                     expand: true,
-                    onPressed: () => openExternal(widget.startUrl),
+                    onPressed: () => openTelegramLink(
+                      ref.read(appOpenerProvider),
+                      widget.startUrl,
+                    ),
                   ),
 
             children: [

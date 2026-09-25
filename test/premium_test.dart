@@ -1579,8 +1579,9 @@ void main() {
       useTallSurface(tester);
       final launcher = FakeUrlLauncher();
       UrlLauncherPlatform.instance = launcher;
+      final opener = FakeAppOpener(installed: false);
       final bridge = premiumBridge(activated: true);
-      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpWidget(premiumApp(bridge, appOpener: opener));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Add a channel'));
@@ -1595,6 +1596,8 @@ void main() {
       // Not tested before the bot has it: the test would only fail.
       expect(bridge.premiumCalls.where((c) => c.startsWith('test:')), isEmpty);
 
+      // Telegram absent: the link goes to a browser tab, never to
+      // whichever app declared t.me.
       await tester.tap(find.text('Open Telegram'));
       await tester.pumpAndSettle();
       expect(launcher.launched, ['https://t.me/GerfautAlertsBot?start=code1']);
@@ -1610,6 +1613,29 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Linked'), findsOneWidget);
       expect(find.text('Waiting for the bot'), findsNothing);
+    });
+
+    testWidgets('telegram: the start link goes to Telegram by name', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final launcher = FakeUrlLauncher();
+      UrlLauncherPlatform.instance = launcher;
+      final opener = FakeAppOpener();
+      final bridge = premiumBridge(activated: true);
+      await tester.pumpWidget(premiumApp(bridge, appOpener: opener));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add a channel'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Telegram'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Open Telegram'));
+      await tester.pumpAndSettle();
+      expect(opener.opened, [
+        'org.telegram.messenger https://t.me/GerfautAlertsBot?start=code1',
+      ]);
+      expect(launcher.launched, isEmpty);
     });
 
     testWidgets('telegram: the row names the chat the bot answers', (

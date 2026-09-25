@@ -213,5 +213,8 @@
              app never asks about is invisible to it, and an installed
              ntfy would look exactly like an absent one. -->
         <package android:name="io.heckel.ntfy" />
+        <!-- Telegram, for the same reason: a start link carries the code
+             that links a chat to the account's alerts. -->
+        <package android:name="org.telegram.messenger" />
     </queries>
 </manifest>
