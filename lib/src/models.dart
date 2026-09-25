@@ -1869,6 +1869,11 @@ enum TxWarningKind {
   dustOutput('dust_output'),
   spendsWatched('spends_watched'),
 
+  /// A signature made with SIGHASH_NONE or SIGHASH_SINGLE: it leaves
+  /// some or all of the outputs open, so whoever relays the transaction
+  /// can send that money elsewhere.
+  uncommittedOutputs('uncommitted_outputs'),
+
   /// A kind this build does not know; shown with a generic icon.
   other('other');
 

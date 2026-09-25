@@ -47,6 +47,14 @@ const String _unconfirmedHint =
     'Compare them with what your signer shows before sending, or preview '
     'again with a backend that knows this coin.';
 
+/// Under the core's line about a signature that leaves outputs open:
+/// what to do about it. The core names the input and the signature
+/// type; the page says, in plain words, not to send it as it is.
+const String _uncommittedHint =
+    'Do not send it as it is. Signing devices cover every output unless '
+    "told otherwise: check the signer's settings, then have it signed "
+    'again.';
+
 /// Broadcast a transaction somebody else signed: paste, import or scan
 /// it, read what it does, then hand it to the network of the workspace.
 /// Gerfaut never signs and never edits the transaction; the preview
@@ -644,6 +652,7 @@ IconData _warningIcon(TxWarningKind kind) => switch (kind) {
   TxWarningKind.feeUnknown => LucideIcons.circleHelp,
   TxWarningKind.dustOutput => LucideIcons.coins,
   TxWarningKind.spendsWatched => LucideIcons.wallet,
+  TxWarningKind.uncommittedOutputs => LucideIcons.lockOpen,
   TxWarningKind.other => LucideIcons.info,
 };
 
@@ -669,9 +678,11 @@ class _WarningRow extends StatelessWidget {
       message: warning.message,
       // The core says which coin went unconfirmed; what the page shows
       // in its place, and what to do about it, is the page's to say.
-      hint: warning.kind == TxWarningKind.inputUnknown
-          ? _unconfirmedHint
-          : null,
+      hint: switch (warning.kind) {
+        TxWarningKind.inputUnknown => _unconfirmedHint,
+        TxWarningKind.uncommittedOutputs => _uncommittedHint,
+        _ => null,
+      },
     );
   }
 }
@@ -1153,7 +1164,16 @@ class _ConfirmDialog extends ConsumerWidget {
     final ending = preview.inputsUnconfirmed
         ? ', $_claimedMark: no backend confirmed what its inputs are worth.'
         : '.';
-    final feeLine = fee == null
+    // Every input known and still no fee: the outputs ask for more than
+    // the inputs bring, which no node will relay.
+    final inputsTotal = sideTotal(preview.inputs.map((i) => i.valueSats));
+    final outputsTotal = preview.outputs.fold(0, (sum, o) => sum + o.valueSats);
+    final overspends =
+        fee == null && inputsTotal != null && outputsTotal > inputsTotal;
+    final feeLine = overspends
+        ? 'Its outputs pay more than its inputs bring: the network will '
+              'refuse it.'
+        : fee == null
         ? 'Its fee could not be established.'
         : 'It pays a fee of ${masked ? maskedValue : formatAmount(fee, unit)}'
               '${rate != null ? ' (${rate.toStringAsFixed(1)} sat/vB)' : ''}'

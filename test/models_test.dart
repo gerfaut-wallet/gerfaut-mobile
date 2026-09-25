@@ -287,6 +287,16 @@ void main() {
       expect(warning.severity, TxSeverity.alert);
     });
 
+    test('a signature that leaves outputs open is named and loud', () {
+      final warning = TxWarning.fromJson(const {
+        'kind': 'uncommitted_outputs',
+        'message': 'Input 0 is signed with SIGHASH_SINGLE.',
+        'severity': 'alert',
+      });
+      expect(warning.kind, TxWarningKind.uncommittedOutputs);
+      expect(warning.severity, TxSeverity.alert);
+    });
+
     test('a kind added by a newer core still arrives with its tone', () {
       // The whole point of carrying severity on the wire: a kind this
       // build cannot name no longer falls through a hand-written table.

@@ -280,6 +280,76 @@ void main() {
     expect(find.byIcon(LucideIcons.equalNot), findsOneWidget);
   });
 
+  testWidgets('a signature that leaves outputs open is red, with advice', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    const message =
+        'Input 0 is signed with SIGHASH_NONE, which leaves some or all of '
+        'the outputs open: whoever relays or mines this transaction can '
+        'send that money elsewhere. Have it signed again over every output '
+        '(SIGHASH_ALL).';
+    final bridge = FakeBridge()
+      ..onPreview = (_, _) => makePreview(
+        warnings: [
+          TxWarning.fromJson(const {
+            'kind': 'uncommitted_outputs',
+            'message': message,
+            'severity': 'alert',
+          }),
+        ],
+      );
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+    await preview(tester);
+
+    expect(blockOf(tester, message).color, GerfautTokens.light.alertSurface);
+    expect(find.byIcon(LucideIcons.lockOpen), findsOneWidget);
+    expect(find.textContaining('Do not send it as it is.'), findsOneWidget);
+  });
+
+  testWidgets('outputs worth more than the inputs are said before the send', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    const message =
+        'The outputs pay more than the inputs bring: the network will refuse '
+        'this transaction.';
+    final bridge = FakeBridge()
+      ..onPreview = (_, _) => makePreview(
+        feeSats: null,
+        feeRate: null,
+        outputs: const [
+          TxOutputPreview(
+            index: 0,
+            valueSats: 150000,
+            address: 'bc1qexternalpayee',
+          ),
+        ],
+        warnings: const [
+          TxWarning(
+            kind: TxWarningKind.feeUnknown,
+            message: message,
+            severity: TxSeverity.info,
+          ),
+        ],
+      );
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+    await preview(tester);
+    expect(find.text(message), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Broadcast'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Its outputs pay more than its inputs bring: the network will '
+        'refuse it.',
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets("a coin nobody confirmed marks the figures as the file's", (
     tester,
   ) async {
@@ -334,9 +404,7 @@ void main() {
     );
   });
 
-  testWidgets('figures the chain confirmed carry no such mark', (
-    tester,
-  ) async {
+  testWidgets('figures the chain confirmed carry no such mark', (tester) async {
     useTallSurface(tester);
     final bridge = FakeBridge()..onPreview = (_, _) => makePreview();
     await tester.pumpWidget(broadcastApp(bridge));
