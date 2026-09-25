@@ -515,7 +515,10 @@ class _StartupErrorScreenState extends State<_StartupErrorScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Gerfaut could not start', style: tokens.h2),
+                Text(
+                  inUse ? 'Gerfaut is already open' : 'Gerfaut could not start',
+                  style: tokens.h2,
+                ),
                 const SizedBox(height: GerfautSpacing.sm),
                 if (keyGone) ...[
                   Text(
@@ -547,13 +550,15 @@ class _StartupErrorScreenState extends State<_StartupErrorScreen> {
                     ),
                   ),
                 ] else if (inUse) ...[
-                  Text('Gerfaut is already running.', style: tokens.body),
+                  Text(
+                    'The vault is open elsewhere, and it opens in one place '
+                    'at a time so that nothing saves over it.',
+                    style: tokens.body,
+                  ),
                   const SizedBox(height: GerfautSpacing.sm),
                   Text(
-                    'Another copy of the app has the vault open, and it '
-                    'opens in one place at a time so that neither saves '
-                    'over the other. Nothing is wrong with it. Close the '
-                    'other copy, or give it a moment, then try again.',
+                    'Nothing is wrong with it. Give it a moment, then try '
+                    'again.',
                     style: muted,
                   ),
                 ] else
@@ -566,11 +571,20 @@ class _StartupErrorScreenState extends State<_StartupErrorScreen> {
                   spacing: GerfautSpacing.sm,
                   runSpacing: GerfautSpacing.sm,
                   children: [
-                    SecondaryButton(
-                      label: 'Try again',
-                      icon: LucideIcons.refreshCw,
-                      onPressed: widget.onRetry,
-                    ),
+                    // Trying again is the whole answer to a vault held
+                    // elsewhere, so it is the screen's primary action.
+                    if (inUse)
+                      PrimaryButton(
+                        label: 'Try again',
+                        icon: LucideIcons.refreshCw,
+                        onPressed: widget.onRetry,
+                      )
+                    else
+                      SecondaryButton(
+                        label: 'Try again',
+                        icon: LucideIcons.refreshCw,
+                        onPressed: widget.onRetry,
+                      ),
                     if (keyGone && widget.onStartOver != null)
                       GhostButton(
                         label: 'Start over…',

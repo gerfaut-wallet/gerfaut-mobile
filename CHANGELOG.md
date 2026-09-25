@@ -218,9 +218,9 @@ The first release: Gerfaut for Android.
 
 - The vault opens in one place at a time. When the app, a background check
   and Live start together, they now share that one opening instead of the
-  later ones failing. If another copy of the app holds the vault, Gerfaut
-  says it is already running and offers to try again. It never sets that
-  vault aside, and a background check quietly skips its turn.
+  later ones failing. If the vault is still held elsewhere, Gerfaut says it
+  is already open and offers to try again. It never sets that vault aside,
+  and a background check quietly skips its turn.
 - Receive offers only addresses nobody has paid yet, and stops 200
   addresses past the next unused one. The gap limit warning counts along
   the derivation path, and a descriptor with a single address offers no

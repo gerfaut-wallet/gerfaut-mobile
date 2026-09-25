@@ -590,7 +590,7 @@ void main() {
     expect(find.text('Start over…'), findsNothing);
   });
 
-  testWidgets('a vault held elsewhere says the app is running, no start over', (
+  testWidgets('a vault held elsewhere says the app is open, no start over', (
     tester,
   ) async {
     var setAside = 0;
@@ -603,10 +603,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Gerfaut could not start'), findsOneWidget);
-    expect(find.text('Gerfaut is already running.'), findsOneWidget);
+    expect(find.text('Gerfaut is already open'), findsOneWidget);
+    expect(find.text('Gerfaut could not start'), findsNothing);
     expect(find.textContaining('Nothing is wrong with it.'), findsOneWidget);
-    expect(find.text('Try again'), findsOneWidget);
+    expect(find.widgetWithText(PrimaryButton, 'Try again'), findsOneWidget);
     // A healthy vault is never offered to be set aside.
     expect(find.text('Start over…'), findsNothing);
     expect(setAside, 0);
