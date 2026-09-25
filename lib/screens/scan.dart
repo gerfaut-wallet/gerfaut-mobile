@@ -42,6 +42,13 @@ class ScanScreen extends ConsumerStatefulWidget {
   ConsumerState<ScanScreen> createState() => ScanScreenState();
 }
 
+/// The most distinct frames one scan collects. Every new frame sends
+/// the whole collection to the core again, so an endless stream of
+/// distinct frames would cost more at each one; no real code needs
+/// anywhere near this many to complete.
+@visibleForTesting
+const int maxScanFrames = 2000;
+
 class ScanScreenState extends ConsumerState<ScanScreen> {
   /// Distinct frames in scan order; the set makes the repeat check O(1).
   final List<String> _frames = [];
@@ -59,6 +66,10 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
   /// arrived meanwhile and the list must be fed again after it.
   bool _busy = false;
   bool _pending = false;
+
+  /// Counts the collections dropped, so an answer about one that is
+  /// gone is not taken for an answer about the next.
+  int _collection = 0;
 
   QrProgress? _progress;
   String? _error;
@@ -87,6 +98,10 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
     if (_done || !mounted || _refused.contains(text) || !_seen.add(text)) {
       return;
     }
+    if (_frames.length >= maxScanFrames) {
+      _startOver('This code has more parts than Gerfaut can read.');
+      return;
+    }
     _frames.add(text);
     if (_busy) {
       _pending = true;
@@ -100,6 +115,8 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
     try {
       do {
         _pending = false;
+        if (_frames.isEmpty) return;
+        final collection = _collection;
         final bridge = ref.read(bridgeProvider);
         final QrProgress progress;
         try {
@@ -108,12 +125,17 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
           // A refusal landing after the pop belongs to a scan the user
           // has walked away from.
           if (!mounted || _done) return;
+          // Or to a collection already dropped meanwhile.
+          if (collection != _collection) continue;
           // The core refused what was collected: a PSBT, an envelope it
           // cannot open.
           _startOver(e.message);
           return;
         }
         if (!mounted || _done) return;
+        // The collection was dropped while this call was out: what it
+        // says is about frames that are gone.
+        if (collection != _collection) continue;
         final text = progress.text;
         if (progress.complete) {
           if (text == null || text.trim().isEmpty) {
@@ -145,6 +167,7 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
   /// nothing. Only a lone frame is provably the one at fault — further
   /// along any of them could be, so none is barred from a fresh try.
   void _startOver(String reason) {
+    _collection++;
     if (_frames.length == 1) _refused.add(_frames.first);
     _frames.clear();
     _seen.clear();

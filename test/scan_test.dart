@@ -150,6 +150,35 @@ void main() {
     ]);
   });
 
+  testWidgets('a code that never ends is dropped, and the scan goes on', (
+    tester,
+  ) async {
+    final bridge = FakeBridge()
+      ..onAssembleQr = (frames) => QrProgress(
+        format: QrFormat.ur,
+        received: frames.length,
+        total: 9999,
+        complete: false,
+      );
+    final outcome = _Outcome();
+    final state = await _open(tester, bridge, outcome);
+
+    for (var i = 1; i <= maxScanFrames + 1; i++) {
+      state.onFrame('ur:bytes/$i-9999/part-$i');
+    }
+    await tester.pumpAndSettle();
+    expect(
+      find.text('This code has more parts than Gerfaut can read.'),
+      findsOneWidget,
+    );
+    expect(
+      bridge.assembleCalls.every((call) => call.length <= maxScanFrames),
+      isTrue,
+    );
+    expect(outcome.pops, 0);
+    expect(find.byType(ScanScreen), findsOneWidget);
+  });
+
   testWidgets('a repeated frame is not fed again', (tester) async {
     final bridge = FakeBridge()..onAssembleQr = threeParts;
     final outcome = _Outcome();
