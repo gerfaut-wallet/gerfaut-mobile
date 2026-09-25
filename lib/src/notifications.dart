@@ -89,9 +89,11 @@ class LocalNotificationService implements NotificationService {
           transactionsChannelId,
           _transactionsChannelName,
           importance: Importance.defaultImportance,
-          // The phone's own lock screen shows the title, never the
-          // amount: an app that hides balances behind a PIN cannot
-          // print them where anyone walking past can read them.
+          // Private: on a phone set to hide sensitive content on its
+          // lock screen, only the app's name shows there. On one set to
+          // show everything, the text shows as written, which is why
+          // it is generic under an app lock and carries no amount while
+          // balances are hidden.
           visibility: NotificationVisibility.private,
         ),
       ),
