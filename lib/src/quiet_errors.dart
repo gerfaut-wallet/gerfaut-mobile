@@ -8,8 +8,6 @@
 // a release build the message goes nowhere. A debug build keeps it: that
 // is where it is read.
 
-import 'dart:ui';
-
 import 'package:flutter/foundation.dart';
 
 /// Silences uncaught errors when [release] is true. Called first in
