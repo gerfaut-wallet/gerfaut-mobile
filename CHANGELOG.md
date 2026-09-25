@@ -191,6 +191,16 @@ The first release: Gerfaut for Android.
 
 ### Changed
 
+- Broadcast warns in red when a signature leaves the outputs open
+  (SIGHASH_NONE or SIGHASH_SINGLE). Whoever relays such a transaction can
+  send that money elsewhere, so the page tells you not to send it as it is.
+  When the outputs pay more than the inputs bring, the last check before
+  sending says the network will refuse it.
+- When the Premium server's code cannot go into the Telegram link, the page
+  asks you to type it to the bot, instead of promising that Start sends it
+  for you.
+- Premium requests go through Tor as soon as any network has a .onion
+  backend, not only the network on screen, and the Tor notice says so.
 - A Telegram link now opens in Telegram itself, or in a browser tab when
   Telegram is not installed. On older Android versions any app that claimed
   t.me links could receive the code that connects a chat to your alerts.
@@ -206,6 +216,23 @@ The first release: Gerfaut for Android.
 
 ### Fixed
 
+- The vault opens in one place at a time. When the app, a background check
+  and Live start together, they now share that one opening instead of the
+  later ones failing. If another copy of the app holds the vault, Gerfaut
+  says it is already running and offers to try again. It never sets that
+  vault aside, and a background check quietly skips its turn.
+- Receive offers only addresses nobody has paid yet, and stops 200
+  addresses past the next unused one. The gap limit warning counts along
+  the derivation path, and a descriptor with a single address offers no
+  next one.
+- The wallet file picker shows every file, so a .bsms or .desc file can be
+  picked. It used to grey them out.
+- When the app refuses a backend, for example a host with a port still in
+  it, the reason now shows under the Save button. The save used to stop
+  without a word.
+- A private key in a pasted wallet, a file or a backup is refused with a
+  sentence that says what to bring instead. A descriptor the wallet engine
+  refuses says so, with the engine's reason.
 - The "watch is offline" banner now goes away when you forget the Premium
   key or stop watching the last wallet during an outage. Tapping
   Acknowledge twice writes it once, and a failed write leaves the banner up.
