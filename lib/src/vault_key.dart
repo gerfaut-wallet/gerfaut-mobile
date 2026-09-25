@@ -74,6 +74,17 @@ class VaultKeyMissingException implements Exception {
   String toString() => 'the vault is here but its key is gone: $detail';
 }
 
+/// Another open holds the vault: a second copy of the app, or a second
+/// opener in this one. Nothing was read, and nothing is wrong with the
+/// vault: it is never set aside for this, and a background run that
+/// meets it simply skips its turn.
+class VaultInUseException implements Exception {
+  const VaultInUseException();
+
+  @override
+  String toString() => 'the vault is already open in another Gerfaut process';
+}
+
 File _vaultFile(String dataDir) =>
     File('$dataDir${Platform.pathSeparator}$vaultFileName');
 
@@ -175,6 +186,7 @@ Future<void> bootstrapGerfaut() async {
   final decoded = jsonDecode(result);
   if (decoded is Map<String, dynamic> && decoded['error'] != null) {
     final error = decoded['error'] as Map<String, dynamic>;
+    if (error['kind'] == 'vault_in_use') throw const VaultInUseException();
     throw StateError(
       'vault init failed (${error['kind']}): ${error['message']}',
     );

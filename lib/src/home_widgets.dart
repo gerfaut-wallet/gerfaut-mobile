@@ -538,6 +538,10 @@ Future<bool> refreshWidgets({
       network: NetworkPayload.of(wallets, network: network, now: now),
     );
     return true;
+  } on VaultInUseException {
+    // Another opener holds the vault, which is fine: the widgets keep
+    // what they show until the next run.
+    return true;
   } catch (_) {
     // A vault that would not open is not a reason to retry in a tight
     // loop: the next scheduled run is soon enough.

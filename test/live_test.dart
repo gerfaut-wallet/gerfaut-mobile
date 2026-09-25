@@ -13,6 +13,7 @@ import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/notifications.dart';
 import 'package:gerfaut/src/state.dart';
+import 'package:gerfaut/src/vault_key.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/select_field.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
@@ -352,6 +353,28 @@ void main() {
     );
 
     test(
+      'a vault held elsewhere is skipped quietly, then started at a tick',
+      () async {
+        var held = true;
+        final service = _Service(
+          _bridge(),
+          bootstrap: () async {
+            if (held) throw const VaultInUseException();
+          },
+        );
+        await service.runner.run();
+        expect(service.bridge.liveStartCalls, 0);
+        // Nothing wrong is said: the vault is healthy.
+        expect(service.told.where((t) => t.$1 == 'status'), isEmpty);
+
+        held = false;
+        await service.send('tick');
+        expect(service.bridge.liveStartCalls, 1);
+        expect(service.bridge.liveTickCalls, 1);
+      },
+    );
+
+    test(
       'the heartbeat asks the core to check, and starts nothing twice',
       () async {
         final service = _Service(_bridge());
@@ -487,6 +510,20 @@ void main() {
         ..watchStatus = const LiveWatchStatus(state: WatchState.connected);
       await check(bridge);
       expect(bridge.syncAllCalls, 0);
+    });
+
+    test('skips its turn quietly while the vault is held', () async {
+      final bridge = _bridge();
+      final notifications = FakeNotifications();
+      final ran = await runBackgroundCheck(
+        bridge: bridge,
+        service: notifications,
+        bootstrap: () async => throw const VaultInUseException(),
+        isDisguised: () async => false,
+      );
+      expect(ran, isTrue);
+      expect(bridge.syncAllCalls, 0);
+      expect(notifications.posted, isEmpty);
     });
 
     test('syncs when the watch is not running', () async {

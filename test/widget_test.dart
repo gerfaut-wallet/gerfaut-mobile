@@ -217,7 +217,10 @@ void main() {
         lessThan(top('Cold storage')),
       );
       expect(top('Cold storage'), lessThan(top('Spending')));
-      expect(tester.getSize(find.widgetWithText(GhostButton, 'Try again')).height, 44);
+      expect(
+        tester.getSize(find.widgetWithText(GhostButton, 'Try again')).height,
+        44,
+      );
 
       // Try again: the same order goes out once more, and lands.
       refuse = false;
@@ -293,9 +296,8 @@ void main() {
       // the last one. The cards and the note stay through it.
       final listed = bridge.listed;
       final gate = bridge.gate = Completer<void>();
-      ProviderScope.containerOf(
-        tester.element(find.text('Cold storage')),
-      ).invalidate(settingsProvider);
+      ProviderScope.containerOf(tester.element(find.text('Cold storage')))
+          .invalidate(settingsProvider);
       await tester.pumpAndSettle();
       expect(bridge.listed, greaterThan(listed));
       expect(find.text('Opening the vault…'), findsNothing);
@@ -586,6 +588,28 @@ void main() {
     expect(find.textContaining('vault init failed'), findsOneWidget);
     expect(find.text('Try again'), findsOneWidget);
     expect(find.text('Start over…'), findsNothing);
+  });
+
+  testWidgets('a vault held elsewhere says the app is running, no start over', (
+    tester,
+  ) async {
+    var setAside = 0;
+    await tester.pumpWidget(
+      app(
+        FakeBridge(),
+        bootstrap: () async => throw const VaultInUseException(),
+        startOver: () async => setAside++,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Gerfaut could not start'), findsOneWidget);
+    expect(find.text('Gerfaut is already running.'), findsOneWidget);
+    expect(find.textContaining('Nothing is wrong with it.'), findsOneWidget);
+    expect(find.text('Try again'), findsOneWidget);
+    // A healthy vault is never offered to be set aside.
+    expect(find.text('Start over…'), findsNothing);
+    expect(setAside, 0);
   });
 
   testWidgets('trying again runs the bootstrap once more', (tester) async {

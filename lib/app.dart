@@ -502,6 +502,9 @@ class _StartupErrorScreenState extends State<_StartupErrorScreen> {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final error = widget.error;
     final keyGone = error is VaultKeyMissingException;
+    // Held by another opener: a healthy vault, so nothing here offers to
+    // set it aside, and trying again is the whole answer.
+    final inUse = error is VaultInUseException;
     final muted = tokens.bodySmall.copyWith(color: tokens.textMuted);
     return Scaffold(
       body: SafeArea(
@@ -542,6 +545,16 @@ class _StartupErrorScreenState extends State<_StartupErrorScreen> {
                       fontSize: 12,
                       color: tokens.textMuted,
                     ),
+                  ),
+                ] else if (inUse) ...[
+                  Text('Gerfaut is already running.', style: tokens.body),
+                  const SizedBox(height: GerfautSpacing.sm),
+                  Text(
+                    'Another copy of the app has the vault open, and it '
+                    'opens in one place at a time so that neither saves '
+                    'over the other. Nothing is wrong with it. Close the '
+                    'other copy, or give it a moment, then try again.',
+                    style: muted,
                   ),
                 ] else
                   SelectableText(

@@ -557,6 +557,10 @@ class LiveRunner {
         onDone: () => _runEnded(run),
       );
       return true;
+    } on VaultInUseException {
+      // Another opener holds the vault: nothing is wrong, and the next
+      // heartbeat tries again. The notification keeps what it says.
+      return false;
     } catch (_) {
       await _tell('status', 'Waiting to start');
       return false;

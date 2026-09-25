@@ -125,6 +125,10 @@ Future<bool> runBackgroundCheck({
       locked: notifiesLocked(settings),
     );
     return true;
+  } on VaultInUseException {
+    // Another opener holds the vault. It is healthy, and whoever holds
+    // it watches the same wallets: this turn is skipped, quietly.
+    return true;
   } catch (_) {
     // A backend that did not answer is not a reason to retry in a
     // tight loop: the next scheduled check is soon enough.
