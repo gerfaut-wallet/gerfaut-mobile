@@ -157,14 +157,14 @@ void main() {
       ..onAssembleQr = (frames) => QrProgress(
         format: QrFormat.ur,
         received: frames.length,
-        total: 9999,
+        total: 500,
         complete: false,
       );
     final outcome = _Outcome();
     final state = await _open(tester, bridge, outcome);
 
     for (var i = 1; i <= maxScanFrames + 1; i++) {
-      state.onFrame('ur:bytes/$i-9999/part-$i');
+      state.onFrame('ur:bytes/$i-500/part-$i');
     }
     await tester.pumpAndSettle();
     expect(
@@ -177,6 +177,45 @@ void main() {
     );
     expect(outcome.pops, 0);
     expect(find.byType(ScanScreen), findsOneWidget);
+  });
+
+  testWidgets('a large code missed half the time still completes', (
+    tester,
+  ) async {
+    // A PSBT of about 100 kB at 80 bytes a frame, Sparrow's low density,
+    // read by a camera that catches every other frame: some 2,500
+    // frames before the fountain resolves every part.
+    const total = 1250;
+    const needed = 2500;
+    final bridge = FakeBridge()
+      ..onAssembleQr = (frames) => QrProgress(
+        format: QrFormat.ur,
+        received: frames.length.clamp(0, total),
+        total: total,
+        complete: frames.length >= needed,
+        text: frames.length >= needed ? 'cHNidP8B' : null,
+      );
+    final outcome = _Outcome();
+    final state = await _open(tester, bridge, outcome);
+
+    for (var i = 1; i <= needed; i++) {
+      state.onFrame('ur:crypto-psbt/$i-$total/part-$i');
+      if (i % 100 == 0) await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    expect(
+      find.text('This code has more parts than Gerfaut can read.'),
+      findsNothing,
+    );
+    expect(outcome.pops, 1);
+    expect(outcome.text, 'cHNidP8B');
+  });
+
+  test('the frame limit follows the parts a code announces', () {
+    expect(scanFrameLimit(null), maxScanFrames);
+    expect(scanFrameLimit(3), maxScanFrames);
+    expect(scanFrameLimit(1250), 3750);
+    expect(scanFrameLimit(10000), maxScanFramesCeiling);
   });
 
   testWidgets('a repeated frame is not fed again', (tester) async {

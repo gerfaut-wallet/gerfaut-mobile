@@ -42,12 +42,26 @@ class ScanScreen extends ConsumerStatefulWidget {
   ConsumerState<ScanScreen> createState() => ScanScreenState();
 }
 
-/// The most distinct frames one scan collects. Every new frame sends
-/// the whole collection to the core again, so an endless stream of
-/// distinct frames would cost more at each one; no real code needs
-/// anywhere near this many to complete.
+/// The most distinct frames one scan collects before the code says how
+/// many parts it has. Every new frame sends the whole collection to the
+/// core again, so an endless stream of distinct frames would cost more
+/// at each one.
 @visibleForTesting
 const int maxScanFrames = 2000;
+
+/// The most distinct frames any scan collects. A fountain code keeps
+/// sending new frames that mix parts, and a camera that misses half of
+/// them needs about twice as many frames as the code has parts: a large
+/// PSBT shown at low density runs to well over a thousand parts.
+@visibleForTesting
+const int maxScanFramesCeiling = 10000;
+
+/// The frames a scan may collect once the code has announced [total]
+/// parts: three times as many, within [maxScanFrames] and
+/// [maxScanFramesCeiling].
+@visibleForTesting
+int scanFrameLimit(int? total) =>
+    ((total ?? 0) * 3).clamp(maxScanFrames, maxScanFramesCeiling);
 
 class ScanScreenState extends ConsumerState<ScanScreen> {
   /// Distinct frames in scan order; the set makes the repeat check O(1).
@@ -98,7 +112,7 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
     if (_done || !mounted || _refused.contains(text) || !_seen.add(text)) {
       return;
     }
-    if (_frames.length >= maxScanFrames) {
+    if (_frames.length >= scanFrameLimit(_progress?.total)) {
       _startOver('This code has more parts than Gerfaut can read.');
       return;
     }
