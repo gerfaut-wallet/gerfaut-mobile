@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show FileSystemException;
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -470,6 +471,52 @@ void main() {
     expect(parsed, ['wpkh(tpub.../0/*)#checksum']);
   });
 
+  testWidgets('a file far too large is refused before it is read', (
+    tester,
+  ) async {
+    final parsed = <String>[];
+    final bridge = FakeBridge(
+      onParse: (input) {
+        parsed.add(input);
+        return makeParsedInput();
+      },
+    );
+    await tester.pumpWidget(
+      screen(
+        bridge,
+        filePicker: () async =>
+            XFile.fromData(Uint8List(64 * 1024 + 1), path: 'holiday.mp4'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Import a file'));
+    await tester.pumpAndSettle();
+    expect(find.text('This file is too large to be a wallet.'), findsOneWidget);
+    expect(parsed, isEmpty);
+  });
+
+  testWidgets('a file that is not text says so', (tester) async {
+    final parsed = <String>[];
+    final bridge = FakeBridge(
+      onParse: (input) {
+        parsed.add(input);
+        return makeParsedInput();
+      },
+    );
+    await tester.pumpWidget(
+      screen(bridge, filePicker: () async => _NotText('wallet.txt')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Import a file'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(
+      find.text('This file is not text Gerfaut can read.'),
+      findsOneWidget,
+    );
+    expect(parsed, isEmpty);
+  });
+
   testWidgets('a picker that never opened does not cover a later trip', (
     tester,
   ) async {
@@ -499,4 +546,19 @@ void main() {
       ..noteResumed();
     expect(lock.state.locked, isTrue);
   });
+}
+
+/// A picked file whose bytes are not UTF-8, as the phone's file system
+/// reports one.
+class _NotText extends XFile {
+  _NotText(super.path);
+
+  @override
+  Future<int> length() async => 5;
+
+  @override
+  Future<String> readAsString({Encoding encoding = utf8}) async =>
+      throw const FileSystemException(
+        "Failed to decode data using encoding 'utf-8'",
+      );
 }

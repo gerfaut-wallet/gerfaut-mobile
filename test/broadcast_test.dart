@@ -874,6 +874,28 @@ void main() {
     expect(bridge.previewInputs, ['cHNidP8B']);
   });
 
+  testWidgets('a file far too large is refused before it is read', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge()..onPreview = (_, _) => makePreview();
+    await tester.pumpWidget(
+      broadcastApp(
+        bridge,
+        filePicker: () async =>
+            XFile.fromData(Uint8List(4000001), path: 'holiday.mp4'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Import a file'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('This file is too large to be a transaction.'),
+      findsOneWidget,
+    );
+    expect(bridge.previewInputs, isEmpty);
+  });
+
   testWidgets('a picker that never opened does not cover a later trip', (
     tester,
   ) async {

@@ -162,10 +162,33 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
       return;
     }
     if (file == null) return;
-    final text = (await file.readAsString()).trim();
+    // Checked before reading: the core reads no more than this much
+    // wallet material, and a video picked by mistake must cost a
+    // sentence, not the memory of the whole file.
+    if (await file.length() > _maxMaterialBytes) {
+      if (mounted) {
+        setState(() => _error = 'This file is too large to be a wallet.');
+      }
+      return;
+    }
+    final String text;
+    try {
+      text = (await file.readAsString()).trim();
+    } on Exception {
+      // Not UTF-8: a file read from disk says so as a file system
+      // error, bytes already in memory as a format error.
+      if (mounted) {
+        setState(() => _error = 'This file is not text Gerfaut can read.');
+      }
+      return;
+    }
+    if (!mounted) return;
     _rawController.text = text;
     await _parse(text);
   }
+
+  /// The most wallet material the core reads, in bytes.
+  static const int _maxMaterialBytes = 64 * 1024;
 
   Future<void> _scan() async {
     final text = await Navigator.of(context).push<String>(

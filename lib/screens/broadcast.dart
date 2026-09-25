@@ -105,6 +105,10 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     }
   }
 
+  /// The most text the core reads as a transaction; a binary file
+  /// goes to it as hex, twice its size, so this is also the limit there.
+  static const int _maxTransactionBytes = 4000000;
+
   Future<void> _importFile() async {
     final lock = ref.read(lockProvider.notifier);
     // The picker is a screen of the system's: Android pauses Gerfaut
@@ -127,6 +131,17 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
       return;
     }
     if (file == null) return;
+    // Checked before reading: the core reads no more than this much, and
+    // a file picked by mistake must cost a sentence, not the memory of
+    // the whole file.
+    if (await file.length() > _maxTransactionBytes) {
+      if (mounted) {
+        setState(
+          () => _inputError = 'This file is too large to be a transaction.',
+        );
+      }
+      return;
+    }
     final text = transactionTextOf(await file.readAsBytes());
     if (!mounted) return;
     _inputController.text = text;
