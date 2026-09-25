@@ -10,6 +10,7 @@ import 'package:gerfaut/screens/premium_channels.dart';
 import 'package:gerfaut/screens/premium_consent.dart';
 import 'package:gerfaut/screens/settings/premium_section.dart';
 import 'package:gerfaut/screens/wallet_home.dart';
+import 'package:gerfaut/src/apps.dart';
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/models.dart';
@@ -1689,6 +1690,43 @@ void main() {
       // learned is.
       expect(find.text('Linked to Alice'), findsOneWidget);
       expect(find.text('linked'), findsNothing);
+    });
+
+    testWidgets('telegram: a link without the code asks for it typed', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      final launcher = FakeUrlLauncher();
+      UrlLauncherPlatform.instance = launcher;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            bridgeProvider.overrideWithValue(bridge),
+            appOpenerProvider.overrideWithValue(
+              FakeAppOpener(installed: false),
+            ),
+          ],
+          child: MaterialApp(
+            theme: themeFrom(GerfautTokens.light, Brightness.light),
+            home: const TelegramChannelScreen(
+              channelId: 'ch1',
+              code: 'a b#c',
+              startUrl: 'https://t.me/GerfautAlertsBot',
+              pollFor: Duration.zero,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Send this to @GerfautAlertsBot'), findsOneWidget);
+      expect(find.textContaining('type the line below'), findsOneWidget);
+      expect(find.textContaining('the code is sent for you'), findsNothing);
+      expect(find.text('/start a b#c'), findsOneWidget);
+
+      await tester.tap(find.text('Open Telegram'));
+      await tester.pumpAndSettle();
+      expect(launcher.launched, ['https://t.me/GerfautAlertsBot']);
     });
 
     testWidgets('telegram: once the page rests, Check again asks out loud', (

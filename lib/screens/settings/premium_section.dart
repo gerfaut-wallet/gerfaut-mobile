@@ -596,9 +596,10 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
         builder: (_) => TelegramChannelScreen(
           channelId: channel.id,
           code: code,
-          startUrl:
-              channel.startUrl ??
-              'https://t.me/${view.telegramBot}?start=$code',
+          // The core builds the link, and leaves out a code Telegram would
+          // not take as a start parameter; without one, the bot alone,
+          // and the code is typed.
+          startUrl: channel.startUrl ?? 'https://t.me/${view.telegramBot}',
         ),
       ),
     );

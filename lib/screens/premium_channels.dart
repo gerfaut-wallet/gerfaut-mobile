@@ -339,7 +339,9 @@ class TelegramChannelScreen extends ConsumerStatefulWidget {
   /// The code the bot expects after `/start`.
   final String code;
 
-  /// `https://t.me/<bot>?start=<code>`.
+  /// `https://t.me/<bot>?start=<code>`, or the bare `https://t.me/<bot>`
+  /// when the core kept a code Telegram would not take as a start
+  /// parameter out of the link: the code is typed by hand then.
   final String startUrl;
 
   /// How often the server is asked, and for how long before the page
@@ -427,6 +429,11 @@ class _TelegramChannelScreenState extends ConsumerState<TelegramChannelScreen> {
     }
   }
 
+  /// Whether pressing Start in Telegram sends the code by itself.
+  bool get _linkCarriesCode =>
+      Uri.tryParse(widget.startUrl)?.queryParameters.containsKey('start') ??
+      false;
+
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
@@ -478,8 +485,13 @@ class _TelegramChannelScreenState extends ConsumerState<TelegramChannelScreen> {
                 ),
                 const SizedBox(height: GerfautSpacing.sm),
                 Text(
-                  'Open Telegram and press Start: the code is sent for you. '
-                  'This page follows along and says when the bot has it.',
+                  _linkCarriesCode
+                      ? 'Open Telegram and press Start: the code is sent for '
+                            'you. This page follows along and says when the '
+                            'bot has it.'
+                      : 'Open Telegram, press Start, then type the line below '
+                            'to the bot. This page follows along and says '
+                            'when the bot has it.',
                   style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                 ),
                 const SizedBox(height: GerfautSpacing.md),
