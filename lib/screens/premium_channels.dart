@@ -434,6 +434,16 @@ class _TelegramChannelScreenState extends ConsumerState<TelegramChannelScreen> {
       Uri.tryParse(widget.startUrl)?.queryParameters.containsKey('start') ??
       false;
 
+  /// Copies the line to type to the bot. The code links a chat to the
+  /// account's alerts, so it stays out of the clipboard's preview and
+  /// history, as the ntfy topic does.
+  Future<void> _copyCode() async {
+    await ref.read(sensitiveClipboardProvider).copy('/start ${widget.code}');
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Copied')));
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
@@ -515,6 +525,15 @@ class _TelegramChannelScreenState extends ConsumerState<TelegramChannelScreen> {
                         '/start ${widget.code}',
                         style: tokens.data.copyWith(fontSize: 22, height: 1.3),
                       ),
+                      // Typed by hand when the link cannot carry it.
+                      if (!_linkCarriesCode) ...[
+                        const SizedBox(height: GerfautSpacing.sm),
+                        GhostButton(
+                          label: 'Copy',
+                          icon: LucideIcons.copy,
+                          onPressed: _copyCode,
+                        ),
+                      ],
                     ],
                   ),
                 ),

@@ -12,6 +12,7 @@ import 'package:gerfaut/screens/settings/premium_section.dart';
 import 'package:gerfaut/screens/wallet_home.dart';
 import 'package:gerfaut/src/apps.dart';
 import 'package:gerfaut/src/bridge.dart';
+import 'package:gerfaut/src/clipboard.dart';
 import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/premium.dart';
@@ -1617,6 +1618,8 @@ void main() {
       expect(find.byType(TelegramChannelScreen), findsOneWidget);
       expect(find.text('Send this to @GerfautAlertsBot'), findsOneWidget);
       expect(find.text('/start code1'), findsOneWidget);
+      // The link carries the code: nothing to copy and type.
+      expect(find.text('Copy'), findsNothing);
       expect(find.text('Waiting for the bot'), findsOneWidget);
       // Not tested before the bot has it: the test would only fail.
       expect(bridge.premiumCalls.where((c) => c.startsWith('test:')), isEmpty);
@@ -1723,6 +1726,7 @@ void main() {
       final bridge = premiumBridge(activated: true);
       final launcher = FakeUrlLauncher();
       UrlLauncherPlatform.instance = launcher;
+      final clipboard = FakeSensitiveClipboard();
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -1730,6 +1734,7 @@ void main() {
             appOpenerProvider.overrideWithValue(
               FakeAppOpener(installed: false),
             ),
+            sensitiveClipboardProvider.overrideWithValue(clipboard),
           ],
           child: MaterialApp(
             theme: themeFrom(GerfautTokens.light, Brightness.light),
@@ -1751,6 +1756,12 @@ void main() {
       await tester.tap(find.text('Open Telegram'));
       await tester.pumpAndSettle();
       expect(launcher.launched, ['https://t.me/GerfautAlertsBot']);
+
+      // The line to type, copied as the secret it is.
+      await tester.tap(find.text('Copy'));
+      await tester.pump();
+      expect(clipboard.copied, ['/start a b#c']);
+      await tester.pump(const Duration(seconds: 5));
     });
 
     testWidgets('telegram: once the page rests, Check again asks out loud', (
