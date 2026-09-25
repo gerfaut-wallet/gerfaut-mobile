@@ -974,6 +974,7 @@ bool watchBannerShows(
 class WatchMonitor extends Notifier<WatchStatus> {
   Timer? _timer;
   bool _checking = false;
+  bool _acknowledging = false;
   int? _lastCheckAt;
   WatchStatus _status = const WatchStatus();
 
@@ -1060,10 +1061,19 @@ class WatchMonitor extends Notifier<WatchStatus> {
 
   /// Puts the banner down for a day of this outage. Stored in the
   /// vault, so a restart does not bring it back.
+  /// One at a time: a second tap while the vault writes does nothing.
   Future<void> acknowledge() async {
-    final until = _now() + offlineAcknowledgement.inSeconds;
-    await ref.read(bridgeProvider).premiumAcknowledgeOffline(until);
-    ref.invalidate(premiumStateProvider);
+    if (_acknowledging) return;
+    _acknowledging = true;
+    try {
+      final until = _now() + offlineAcknowledgement.inSeconds;
+      await ref.read(bridgeProvider).premiumAcknowledgeOffline(until);
+      ref.invalidate(premiumStateProvider);
+    } catch (_) {
+      // Not written: the banner stays up, and the next tap tries again.
+    } finally {
+      _acknowledging = false;
+    }
   }
 }
 

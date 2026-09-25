@@ -2252,9 +2252,19 @@ class FakeBridge implements GerfautBridge {
     return 0;
   }
 
+  /// Makes the next acknowledgements fail, as a vault that cannot write.
+  bool acknowledgeFails = false;
+
+  /// Holds acknowledgements until completed, as a slow vault.
+  Completer<void>? acknowledgeGate;
+
   @override
   Future<void> premiumAcknowledgeOffline(int? untilUnix) async {
     premiumCalls.add('acknowledge:$untilUnix');
+    await acknowledgeGate?.future;
+    if (acknowledgeFails) {
+      throw const BridgeException('vault', 'the vault could not be written');
+    }
     premiumAcknowledgedUntil = untilUnix;
   }
 

@@ -2301,6 +2301,31 @@ void main() {
       expect(find.byType(AlertBanner), findsNothing);
     });
 
+    testWidgets('an acknowledgement the vault refuses leaves the banner, '
+        'and a double tap writes once', (tester) async {
+      final bridge = await offline(tester);
+      bridge.acknowledgeFails = true;
+      await tester.tap(find.text('Acknowledge'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byType(AlertBanner), findsOneWidget);
+
+      bridge.acknowledgeFails = false;
+      bridge.premiumCalls.clear();
+      final gate = bridge.acknowledgeGate = Completer<void>();
+      await tester.tap(find.text('Acknowledge'));
+      await tester.pump();
+      await tester.tap(find.text('Acknowledge'));
+      await tester.pump();
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(
+        bridge.premiumCalls.where((call) => call.startsWith('acknowledge')),
+        hasLength(1),
+      );
+      expect(find.byType(AlertBanner), findsNothing);
+    });
+
     testWidgets('nothing beats while no wallet is watched', (tester) async {
       final bridge = premiumBridge(activated: true);
       await tester.pumpWidget(wholeApp(bridge));
