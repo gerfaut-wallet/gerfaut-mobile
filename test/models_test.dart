@@ -1,6 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gerfaut/src/bridge.dart';
+import 'package:flutter_rust_bridge/flutter_rust_bridge.dart'
+    show PanicException;
 import 'package:gerfaut/src/models.dart';
 
 const _descriptors = {
@@ -581,4 +584,21 @@ void main() {
       expect(WalletWatch.fromJson(watch(1755000030)).scanning, isFalse);
     });
   });
+
+  test(
+    'a panic in the core comes back as a failure the screens catch',
+    () async {
+      await expectLater(
+        guardPanics(
+          Future<String>.error(PanicException('index out of bounds')),
+        ),
+        throwsA(
+          isA<BridgeException>()
+              .having((e) => e.kind, 'kind', 'internal')
+              .having((e) => e.message, 'message', internalFailure),
+        ),
+      );
+      expect(await guardPanics(Future.value('{"ok":true}')), '{"ok":true}');
+    },
+  );
 }
