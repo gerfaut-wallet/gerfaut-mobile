@@ -34,6 +34,9 @@ class _RecordingNotifications implements NotificationService {
   /// Answers a clear the way a platform without the plugin does.
   bool refuseClear = false;
   @override
+  Future<bool> deliverable() async => true;
+
+  @override
   Future<void> init() async {}
   @override
   Future<bool> requestPermission() async => true;

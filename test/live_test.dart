@@ -1647,6 +1647,90 @@ void main() {
     });
   });
 
+  group('notices the system no longer lets through', () {
+    ProviderContainer withNotices(
+      FakeBridge bridge,
+      FakeLivePlatform platform,
+      FakeNotifications notices,
+    ) {
+      final container = ProviderContainer(
+        overrides: [
+          bridgeProvider.overrideWithValue(bridge),
+          livePlatformProvider.overrideWithValue(platform),
+          disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+          notificationServiceProvider.overrideWithValue(notices),
+          backgroundSchedulerProvider.overrideWithValue((seconds) async {}),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      container.read(backgroundCheckProvider.notifier).hydrate('live');
+      return container;
+    }
+
+    test('are said, and Live goes back to a periodic check', () async {
+      final bridge = _bridge();
+      final platform = FakeLivePlatform(running: true, wanted: true);
+      final notices = FakeNotifications()..deliverableNow = false;
+      final container = withNotices(bridge, platform, notices);
+
+      await container.read(notifyNewTxProvider.notifier).checkSystem();
+
+      expect(container.read(notificationsRefusedProvider), isTrue);
+      expect(platform.calls, ['stop']);
+      expect(bridge.appPrefs['notify.background'], '900');
+      // The notice itself stays on: it is the system that stops it.
+      expect(container.read(notifyNewTxProvider), isTrue);
+    });
+
+    test('let through again, nothing more is said', () async {
+      final bridge = _bridge();
+      final platform = FakeLivePlatform(running: true, wanted: true);
+      final notices = FakeNotifications()..deliverableNow = false;
+      final container = withNotices(bridge, platform, notices);
+      await container.read(notifyNewTxProvider.notifier).checkSystem();
+
+      notices.deliverableNow = true;
+      await container.read(notifyNewTxProvider.notifier).checkSystem();
+      expect(container.read(notificationsRefusedProvider), isFalse);
+    });
+
+    test('with the notice off, the system is not asked', () async {
+      final bridge = _bridge();
+      final platform = FakeLivePlatform(running: true, wanted: true);
+      final notices = FakeNotifications()..deliverableNow = false;
+      final container = withNotices(bridge, platform, notices);
+      container.read(notifyNewTxProvider.notifier).hydrate('0');
+
+      await container.read(notifyNewTxProvider.notifier).checkSystem();
+      expect(container.read(notificationsRefusedProvider), isFalse);
+      expect(platform.calls, isEmpty);
+    });
+
+    testWidgets('the settings say it, with a way to the system page', (
+      tester,
+    ) async {
+      final bridge = _bridge(
+        prefs: {'notify.new_tx': '1', 'notify.background': '900'},
+      );
+      final platform = FakeLivePlatform();
+      await _open(tester, _settings(bridge, platform: platform));
+      ProviderScope.containerOf(tester.element(find.byType(SettingsScreen)))
+              .read(notificationsRefusedProvider.notifier)
+              .state =
+          true;
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Notifications are off for Gerfaut in the system settings.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Open system settings'));
+      await tester.pumpAndSettle();
+      expect(platform.calls, contains('appSettings'));
+    });
+  });
+
   group('the app and the service', () {
     ProviderContainer app(FakeBridge bridge, FakeLivePlatform platform) {
       final container = ProviderContainer(

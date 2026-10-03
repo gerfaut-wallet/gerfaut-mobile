@@ -216,6 +216,9 @@ class RecordingNotifications implements NotificationService {
   final List<({int id, String title, String body})> posted = [];
 
   @override
+  Future<bool> deliverable() async => true;
+
+  @override
   Future<void> init() async {}
 
   @override

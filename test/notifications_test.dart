@@ -24,6 +24,12 @@ class FakeNotifications implements NotificationService {
   int permissionAsks = 0;
   final List<({int id, String title, String body})> posted = [];
 
+  /// What the system answers when asked whether notices get through.
+  bool deliverableNow = true;
+
+  @override
+  Future<bool> deliverable() async => deliverableNow;
+
   @override
   Future<void> init() async => inits++;
 

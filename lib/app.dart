@@ -191,8 +191,9 @@ class _Hydrated extends ConsumerWidget {
         ref.read(deviceWatchProvider);
         // Live watch: listen to the core, and see that the service runs
         // if the setting asks for it. The app is on screen, which is
-        // when Android lets it start.
-        unawaited(ref.read(liveProvider.notifier).resume());
+        // when Android lets it start. Not before the notices are known
+        // to get through: Live is there to say things.
+        unawaited(_checkNoticesThenLive(ref));
       }
       // The vault says whether a lock exists, every time it is read:
       // the first reading with one in it is what puts the screen up.
@@ -248,6 +249,13 @@ void _startUpdateSession(WidgetRef ref) {
   final lock = ref.read(lockProvider);
   if (!ref.read(prefsHydratedProvider) || !lock.loaded || lock.locked) return;
   unawaited(ref.read(updateProvider.notifier).sessionStarted());
+}
+
+/// Reads whether the notices still get through, then brings Live in
+/// line with the setting that check may have changed.
+Future<void> _checkNoticesThenLive(WidgetRef ref) async {
+  await ref.read(notifyNewTxProvider.notifier).checkSystem();
+  await ref.read(liveProvider.notifier).resume();
 }
 
 /// What the app shows once the vault is open: the lock while it is
@@ -311,7 +319,7 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
           // are looked at at once.
           ref.read(watchMonitorProvider.notifier).resume();
           ref.read(deviceWatchProvider.notifier).resume();
-          unawaited(ref.read(liveProvider.notifier).resume());
+          unawaited(_checkNoticesThenLive(ref));
           _startUpdateSession(ref);
         }
       case AppLifecycleState.inactive:

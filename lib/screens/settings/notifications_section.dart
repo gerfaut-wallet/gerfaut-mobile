@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../src/disguise.dart';
 import '../../src/live.dart';
+import '../../src/lock.dart';
 import '../../src/models.dart';
 import '../../src/notifications.dart';
 import '../../src/premium.dart';
@@ -35,6 +36,15 @@ class NotificationsSection extends ConsumerWidget {
       return;
     }
     await ref.read(backgroundCheckProvider.notifier).set(check);
+  }
+
+  /// Gerfaut's page in the system settings, where its notifications
+  /// are turned back on. A trip out of the app the user asked for: the
+  /// lock does not land on the way back.
+  Future<void> _openSystemSettings(WidgetRef ref) async {
+    final lock = ref.read(lockProvider.notifier)..expectExcursion();
+    final opened = await ref.read(livePlatformProvider).openAppSettings();
+    if (!opened) lock.forgetExcursion();
   }
 
   @override
@@ -69,11 +79,23 @@ class NotificationsSection extends ConsumerWidget {
               ? null
               : (next) => ref.read(notifyNewTxProvider.notifier).set(next),
         ),
-        if (refused) ...[
+        if (refused && !disguised) ...[
           const SizedBox(height: GerfautSpacing.sm),
-          Text(
-            'Notifications are off for Gerfaut in the system settings.',
-            style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+          // Amber: the setting says on, and nothing reaches the user.
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              'Notifications are off for Gerfaut in the system settings.',
+              style: tokens.bodySmall.copyWith(color: tokens.pending),
+            ),
+          ),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: GhostButton(
+              label: 'Open system settings',
+              icon: LucideIcons.externalLink,
+              onPressed: () => _openSystemSettings(ref),
+            ),
           ),
         ],
         const SizedBox(height: GerfautSpacing.md),

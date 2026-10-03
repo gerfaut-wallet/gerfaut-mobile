@@ -25,6 +25,11 @@ abstract class NotificationService {
   /// Posts a notification, replacing the one already up under [id].
   Future<void> show(int id, String title, String body);
 
+  /// Whether what is posted reaches the user right now: the app's
+  /// notifications allowed, and its transactions channel not silenced.
+  /// Both are changed in the system settings, behind the app's back.
+  Future<bool> deliverable();
+
   /// Takes every notification the app has posted off the screen.
   Future<void> cancelAll();
 }
@@ -75,6 +80,21 @@ class LocalNotificationService implements NotificationService {
     return await android.requestNotificationsPermission() ??
         await android.areNotificationsEnabled() ??
         true;
+  }
+
+  @override
+  Future<bool> deliverable() async {
+    await init();
+    final android = _android;
+    if (android == null) return true;
+    if (await android.areNotificationsEnabled() == false) return false;
+    final channels = await android.getNotificationChannels() ?? const [];
+    for (final channel in channels) {
+      if (channel.id == transactionsChannelId) {
+        return channel.importance != Importance.none;
+      }
+    }
+    return true;
   }
 
   @override
@@ -446,6 +466,34 @@ class NotifyNewTxNotifier extends Notifier<bool> {
         .read(liveProvider.notifier)
         .apply(wanted: on && cadence == BackgroundCheck.live);
   }
+
+  /// Reads again whether Android lets the notices through, each time the
+  /// app comes back: a long press on a notice silences its channel, and
+  /// the permission is taken back in the system settings, both without
+  /// a word to the app. Said under the setting when they no longer get
+  /// through, and Live, which would keep a connection open for nothing,
+  /// goes back to a periodic check.
+  Future<void> checkSystem() async {
+    final refused = ref.read(notificationsRefusedProvider.notifier);
+    if (!state) {
+      refused.state = false;
+      return;
+    }
+    final bool deliverable;
+    try {
+      deliverable = await ref.read(notificationServiceProvider).deliverable();
+    } catch (_) {
+      // Unanswered: what was last known stands.
+      return;
+    }
+    refused.state = !deliverable;
+    if (!deliverable &&
+        ref.read(backgroundCheckProvider) == BackgroundCheck.live) {
+      await ref
+          .read(backgroundCheckProvider.notifier)
+          .set(BackgroundCheck.quarterHour);
+    }
+  }
 }
 
 /// The new-transaction notice, off by default, persisted as
@@ -454,7 +502,8 @@ final notifyNewTxProvider = NotifierProvider<NotifyNewTxNotifier, bool>(
   NotifyNewTxNotifier.new,
 );
 
-/// The system refused notifications the last time the toggle asked.
+/// The system refused notifications the last time it was asked, when
+/// the toggle went on or when the app last came back on screen.
 final notificationsRefusedProvider = StateProvider<bool>((ref) => false);
 
 /// How Gerfaut looks for transactions while it is off screen. What the
