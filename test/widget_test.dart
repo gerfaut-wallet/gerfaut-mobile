@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/backup_restore.dart';
+import 'package:gerfaut/screens/calculator.dart';
 import 'package:gerfaut/screens/wallet_home.dart';
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/models.dart';
@@ -26,11 +27,12 @@ Widget app(
   FakeBridge bridge, {
   Future<void> Function()? bootstrap,
   Future<void> Function()? startOver,
+  FakeDisguise? disguise,
 }) {
   return ProviderScope(
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
-      disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+      disguiseServiceProvider.overrideWithValue(disguise ?? FakeDisguise()),
     ],
     child: GerfautApp(bootstrap: bootstrap, startOver: startOver),
   );
@@ -695,6 +697,104 @@ void main() {
     expect(find.textContaining('vault init failed'), findsOneWidget);
     expect(find.text('Try again'), findsOneWidget);
     expect(find.text('Start over…'), findsNothing);
+  });
+
+  group('a failed start under the disguise', () {
+    Future<void> typePin(WidgetTester tester, String pin) async {
+      for (final d in pin.split('')) {
+        await tester.tap(find.widgetWithText(InkWell, d));
+        await tester.pump();
+      }
+      await tester.tap(find.bySemanticsLabel('Equals'));
+      await tester.pumpAndSettle();
+    }
+
+    FakeBridge lockedBridge() => returning(wallets: [makeMeta()])
+      ..lock = const AppLock(kind: LockKind.pin, biometric: false)
+      ..lockSecret = '1234';
+
+    testWidgets('shows a calculator, never the error', (tester) async {
+      await tester.pumpWidget(
+        app(
+          lockedBridge(),
+          bootstrap: () async => throw const VaultKeyMissingException(
+            'nothing is stored under its name',
+          ),
+          disguise: FakeDisguise(disguised: true),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CalculatorScreen), findsOneWidget);
+      expect(find.text('Gerfaut could not start'), findsNothing);
+      expect(find.textContaining('vault'), findsNothing);
+      expect(find.text('Try again'), findsNothing);
+    });
+
+    testWidgets('a pin tries the vault again, and a vault still closed '
+        'leaves the number on the display', (tester) async {
+      var attempts = 0;
+      await tester.pumpWidget(
+        app(
+          lockedBridge(),
+          bootstrap: () async {
+            attempts++;
+            throw StateError('vault init failed');
+          },
+          disguise: FakeDisguise(disguised: true),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await typePin(tester, '1234');
+      expect(attempts, 2);
+      expect(find.byType(CalculatorScreen), findsOneWidget);
+      expect(find.text('1,234'), findsOneWidget);
+      expect(find.text('Gerfaut could not start'), findsNothing);
+    });
+
+    testWidgets('a vault that opens behind it brings the usual calculator', (
+      tester,
+    ) async {
+      var attempts = 0;
+      final bridge = lockedBridge();
+      await tester.pumpWidget(
+        app(
+          bridge,
+          bootstrap: () async {
+            attempts++;
+            if (attempts == 1) throw StateError('vault init failed');
+          },
+          disguise: FakeDisguise(disguised: true),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await typePin(tester, '1234');
+      expect(attempts, 2);
+      // Still a calculator, now the one the lock answers through.
+      expect(find.byType(CalculatorScreen), findsOneWidget);
+      expect(find.text('Cold storage'), findsNothing);
+
+      await typePin(tester, '1234');
+      expect(find.byType(CalculatorScreen), findsNothing);
+      expect(find.text('Cold storage'), findsOneWidget);
+    });
+
+    testWidgets('settings that fail to load stay behind the calculator', (
+      tester,
+    ) async {
+      final bridge = lockedBridge()
+        ..settingsError = const BridgeException('vault', 'the vault is gone');
+      await tester.pumpWidget(
+        app(bridge, disguise: FakeDisguise(disguised: true)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CalculatorScreen), findsOneWidget);
+      expect(find.text('Gerfaut could not start'), findsNothing);
+      expect(find.textContaining('the vault is gone'), findsNothing);
+    });
   });
 
   testWidgets('a vault held elsewhere says the app is open, no start over', (

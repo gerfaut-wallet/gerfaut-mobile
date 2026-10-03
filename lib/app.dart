@@ -50,6 +50,31 @@ class _GerfautAppState extends ConsumerState<GerfautApp> {
   /// aside.
   final _navigator = GlobalKey<NavigatorState>();
 
+  /// A quiet retry is already running behind the calculator.
+  bool _retryingBehind = false;
+
+  /// Runs the bootstrap again behind the calculator of a disguised app
+  /// that could not start. Nothing on screen moves while it runs, nor
+  /// when it fails: a calculator that blinked on = would give the app
+  /// away. Only a vault that opens changes the screen, to the
+  /// calculator that unlocks it.
+  Future<void> _retryBehind() async {
+    final bootstrap = widget.bootstrap;
+    if (bootstrap == null || _retryingBehind) return;
+    _retryingBehind = true;
+    try {
+      await bootstrap();
+      if (!mounted) return;
+      setState(() {
+        _ready = Future<void>.value();
+      });
+    } catch (_) {
+      // Still closed: the calculator stays as it was.
+    } finally {
+      _retryingBehind = false;
+    }
+  }
+
   /// Runs the bootstrap again, on a fresh future so the gate rebuilds
   /// from its loading state.
   void _retry() {
@@ -101,6 +126,7 @@ class _GerfautAppState extends ConsumerState<GerfautApp> {
           : _BootstrapGate(
               ready: _ready!,
               onRetry: _retry,
+              onRetryBehind: _retryBehind,
               onStartOver: _startOver,
             ),
     );
@@ -315,6 +341,16 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
     final lock = ref.watch(lockProvider);
     final disguise = ref.watch(disguiseProvider);
     if (settings.hasError) {
+      // The error names the app and its vault: disguised, it is never
+      // shown, and the calculator stands in front of it. A PIN-shaped
+      // number reads the settings again, and settings that load bring
+      // the lock, behind the same calculator.
+      if (!disguise.loaded) return const _StartupScreen();
+      if (disguise.disguised) {
+        return CalculatorScreen(
+          onPin: (_) async => ref.invalidate(settingsProvider),
+        );
+      }
       return _StartupErrorScreen(
         error: settings.error!,
         onRetry: () => ref.invalidate(settingsProvider),
@@ -340,19 +376,28 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
 }
 
 /// Shows a quiet loading scaffold until the bootstrap future settles.
-class _BootstrapGate extends StatelessWidget {
+///
+/// A start that failed says why, unless the app is disguised: the error
+/// names the app and its vault, and the face a disguised app shows to
+/// whoever opens it is a calculator, whatever happened behind it. The
+/// error reads once the disguise is off, or the vault opens behind the
+/// calculator and the PIN unlocks it as on any other day.
+class _BootstrapGate extends ConsumerWidget {
   const _BootstrapGate({
     required this.ready,
     required this.onRetry,
+    required this.onRetryBehind,
     required this.onStartOver,
   });
 
   final Future<void> ready;
   final VoidCallback onRetry;
+  final Future<void> Function() onRetryBehind;
   final VoidCallback onStartOver;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final disguise = ref.watch(disguiseProvider);
     return FutureBuilder<void>(
       future: ready,
       builder: (context, snapshot) {
@@ -360,6 +405,10 @@ class _BootstrapGate extends StatelessWidget {
           return const _StartupScreen();
         }
         if (snapshot.hasError) {
+          if (!disguise.loaded) return const _StartupScreen();
+          if (disguise.disguised) {
+            return CalculatorScreen(onPin: (_) => onRetryBehind());
+          }
           return _StartupErrorScreen(
             error: snapshot.error!,
             onRetry: onRetry,

@@ -1030,8 +1030,14 @@ class FakeBridge implements GerfautBridge {
     snapshots.remove(id);
   }
 
+  /// Thrown by every read of the settings, the way a vault that opened
+  /// and then would not answer surfaces.
+  Object? settingsError;
+
   @override
   Future<Settings> getSettings() async {
+    final failure = settingsError;
+    if (failure != null) throw failure;
     // The vault carries the lock: the settings screen reads it there,
     // the same place the core keeps it.
     // A preference written since is read back, the way the core reads
