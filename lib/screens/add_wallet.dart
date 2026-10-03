@@ -454,7 +454,18 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
             value: payload.script,
             items: [
               for (final option in parsed.scriptOptions)
-                GerfautSelectItem(value: option, title: option.label),
+                GerfautSelectItem(
+                  value: option,
+                  title: option.label,
+                  // The start of the addresses on the network the wallet
+                  // goes to, never mainnet's on a test network.
+                  subtitle: switch (option.addressStart(
+                    _network ?? Network.mainnet,
+                  )) {
+                    final start? => 'Addresses starting with $start',
+                    null => null,
+                  },
+                ),
             ],
             onChanged: (chosen) {
               if (chosen != payload.script) _chooseScript(chosen);

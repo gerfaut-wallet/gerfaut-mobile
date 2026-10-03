@@ -141,6 +141,31 @@ void main() {
       findsOneWidget,
     );
     expect(bridge.parseScripts, [null]);
+
+    // The addresses' start on the network the wallet goes to, never
+    // mainnet's on a test network.
+    final options = tester
+        .widget<GerfautSelect<ScriptKind>>(
+          find.byType(GerfautSelect<ScriptKind>),
+        )
+        .items;
+    expect(
+      options.firstWhere((o) => o.value == ScriptKind.segwit).subtitle,
+      'Addresses starting with tb1q',
+    );
+    expect(
+      options.map((o) => o.subtitle ?? '').join(' '),
+      isNot(contains('bc1')),
+    );
+  });
+
+  test('each network has its own address starts', () {
+    expect(ScriptKind.segwit.addressStart(Network.mainnet), 'bc1q');
+    expect(ScriptKind.taproot.addressStart(Network.signet), 'tb1p');
+    expect(ScriptKind.taproot.addressStart(Network.regtest), 'bcrt1p');
+    expect(ScriptKind.legacy.addressStart(Network.testnet4), 'm or n');
+    expect(ScriptKind.nestedSegwit.addressStart(Network.mainnet), '3');
+    expect(ScriptKind.witnessScript.addressStart(Network.signet), isNull);
   });
 
   testWidgets('a bare key states its missing script type outside the card', (

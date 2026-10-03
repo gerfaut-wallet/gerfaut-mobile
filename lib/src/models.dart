@@ -38,6 +38,21 @@ enum ScriptKind {
 
   static ScriptKind fromId(String id) =>
       ScriptKind.values.firstWhere((k) => k.id == id);
+
+  /// How the addresses of this script type start on [network], for the
+  /// single-key types: what a person compares with their own wallet.
+  /// Null for a script, whose addresses say nothing of its type.
+  String? addressStart(Network network) {
+    final test = network != Network.mainnet;
+    final regtest = network == Network.regtest;
+    return switch (this) {
+      legacy => test ? 'm or n' : '1',
+      nestedSegwit => test ? '2' : '3',
+      segwit => regtest ? 'bcrt1q' : (test ? 'tb1q' : 'bc1q'),
+      taproot => regtest ? 'bcrt1p' : (test ? 'tb1p' : 'bc1p'),
+      witnessScript || legacyScript || bare => null,
+    };
+  }
 }
 
 /// What the input classifier recognized.
