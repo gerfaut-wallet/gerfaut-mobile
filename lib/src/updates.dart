@@ -19,7 +19,10 @@ import 'disguise.dart';
 import 'models.dart';
 import 'state.dart';
 
-/// Application version shown in About. Kept in step with pubspec.yaml.
+/// Application version shown in About, and the one an update is
+/// compared against. The same as `version` in pubspec.yaml, which the
+/// build stamps on the APK: a test fails the moment the two part, so a
+/// release never announces itself to the people already running it.
 const String appVersion = '0.1.0';
 
 /// Where "View release" goes. The one place to change when the app is

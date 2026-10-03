@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -98,6 +100,15 @@ Future<void> _launch(
 const String _line = 'Gerfaut 0.2.0 is available';
 
 void main() {
+  test('the version shown is the one pubspec.yaml stamps on the build', () {
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+    final stamped = RegExp(
+      r'^version:\s*([^+\s]+)',
+      multiLine: true,
+    ).firstMatch(pubspec)!.group(1);
+    expect(appVersion, stamped);
+  });
+
   group('versions', () {
     ReleaseVersion parse(String text) => ReleaseVersion.tryParse(text)!;
 
