@@ -931,7 +931,9 @@ void main() {
       });
     });
 
-    testWidgets('an Electrum server says what it cannot serve', (tester) async {
+    // The core reads a single address from an Electrum server as it does
+    // from an Esplora one: choosing one carries no caveat.
+    testWidgets('an Electrum server is chosen like any other', (tester) async {
       useTallSurface(tester);
       final bridge = FakeBridge();
       await tester.pumpWidget(
@@ -939,21 +941,13 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(
-        find.text('An Electrum server cannot serve a single-address wallet.'),
-        findsNothing,
-      );
-
       final field = tester.widget<GerfautSelect<String?>>(
         find.byType(GerfautSelect<String?>),
       );
       field.onChanged('electrum:frigate.2140.dev');
       await tester.pumpAndSettle();
 
-      expect(
-        find.text('An Electrum server cannot serve a single-address wallet.'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('single-address'), findsNothing);
 
       await tester.tap(find.text('Save backend'));
       await tester.pumpAndSettle();

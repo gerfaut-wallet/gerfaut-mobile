@@ -843,13 +843,6 @@ class _PublicServerField extends ConsumerWidget {
           ],
           onChanged: onChanged,
         ),
-        if (chosen?.protocol == ServerProtocol.electrum) ...[
-          const SizedBox(height: GerfautSpacing.sm),
-          Text(
-            'An Electrum server cannot serve a single-address wallet.',
-            style: tokens.bodySmall.copyWith(color: tokens.pending),
-          ),
-        ],
         if (chosen?.selfSigned ?? false) ...[
           const SizedBox(height: GerfautSpacing.sm),
           Text(
