@@ -43,10 +43,18 @@ import java.io.File
 // honours in Doze comes by every few minutes, and each change of network
 // comes by at once, and both ask the core to check its connection under
 // a wake lock that is short and released by a timeout whatever happens.
+//
+// Asking is not the end of it: the core answers at once and does the
+// work after, the ping, a reconnection, the sync of a wallet that moved,
+// and the announcement waits a few seconds more for the sync that
+// closes it. The Dart side says when the watch is busy, and a second
+// lock is held for it, renewed by every word from the watch and let go
+// once it has been quiet for a moment, or after WORK_LOCK_MS at most.
 class LiveService : Service() {
     private var engine: FlutterEngine? = null
     private var channel: MethodChannel? = null
     private var tickLock: PowerManager.WakeLock? = null
+    private var workLock: PowerManager.WakeLock? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private val main = Handler(Looper.getMainLooper())
 
@@ -115,6 +123,7 @@ class LiveService : Service() {
         // now: this service is gone.
         main.removeCallbacksAndMessages(null)
         releaseTickLock()
+        releaseWorkLock()
         unwatchNetwork()
         val live = channel
         val hosted = engine
@@ -236,6 +245,17 @@ class LiveService : Service() {
                     }
                     result.success(null)
                 }
+                // The watch is at work: keep the phone awake for it, a
+                // while more from now.
+                "hold" -> {
+                    holdWorkLock()
+                    result.success(null)
+                }
+                // The watch has been quiet for a moment: let it sleep.
+                "release" -> {
+                    releaseWorkLock()
+                    result.success(null)
+                }
                 // The Dart side read the settings and Live is not what
                 // they ask for: turned off elsewhere, or disguised.
                 "standDown" -> {
@@ -298,6 +318,23 @@ class LiveService : Service() {
     private fun releaseTickLock() {
         tickLock?.let { release(it) }
         tickLock = null
+    }
+
+    // Not counted either: each word from the watch moves the one
+    // timeout further, and a single release ends it.
+    private fun holdWorkLock() {
+        if (leaving) return
+        val lock = workLock ?: (getSystemService(Context.POWER_SERVICE) as PowerManager)
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "gerfaut:live-work")
+            .also {
+                it.setReferenceCounted(false)
+                workLock = it
+            }
+        lock.acquire(WORK_LOCK_MS)
+    }
+
+    private fun releaseWorkLock() {
+        workLock?.let { release(it) }
     }
 
     // A change of network closes the sockets of the network that went,
@@ -427,6 +464,7 @@ class LiveService : Service() {
 
     private fun shutdown() {
         leaving = true
+        releaseWorkLock()
         cancelHeartbeat(this)
         main.removeCallbacksAndMessages(null)
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -456,6 +494,7 @@ class LiveService : Service() {
         private const val HEARTBEAT_MS = 270_000L
         private const val RESTART_MS = 2_000L
         private const val TICK_LOCK_MS = 30_000L
+        private const val WORK_LOCK_MS = 30_000L
         private const val STOP_TIMEOUT_MS = 8_000L
         private const val RETIRE_POLL_MS = 250L
 

@@ -87,10 +87,18 @@ class _Service {
     Future<void> Function()? bootstrap,
     Duration flushAfter = const Duration(seconds: 3),
     Duration restartAfter = const Duration(seconds: 2),
+    Duration quietAfter = const Duration(seconds: 5),
+    Duration connectingFor = const Duration(seconds: 30),
   }) {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_serviceChannel, (call) async {
-          told.add((call.method, call.arguments));
+          // The wake lock is kept apart from what the notification is
+          // told, so each can be read on its own.
+          if (call.method == 'hold' || call.method == 'release') {
+            awake.add(call.method);
+          } else {
+            told.add((call.method, call.arguments));
+          }
           return null;
         });
     runner = LiveRunner(
@@ -102,12 +110,20 @@ class _Service {
       schedule: (seconds) async => scheduled.add(seconds),
       flushAfter: flushAfter,
       restartAfter: restartAfter,
+      quietAfter: quietAfter,
+      connectingFor: connectingFor,
     );
   }
 
   final FakeBridge bridge;
   final FakeNotifications notifications = FakeNotifications();
   final List<(String, Object?)> told = [];
+
+  /// Every hold and release of the wake lock, in order.
+  final List<String> awake = [];
+
+  /// Whether the service holds the work lock now.
+  bool get holding => awake.isNotEmpty && awake.last == 'hold';
   final List<int> scheduled = [];
   late final LiveRunner runner;
 
@@ -486,6 +502,73 @@ void main() {
       await service.settle();
       expect(service.bridge.liveStartCalls, 1);
       expect(service.told.where((t) => t.$1 == 'status'), hasLength(1));
+    });
+
+    test(
+      'a tick keeps the phone up while the core checks, then lets go',
+      () async {
+        final service = _Service(
+          _bridge(),
+          quietAfter: const Duration(milliseconds: 30),
+        );
+        await service.runner.run();
+        await service.send('tick');
+        expect(service.holding, isTrue);
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        expect(service.awake.last, 'release');
+      },
+    );
+
+    test('an arrival keeps the phone up until it is announced', () async {
+      final service = _Service(
+        _bridge(),
+        quietAfter: const Duration(milliseconds: 20),
+        flushAfter: const Duration(milliseconds: 80),
+      );
+      await service.runner.run();
+      service.bridge.liveController.add(LiveTransaction(_live('aa', 5000)));
+      await service.settle();
+      expect(service.holding, isTrue);
+
+      // Quiet for longer than the window, the announcement still to say.
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(service.notifications.posted, isEmpty);
+      expect(service.holding, isTrue);
+
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(service.notifications.posted, hasLength(1));
+      expect(service.awake.last, 'release');
+    });
+
+    test('a reconnection keeps the phone up for longer', () async {
+      final service = _Service(
+        _bridge(),
+        quietAfter: const Duration(milliseconds: 20),
+        connectingFor: const Duration(milliseconds: 120),
+      );
+      await service.runner.run();
+      service.bridge.liveController.add(
+        const LiveStatusChanged(
+          LiveWatchStatus(state: WatchState.reconnecting),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(service.holding, isTrue);
+
+      // Connected: a moment more for the catch-up, then sleep.
+      service.bridge.liveController.add(
+        const LiveStatusChanged(LiveWatchStatus(state: WatchState.connected)),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(service.awake.last, 'release');
+    });
+
+    test('a stop lets the phone sleep once it is over', () async {
+      final service = _Service(_bridge());
+      await service.runner.run();
+      await service.send('tick');
+      await service.send('stop', false);
+      expect(service.awake.last, 'release');
     });
 
     test('a watch stopped on purpose stays stopped', () async {

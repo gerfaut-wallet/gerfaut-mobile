@@ -507,6 +507,15 @@ const Duration _endWait = Duration(seconds: 3);
 /// How long a watch that ended on its own is left before it starts again.
 const Duration _restartAfter = Duration(seconds: 2);
 
+/// How long the phone stays awake after the last word from a watch at
+/// work: a ping answered, a wallet synced, a status said.
+const Duration _quietAfter = Duration(seconds: 5);
+
+/// How long it stays awake for a watch that is still connecting, which
+/// may say nothing until the server answers. The service lets go after
+/// this much whatever happens.
+const Duration _connectingFor = Duration(seconds: 30);
+
 /// What runs inside the engine the Android service hosts: opens the
 /// vault, starts the watch, says what it finds, and answers the
 /// service's heartbeat.
@@ -520,6 +529,8 @@ class LiveRunner {
     this.schedule = registerBackgroundCheck,
     this.flushAfter = _flushAfter,
     this.restartAfter = _restartAfter,
+    this.quietAfter = _quietAfter,
+    this.connectingFor = _connectingFor,
   });
 
   final GerfautBridge bridge;
@@ -530,8 +541,16 @@ class LiveRunner {
   final BackgroundScheduler schedule;
   final Duration flushAfter;
   final Duration restartAfter;
+  final Duration quietAfter;
+  final Duration connectingFor;
 
   StreamSubscription<LiveEvent>? _events;
+
+  /// When the phone may sleep again, if nothing more is said.
+  Timer? _letGo;
+
+  /// Announcements being said: the phone stays awake until they are.
+  int _flushing = 0;
   bool _started = false;
 
   /// The start under way: the heartbeat and a change of network may ask
@@ -555,6 +574,9 @@ class LiveRunner {
   Future<Object?> _onCall(MethodCall call) async {
     switch (call.method) {
       case 'tick':
+        // The core only hears the ask here: the ping, and whatever its
+        // answer sets off, happen after, and the phone stays up for it.
+        _stayAwake(quietAfter);
         // A start that failed (the keystore not ready, the vault not
         // to be opened yet) is tried again at each heartbeat.
         if (await _ensureStarted()) {
@@ -623,6 +645,7 @@ class LiveRunner {
   /// announced here. Nothing handed out is ever handed out again.
   Future<void> stop({required bool revert}) async {
     _stopping = true;
+    _stayAwake(connectingFor);
     final running = _started;
     final ended = _ended = Completer<void>();
     try {
@@ -638,6 +661,9 @@ class LiveRunner {
     await _events?.cancel();
     _events = null;
     _started = false;
+    _letGo?.cancel();
+    _letGo = null;
+    await _tell('release');
     try {
       if (revert) {
         await bridge.setAppPref(
@@ -653,6 +679,17 @@ class LiveRunner {
   }
 
   void _onEvent(LiveEvent event) {
+    // A push from the server wakes the phone for an instant; the sync it
+    // sets off and the announcement after it need it awake for longer.
+    _stayAwake(switch (event) {
+      LiveStatusChanged(
+        status: LiveWatchStatus(
+          state: WatchState.connecting || WatchState.reconnecting,
+        ),
+      ) =>
+        connectingFor,
+      _ => quietAfter,
+    });
     switch (event) {
       case LiveTransaction(:final tx):
         _pending.putIfAbsent(tx.walletId, () => []).add(tx);
@@ -702,6 +739,7 @@ class LiveRunner {
     _timers.remove(walletId)?.cancel();
     final txs = _pending.remove(walletId);
     if (txs == null || txs.isEmpty) return;
+    _flushing++;
     try {
       final settings = await bridge.getSettings();
       final prefs = settings.appPrefs;
@@ -717,7 +755,29 @@ class LiveRunner {
     } catch (_) {
       // A notification that cannot be posted ends nothing: the
       // transaction is in the wallet for the next look at the app.
+    } finally {
+      _flushing--;
     }
+  }
+
+  /// Keeps the phone awake for [window] more, from now. Each call asks
+  /// the service again, which moves its own timeout; the last one to
+  /// run out lets the phone sleep, unless announcements are still on
+  /// their way, which keep it up until they are said.
+  void _stayAwake(Duration window) {
+    if (window <= Duration.zero) return;
+    _letGo?.cancel();
+    _letGo = Timer(window, _rest);
+    unawaited(_tell('hold'));
+  }
+
+  void _rest() {
+    _letGo = null;
+    if (_pending.isNotEmpty || _flushing > 0) {
+      _stayAwake(quietAfter);
+      return;
+    }
+    unawaited(_tell('release'));
   }
 
   Future<void> _tell(String method, [Object? argument]) async {
