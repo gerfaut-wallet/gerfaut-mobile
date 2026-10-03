@@ -339,9 +339,13 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
         ),
         if (_error != null) ...[
           const SizedBox(height: GerfautSpacing.sm),
-          Text(
-            _error!,
-            style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+          // Said aloud as it appears: the field above is what was typed.
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              _error!,
+              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+            ),
           ),
         ],
         const SizedBox(height: GerfautSpacing.sm),

@@ -276,9 +276,13 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
         ],
         if (_error != null) ...[
           const SizedBox(height: GerfautSpacing.sm),
-          Text(
-            _error!,
-            style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+          // Said aloud as it appears.
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              _error!,
+              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+            ),
           ),
         ],
       ],

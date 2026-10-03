@@ -103,6 +103,9 @@ class _ConfirmItsYouSheetState extends ConsumerState<ConfirmItsYouSheet> {
 
   /// Seconds left before the core looks at a secret again.
   int _wait = 0;
+
+  /// The wait as it was when it began: what a screen reader is told.
+  int _waitFrom = 0;
   Timer? _countdown;
 
   bool get _pin => widget.lock.kind == LockKind.pin;
@@ -139,13 +142,17 @@ class _ConfirmItsYouSheetState extends ConsumerState<ConfirmItsYouSheet> {
 
   void _startCountdown(int seconds) {
     _countdown?.cancel();
-    setState(() => _wait = seconds);
+    setState(() {
+      _wait = seconds;
+      _waitFrom = seconds;
+    });
     _countdown = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return timer.cancel();
       setState(() => _wait -= 1);
       if (_wait <= 0) {
         timer.cancel();
-        setState(() => _message = null);
+        // Said once the wait is over, as its start was.
+        setState(() => _message = 'You can try again.');
       }
     });
   }
@@ -272,9 +279,14 @@ class _ConfirmItsYouSheetState extends ConsumerState<ConfirmItsYouSheet> {
               if (note != null) ...[
                 const SizedBox(height: GerfautSpacing.sm),
                 // A refused secret is a fact, not an alarm: muted, as on
-                // the lock screen.
+                // the lock screen. The countdown is said once, with the
+                // wait it began at, not every second.
                 Semantics(
                   liveRegion: true,
+                  label: _wait > 0
+                      ? 'Too many attempts. Try again in $_waitFrom seconds.'
+                      : null,
+                  excludeSemantics: _wait > 0,
                   child: Text(
                     note,
                     style: tokens.bodySmall.copyWith(color: tokens.textMuted),

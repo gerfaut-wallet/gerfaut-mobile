@@ -306,9 +306,13 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
               ),
               if (_inputError != null) ...[
                 const SizedBox(height: GerfautSpacing.sm),
-                Text(
-                  _inputError!,
-                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                // Said aloud as it appears.
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    _inputError!,
+                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                  ),
                 ),
               ],
               const SizedBox(height: GerfautSpacing.sm),

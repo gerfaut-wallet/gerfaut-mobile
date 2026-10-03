@@ -30,6 +30,9 @@ class _LockScreenState extends ConsumerState<LockScreen> {
 
   /// Seconds left before the core will even look at a secret again.
   int _wait = 0;
+
+  /// The wait as it was when it began: what a screen reader is told.
+  int _waitFrom = 0;
   Timer? _countdown;
 
   @override
@@ -65,13 +68,18 @@ class _LockScreenState extends ConsumerState<LockScreen> {
 
   void _startCountdown(int seconds) {
     _countdown?.cancel();
-    setState(() => _wait = seconds);
+    setState(() {
+      _wait = seconds;
+      _waitFrom = seconds;
+    });
     _countdown = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return timer.cancel();
       setState(() => _wait -= 1);
       if (_wait <= 0) {
         timer.cancel();
-        setState(() => _message = null);
+        // Said once the wait is over, as its start was: a screen reader
+        // hears the two ends, not every second in between.
+        setState(() => _message = 'You can try again.');
       }
     });
   }
@@ -204,10 +212,19 @@ class _LockScreenState extends ConsumerState<LockScreen> {
               if (note != null) ...[
                 const SizedBox(height: GerfautSpacing.sm),
                 // A refused secret is a fact, not an alarm: Alerte is
-                // kept for coins moving.
-                Text(
-                  note,
-                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                // kept for coins moving. Said aloud as it appears; the
+                // countdown is said once, with the wait it began at,
+                // and the field greyed meanwhile says the rest.
+                Semantics(
+                  liveRegion: true,
+                  label: blocked
+                      ? 'Too many attempts. Try again in $_waitFrom seconds.'
+                      : null,
+                  excludeSemantics: blocked,
+                  child: Text(
+                    note,
+                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                  ),
                 ),
               ],
             ],

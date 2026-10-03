@@ -197,8 +197,18 @@ void main() {
 
       await tester.pump(const Duration(seconds: 1));
       expect(find.text('Too many attempts. Try again in 4 s'), findsOneWidget);
-      // Let the countdown finish so no timer outlives the test.
+      // A screen reader hears the wait it began at, not every second.
+      final handle = tester.ensureSemantics();
+      await tester.pump();
+      expect(
+        find.bySemanticsLabel('Too many attempts. Try again in 5 seconds.'),
+        findsOneWidget,
+      );
+      // Let the countdown finish so no timer outlives the test: the end
+      // is said as the start was.
       await tester.pump(const Duration(seconds: 5));
+      expect(find.text('You can try again.'), findsOneWidget);
+      handle.dispose();
     });
 
     testWidgets('a PIN field takes digits only', (tester) async {

@@ -319,9 +319,15 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.only(top: GerfautSpacing.sm),
-                    child: Text(
-                      _walletError!,
-                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                    // Said aloud as it appears.
+                    child: Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        _walletError!,
+                        style: tokens.bodySmall.copyWith(
+                          color: tokens.textMuted,
+                        ),
+                      ),
                     ),
                   ),
                 ),
