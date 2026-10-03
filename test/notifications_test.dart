@@ -8,6 +8,7 @@ import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/live.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/notifications.dart';
+import 'package:gerfaut/src/prefs.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/select_field.dart';
@@ -376,6 +377,55 @@ void main() {
       expect(noticeId('abc'), noticeId('abc'));
       expect(noticeId('abc'), isNot(noticeId('abd')));
       expect(noticeId('abc'), greaterThanOrEqualTo(0));
+    });
+  });
+
+  group('what a background isolate claimed', () {
+    FakeBridge vault(Map<String, String> prefs) => FakeBridge(
+      wallets: [makeMeta(id: 'w1', name: 'Savings')],
+      settings: Settings(
+        activeNetwork: Network.mainnet,
+        backends: const {},
+        appPrefs: prefs,
+      ),
+    );
+    final claimed = [
+      const LiveTx(
+        walletId: 'w1',
+        txid: 'aa',
+        netSats: 150000,
+        stage: TxStage.mempool,
+      ),
+    ];
+
+    test('is said with the name and the unit the vault holds', () async {
+      final notices = FakeNotifications();
+      await announceFromVault(
+        vault({Pref.notifyNewTx: '1', Pref.unit: 'sats'}),
+        notices,
+        claimed,
+        isDisguised: () async => false,
+      );
+      expect(notices.posted.single.title, contains('Savings'));
+      expect(notices.posted.single.body, contains('150'));
+      expect(notices.posted.single.body, contains('sats'));
+    });
+
+    test('is not said while the notice is off or the app disguised', () async {
+      final notices = FakeNotifications();
+      await announceFromVault(
+        vault({}),
+        notices,
+        claimed,
+        isDisguised: () async => false,
+      );
+      await announceFromVault(
+        vault({Pref.notifyNewTx: '1'}),
+        notices,
+        claimed,
+        isDisguised: () async => true,
+      );
+      expect(notices.posted, isEmpty);
     });
   });
 

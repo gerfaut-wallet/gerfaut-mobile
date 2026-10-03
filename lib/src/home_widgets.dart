@@ -16,6 +16,7 @@ import 'format.dart';
 import 'models.dart';
 import 'state.dart';
 import 'vault_key.dart';
+import 'prefs.dart';
 
 /// The three providers, by the class name Android knows them under.
 abstract final class HomeWidgets {
@@ -213,8 +214,8 @@ String syncedLine(List<WalletMeta> wallets, {DateTime? now}) {
   Map<String, String> prefs,
 ) {
   final currency =
-      FiatCurrency.fromId(prefs['display.fiat_currency']) ?? FiatCurrency.eur;
-  final stored = PriceSource.fromId(prefs['display.fiat_source']);
+      FiatCurrency.fromId(prefs[Pref.fiatCurrency]) ?? FiatCurrency.eur;
+  final stored = PriceSource.fromId(prefs[Pref.fiatSource]);
   final source = stored != null && stored.supportsCurrency(currency)
       ? stored
       : PriceSource.coingecko;
@@ -304,7 +305,7 @@ class WidgetBalancesNotifier extends Notifier<bool> {
     state = on;
     ref
         .read(bridgeProvider)
-        .setAppPref('widgets.balances', on ? '1' : '0')
+        .setAppPref(Pref.widgetBalances, on ? '1' : '0')
         .catchError((_) {});
   }
 }
@@ -530,9 +531,8 @@ Future<bool> refreshWidgets({
       price: quote == null ? null : PricePayload.of(quote),
       balance: BalancePayload.of(
         wallets,
-        unit: AmountUnit.fromId(prefs['display.unit']) ?? AmountUnit.btc,
-        masked:
-            prefs['mobile.masked'] == '1' || prefs['widgets.balances'] != '1',
+        unit: AmountUnit.fromId(prefs[Pref.unit]) ?? AmountUnit.btc,
+        masked: prefs[Pref.masked] == '1' || prefs[Pref.widgetBalances] != '1',
         now: now,
       ),
       network: NetworkPayload.of(wallets, network: network, now: now),

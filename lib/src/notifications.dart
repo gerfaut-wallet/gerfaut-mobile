@@ -12,6 +12,7 @@ import 'format.dart';
 import 'live.dart';
 import 'models.dart';
 import 'state.dart';
+import 'prefs.dart';
 
 /// Posts notifications on this device. Widget tests substitute a
 /// recording fake so no test ever reaches the platform.
@@ -347,10 +348,31 @@ const Set<int> _invisible = {
 /// them under a lock: while an app lock is set.
 bool notifiesLocked(Settings settings) => settings.appLock != null;
 
-/// Whether notifications leave the amounts out: while balances are
-/// masked.
-bool notifiesMasked(Settings settings) =>
-    settings.appPrefs['mobile.masked'] == '1';
+/// Says what a background isolate claimed, the way the open app would
+/// say it: the names, the unit and the mask read from the vault, since
+/// these isolates have no screen to ask, and nothing at all while the
+/// notice is off or the app is disguised. The periodic task and Live
+/// both come through here, so a rule of silence added once holds for
+/// both.
+Future<void> announceFromVault(
+  GerfautBridge bridge,
+  NotificationService service,
+  List<LiveTx> claimed, {
+  required Future<bool> Function() isDisguised,
+}) async {
+  if (claimed.isEmpty) return;
+  final settings = await bridge.getSettings();
+  final prefs = AppPrefs(settings.appPrefs);
+  if (!prefs.notifyNewTx || await isDisguised()) return;
+  final wallets = await bridge.listWallets();
+  await NewTxAnnouncer(service).announce(
+    claimed,
+    walletNames: {for (final wallet in wallets) wallet.id: wallet.name},
+    unit: prefs.unit,
+    masked: prefs.masked,
+    locked: notifiesLocked(settings),
+  );
+}
 
 /// What the syncs behind these reports found that nobody has announced
 /// yet, in order, taken off the core's record. Every wallet is asked,
@@ -452,7 +474,7 @@ class NotifyNewTxNotifier extends Notifier<bool> {
     state = on;
     ref
         .read(bridgeProvider)
-        .setAppPref('notify.new_tx', on ? '1' : '0')
+        .setAppPref(Pref.notifyNewTx, on ? '1' : '0')
         .catchError((_) {});
     final cadence = ref.read(backgroundCheckProvider);
     await rescheduleBackgroundCheck(
@@ -553,7 +575,7 @@ class BackgroundCheckNotifier extends Notifier<BackgroundCheck> {
     state = check;
     ref
         .read(bridgeProvider)
-        .setAppPref('notify.background', check.stored)
+        .setAppPref(Pref.background, check.stored)
         .catchError((_) {});
     final notifying = ref.read(notifyNewTxProvider);
     await rescheduleBackgroundCheck(

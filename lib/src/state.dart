@@ -11,6 +11,7 @@ import 'bridge.dart';
 import 'format.dart';
 import 'models.dart';
 import 'notifications.dart';
+import 'prefs.dart';
 
 /// The bridge to the core. Widget tests override this with a fake.
 final bridgeProvider = Provider<GerfautBridge>((ref) => const RustBridge());
@@ -118,10 +119,7 @@ class ThemeNotifier extends Notifier<ThemePref> {
     state = pref;
     // Persisted in the encrypted vault; a write failure only loses the
     // preference, never the UI change.
-    ref
-        .read(bridgeProvider)
-        .setAppPref('mobile.theme', pref.id)
-        .catchError((_) {});
+    ref.read(bridgeProvider).setAppPref(Pref.theme, pref.id).catchError((_) {});
   }
 }
 
@@ -141,7 +139,7 @@ class MaskedNotifier extends Notifier<bool> {
     state = !state;
     ref
         .read(bridgeProvider)
-        .setAppPref('mobile.masked', state ? '1' : '0')
+        .setAppPref(Pref.masked, state ? '1' : '0')
         .catchError((_) {});
   }
 }
@@ -162,10 +160,7 @@ class UnitNotifier extends Notifier<AmountUnit> {
 
   void set(AmountUnit unit) {
     state = unit;
-    ref
-        .read(bridgeProvider)
-        .setAppPref('display.unit', unit.id)
-        .catchError((_) {});
+    ref.read(bridgeProvider).setAppPref(Pref.unit, unit.id).catchError((_) {});
   }
 }
 
@@ -187,7 +182,7 @@ class FiatEnabledNotifier extends Notifier<bool> {
     state = enabled;
     ref
         .read(bridgeProvider)
-        .setAppPref('display.fiat', enabled ? '1' : '0')
+        .setAppPref(Pref.fiat, enabled ? '1' : '0')
         .catchError((_) {});
   }
 }
@@ -210,7 +205,7 @@ class FiatCurrencyNotifier extends Notifier<FiatCurrency> {
     state = currency;
     ref
         .read(bridgeProvider)
-        .setAppPref('display.fiat_currency', currency.id)
+        .setAppPref(Pref.fiatCurrency, currency.id)
         .catchError((_) {});
   }
 }
@@ -240,7 +235,7 @@ class FiatSourceNotifier extends Notifier<PriceSource> {
     state = source;
     ref
         .read(bridgeProvider)
-        .setAppPref('display.fiat_source', source.id)
+        .setAppPref(Pref.fiatSource, source.id)
         .catchError((_) {});
   }
 }
@@ -263,7 +258,7 @@ class ExplorerAckNotifier extends Notifier<bool> {
     state = acknowledged;
     ref
         .read(bridgeProvider)
-        .setAppPref('privacy.explorer_ack', acknowledged ? '1' : '0')
+        .setAppPref(Pref.explorerAck, acknowledged ? '1' : '0')
         .catchError((_) {});
   }
 }
@@ -344,7 +339,7 @@ class RecentBroadcastsNotifier extends Notifier<List<RecentBroadcast>> {
     ref
         .read(bridgeProvider)
         .setAppPref(
-          'broadcast.recent',
+          Pref.recentBroadcasts,
           jsonEncode([for (final b in state) b.toJson()]),
         )
         .catchError((_) {});

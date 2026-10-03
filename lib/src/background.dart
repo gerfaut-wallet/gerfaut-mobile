@@ -9,12 +9,12 @@ import 'package:workmanager/workmanager.dart';
 
 import 'bridge.dart';
 import 'disguise.dart';
-import 'format.dart';
 import 'home_widgets.dart';
 import 'models.dart';
 import 'notifications.dart';
 import 'quiet_errors.dart';
 import 'vault_key.dart';
+import 'prefs.dart';
 
 /// The one task Gerfaut registers. A stable name: registering again
 /// with the same one replaces the schedule instead of adding a second.
@@ -97,7 +97,7 @@ Future<bool> runBackgroundCheck({
     final prefs = settings.appPrefs;
     // The isolate reads the same preferences the screens write: a check
     // that the user turned off must not notify, and must not sync.
-    if (prefs['notify.new_tx'] != '1') return true;
+    if (!AppPrefs(prefs).notifyNewTx) return true;
     // Nothing is posted while disguised. The isolate has no channel to
     // the activity, so it reads the marker the activity keeps on disk.
     if (await isDisguised()) return true;
@@ -105,7 +105,7 @@ Future<bool> runBackgroundCheck({
     // the service. While the watch runs it has everything covered, and
     // a full sync every quarter hour would only cost data and battery.
     // The watch lives in this same process, so the core can say.
-    if (prefs['notify.background'] == BackgroundCheck.live.stored &&
+    if (prefs[Pref.background] == BackgroundCheck.live.stored &&
         (await bridge.liveStatus()).state != WatchState.off) {
       return true;
     }
@@ -114,15 +114,11 @@ Future<bool> runBackgroundCheck({
     // Only what nobody has said yet. A wallet's first sync is an
     // import, and the core keeps none of it as news.
     final claimed = await claimAll(bridge, report.reports);
-    if (claimed.isEmpty) return true;
-    final wallets = await bridge.listWallets(settings.activeNetwork);
-    final announcer = NewTxAnnouncer(service ?? LocalNotificationService());
-    await announcer.announce(
+    await announceFromVault(
+      bridge,
+      service ?? LocalNotificationService(),
       claimed,
-      walletNames: {for (final wallet in wallets) wallet.id: wallet.name},
-      unit: AmountUnit.fromId(prefs['display.unit']) ?? AmountUnit.btc,
-      masked: notifiesMasked(settings),
-      locked: notifiesLocked(settings),
+      isDisguised: isDisguised,
     );
     return true;
   } on VaultInUseException {

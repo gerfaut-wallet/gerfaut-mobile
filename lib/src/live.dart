@@ -30,6 +30,7 @@ import 'models.dart';
 import 'notifications.dart';
 import 'state.dart';
 import 'vault_key.dart';
+import 'prefs.dart';
 
 // --- the platform side, as the screens see it --------------------------
 
@@ -512,7 +513,7 @@ class LiveController extends Notifier<LiveState> {
     try {
       final settings = await ref.read(bridgeProvider).getSettings();
       final stored = BackgroundCheck.fromStored(
-        settings.appPrefs['notify.background'],
+        settings.appPrefs[Pref.background],
       );
       if (stored != null && stored != ref.read(backgroundCheckProvider)) {
         ref.read(backgroundCheckProvider.notifier).hydrate(stored.stored);
@@ -645,8 +646,8 @@ class LiveRunner {
       final settings = await bridge.getSettings();
       final prefs = settings.appPrefs;
       final wanted =
-          prefs['notify.new_tx'] == '1' &&
-          prefs['notify.background'] == BackgroundCheck.live.stored;
+          prefs[Pref.notifyNewTx] == '1' &&
+          prefs[Pref.background] == BackgroundCheck.live.stored;
       if (!wanted || await isDisguised()) {
         await _tell('standDown');
         return false;
@@ -703,7 +704,7 @@ class LiveRunner {
     try {
       if (revert) {
         await bridge.setAppPref(
-          'notify.background',
+          Pref.background,
           BackgroundCheck.quarterHour.stored,
         );
         await schedule(BackgroundCheck.quarterHour.seconds);
@@ -783,16 +784,11 @@ class LiveRunner {
     if (txs == null || txs.isEmpty) return;
     _flushing++;
     try {
-      final settings = await bridge.getSettings();
-      final prefs = settings.appPrefs;
-      if (prefs['notify.new_tx'] != '1' || await isDisguised()) return;
-      final wallets = await bridge.listWallets();
-      await NewTxAnnouncer(notifications).announce(
+      await announceFromVault(
+        bridge,
+        notifications,
         txs,
-        walletNames: {for (final wallet in wallets) wallet.id: wallet.name},
-        unit: AmountUnit.fromId(prefs['display.unit']) ?? AmountUnit.btc,
-        masked: notifiesMasked(settings),
-        locked: notifiesLocked(settings),
+        isDisguised: isDisguised,
       );
     } catch (_) {
       // A notification that cannot be posted ends nothing: the

@@ -23,6 +23,7 @@ import 'src/vault_key.dart';
 import 'theme/tokens.dart';
 import 'widgets/buttons.dart';
 import 'widgets/notice.dart';
+import 'src/prefs.dart';
 
 /// Root widget: both Toundra themes, light by default, and the startup
 /// bootstrap (Rust bridge + encrypted vault) before the home screen.
@@ -149,34 +150,30 @@ class _Hydrated extends ConsumerWidget {
       if (settings != null && !ref.read(prefsHydratedProvider)) {
         ref.read(prefsHydratedProvider.notifier).state = true;
         final prefs = settings.appPrefs;
-        ref.read(themeProvider.notifier).hydrate(prefs['mobile.theme']);
-        ref.read(maskedProvider.notifier).hydrate(prefs['mobile.masked']);
-        ref.read(unitProvider.notifier).hydrate(prefs['display.unit']);
-        ref.read(fiatEnabledProvider.notifier).hydrate(prefs['display.fiat']);
+        ref.read(themeProvider.notifier).hydrate(prefs[Pref.theme]);
+        ref.read(maskedProvider.notifier).hydrate(prefs[Pref.masked]);
+        ref.read(unitProvider.notifier).hydrate(prefs[Pref.unit]);
+        ref.read(fiatEnabledProvider.notifier).hydrate(prefs[Pref.fiat]);
         // Currency before source: the source only takes if it quotes
         // the currency that was stored with it.
         ref
             .read(fiatCurrencyProvider.notifier)
-            .hydrate(prefs['display.fiat_currency']);
-        ref
-            .read(fiatSourceProvider.notifier)
-            .hydrate(prefs['display.fiat_source']);
-        ref
-            .read(explorerAckProvider.notifier)
-            .hydrate(prefs['privacy.explorer_ack']);
+            .hydrate(prefs[Pref.fiatCurrency]);
+        ref.read(fiatSourceProvider.notifier).hydrate(prefs[Pref.fiatSource]);
+        ref.read(explorerAckProvider.notifier).hydrate(prefs[Pref.explorerAck]);
         ref
             .read(recentBroadcastsProvider.notifier)
-            .hydrate(prefs['broadcast.recent']);
-        ref.read(notifyNewTxProvider.notifier).hydrate(prefs['notify.new_tx']);
+            .hydrate(prefs[Pref.recentBroadcasts]);
+        ref.read(notifyNewTxProvider.notifier).hydrate(prefs[Pref.notifyNewTx]);
         ref
             .read(backgroundCheckProvider.notifier)
-            .hydrate(prefs['notify.background']);
+            .hydrate(prefs[Pref.background]);
         ref
             .read(onboardingSeenProvider.notifier)
-            .hydrate(prefs['onboarding.seen']);
+            .hydrate(prefs[Pref.onboardingSeen]);
         ref
             .read(widgetBalancesProvider.notifier)
-            .hydrate(prefs['widgets.balances']);
+            .hydrate(prefs[Pref.widgetBalances]);
         ref.read(updateProvider.notifier).hydrate(prefs);
         // The widgets follow from here: everything they show is
         // hydrated now, so the first thing they get is the right thing.
