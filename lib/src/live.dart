@@ -551,6 +551,9 @@ class LiveRunner {
 
   /// Announcements being said: the phone stays awake until they are.
   int _flushing = 0;
+
+  /// The state the watch last said it was in.
+  WatchState? _lastState;
   bool _started = false;
 
   /// The start under way: the heartbeat and a change of network may ask
@@ -681,7 +684,12 @@ class LiveRunner {
   void _onEvent(LiveEvent event) {
     // A push from the server wakes the phone for an instant; the sync it
     // sets off and the announcement after it need it awake for longer.
+    // A status that only recounts what is followed sets nothing off: the
+    // watch says one at every round of its own, and holding the phone
+    // up for each would cost more than the watch itself.
     _stayAwake(switch (event) {
+      LiveStatusChanged(:final status) when status.state == _lastState =>
+        Duration.zero,
       LiveStatusChanged(
         status: LiveWatchStatus(
           state: WatchState.connecting || WatchState.reconnecting,
@@ -690,6 +698,7 @@ class LiveRunner {
         connectingFor,
       _ => quietAfter,
     });
+    if (event is LiveStatusChanged) _lastState = event.status.state;
     switch (event) {
       case LiveTransaction(:final tx):
         _pending.putIfAbsent(tx.walletId, () => []).add(tx);

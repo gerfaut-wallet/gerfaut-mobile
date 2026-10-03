@@ -568,6 +568,29 @@ void main() {
       expect(service.awake.last, 'release');
     });
 
+    test('a status that changes nothing keeps nobody up', () async {
+      final service = _Service(
+        _bridge(),
+        quietAfter: const Duration(milliseconds: 20),
+      );
+      await service.runner.run();
+      const connected = LiveStatusChanged(
+        LiveWatchStatus(state: WatchState.connected, pushedScripts: 10),
+      );
+      service.bridge.liveController.add(connected);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(service.awake, ['hold', 'release']);
+
+      // The next round recounts, in the same state: nothing to wait for.
+      service.bridge.liveController.add(
+        const LiveStatusChanged(
+          LiveWatchStatus(state: WatchState.connected, pushedScripts: 20),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(service.awake, ['hold', 'release']);
+    });
+
     test('a stop lets the phone sleep once it is over', () async {
       final service = _Service(_bridge());
       await service.runner.run();
