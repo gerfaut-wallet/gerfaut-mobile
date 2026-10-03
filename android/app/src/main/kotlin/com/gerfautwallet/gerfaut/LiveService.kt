@@ -83,6 +83,8 @@ class LiveService : Service() {
             shutdown()
             return START_NOT_STICKY
         }
+        // Started: the waits stretched by refusals go back to normal.
+        clearBackOff(this)
         if (leaving) {
             // Turned back on while the last stop is still saying what
             // its watch held: that stop ends this service in a moment,
@@ -482,6 +484,7 @@ class LiveService : Service() {
         private const val NOTIFICATION_ID = 0x4C495645
         private const val PREFS = "gerfaut.live"
         private const val PREF_WANTED = "wanted"
+        private const val PREF_REFUSALS = "refusals"
         private const val DISGUISE_MARKER = "disguised"
         private const val STATUS_MAX = 80
         private const val TEXT_STARTING = "Starting"
@@ -493,6 +496,8 @@ class LiveService : Service() {
         // it to about nine minutes by itself.
         private const val HEARTBEAT_MS = 270_000L
         private const val RESTART_MS = 2_000L
+        private const val MAX_BACK_OFF_MS = 3_600_000L
+        private const val MAX_DOUBLINGS = 4
         private const val TICK_LOCK_MS = 30_000L
         private const val WORK_LOCK_MS = 30_000L
         private const val STOP_TIMEOUT_MS = 8_000L
@@ -516,6 +521,21 @@ class LiveService : Service() {
         fun isWanted(context: Context): Boolean =
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .getBoolean(PREF_WANTED, false) && !isDisguised(context)
+
+        // How long the heartbeat waits after a start Android refused:
+        // twice as long at each refusal in a row, an hour at most.
+        fun backOff(context: Context): Long {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val refusals = prefs.getInt(PREF_REFUSALS, 0)
+            prefs.edit().putInt(PREF_REFUSALS, refusals + 1).apply()
+            val doubled = HEARTBEAT_MS shl refusals.coerceAtMost(MAX_DOUBLINGS)
+            return doubled.coerceAtMost(MAX_BACK_OFF_MS)
+        }
+
+        fun clearBackOff(context: Context) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit().remove(PREF_REFUSALS).apply()
+        }
 
         fun setWanted(context: Context, wanted: Boolean) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

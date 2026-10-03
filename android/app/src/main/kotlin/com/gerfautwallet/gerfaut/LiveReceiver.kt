@@ -44,6 +44,12 @@ class LiveReceiver : BroadcastReceiver() {
         // and later only allow this from the background after a boot, an
         // update, or for an app exempt from battery optimisation; a
         // refusal is caught in there, and the periodic check goes on.
-        LiveService.start(app)
+        // Refused, the next try waits longer each time: an app that is
+        // not exempt is refused at every one of them, and waking the
+        // phone every few minutes for days to be refused costs battery
+        // and buys nothing. Opening the app starts Live again at once.
+        if (!LiveService.start(app)) {
+            LiveService.armHeartbeat(app, LiveService.backOff(app))
+        }
     }
 }
