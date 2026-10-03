@@ -1,10 +1,11 @@
 name: CI
 
-# Flutter analysis and widget tests on every push and pull request, and a
-# Clippy pass over the Rust crate on push only: the crate depends on the
-# sibling gerfaut-core checkout, which comes from a deploy key, and a pull
-# request from a fork never gets one. The APKs themselves are built by the
-# release and reproducible workflows.
+# Flutter formatting, analysis and widget tests on every push and pull
+# request, and the Rust crate's formatting, Clippy pass and tests on push
+# only: the crate depends on the sibling gerfaut-core checkout, which
+# comes from a deploy key, and a pull request from a fork never gets one.
+# The APKs themselves are built by the release and reproducible
+# workflows.
 on:
   push:
     branches: [main]
@@ -18,11 +19,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # The Flutter the release builds with (reproducible/Dockerfile): a
+      # green run on another one says little about the APK.
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           channel: stable
+          flutter-version: 3.47.1
           cache: true
       - run: flutter pub get
+      - name: Format
+        run: dart format --output=none --set-exit-if-changed lib test
       - name: Analyze
         run: flutter analyze
       - name: Test
@@ -53,8 +59,19 @@ jobs:
         with:
           workspaces: gerfaut-mobile/rust
 
+      - name: Format
+        working-directory: gerfaut-mobile/rust
+        run: cargo fmt --check
+
       - name: Clippy
         working-directory: gerfaut-mobile/rust
         run: |
           rustup show
           cargo clippy --all-targets -- -D warnings
+
+      # The bridge's own tests: the release build logs nothing, an
+      # oversized QR frame is turned away, the isolates share one
+      # manager and one first-launch key.
+      - name: Test
+        working-directory: gerfaut-mobile/rust
+        run: cargo test
