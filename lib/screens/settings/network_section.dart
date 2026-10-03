@@ -12,6 +12,7 @@ import '../../widgets/facts.dart';
 import '../../widgets/notice.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/select_field.dart';
+import '../../widgets/setting_switch.dart';
 import '../scan.dart';
 import 'certificates.dart';
 import 'fields.dart';
@@ -53,6 +54,11 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
   final _hostController = TextEditingController();
   final _portController = TextEditingController(text: '50002');
   bool _tls = true;
+
+  /// "This is my node", for a server of the user's own. Seeded from the
+  /// saved backend and sent with every save of a custom one: a save that
+  /// left it out would turn it off.
+  bool _ownNode = false;
   String _backendKind = 'public_esplora';
 
   /// Chosen public server id; null is the automatic rotation.
@@ -116,6 +122,11 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
     _hostController.text = electrum.host;
     _portController.text = electrum.port.isEmpty ? '50002' : electrum.port;
     _tls = electrum.tls;
+    _ownNode = switch (config) {
+      CustomEsplora(:final ownNode) ||
+      CustomElectrum(:final ownNode) => ownNode,
+      PublicEsplora() => false,
+    };
   }
 
   void _toast(String message) {
@@ -221,9 +232,13 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
       _saveError = null;
     });
     final config = switch (_backendKind) {
-      'custom_esplora' => CustomEsplora(url: _esploraController.text.trim()),
+      'custom_esplora' => CustomEsplora(
+        url: _esploraController.text.trim(),
+        ownNode: _ownNode,
+      ),
       'custom_electrum' => CustomElectrum(
         url: buildElectrumUrl(_hostController.text, _portController.text, _tls),
+        ownNode: _ownNode,
       ),
       _ => PublicEsplora(server: _publicServer),
     };
@@ -531,7 +546,23 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
               ],
             ],
             if (_backendKind != 'public_esplora') ...[
-              const SizedBox(height: GerfautSpacing.sm),
+              const SizedBox(height: GerfautSpacing.md),
+              // Declared, never detected: a public server typed in by
+              // hand looks exactly like a node of one's own.
+              SettingSwitch(
+                title: 'This is my node',
+                hint:
+                    'Live follows up to 20,000 addresses on your own node, '
+                    'instead of 2,000. Leave it off for a server you do not '
+                    'run: a public server limits how many addresses one '
+                    'connection may follow, and refuses the rest.',
+                value: _ownNode,
+                onChanged: (on) => setState(() {
+                  _ownNode = on;
+                  _saveError = null;
+                }),
+              ),
+              const SizedBox(height: GerfautSpacing.md),
               // The card below is the one that knows which Tor is used
               // and can test it; this line only says a .onion will take
               // that route. Naming a port and asking for Orbot outlived

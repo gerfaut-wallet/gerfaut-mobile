@@ -247,6 +247,40 @@ void main() {
       );
     });
 
+    test("a node of the user's own says so, and only when it is", () {
+      // Written by a version without the switch: off, and written back
+      // in the very same shape.
+      final before = BackendConfig.fromJson({
+        'type': 'custom_electrum',
+        'url': 'ssl://node.local:50002',
+      });
+      expect((before as CustomElectrum).ownNode, isFalse);
+      expect(
+        jsonEncode(before.toJson()),
+        '{"type":"custom_electrum","url":"ssl://node.local:50002"}',
+      );
+
+      final electrum = BackendConfig.fromJson({
+        'type': 'custom_electrum',
+        'url': 'ssl://node.local:50002',
+        'own_node': true,
+      });
+      expect((electrum as CustomElectrum).ownNode, isTrue);
+      expect(electrum.toJson()['own_node'], isTrue);
+
+      final esplora = BackendConfig.fromJson({
+        'type': 'custom_esplora',
+        'url': 'https://node.local:3002/api',
+        'own_node': true,
+      });
+      expect((esplora as CustomEsplora).ownNode, isTrue);
+      expect(
+        jsonEncode(esplora.toJson()),
+        '{"type":"custom_esplora","url":"https://node.local:3002/api",'
+        '"own_node":true}',
+      );
+    });
+
     test('settings fall back to the automatic public backend', () {
       const settings = Settings(
         activeNetwork: Network.mainnet,

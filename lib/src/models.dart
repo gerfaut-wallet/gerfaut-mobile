@@ -1276,8 +1276,14 @@ sealed class BackendConfig {
   factory BackendConfig.fromJson(Map<String, dynamic> json) {
     return switch (json['type'] as String) {
       'public_esplora' => PublicEsplora(server: json['server'] as String?),
-      'custom_esplora' => CustomEsplora(url: json['url'] as String),
-      'custom_electrum' => CustomElectrum(url: json['url'] as String),
+      'custom_esplora' => CustomEsplora(
+        url: json['url'] as String,
+        ownNode: json['own_node'] as bool? ?? false,
+      ),
+      'custom_electrum' => CustomElectrum(
+        url: json['url'] as String,
+        ownNode: json['own_node'] as bool? ?? false,
+      ),
       final other => throw FormatException('unknown backend type: $other'),
     };
   }
@@ -1304,21 +1310,43 @@ class PublicEsplora extends BackendConfig {
 }
 
 class CustomEsplora extends BackendConfig {
-  const CustomEsplora({required this.url});
+  const CustomEsplora({required this.url, this.ownNode = false});
 
   final String url;
 
+  /// The user says they run this server: Live follows many more of
+  /// their addresses on it. See [CustomElectrum.ownNode].
+  final bool ownNode;
+
   @override
-  Map<String, dynamic> toJson() => {'type': 'custom_esplora', 'url': url};
+  Map<String, dynamic> toJson() => {
+    'type': 'custom_esplora',
+    'url': url,
+    if (ownNode) 'own_node': true,
+  };
 }
 
 class CustomElectrum extends BackendConfig {
-  const CustomElectrum({required this.url});
+  const CustomElectrum({required this.url, this.ownNode = false});
 
   final String url;
 
+  /// The user says they run this server, so Live may follow up to
+  /// 20,000 of their addresses on it instead of 2,000. The app cannot
+  /// check it: a public server typed in by hand looks the same.
+  ///
+  /// Sent back with every save of the address: the core takes a config
+  /// without it for one where it is off. Omitted when off, so a backend
+  /// saved before the switch existed serializes exactly as the vault
+  /// already carries it.
+  final bool ownNode;
+
   @override
-  Map<String, dynamic> toJson() => {'type': 'custom_electrum', 'url': url};
+  Map<String, dynamic> toJson() => {
+    'type': 'custom_electrum',
+    'url': url,
+    if (ownNode) 'own_node': true,
+  };
 }
 
 /// Global settings stored in the vault.

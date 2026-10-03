@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/settings.dart';
 import 'package:gerfaut/screens/settings/about_section.dart';
+import 'package:gerfaut/screens/settings/fields.dart';
 import 'package:gerfaut/screens/settings/network_section.dart';
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/format.dart';
@@ -18,6 +19,7 @@ import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/buttons.dart';
 import 'package:gerfaut/widgets/notice.dart';
 import 'package:gerfaut/widgets/select_field.dart';
+import 'package:gerfaut/widgets/setting_switch.dart';
 import 'package:gerfaut/widgets/wallet_icon.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -1475,6 +1477,125 @@ void main() {
         'ssl://frigate.2140.dev:50002',
         'ssl://bitcoin.lu.ke:50002',
       ]);
+    });
+  });
+
+  group('this is my node', () {
+    FakeBridge withBackend(BackendConfig config) {
+      return FakeBridge(
+        settings: Settings(
+          activeNetwork: Network.mainnet,
+          backends: {Network.mainnet: config},
+          appPrefs: const {},
+        ),
+      );
+    }
+
+    Finder ownNodeSwitch() => find.descendant(
+      of: find.widgetWithText(SettingSwitch, 'This is my node'),
+      matching: find.byType(Switch),
+    );
+
+    Future<void> save(WidgetTester tester) async {
+      await tester.ensureVisible(find.text('Save backend'));
+      await tester.tap(find.text('Save backend'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('off until declared, then saved with the server', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = withBackend(
+        const CustomElectrum(url: 'ssl://node.local:50002'),
+      );
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<Switch>(ownNodeSwitch()).value, isFalse);
+      expect(
+        find.textContaining('Live follows up to 20,000 addresses'),
+        findsOneWidget,
+      );
+      await tester.tap(ownNodeSwitch());
+      await tester.pumpAndSettle();
+      await save(tester);
+
+      final saved = bridge.savedBackends[Network.mainnet]! as CustomElectrum;
+      expect(saved.url, 'ssl://node.local:50002');
+      expect(saved.ownNode, isTrue);
+      expect(saved.toJson()['own_node'], isTrue);
+    });
+
+    testWidgets('saving the address again keeps the node declared', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = withBackend(
+        const CustomElectrum(url: 'ssl://node.local:50002', ownNode: true),
+      );
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<Switch>(ownNodeSwitch()).value, isTrue);
+      // Another port, and nothing said about the switch: the save must
+      // not take it for off.
+      await tester.enterText(
+        find
+            .descendant(
+              of: find.byType(MonoField),
+              matching: find.byType(TextField),
+            )
+            .at(1),
+        '50001',
+      );
+      await tester.pumpAndSettle();
+      await save(tester);
+
+      final saved = bridge.savedBackends[Network.mainnet]! as CustomElectrum;
+      expect(saved.url, 'ssl://node.local:50001');
+      expect(saved.ownNode, isTrue);
+    });
+
+    testWidgets("an Esplora of one's own keeps it too", (tester) async {
+      useTallSurface(tester);
+      final bridge = withBackend(
+        const CustomEsplora(url: 'https://node.local:3002/api', ownNode: true),
+      );
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
+      await tester.pumpAndSettle();
+      await save(tester);
+
+      final saved = bridge.savedBackends[Network.mainnet]! as CustomEsplora;
+      expect(saved.ownNode, isTrue);
+    });
+
+    testWidgets("a public server is never anyone's node", (tester) async {
+      useTallSurface(tester);
+      final bridge = withBackend(
+        const CustomElectrum(url: 'ssl://node.local:50002', ownNode: true),
+      );
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Public API'));
+      await tester.pumpAndSettle();
+      expect(find.text('This is my node'), findsNothing);
+      await save(tester);
+
+      expect(bridge.savedBackends[Network.mainnet], isA<PublicEsplora>());
+      expect(
+        bridge.savedBackends[Network.mainnet]!.toJson().containsKey('own_node'),
+        isFalse,
+      );
     });
   });
 
