@@ -8,6 +8,7 @@ import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/policy.dart';
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/clipboard.dart';
+import 'package:gerfaut/src/descriptor.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/policy_text.dart';
 import 'package:gerfaut/src/state.dart';
@@ -821,6 +822,47 @@ void main() {
       await tester.tap(find.byTooltip('Copy policy'));
       await tester.pump();
       expect(clipboard.copied, [snapshot.policy]);
+      await tester.pump(const Duration(seconds: 2));
+    });
+
+    testWidgets('the wallet whole is shown and copied, change included', (
+      tester,
+    ) async {
+      // The receive descriptor the core reads the policy from, and the
+      // change one the vault keeps beside it: the page hands out both.
+      const tpub =
+          'tpubDDnGNapGEY6AZAdQbfRJgMg9fvz8pUBrLwvyvUqEgcUfgzM6zc2eVK4vY9x9L5FJWdX8WumXuLEDV5zDZnTfbn87vLe9XceCFwTu9so9Kks';
+      const receive = "wpkh([9a6a2580/84'/1'/0']$tpub/0/*)#76ngmkux";
+      const change = "wpkh([9a6a2580/84'/1'/0']$tpub/1/*)#0wkfxrv7";
+      final meta = makeMeta(
+        kind: const DescriptorsKind(
+          external: receive,
+          internal: change,
+          script: ScriptKind.segwit,
+        ),
+      );
+      final policyJson = singleKeyPolicyJson()..['descriptor'] = receive;
+      final bridge = FakeBridge(
+        wallets: [meta],
+        snapshots: {'w1': makeSnapshot(meta: meta)},
+      )..policies['w1'] = _snapshot(policyJson);
+      final clipboard = FakeSensitiveClipboard();
+      await _pumpPolicy(tester, bridge, clipboard: clipboard);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('DESCRIPTOR'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('DESCRIPTOR'));
+      await tester.pumpAndSettle();
+
+      final whole = multipathDescriptor(receive, change)!;
+      expect(whole, contains('/<0;1>/*'));
+      expect(find.text(whole), findsOneWidget);
+      expect(find.text(receive), findsNothing);
+      await tester.ensureVisible(find.byTooltip('Copy descriptor'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Copy descriptor'));
+      await tester.pump();
+      expect(clipboard.copied, [whole]);
       await tester.pump(const Duration(seconds: 2));
     });
 

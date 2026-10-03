@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/clipboard.dart';
+import '../src/descriptor.dart';
 import '../src/models.dart';
 import '../src/policy_text.dart';
 import '../src/state.dart';
@@ -28,7 +29,8 @@ class PolicyScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final name = ref.watch(snapshotProvider(walletId)).valueOrNull?.meta.name;
+    final meta = ref.watch(snapshotProvider(walletId)).valueOrNull?.meta;
+    final name = meta?.name;
     final policy = ref.watch(policyProvider(walletId));
 
     return Scaffold(
@@ -59,6 +61,7 @@ class PolicyScreen extends ConsumerWidget {
               // placeholder. Only a page that never had one waits.
               AsyncValue(valueOrNull: final snapshot?) => _Loaded(
                 snapshot: snapshot,
+                wallet: meta?.kind,
               ),
               _ => const PolicyPlaceholder(),
             },
@@ -99,10 +102,28 @@ class PolicyPlaceholder extends StatelessWidget {
   }
 }
 
+/// The descriptor the page shows and copies: the wallet whole, its
+/// receive and change branches as one multipath descriptor (`<0;1>`),
+/// the form it was most likely imported in. The core reads the policy
+/// from the receive branch alone, and that one copied elsewhere would
+/// watch the wallet without its change. When the two do not make one
+/// descriptor, the receive one, as before.
+String shownDescriptor(PolicySnapshot snapshot, WalletKind? wallet) {
+  if (wallet is! DescriptorsKind) return snapshot.descriptor;
+  final internal = wallet.internal;
+  if (internal == null || wallet.external != snapshot.descriptor) {
+    return snapshot.descriptor;
+  }
+  return multipathDescriptor(wallet.external, internal) ?? snapshot.descriptor;
+}
+
 class _Loaded extends StatelessWidget {
-  const _Loaded({required this.snapshot});
+  const _Loaded({required this.snapshot, this.wallet});
 
   final PolicySnapshot snapshot;
+
+  /// What the vault holds of the wallet: its two branches, when it has.
+  final WalletKind? wallet;
 
   @override
   Widget build(BuildContext context) {
@@ -155,7 +176,7 @@ class _Loaded extends StatelessWidget {
         _KeysSection(keys: snapshot.keys),
         const SizedBox(height: GerfautSpacing.lg),
         _DescriptorSection(
-          descriptor: snapshot.descriptor,
+          descriptor: shownDescriptor(snapshot, wallet),
           policy: snapshot.policy,
         ),
       ],
