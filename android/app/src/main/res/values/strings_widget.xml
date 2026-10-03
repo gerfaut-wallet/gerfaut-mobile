@@ -11,4 +11,8 @@
     <string name="widget_block_height_label">Block height</string>
     <string name="widget_placeholder">—</string>
     <string name="widget_masked_placeholder">•••••</string>
+    <!-- What a screen reader says for each placeholder: read as drawn,
+         the dash is "dash" and the mask "bullet" five times over. -->
+    <string name="widget_placeholder_spoken">Not known yet</string>
+    <string name="widget_masked_spoken">Hidden amount</string>
 </resources>

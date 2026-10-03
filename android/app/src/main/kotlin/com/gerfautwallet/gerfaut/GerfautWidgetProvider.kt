@@ -59,14 +59,26 @@ abstract class GerfautWidgetProvider : HomeWidgetProvider() {
         )
     }
 
-    // Shows a line when the app said something, hides it when not.
+    // Shows a line when the app said something, hides it when not. A
+    // masked figure is described in words for a screen reader, which
+    // would read the dots one by one; anything else reads as written.
     protected fun RemoteViews.line(viewId: Int, value: String?) {
         if (value == null) {
             setViewVisibility(viewId, View.GONE)
         } else {
             setTextViewText(viewId, value)
+            setContentDescription(
+                viewId,
+                if (value.contains(MASK)) value.replace(MASK, MASK_SPOKEN) else null,
+            )
             setViewVisibility(viewId, View.VISIBLE)
         }
+    }
+
+    private companion object {
+        // As the app writes them (lib/src/format.dart).
+        const val MASK = "•••••"
+        const val MASK_SPOKEN = "Hidden amount"
     }
 
     // The smallest height the launcher may draw this instance at, in

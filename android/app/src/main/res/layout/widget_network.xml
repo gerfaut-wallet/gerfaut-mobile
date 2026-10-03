@@ -26,13 +26,20 @@
         android:maxLines="1"
         android:ellipsize="end" />
 
+    <!-- Shrinks to the width it has rather than cutting a figure:
+         a cut price or height is a wrong one. -->
     <TextView
         android:id="@+id/network_height"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="2dp"
         android:text="@string/widget_placeholder"
+        android:contentDescription="@string/widget_placeholder_spoken"
         android:textSize="22sp"
+        android:autoSizeTextType="uniform"
+        android:autoSizeMinTextSize="13sp"
+        android:autoSizeMaxTextSize="22sp"
+        android:autoSizeStepGranularity="1sp"
         android:fontFamily="sans-serif-medium"
         android:fontFeatureSettings="'tnum'"
         android:letterSpacing="-0.01"
