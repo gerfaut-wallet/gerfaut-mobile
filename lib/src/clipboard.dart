@@ -4,7 +4,9 @@
 // history of it; any app in the foreground can read the clipboard
 // besides. A clip marked sensitive is shown as hidden in that preview
 // and left out of the history, which is the difference between a secret
-// that crosses the screen once and one that stays there.
+// that crosses the screen once and one that stays there. A minute later
+// it leaves the clipboard too, unless something else was copied over it
+// meanwhile, as on the desktop app.
 //
 // What goes through here is what identifies a wallet or opens its
 // alerts: a descriptor, the policy read off it, the ntfy topic, the
