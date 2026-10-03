@@ -160,4 +160,43 @@ void main() {
     expect(copied, txid);
     await tester.pump(const Duration(milliseconds: 1600));
   });
+
+  testWidgets('a chip is read once, by its label alone', (tester) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: themeFrom(GerfautTokens.light, Brightness.light),
+        home: const Scaffold(
+          body: AddressChip(
+            value: 'f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16',
+            kind: 'transaction ID',
+            spoken: 'starting f4184fc5',
+          ),
+        ),
+      ),
+    );
+    final node = tester.getSemantics(find.byType(AddressChip));
+    expect(node.label, 'Copy transaction ID starting f4184fc5');
+    // Nothing of the truncated text drawn inside is read after it.
+    expect(find.bySemanticsLabel(RegExp('…')), findsNothing);
+    handle.dispose();
+  });
+
+  testWidgets('Copied is said in Ardoise, not in the colour of the chain', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: themeFrom(GerfautTokens.light, Brightness.light),
+        home: const Scaffold(body: AddressChip(value: 'bc1qexampleaddress')),
+      ),
+    );
+    await tester.tap(find.byType(AddressChip));
+    await tester.pump();
+    expect(
+      tester.widget<Text>(find.text('Copied')).style!.color,
+      GerfautTokens.light.textMuted,
+    );
+    await tester.pump(const Duration(seconds: 2));
+  });
 }

@@ -548,7 +548,13 @@ class _Hero extends StatelessWidget {
         const SizedBox(height: GerfautSpacing.xs),
         Align(
           alignment: Alignment.centerLeft,
-          child: AddressChip(value: preview.txid, head: 12, tail: 10),
+          child: AddressChip(
+            value: preview.txid,
+            head: 12,
+            tail: 10,
+            kind: 'transaction ID',
+            spoken: spokenTxid(preview.txid),
+          ),
         ),
         const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
         Wrap(
@@ -1408,7 +1414,13 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
           if (widget.showTxid) ...[
             Align(
               alignment: Alignment.centerLeft,
-              child: AddressChip(value: record.txid, head: 12, tail: 10),
+              child: AddressChip(
+                value: record.txid,
+                head: 12,
+                tail: 10,
+                kind: 'transaction ID',
+                spoken: spokenTxid(record.txid),
+              ),
             ),
             const SizedBox(height: GerfautSpacing.xs),
             Text(

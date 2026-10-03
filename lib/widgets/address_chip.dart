@@ -118,7 +118,9 @@ class _AddressChipState extends State<AddressChip> {
             fontVariations: const [FontVariation('wght', 500)],
           )
         : tokens.data.copyWith(color: tokens.textMuted);
-    final copiedStyle = tokens.label.copyWith(color: tokens.confirmed);
+    // Ardoise: a copy is done, not a success to celebrate. Lichen is
+    // for what the chain confirms.
+    final copiedStyle = tokens.label.copyWith(color: tokens.textMuted);
     // What the word and its own gap will occupy, given back by the
     // identifier so the chip's outer width never moves.
     final valueWidth = _widthOf(shown, valueStyle, scaler);
@@ -133,8 +135,11 @@ class _AddressChipState extends State<AddressChip> {
                 GerfautSpacing.xs,
           )
         : double.infinity;
+    // The label is the whole of what is read: the truncated value drawn
+    // inside would be read again after it, cut in the middle.
     return Semantics(
       button: true,
+      excludeSemantics: true,
       label: [
         'Copy',
         if (widget.kind != null) widget.kind!,
@@ -177,7 +182,7 @@ class _AddressChipState extends State<AddressChip> {
               Icon(
                 _copied ? LucideIcons.check : LucideIcons.copy,
                 size: 14,
-                color: _copied ? tokens.confirmed : tokens.textMuted,
+                color: tokens.textMuted,
               ),
               if (_copied) ...[
                 const SizedBox(width: GerfautSpacing.xs),

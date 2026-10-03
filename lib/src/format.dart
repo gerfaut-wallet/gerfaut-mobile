@@ -14,6 +14,12 @@ const String groupSeparator = '\u00A0';
 /// Masked replacement for any amount.
 const String maskedValue = '•••••';
 
+/// A txid as a screen reader says it: its first eight characters, which
+/// tell one transaction from another by ear. All sixty-four, read one
+/// by one, tell nothing.
+String spokenTxid(String txid) =>
+    'starting ${txid.length > 8 ? txid.substring(0, 8) : txid}';
+
 /// What a screen reader says in place of [maskedValue]: left to itself
 /// it reads the dots one by one, "bullet, bullet, bullet".
 const String maskedSpoken = 'Hidden amount';

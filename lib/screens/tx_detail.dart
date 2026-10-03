@@ -328,7 +328,13 @@ class _QuickFacts extends StatelessWidget {
         _QuickFact(
           label: 'Transaction ID',
           tokens: tokens,
-          child: AddressChip(value: summary.txid, head: 8, tail: 8),
+          child: AddressChip(
+            value: summary.txid,
+            head: 8,
+            tail: 8,
+            kind: 'transaction ID',
+            spoken: spokenTxid(summary.txid),
+          ),
         ),
         _QuickFact(
           label: 'Date',
@@ -766,7 +772,7 @@ class _RawTransactionState extends State<_RawTransaction> {
                   iconSize: 16,
                   icon: Icon(
                     _copied ? LucideIcons.check : LucideIcons.copy,
-                    color: _copied ? tokens.confirmed : tokens.textMuted,
+                    color: tokens.textMuted,
                   ),
                 ),
               ),

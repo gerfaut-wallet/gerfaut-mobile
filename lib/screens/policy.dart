@@ -641,7 +641,7 @@ class _CodeBoxState extends ConsumerState<_CodeBox> {
             iconSize: 16,
             icon: Icon(
               _copied ? LucideIcons.check : LucideIcons.copy,
-              color: _copied ? tokens.confirmed : tokens.textMuted,
+              color: tokens.textMuted,
             ),
           ),
         ),
