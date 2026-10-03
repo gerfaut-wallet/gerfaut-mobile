@@ -9,6 +9,7 @@ import '../../src/identity.dart';
 import '../../src/lock.dart';
 import '../../src/models.dart';
 import '../../src/notifications.dart';
+import '../../src/premium.dart';
 import '../../src/state.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/buttons.dart';
@@ -127,11 +128,21 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
       await _swapFace(false);
       return;
     }
+    // Read from the vault, not from whatever screen loaded it last: the
+    // sheet promises Premium alerts only to an account that gets them.
+    var premium = false;
+    try {
+      premium = (await ref.read(premiumStateProvider.future)).connected;
+    } catch (_) {
+      // Unread, the sheet promises nothing it cannot keep.
+    }
+    if (!mounted) return;
     final confirmed = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => _DisguiseSheet(
+      builder: (_) => DisguiseSheet(
         liveOn: ref.read(backgroundCheckProvider) == BackgroundCheck.live,
+        premium: premium,
       ),
     );
     if (confirmed != true) return;
@@ -500,24 +511,39 @@ class _ConfirmSecretSheetState extends State<_ConfirmSecretSheet> {
 /// stays, said once as plain facts, and the one consequence that bites
 /// in a note of its own. Five amber panels in a row read as a wall of
 /// warnings, and a wall is skipped; one panel is read.
-class _DisguiseSheet extends StatelessWidget {
-  const _DisguiseSheet({this.liveOn = false});
+class DisguiseSheet extends StatelessWidget {
+  const DisguiseSheet({super.key, this.liveOn = false, this.premium = false});
 
   /// Live watch is what looks for transactions right now: the sheet
   /// says it is about to stop.
   final bool liveOn;
 
+  /// A Premium account is connected: its alerts are what still arrives.
+  final bool premium;
+
   /// What stops with the disguise when Live is on. Its permanent
-  /// notification is headed with the app's name, so it cannot stay.
+  /// notification is headed with the app's name, so it cannot stay, and
+  /// taking the disguise off later does not bring it back by itself.
   static const String liveFact =
-      'Live watch is turned off, and the check for transactions goes back '
-      'to every 15 minutes.';
+      'Live watch is turned off. Turn it back on in Notifications once the '
+      'disguise is off.';
+
+  /// Every notification of the app's own is headed with its name.
+  static const String silenceFact =
+      'Gerfaut posts no notification while disguised: one would show its '
+      'name. Background checks stay silent, and home-screen widgets are '
+      'turned off.';
+
+  /// The server sends these, not the phone: the disguise has no say.
+  static const String premiumFact =
+      'Premium alerts still reach your channels: the Gerfaut server sends '
+      'them, not this phone.';
 
   static const List<String> facts = [
     'The launcher will show a calculator named "Calculator".',
     'Open the wallet by typing your PIN into it, then =.',
     'Settings → Apps and the app store still list "Gerfaut".',
-    'Notifications and home-screen widgets are turned off while disguised.',
+    silenceFact,
     'Clear your recent apps once: Android may still show an older Gerfaut '
         'thumbnail.',
   ];
@@ -545,7 +571,11 @@ class _DisguiseSheet extends StatelessWidget {
               style: tokens.body,
             ),
             const SizedBox(height: GerfautSpacing.sm),
-            for (final fact in [...facts, if (liveOn) liveFact])
+            for (final fact in [
+              ...facts,
+              if (premium) premiumFact,
+              if (liveOn) liveFact,
+            ])
               Padding(
                 padding: const EdgeInsets.only(bottom: GerfautSpacing.xs),
                 child: Row(

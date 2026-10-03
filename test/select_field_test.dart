@@ -210,6 +210,42 @@ void main() {
     handle.dispose();
   });
 
+  testWidgets('a field without a handler is greyed and opens nothing', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: themeFrom(GerfautTokens.light, Brightness.light),
+        home: Scaffold(
+          body: GerfautSelect<String>.items(
+            label: 'Check for transactions',
+            value: 'eur',
+            items: const [
+              GerfautSelectItem(value: 'eur', title: 'EUR'),
+              GerfautSelectItem(value: 'usd', title: 'USD'),
+            ],
+            onChanged: null,
+          ),
+        ),
+      ),
+    );
+
+    // The value still reads, in the muted ink of what cannot change.
+    expect(
+      tester.widget<Text>(find.text('EUR')).style!.color,
+      GerfautTokens.light.textMuted,
+    );
+    final semantics = tester.getSemantics(find.byType(GerfautSelect<String>));
+    expect(semantics.flagsCollection.isEnabled, Tristate.isFalse);
+    expect(semantics.value, 'EUR');
+
+    await tester.tap(find.byType(GerfautSelect<String>));
+    await tester.pumpAndSettle();
+    expect(find.text('USD'), findsNothing);
+    handle.dispose();
+  });
+
   testWidgets('a phone opens a bottom sheet with a handle', (tester) async {
     usePhone(tester);
     final picked = <String>[];

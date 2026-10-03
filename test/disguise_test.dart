@@ -193,6 +193,44 @@ void main() {
       expect(disguise.disguised, isTrue);
     });
 
+    testWidgets('the sheet says nothing will notify, before confirming', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_securityApp(_locked(), FakeDisguise()));
+      await tester.pumpAndSettle();
+      await tester.tap(_disguiseSwitch());
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Gerfaut posts no notification while disguised: one would show '
+          'its name. Background checks stay silent, and home-screen widgets '
+          'are turned off.',
+        ),
+        findsOneWidget,
+      );
+      // Without a Premium account, nothing else arrives either: the
+      // sheet does not promise alerts nobody would get.
+      expect(find.textContaining('Premium alerts'), findsNothing);
+    });
+
+    testWidgets('a premium account hears its alerts go on', (tester) async {
+      final bridge = _locked()
+        ..premiumKey = 'abcdefghijkmnpqr'
+        ..premiumThisDeviceId = 'dev1';
+      bridge.premiumAddDevice(waiting: false);
+      await tester.pumpWidget(_securityApp(bridge, FakeDisguise()));
+      await tester.pumpAndSettle();
+      await tester.tap(_disguiseSwitch());
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Premium alerts still reach your channels: the Gerfaut server '
+          'sends them, not this phone.',
+        ),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('without Live, the sheet does not mention it', (tester) async {
       await tester.pumpWidget(_securityApp(_locked(), FakeDisguise()));
       await tester.pumpAndSettle();

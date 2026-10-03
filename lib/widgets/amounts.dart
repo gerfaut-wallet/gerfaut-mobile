@@ -286,10 +286,7 @@ class IoListHeading extends ConsumerWidget {
         heading,
         Text(
           note,
-          style: tokens.label.copyWith(
-            letterSpacing: 0,
-            color: tokens.pending,
-          ),
+          style: tokens.label.copyWith(letterSpacing: 0, color: tokens.pending),
         ),
       ],
     );

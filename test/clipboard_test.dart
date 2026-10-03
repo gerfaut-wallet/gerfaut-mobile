@@ -36,7 +36,9 @@ void main() {
 
   test('a secret goes to the activity, not to the plain clipboard', () async {
     install(null);
-    await const SystemSensitiveClipboard().copy('wsh(or_d(pk(A),older(52560)))');
+    await const SystemSensitiveClipboard().copy(
+      'wsh(or_d(pk(A),older(52560)))',
+    );
 
     expect(sensitive.single.method, 'copySensitive');
     expect(sensitive.single.arguments, 'wsh(or_d(pk(A),older(52560)))');

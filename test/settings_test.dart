@@ -926,7 +926,7 @@ void main() {
       expect(bridge.appPrefs['display.fiat_source'], 'kraken');
       expect(sourcePill(tester, 'mempool.space').onTap, isNotNull);
 
-      currencyField(tester).onChanged(FiatCurrency.ngn);
+      currencyField(tester).onChanged!(FiatCurrency.ngn);
       await tester.pumpAndSettle();
 
       expect(bridge.appPrefs['display.fiat_currency'], 'ngn');
@@ -946,7 +946,7 @@ void main() {
       );
 
       // Back to a currency everyone quotes: the sources return.
-      currencyField(tester).onChanged(FiatCurrency.chf);
+      currencyField(tester).onChanged!(FiatCurrency.chf);
       await tester.pumpAndSettle();
       expect(sourcePill(tester, 'Kraken').onTap, isNotNull);
       expect(find.textContaining('the only source that quotes'), findsNothing);
@@ -984,7 +984,7 @@ void main() {
       await tester.pumpAndSettle();
       await enableFiat(tester);
 
-      currencyField(tester).onChanged(FiatCurrency.krw);
+      currencyField(tester).onChanged!(FiatCurrency.krw);
       await tester.pumpAndSettle();
 
       final kraken = tester.getSemantics(find.text('Kraken'));
@@ -1093,7 +1093,7 @@ void main() {
       final field = tester.widget<GerfautSelect<String?>>(
         find.byType(GerfautSelect<String?>),
       );
-      field.onChanged('electrum:frigate.2140.dev');
+      field.onChanged!('electrum:frigate.2140.dev');
       await tester.pumpAndSettle();
 
       expect(find.textContaining('single-address'), findsNothing);
@@ -1189,7 +1189,7 @@ void main() {
 
       // Picked, it repeats it under the field: the hint line closes
       // with the menu.
-      serverField(tester).onChanged('electrum:bitcoin.lu.ke');
+      serverField(tester).onChanged!('electrum:bitcoin.lu.ke');
       await tester.pumpAndSettle();
       expect(
         find.text(
@@ -1608,12 +1608,12 @@ void main() {
 
       // Every Electrum server is checked, whether the catalogue calls it
       // self-signed or not: what it presents today is what counts.
-      serverField(tester).onChanged('electrum:frigate.2140.dev');
+      serverField(tester).onChanged!('electrum:frigate.2140.dev');
       await tester.pumpAndSettle();
       await save(tester);
       expect(bridge.inspectedCertificates, ['ssl://frigate.2140.dev:50002']);
 
-      serverField(tester).onChanged('electrum:bitcoin.lu.ke');
+      serverField(tester).onChanged!('electrum:bitcoin.lu.ke');
       await tester.pumpAndSettle();
       await save(tester);
       expect(bridge.inspectedCertificates, [

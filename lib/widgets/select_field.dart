@@ -80,7 +80,9 @@ class GerfautSelect<T> extends StatefulWidget {
   final List<GerfautSelectGroup<T>> groups;
 
   /// Called with the option picked, even when it is the current one.
-  final ValueChanged<T> onChanged;
+  /// Null greys the field out: it shows its value and opens nothing,
+  /// and the line under it says why.
+  final ValueChanged<T>? onChanged;
 
   /// Every option, groups flattened.
   List<GerfautSelectItem<T>> get items => [
@@ -107,7 +109,7 @@ class _GerfautSelectState<T> extends State<GerfautSelect<T>> {
     final T? picked = wide
         ? await _showAnchored<T>(context, widget)
         : await _showSheet<T>(context, widget);
-    if (picked != null && mounted) widget.onChanged(picked);
+    if (picked != null && mounted) widget.onChanged?.call(picked);
   }
 
   @override
@@ -116,22 +118,29 @@ class _GerfautSelectState<T> extends State<GerfautSelect<T>> {
     final selected = widget.selected;
     final title = selected?.title ?? '';
     final subtitle = selected?.subtitle;
-    final titleStyle = selected?.mono ?? false
+    final enabled = widget.onChanged != null;
+    final baseStyle = selected?.mono ?? false
         ? tokens.data.copyWith(fontSize: tokens.body.fontSize)
         : tokens.body;
+    // Greyed, the value is still read: it is what applies again once
+    // the field can be changed.
+    final titleStyle = enabled
+        ? baseStyle
+        : baseStyle.copyWith(color: tokens.textMuted);
     return Semantics(
       container: true,
       button: true,
+      enabled: enabled,
       label: widget.label,
       value: subtitle == null ? title : '$title, $subtitle',
-      onTap: _open,
+      onTap: enabled ? _open : null,
       excludeSemantics: true,
       child: Material(
         color: tokens.surfaceSunken,
         borderRadius: BorderRadius.circular(GerfautRadius.sm),
         child: InkWell(
           borderRadius: BorderRadius.circular(GerfautRadius.sm),
-          onTap: _open,
+          onTap: enabled ? _open : null,
           onFocusChange: (focused) => setState(() => _focused = focused),
           child: Container(
             height: 44,

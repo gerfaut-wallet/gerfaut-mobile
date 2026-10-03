@@ -6,6 +6,7 @@ import '../../src/disguise.dart';
 import '../../src/live.dart';
 import '../../src/models.dart';
 import '../../src/notifications.dart';
+import '../../src/premium.dart';
 import '../../src/state.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/buttons.dart';
@@ -43,19 +44,30 @@ class NotificationsSection extends ConsumerWidget {
     final refused = ref.watch(notificationsRefusedProvider);
     final cadence = ref.watch(backgroundCheckProvider);
     final disguised = ref.watch(disguiseProvider).disguised;
+    // Premium alerts come from the server, not from this phone: they
+    // are what still arrives while the app is disguised.
+    final premium =
+        ref.watch(premiumStateProvider).valueOrNull?.connected ?? false;
 
     return SectionCard(
       icon: LucideIcons.bell,
       title: 'Notifications',
       children: [
+        // Disguised, nothing of the app's own is posted: a notification
+        // is headed with its name. Both settings keep their value for
+        // when the disguise comes off, greyed meanwhile, and the line
+        // under the first says why.
         SettingSwitch(
           title: 'New transactions',
-          hint:
-              'A notification when a sync finds a transaction you have not '
-              'seen. Amounts follow the display unit and stay hidden while '
-              'balances are masked.',
+          hint: disguised
+              ? disguisedNotificationsHint(premium: premium)
+              : 'A notification when a sync finds a transaction you have '
+                    'not seen. Amounts follow the display unit and stay '
+                    'hidden while balances are masked.',
           value: on,
-          onChanged: (next) => ref.read(notifyNewTxProvider.notifier).set(next),
+          onChanged: disguised
+              ? null
+              : (next) => ref.read(notifyNewTxProvider.notifier).set(next),
         ),
         if (refused) ...[
           const SizedBox(height: GerfautSpacing.sm),
@@ -76,21 +88,18 @@ class NotificationsSection extends ConsumerWidget {
                 value: check,
                 title: check.label,
                 subtitle: switch (check) {
-                  BackgroundCheck.live when disguised =>
-                    'Not available while the app is disguised',
                   BackgroundCheck.live =>
                     'A connection kept open, told within seconds',
                   BackgroundCheck.off => 'Only while Gerfaut is open',
                   _ => null,
                 },
-                // Nothing to schedule while nothing would be said, and
-                // no permanent notification over a calculator.
-                enabled: on && !(check == BackgroundCheck.live && disguised),
+                // Nothing to schedule while nothing would be said.
+                enabled: on,
               ),
           ],
-          onChanged: (check) => _choose(context, ref, check),
+          onChanged: disguised ? null : (check) => _choose(context, ref, check),
         ),
-        if (on && cadence == BackgroundCheck.live) ...[
+        if (on && cadence == BackgroundCheck.live && !disguised) ...[
           const SizedBox(height: GerfautSpacing.sm),
           const _LiveStatus(),
         ],
@@ -109,6 +118,16 @@ class NotificationsSection extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// Why the notification settings are greyed while the app is disguised,
+/// and what still arrives: Premium alerts, which the server sends to
+/// the user's channels without this phone posting anything.
+String disguisedNotificationsHint({required bool premium}) {
+  const silent =
+      'Off while the app is disguised: a notification would show the name '
+      'Gerfaut. Live stops, and background checks post nothing.';
+  return premium ? '$silent Premium alerts still reach your channels.' : silent;
 }
 
 /// Where Live stands, always on screen while Live is chosen: how the

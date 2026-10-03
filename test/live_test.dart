@@ -16,6 +16,7 @@ import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/vault_key.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/select_field.dart';
+import 'package:gerfaut/widgets/setting_switch.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
 import 'fakes.dart';
@@ -42,6 +43,17 @@ FakeBridge _bridge({
       appPrefs: {...prefs},
     ),
   )..lock = lock;
+}
+
+/// A Premium key this phone is connected with, the way the vault
+/// holds one.
+void _connectPremium(FakeBridge bridge) {
+  bridge
+    ..premiumKey = 'abcdefghijkmnpqr'
+    ..premiumThisDeviceId = bridge.premiumAddDevice(
+      platform: DevicePlatform.android,
+      waiting: false,
+    );
 }
 
 LiveTx _live(
@@ -1414,7 +1426,7 @@ void main() {
   });
 
   group('the disguise', () {
-    testWidgets('Live cannot be chosen while disguised, and says why', (
+    testWidgets('disguised, both settings are greyed and say why', (
       tester,
     ) async {
       final bridge = _bridge(
@@ -1429,13 +1441,66 @@ void main() {
           disguise: FakeDisguise(disguised: true),
         ),
       );
-      await _pick(tester, 'Live');
-      expect(
-        find.text('Not available while the app is disguised'),
-        findsOneWidget,
+      // Each keeps the value that applies again once the disguise is
+      // off, and neither can be moved meanwhile.
+      final notify = tester.widget<SettingSwitch>(
+        find.widgetWithText(SettingSwitch, 'New transactions'),
       );
+      expect(notify.value, isTrue);
+      expect(notify.onChanged, isNull);
+      expect(
+        notify.hint,
+        'Off while the app is disguised: a notification would show the '
+        'name Gerfaut. Live stops, and background checks post nothing.',
+      );
+      final cadence = tester.widget<GerfautSelect<BackgroundCheck>>(
+        find.byType(GerfautSelect<BackgroundCheck>),
+      );
+      expect(cadence.onChanged, isNull);
+      expect(cadence.value, BackgroundCheck.quarterHour);
+
+      await tester.tap(find.byType(GerfautSelect<BackgroundCheck>));
+      await tester.pumpAndSettle();
+      expect(find.text('Every hour'), findsNothing);
       expect(find.text('Live watch'), findsNothing);
       expect(platform.calls, isEmpty);
+      // Nothing written over the choice the user made.
+      expect(bridge.appPrefs.containsKey('notify.background'), isFalse);
+    });
+
+    testWidgets('disguised, a premium account hears it still gets alerts', (
+      tester,
+    ) async {
+      final bridge = _bridge(
+        prefs: {'notify.new_tx': '1', 'notify.background': '900'},
+      );
+      _connectPremium(bridge);
+      await _open(
+        tester,
+        _settings(
+          bridge,
+          platform: FakeLivePlatform(),
+          disguise: FakeDisguise(disguised: true),
+        ),
+      );
+      expect(
+        find.textContaining('Premium alerts still reach your channels.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('without the disguise, nothing says it', (tester) async {
+      final bridge = _bridge(
+        prefs: {'notify.new_tx': '1', 'notify.background': '900'},
+      );
+      _connectPremium(bridge);
+      await _open(tester, _settings(bridge, platform: FakeLivePlatform()));
+      expect(find.textContaining('while the app is disguised'), findsNothing);
+      expect(find.textContaining('Premium alerts'), findsNothing);
+      final notify = tester.widget<SettingSwitch>(
+        find.widgetWithText(SettingSwitch, 'New transactions'),
+      );
+      expect(notify.onChanged, isNotNull);
     });
 
     test('putting it on stops Live and goes back to 15 min', () async {
