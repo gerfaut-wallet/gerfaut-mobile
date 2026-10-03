@@ -145,8 +145,8 @@ void main() {
 
   group('formatFiat', () {
     test('applies the rate with the currency symbol', () {
-      expect(formatFiat(100000000, 50000, FiatCurrency.usd), r'$50,000.00');
-      expect(formatFiat(100000000, 50000, FiatCurrency.eur), '€50,000.00');
+      expect(formatFiat(100000000, 50000, FiatCurrency.usd), '\$50 000.00');
+      expect(formatFiat(100000000, 50000, FiatCurrency.eur), '€50 000.00');
     });
 
     test('small values keep four decimals', () {
@@ -164,10 +164,10 @@ void main() {
         FiatCurrency.idr,
       ]) {
         final formatted = formatFiat(100000000, 7654321, currency);
-        expect(formatted, contains('7,654,321'));
+        expect(formatted, contains('7 654 321'));
         expect(formatted, isNot(contains('.')));
       }
-      expect(formatFiat(100000000, 1234.6, FiatCurrency.jpy), '¥1,235');
+      expect(formatFiat(100000000, 1234.6, FiatCurrency.jpy), '¥1 235');
     });
 
     test('a small value in a whole currency still shows', () {

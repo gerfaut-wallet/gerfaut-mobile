@@ -86,7 +86,7 @@ void main() {
   group('the price widget', () {
     test('states one bitcoin in the currency and the clock time', () {
       final payload = PricePayload.of(_quote);
-      expect(payload.figure, '€50,000');
+      expect(payload.figure, '€50 000');
       expect(payload.asOf, 'as of ${formatClock(_syncedAt)}');
       // The core carries no daily change yet: the line stays hidden.
       expect(payload.toData()[WidgetKeys.priceChange], isNull);
@@ -102,9 +102,9 @@ void main() {
         source: PriceSource.kraken,
         at: _syncedAt,
       );
-      expect(PricePayload.of(quote).figure, '€66,741');
-      expect(formatFiatPrice(66741.37, FiatCurrency.eur), '€66,741');
-      expect(formatFiatPrice(9876543.2, FiatCurrency.jpy), '¥9,876,543');
+      expect(PricePayload.of(quote).figure, '€66 741');
+      expect(formatFiatPrice(66741.37, FiatCurrency.eur), '€66 741');
+      expect(formatFiatPrice(9876543.2, FiatCurrency.jpy), '¥9 876 543');
       // Under a hundred the currency keeps its own decimals.
       expect(formatFiatPrice(42.5, FiatCurrency.eur), '€42.50');
     });
@@ -311,7 +311,7 @@ void main() {
 
       // Fiat display is off in the app: the widget fetched its own quote
       // in the preferred currency all the same.
-      expect(board.data[WidgetKeys.priceFigure], '€50,000');
+      expect(board.data[WidgetKeys.priceFigure], '€50 000');
       expect(board.data[WidgetKeys.priceAsOf], startsWith('as of '));
       expect(board.data.containsKey(WidgetKeys.priceChange), isFalse);
       // Masked until the widget preference says otherwise.
@@ -487,7 +487,7 @@ void main() {
       expect(bridge.syncWalletCalls, 0);
       // Fiat display is off in the app; the quote comes anyway, in the
       // preferred currency, because the placed widget is the opt-in.
-      expect(board.data[WidgetKeys.priceFigure], '€50,000');
+      expect(board.data[WidgetKeys.priceFigure], '€50 000');
       expect(board.data[WidgetKeys.balanceTotal], formatSats(100050000));
       expect(board.data[WidgetKeys.balanceSynced], 'Synced 2 h ago');
       expect(board.data[WidgetKeys.networkHeight], groupThousands('912345'));

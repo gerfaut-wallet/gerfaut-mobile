@@ -343,13 +343,20 @@ NumberFormat _fiatFormatter(FiatCurrency currency, {required bool precise}) {
   return precise ? pair.precise : pair.natural;
 }
 
+/// [value] in [formatter], its thousands grouped like every other
+/// number on screen: the formatter's commas would put "€74,074.07"
+/// beside "1 297 812 sats".
+String _grouped(NumberFormat formatter, double value) => formatter
+    .format(value)
+    .replaceAll(formatter.symbols.GROUP_SEP, groupSeparator);
+
 /// Fiat value of an amount at a given BTC rate, with the currency's
 /// symbol and its own number of decimals — never two forced on a
 /// currency that has none. Small values keep four decimals so they
 /// never round to zero.
 String formatFiat(int sats, double rate, FiatCurrency currency) {
   final value = sats / satsPerBtc * rate;
-  return _fiatFormatter(currency, precise: value.abs() < 1).format(value);
+  return _grouped(_fiatFormatter(currency, precise: value.abs() < 1), value);
 }
 
 final Map<FiatCurrency, NumberFormat> _wholeFiatFormatters = {};
@@ -358,12 +365,12 @@ final Map<FiatCurrency, NumberFormat> _wholeFiatFormatters = {};
 /// up — the cents of a five-figure price are noise, and every surface
 /// that quotes the price drops them the same way — and the currency's
 /// own decimals under that, so a currency priced in fractions still
-/// reads. `66741.37` -> `"€66,741"`, `42.5` -> `"€42.50"`.
+/// reads. `66741.37` -> `"€66 741"`, `42.5` -> `"€42.50"`.
 String formatFiatPrice(double rate, FiatCurrency currency) {
   if (rate.abs() < 100) return formatFiat(satsPerBtc, rate, currency);
   final formatter = _wholeFiatFormatters.putIfAbsent(
     currency,
     () => NumberFormat.simpleCurrency(name: currency.code, decimalDigits: 0),
   );
-  return formatter.format(rate);
+  return _grouped(formatter, rate);
 }
