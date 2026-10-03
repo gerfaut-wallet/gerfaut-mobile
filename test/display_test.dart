@@ -126,4 +126,43 @@ void main() {
     );
     expect(spokenIfMasked('0.001 BTC'), isNull);
   });
+
+  testWidgets('out of sight the price is not asked, and is asked on return', (
+    tester,
+  ) async {
+    var asked = 0;
+    final bridge = FakeBridge()
+      ..onFetchPrice = (source, currency) {
+        asked++;
+        return PriceQuote(
+          rate: 50000,
+          currency: currency,
+          source: source,
+          at: 1755000000,
+        );
+      };
+    final container = ProviderContainer(
+      overrides: [bridgeProvider.overrideWithValue(bridge)],
+    );
+    addTearDown(container.dispose);
+    container.read(fiatEnabledProvider.notifier).hydrate('1');
+    container.listen(priceProvider, (_, _) {});
+    await tester.pump();
+    expect(asked, 1);
+
+    await tester.pump(const Duration(seconds: 61));
+    expect(asked, 2);
+
+    // Behind the launcher: the quote in hand stays, nothing is asked.
+    container.read(appInFrontProvider.notifier).state = false;
+    await tester.pump();
+    await tester.pump(const Duration(minutes: 10));
+    expect(asked, 2);
+    expect(container.read(priceProvider).valueOrNull?.rate, 50000);
+
+    container.read(appInFrontProvider.notifier).state = true;
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(asked, 3);
+    container.dispose();
+  });
 }

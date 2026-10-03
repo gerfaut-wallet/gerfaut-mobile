@@ -349,9 +349,13 @@ class WidgetPriceNotifier extends AsyncNotifier<PriceQuote?> {
     final appQuote = ref.watch(priceProvider);
     final currency = ref.watch(fiatCurrencyProvider);
     final source = ref.watch(fiatSourceProvider);
+    final inFront = ref.watch(appInFrontProvider);
     final installed = await ref.watch(installedWidgetsProvider.future);
     if (!installed.contains(HomeWidgets.price)) return null;
     if (fiatOn) return appQuote.valueOrNull;
+    // Out of sight the widget is the periodic task's to refresh: no
+    // minute clock runs behind the launcher.
+    if (!inFront) return state.valueOrNull;
     ref.onDispose(() => _timer?.cancel());
     // Scheduled before the fetch so failures retry on the same cadence
     // as the app's own quote.

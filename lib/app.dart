@@ -299,6 +299,7 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
       case AppLifecycleState.hidden:
       case AppLifecycleState.detached:
         lock.noteHidden();
+        ref.read(appInFrontProvider.notifier).state = false;
         // Devices are looked at in front only: Dart timers go on firing
         // behind the launcher, for as long as Live keeps the process.
         if (ref.read(prefsHydratedProvider)) {
@@ -306,6 +307,7 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
         }
       case AppLifecycleState.resumed:
         lock.noteResumed();
+        ref.read(appInFrontProvider.notifier).state = true;
         // The launcher may have gained or lost a widget meanwhile. Only
         // once the preferences are in: a feed started before them would
         // publish the defaults first.

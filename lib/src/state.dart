@@ -269,9 +269,15 @@ final explorerAckProvider = NotifierProvider<ExplorerAckNotifier, bool>(
   ExplorerAckNotifier.new,
 );
 
-/// Current BTC price, refreshed every minute while fiat display is on.
-/// Failures surface as an error state: amounts degrade to no fiat and
-/// the settings screen shows a quiet hint.
+/// Whether the app is on screen. Dart timers go on firing behind the
+/// launcher for as long as Live keeps the process, so what runs on a
+/// clock for the screen's sake watches this and stops while it is
+/// false. Kept by the gate, from the app's lifecycle.
+final appInFrontProvider = StateProvider<bool>((ref) => true);
+
+/// Current BTC price, refreshed every minute while fiat display is on
+/// and the app is on screen. Failures surface as an error state: amounts
+/// degrade to no fiat and the settings screen shows a quiet hint.
 class PriceNotifier extends AsyncNotifier<PriceQuote?> {
   Timer? _timer;
 
@@ -281,7 +287,11 @@ class PriceNotifier extends AsyncNotifier<PriceQuote?> {
     final enabled = ref.watch(fiatEnabledProvider);
     final currency = ref.watch(fiatCurrencyProvider);
     final source = ref.watch(fiatSourceProvider);
+    final inFront = ref.watch(appInFrontProvider);
     if (!enabled) return null;
+    // Out of sight nothing is asked, and no clock runs: the quote in
+    // hand stays, and a fresh one is asked the moment the app is back.
+    if (!inFront) return state.valueOrNull;
     ref.onDispose(() => _timer?.cancel());
     // Scheduled before the fetch so failures retry on the same cadence.
     _timer = Timer(const Duration(seconds: 60), () => ref.invalidateSelf());
