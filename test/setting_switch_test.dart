@@ -73,4 +73,35 @@ void main() {
     expect(node.flagsCollection.isEnabled, Tristate.isFalse);
     handle.dispose();
   });
+
+  testWidgets('a switch that cannot move is dimmed, one that can is not', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      host(
+        Column(
+          children: [
+            const SettingSwitch(
+              title: 'New transactions',
+              value: true,
+              onChanged: null,
+            ),
+            SettingSwitch(title: 'App lock', value: true, onChanged: (_) {}),
+          ],
+        ),
+      ),
+    );
+    double opacityOf(String title) => tester
+        .widget<Opacity>(
+          find
+              .descendant(
+                of: find.widgetWithText(SettingSwitch, title),
+                matching: find.byType(Opacity),
+              )
+              .first,
+        )
+        .opacity;
+    expect(opacityOf('New transactions'), 0.45);
+    expect(opacityOf('App lock'), 1);
+  });
 }

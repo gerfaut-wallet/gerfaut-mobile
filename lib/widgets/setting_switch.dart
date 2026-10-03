@@ -74,13 +74,20 @@ class SettingSwitch extends StatelessWidget {
             ),
           ),
           const SizedBox(width: GerfautSpacing.sm),
-          Switch(
-            value: value,
-            activeThumbColor: tokens.onPrimary,
-            activeTrackColor: tokens.primary,
-            inactiveThumbColor: tokens.textMuted,
-            inactiveTrackColor: tokens.surfaceSunken,
-            onChanged: onChanged,
+          // The colours above are the switch's own, kept when it cannot
+          // move: on its own a greyed switch still wears the Glacier
+          // track of one that is on, and reads as on. At the opacity
+          // of every disabled control, it reads as out of reach.
+          Opacity(
+            opacity: onChanged == null ? 0.45 : 1,
+            child: Switch(
+              value: value,
+              activeThumbColor: tokens.onPrimary,
+              activeTrackColor: tokens.primary,
+              inactiveThumbColor: tokens.textMuted,
+              inactiveTrackColor: tokens.surfaceSunken,
+              onChanged: onChanged,
+            ),
           ),
         ],
       ),
