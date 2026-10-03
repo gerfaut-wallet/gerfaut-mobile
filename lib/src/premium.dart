@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'bridge.dart';
 import 'disguise.dart';
+import 'format.dart';
 import 'models.dart';
 import 'notifications.dart';
 import 'state.dart';
@@ -310,6 +311,42 @@ String offReason(PremiumChannel channel) => switch (channel.kind) {
     'The server turned this channel off, so nothing is delivered to it. '
         'Remove it and add it again.',
 };
+
+/// How long a channel fails before it reads as not delivering. The
+/// server tries again on its own; a failure that passes within the hour
+/// changes nothing on screen.
+const Duration channelFailingFor = Duration(hours: 1);
+
+/// Since when nothing has reached [channel], once every attempt has
+/// failed for [channelFailingFor] or more; null while it delivers, while
+/// it has failed for less, and for a channel the server turned off,
+/// which says so on its own.
+int? notDeliveringSince(PremiumChannel channel, {DateTime? now}) {
+  final since = channel.failingSince;
+  if (since == null || !channel.enabled) return null;
+  final seconds = (now ?? DateTime.now()).millisecondsSinceEpoch ~/ 1000;
+  return since <= seconds - channelFailingFor.inSeconds ? since : null;
+}
+
+/// What a channel that stopped delivering says: since when, and what to
+/// do about it, which depends on what is at the other end.
+String notDeliveringNote(PremiumChannel channel, int since) {
+  final remedy = switch (channel.kind) {
+    ChannelKind.telegram =>
+      'If the bot was blocked in Telegram, unblock it, then send a test. '
+          'Otherwise remove the channel and add it again.',
+    ChannelKind.email =>
+      'Check that the address still takes mail, then send a test, or '
+          'remove the channel and add it again.',
+    ChannelKind.webhook =>
+      'Check that the address answers, then send a test, or remove the '
+          'channel and add it again.',
+    ChannelKind.ntfy =>
+      'Send a test to try again, or remove the channel and add it again.',
+  };
+  return 'Nothing has reached this channel since ${formatTimestamp(since)}. '
+      '$remedy';
+}
 
 // --- the key -------------------------------------------------------------
 

@@ -3547,6 +3547,9 @@ class PremiumChannel {
     this.linkedName,
     this.enabled = true,
     required this.createdAt,
+    this.lastSentAt,
+    this.failingSince,
+    this.lastFailure,
   });
 
   factory PremiumChannel.fromJson(Map<String, dynamic> json) {
@@ -3560,6 +3563,10 @@ class PremiumChannel {
       linkedName: json['linked_name'] as String?,
       enabled: json['enabled'] as bool? ?? true,
       createdAt: json['created_at'] as int,
+      // Absent from a server that predates them: nothing to say then.
+      lastSentAt: json['last_sent_at'] as int?,
+      failingSince: json['failing_since'] as int?,
+      lastFailure: json['last_failure'] as String?,
     );
   }
 
@@ -3587,6 +3594,19 @@ class PremiumChannel {
 
   /// Unix seconds.
   final int createdAt;
+
+  /// Unix seconds when an alert or a test last went through; null
+  /// before any.
+  final int? lastSentAt;
+
+  /// Unix seconds since every attempt on the channel fails; null again
+  /// at the first that goes through.
+  final int? failingSince;
+
+  /// Why the last attempt failed, in the server's words: `the channel
+  /// answered 403`, `the channel could not be reached`. Null while
+  /// nothing fails.
+  final String? lastFailure;
 
   /// A Telegram channel the bot has not heard from yet.
   bool get waitingForBot => kind == ChannelKind.telegram && !linked;

@@ -2016,6 +2016,23 @@ class _ChannelsCard extends ConsumerWidget {
                   message: offReason(channel),
                 ),
               )
+            // Every attempt has failed for an hour or more: a blocked
+            // bot, a webhook whose domain lapsed. The server keeps
+            // trying and says nothing else, so the row says it, with
+            // the server's last words as they came.
+            else if (notDeliveringSince(channel) case final since?)
+              Padding(
+                padding: const EdgeInsets.only(
+                  left:
+                      GerfautSpacing.md + GerfautSpacing.sm + GerfautSpacing.xs,
+                  bottom: GerfautSpacing.sm,
+                ),
+                child: GerfautNotice(
+                  tone: NoticeTone.info,
+                  message: notDeliveringNote(channel, since),
+                  detail: channel.lastFailure,
+                ),
+              )
             // The code the address received, asked for under the row
             // it belongs to: an address is written to only once its
             // owner has proved they read it.
@@ -2143,6 +2160,8 @@ class _ChannelRow extends StatelessWidget {
     final name = channel.linkedName;
     final linkedName = name == null || name.isEmpty ? null : name;
     final off = !channel.enabled;
+    // Failing for an hour or more reads as off does: nothing arrives.
+    final failing = notDeliveringSince(channel) != null;
     // The address has the code and has not sent it back: nothing is
     // delivered there until it does.
     final awaitingCode =
@@ -2170,7 +2189,7 @@ class _ChannelRow extends StatelessWidget {
                         fontVariations: const [FontVariation('wght', 500)],
                       ),
                     ),
-                    if (off)
+                    if (off || failing)
                       // Amber, not red: nothing on chain is at stake,
                       // and the glyph says it is a warning rather than
                       // a wait.

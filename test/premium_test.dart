@@ -2232,6 +2232,138 @@ void main() {
       expect(find.text('Remove'), findsOneWidget);
     });
 
+    testWidgets('a channel failing for an hour says so, and what to do', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final since = now - 2 * 3600;
+      bridge.premiumChannelList.add(
+        PremiumChannel(
+          id: 'ch8',
+          kind: ChannelKind.telegram,
+          target: '12••••89',
+          linked: true,
+          createdAt: 1,
+          lastSentAt: since - 600,
+          failingSince: since,
+          lastFailure: 'the channel answered 403',
+        ),
+      );
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Not delivering'), findsOneWidget);
+      expect(find.text('Linked'), findsNothing);
+      final note = tester.widget<GerfautNotice>(find.byType(GerfautNotice));
+      expect(note.tone, NoticeTone.info);
+      expect(
+        note.message,
+        'Nothing has reached this channel since ${formatTimestamp(since)}. '
+        'If the bot was blocked in Telegram, unblock it, then send a test. '
+        'Otherwise remove the channel and add it again.',
+      );
+      // The server's own words, as they came.
+      expect(note.detail, 'the channel answered 403');
+
+      // Both ways out are in the menu.
+      await tester.tap(find.byTooltip('More for Telegram'));
+      await tester.pumpAndSettle();
+      expect(find.text('Send a test'), findsOneWidget);
+      expect(find.text('Remove'), findsOneWidget);
+    });
+
+    testWidgets('a failure younger than an hour changes nothing', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      bridge.premiumChannelList.add(
+        PremiumChannel(
+          id: 'ch9',
+          kind: ChannelKind.telegram,
+          target: '12••••89',
+          linked: true,
+          createdAt: 1,
+          failingSince: now - 600,
+          lastFailure: 'the channel could not be reached',
+        ),
+      );
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Linked'), findsOneWidget);
+      expect(find.text('Not delivering'), findsNothing);
+      expect(find.byType(GerfautNotice), findsNothing);
+    });
+
+    test('a channel delivers until it has failed for an hour', () {
+      final now = DateTime.utc(2026, 10, 3, 12);
+      final at = now.millisecondsSinceEpoch ~/ 1000;
+      PremiumChannel failing(int? since, {bool enabled = true}) =>
+          PremiumChannel(
+            id: 'x',
+            kind: ChannelKind.webhook,
+            target: '',
+            linked: true,
+            enabled: enabled,
+            createdAt: 1,
+            failingSince: since,
+          );
+      expect(notDeliveringSince(failing(null), now: now), isNull);
+      expect(notDeliveringSince(failing(at - 3599), now: now), isNull);
+      expect(notDeliveringSince(failing(at - 3600), now: now), at - 3600);
+      // Turned off by the server: its own sentence says it.
+      expect(
+        notDeliveringSince(failing(at - 7200, enabled: false), now: now),
+        isNull,
+      );
+      for (final kind in ChannelKind.values) {
+        final note = notDeliveringNote(
+          PremiumChannel(
+            id: 'x',
+            kind: kind,
+            target: '',
+            linked: true,
+            createdAt: 1,
+          ),
+          at,
+        );
+        expect(note, startsWith('Nothing has reached this channel since'));
+        expect(note, endsWith('add it again.'));
+      }
+    });
+
+    test('a server that predates the record reads as delivering', () {
+      final channel = PremiumChannel.fromJson({
+        'id': 'c1',
+        'kind': 'email',
+        'target': 'a••@example.org',
+        'linked': true,
+        'enabled': true,
+        'created_at': 1,
+      });
+      expect(channel.failingSince, isNull);
+      expect(channel.lastFailure, isNull);
+      expect(channel.lastSentAt, isNull);
+      final failing = PremiumChannel.fromJson({
+        'id': 'c1',
+        'kind': 'email',
+        'target': 'a••@example.org',
+        'linked': true,
+        'enabled': true,
+        'created_at': 1,
+        'last_sent_at': 5,
+        'failing_since': 10,
+        'last_failure': 'the channel answered 550',
+      });
+      expect(failing.lastSentAt, 5);
+      expect(failing.failingSince, 10);
+      expect(failing.lastFailure, 'the channel answered 550');
+    });
+
     testWidgets('every kind the server can turn off has a sentence', (
       tester,
     ) async {

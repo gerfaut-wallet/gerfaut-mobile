@@ -1751,6 +1751,42 @@ mod tests {
         assert!(keys.iter().all(|key| key == &keys[0]), "{keys:?}");
     }
 
+    /// A channel's delivery record reaches the app as the core reads
+    /// it: when something last went through, since when it fails and
+    /// why, each null when there is nothing to say.
+    #[test]
+    fn a_channel_view_carries_its_delivery_record() {
+        let channel: Channel = serde_json::from_value(json!({
+            "id": "c1",
+            "kind": "telegram",
+            "target": "12••••89",
+            "linked": true,
+            "enabled": true,
+            "created_at": 1_755_000_000,
+            "last_sent_at": 1_755_000_100,
+            "failing_since": 1_755_000_200,
+            "last_failure": "the channel answered 403",
+        }))
+        .unwrap();
+        let view = channel_view(&channel);
+        assert_eq!(view["last_sent_at"], 1_755_000_100);
+        assert_eq!(view["failing_since"], 1_755_000_200);
+        assert_eq!(view["last_failure"], "the channel answered 403");
+
+        let quiet: Channel = serde_json::from_value(json!({
+            "id": "c2",
+            "kind": "ntfy",
+            "target": "",
+            "linked": true,
+            "enabled": true,
+            "created_at": 1_755_000_000,
+        }))
+        .unwrap();
+        let view = channel_view(&quiet);
+        assert!(view["failing_since"].is_null());
+        assert!(view["last_failure"].is_null());
+    }
+
     /// The words of a refusal are the server's own, and nothing else:
     /// they are what the card prints under "The Gerfaut server refused".
     #[test]
