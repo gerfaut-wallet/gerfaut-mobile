@@ -42,9 +42,10 @@ class NotificationsSection extends ConsumerWidget {
   /// are turned back on. A trip out of the app the user asked for: the
   /// lock does not land on the way back.
   Future<void> _openSystemSettings(WidgetRef ref) async {
-    final lock = ref.read(lockProvider.notifier)..expectExcursion();
-    final opened = await ref.read(livePlatformProvider).openAppSettings();
-    if (!opened) lock.forgetExcursion();
+    final platform = ref.read(livePlatformProvider);
+    await ref
+        .read(lockProvider.notifier)
+        .excursion(platform.openAppSettings, shown: (opened) => opened);
   }
 
   @override

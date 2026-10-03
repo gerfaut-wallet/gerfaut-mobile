@@ -122,20 +122,19 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
     final lock = ref.read(lockProvider.notifier);
     // The picker is a screen of the system's: Android pauses Gerfaut
     // behind it, and coming back from a picker the user opened here is
-    // not coming back from the background. Announced against the call
-    // that opens it, and nothing earlier.
-    lock.expectExcursion();
+    // not coming back from the background.
     final XFile? file;
     try {
-      file = await (widget.filePicker ?? _pickBackupFile)();
+      file = await lock.excursion(
+        widget.filePicker ?? _pickBackupFile,
+        // Picked, then not read: the trip did happen.
+        cameUp: (error) => error is FileReadException,
+      );
     } on FileReadException catch (error) {
-      // Picked, then not read: the trip did happen.
       if (mounted) setState(() => _error = error.message);
       return;
     } catch (_) {
-      // No picker came up: the trip goes back, or it would be spent on
-      // a real absence hours from now.
-      lock.forgetExcursion();
+      // No picker came up.
       if (!mounted) return;
       setState(
         () => _error = 'No app on this phone can open a file to restore.',

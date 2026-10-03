@@ -125,20 +125,19 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     // behind it, and coming back from a picker the user opened here is
     // not coming back from the background. Without this the lock lands
     // on the way in and takes the picked file with it.
-    lock.expectExcursion();
     final XFile? file;
     try {
-      file =
-          await (widget.filePicker ??
-              () => openBoundedFile(maxBytes: _maxTransactionBytes))();
+      file = await lock.excursion(
+        widget.filePicker ??
+            () => openBoundedFile(maxBytes: _maxTransactionBytes),
+        // Picked, then not read: the trip did happen.
+        cameUp: (error) => error is FileReadException,
+      );
     } on FileReadException catch (error) {
-      // Picked, then not read: the trip did happen.
       if (mounted) setState(() => _inputError = error.message);
       return;
     } catch (_) {
-      // No picker came up: the trip goes back, or it would be spent on
-      // a real absence hours from now.
-      lock.forgetExcursion();
+      // No picker came up.
       if (mounted) {
         setState(
           () => _inputError = 'No app on this phone can open a file to read.',

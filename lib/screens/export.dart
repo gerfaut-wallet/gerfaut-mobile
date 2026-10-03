@@ -136,36 +136,36 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
       // announced against the call that opens it, and nothing earlier.
       switch (destination) {
         case _Destination.file:
-          lock.expectExcursion();
-          final saved = await ref
-              .read(documentSaverProvider)
-              .save(
-                bytes: utf8.encode(result.csv),
-                filename: filename,
-                mimeType: 'text/csv',
-              );
+          final saver = ref.read(documentSaverProvider);
+          final saved = await lock.excursion(
+            () => saver.save(
+              bytes: utf8.encode(result.csv),
+              filename: filename,
+              mimeType: 'text/csv',
+            ),
+            // A save refused before the dialog came up is no trip.
+            cameUp: (error) =>
+                error is DocumentSaveException && error.dialogOpened,
+          );
           // A dialog waved away says nothing: the filters are still here.
           if (saved) {
             messenger.showSnackBar(SnackBar(content: Text('$rows saved')));
           }
         case _Destination.share:
-          lock.expectExcursion();
+          final sharer = ref.read(csvSharerProvider);
           try {
-            await ref
-                .read(csvSharerProvider)
-                .shareCsv(csv: result.csv, filename: filename);
+            await lock.excursion(
+              () => sharer.shareCsv(csv: result.csv, filename: filename),
+            );
             messenger.showSnackBar(SnackBar(content: Text('$rows exported')));
           } catch (_) {
             // No sheet came up: nothing left the screen.
-            lock.forgetExcursion();
             _fail('The share sheet could not be opened.');
           }
       }
     } on BridgeException catch (error) {
       _fail('The file could not be built.', detail: error.message);
     } on DocumentSaveException catch (error) {
-      // A save refused before the dialog came up is no trip at all.
-      if (!error.dialogOpened) lock.forgetExcursion();
       _fail('The file could not be saved.', detail: error.message);
     } finally {
       if (mounted) setState(() => _exporting = false);

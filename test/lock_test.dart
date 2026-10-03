@@ -719,6 +719,56 @@ void main() {
   });
 
   group('a system screen Gerfaut opened itself', () {
+    /// Whether the next return from the background locks.
+    Future<bool> nextReturnLocks(
+      ({ProviderContainer container, LockController lock}) app,
+    ) async {
+      app.lock.noteHidden();
+      app.lock.noteResumed();
+      return app.container.read(lockProvider).locked;
+    }
+
+    test('an excursion that opened covers its return', () async {
+      final app = lockedApp();
+      await app.lock.unlock('1234');
+      expect(await app.lock.excursion(() async => 'picked'), 'picked');
+      expect(await nextReturnLocks(app), isFalse);
+    });
+
+    test('an excursion that failed to open is taken back', () async {
+      final app = lockedApp();
+      await app.lock.unlock('1234');
+      await expectLater(
+        app.lock.excursion<String>(() async => throw StateError('no app')),
+        throwsStateError,
+      );
+      expect(await nextReturnLocks(app), isTrue);
+    });
+
+    test('a failure after the screen came up keeps the trip', () async {
+      final app = lockedApp();
+      await app.lock.unlock('1234');
+      await expectLater(
+        app.lock.excursion<String>(
+          () async => throw const FormatException('picked, not read'),
+          cameUp: (error) => error is FormatException,
+        ),
+        throwsFormatException,
+      );
+      expect(await nextReturnLocks(app), isFalse);
+    });
+
+    test('a result that says nothing opened is taken back', () async {
+      final app = lockedApp();
+      await app.lock.unlock('1234');
+      final opened = await app.lock.excursion(
+        () async => false,
+        shown: (opened) => opened,
+      );
+      expect(opened, isFalse);
+      expect(await nextReturnLocks(app), isTrue);
+    });
+
     test('coming back from a picker does not lock', () async {
       final app = lockedApp();
       await app.lock.unlock('1234');

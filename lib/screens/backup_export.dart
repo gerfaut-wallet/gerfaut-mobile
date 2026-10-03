@@ -155,24 +155,23 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
     });
     // The dialog that picks where the file goes is a screen of the
     // system's: Android pauses Gerfaut behind it, and coming back from
-    // it is not coming back from the background. Announced against the
-    // call that opens it, and nothing earlier.
-    lock.expectExcursion();
+    // it is not coming back from the background.
+    final saver = ref.read(documentSaverProvider);
     try {
-      final saved = await ref
-          .read(documentSaverProvider)
-          .save(
-            bytes: bytes,
-            filename: _filename(),
-            mimeType: 'application/octet-stream',
-          );
+      final saved = await lock.excursion(
+        () => saver.save(
+          bytes: bytes,
+          filename: _filename(),
+          mimeType: 'application/octet-stream',
+        ),
+        // A save refused before the dialog came up is no trip at all.
+        cameUp: (error) => error is DocumentSaveException && error.dialogOpened,
+      );
       // A dialog waved away says nothing: the backup is still here.
       if (saved) {
         messenger.showSnackBar(const SnackBar(content: Text('Saved')));
       }
     } on DocumentSaveException catch (error) {
-      // A save refused before the dialog came up is no trip at all.
-      if (!error.dialogOpened) lock.forgetExcursion();
       _fail('The file could not be saved.', detail: error.message);
     } finally {
       if (mounted) setState(() => _trip = null);
@@ -194,15 +193,16 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
       _trip = _Trip.share;
       _failure = null;
     });
-    lock.expectExcursion();
+    final sharer = ref.read(backupSharerProvider);
     try {
-      await ref
-          .read(backupSharerProvider)
-          .shareBackup(bytes: base64Decode(bundle.data), filename: _filename());
+      await lock.excursion(
+        () => sharer.shareBackup(
+          bytes: base64Decode(bundle.data),
+          filename: _filename(),
+        ),
+      );
     } catch (_) {
-      // No sheet came up: the trip goes back, or it would be spent on
-      // a real absence hours from now.
-      lock.forgetExcursion();
+      // No sheet came up.
       _fail('The share sheet could not be opened.');
     } finally {
       if (mounted) setState(() => _trip = null);
