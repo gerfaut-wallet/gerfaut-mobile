@@ -233,7 +233,15 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
           .valueOrNull
           ?.activeNetwork;
       if (network != active) {
-        await bridge.setActiveNetwork(network);
+        // The wallet is in the vault whatever happens here: a switch
+        // that fails must not read as a failed add, or adding again
+        // would only be refused as a duplicate. The wallet page opens
+        // anyway; the network is set from the settings.
+        try {
+          await bridge.setActiveNetwork(network);
+        } catch (_) {
+          // The page about to open is the wallet's own.
+        }
         container.invalidate(settingsProvider);
       }
       container.invalidate(walletsProvider);

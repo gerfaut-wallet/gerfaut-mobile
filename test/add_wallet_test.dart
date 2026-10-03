@@ -278,6 +278,32 @@ void main() {
     expect(find.text('NAME'), findsNothing);
   });
 
+  testWidgets('a network that will not switch still opens the new wallet', (
+    tester,
+  ) async {
+    final bridge = FakeBridge(onParse: (_) => makeParsedInput())
+      ..onSetActiveNetwork = (_) {
+        throw const BridgeException('storage', 'the vault could not save');
+      };
+    await tester.pumpWidget(screen(bridge));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'wpkh(tpub.../0/*)');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Cold');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Add wallet'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add wallet'));
+    await tester.pumpAndSettle();
+
+    // Added once, and not offered again as if it had failed.
+    expect(bridge.wallets, hasLength(1));
+    expect(find.byType(AddWalletScreen), findsNothing);
+    expect(find.textContaining('could not save'), findsNothing);
+  });
+
   testWidgets('a wallet the core refuses at the add step says why', (
     tester,
   ) async {
