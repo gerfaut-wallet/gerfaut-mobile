@@ -576,25 +576,30 @@ class _WalletCard extends StatelessWidget {
                     Tooltip(
                       message: error!,
                       triggerMode: TooltipTriggerMode.tap,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            LucideIcons.triangleAlert,
-                            size: 13,
-                            color: tokens.pending,
-                          ),
-                          const SizedBox(width: GerfautSpacing.xs),
-                          Flexible(
-                            child: Text(
-                              'Sync failed',
-                              style: tokens.label.copyWith(
-                                color: tokens.pending,
-                              ),
-                              overflow: TextOverflow.ellipsis,
+                      // 44 high: a tap on the line reads the reason
+                      // rather than opening the wallet around it.
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 44),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              LucideIcons.triangleAlert,
+                              size: 13,
+                              color: tokens.pending,
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: GerfautSpacing.xs),
+                            Flexible(
+                              child: Text(
+                                'Sync failed',
+                                style: tokens.label.copyWith(
+                                  color: tokens.pending,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],

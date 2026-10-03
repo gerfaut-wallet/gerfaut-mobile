@@ -654,9 +654,14 @@ class _WalletRow extends StatelessWidget {
                                 decoration: InputDecoration(
                                   filled: true,
                                   fillColor: tokens.surfaceSunken,
+                                  // The height of every other field: a
+                                  // box the thumb lands in.
+                                  constraints: const BoxConstraints(
+                                    minHeight: 44,
+                                  ),
                                   contentPadding: const EdgeInsets.symmetric(
                                     horizontal: GerfautSpacing.sm,
-                                    vertical: GerfautSpacing.xs,
+                                    vertical: GerfautSpacing.sm + 2,
                                   ),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(

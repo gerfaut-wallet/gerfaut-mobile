@@ -97,7 +97,9 @@ void openExplorer(BuildContext context, WidgetRef ref, String url) {
                     child: InkWell(
                       borderRadius: BorderRadius.circular(GerfautRadius.sm),
                       onTap: () => setState(() => skipNextTime = !skipNextTime),
-                      child: Padding(
+                      child: Container(
+                        // The whole line is the box: 44 high at least.
+                        constraints: const BoxConstraints(minHeight: 44),
                         padding: const EdgeInsets.symmetric(
                           vertical: GerfautSpacing.sm + 2,
                         ),

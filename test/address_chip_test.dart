@@ -199,4 +199,32 @@ void main() {
     );
     await tester.pump(const Duration(seconds: 2));
   });
+
+  testWidgets('the finger gets 44 around a chip drawn smaller', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: themeFrom(GerfautTokens.light, Brightness.light),
+        home: const Scaffold(
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [AddressChip(value: 'bc1qexampleaddress')],
+          ),
+        ),
+      ),
+    );
+    expect(
+      tester.getSize(find.byType(AddressChip)).height,
+      greaterThanOrEqualTo(44),
+    );
+    // What is drawn keeps its own height.
+    final drawn = tester.getSize(
+      find
+          .descendant(
+            of: find.byType(AddressChip),
+            matching: find.byType(InkWell),
+          )
+          .first,
+    );
+    expect(drawn.height, lessThan(44));
+  });
 }
