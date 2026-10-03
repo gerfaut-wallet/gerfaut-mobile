@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../src/bridge.dart';
 import '../../src/models.dart';
 import '../../src/premium.dart';
 import '../../src/state.dart';
@@ -10,6 +11,7 @@ import '../../widgets/buttons.dart';
 import '../../widgets/notice.dart';
 import '../../widgets/reorder.dart';
 import '../../widgets/section_card.dart';
+import '../../widgets/setting_switch.dart';
 import '../../widgets/wallet_icon.dart';
 import '../confirm_identity.dart';
 import 'fields.dart';
@@ -315,6 +317,8 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
                     ),
                   ),
                 ),
+              if (shown.isNotEmpty)
+                SliverToBoxAdapter(child: _LivePins(wallets: shown)),
             ],
           ),
         ),
@@ -418,6 +422,123 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
       rescanning: _rescanningId == wallet.id,
       busy: sync.isSyncing(wallet.id),
       onRescan: () => _rescan(wallet.id),
+    );
+  }
+}
+
+/// "Always watch live first", an advanced setting folded away under
+/// the list. When Live cannot follow every address, it follows the
+/// pinned wallets before the others, then the ones holding coins.
+/// Pinning many large wallets can leave the rest to the syncs: the
+/// user's call to make, and why the switches are out of the way.
+class _LivePins extends ConsumerStatefulWidget {
+  const _LivePins({required this.wallets});
+
+  /// The wallets of the active network, in the order of the list.
+  final List<WalletMeta> wallets;
+
+  @override
+  ConsumerState<_LivePins> createState() => _LivePinsState();
+}
+
+class _LivePinsState extends ConsumerState<_LivePins> {
+  bool _open = false;
+
+  /// The wallet a pin is on its way to the vault for: the other
+  /// switches wait for it.
+  String? _savingId;
+
+  /// What the vault refused, under the wallet it was for.
+  ({String id, String message})? _failure;
+
+  Future<void> _pin(WalletMeta wallet, bool pinned) async {
+    if (_savingId != null) return;
+    // Held before the await: the list is read again even if the page
+    // was left meanwhile.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() {
+      _savingId = wallet.id;
+      _failure = null;
+    });
+    try {
+      await ref.read(bridgeProvider).setWalletLivePinned(wallet.id, pinned);
+      container.invalidate(walletsProvider);
+      messenger.showSnackBar(const SnackBar(content: Text('Setting saved')));
+    } on BridgeException catch (error) {
+      if (mounted) {
+        setState(() => _failure = (id: wallet.id, message: error.message));
+      }
+    } finally {
+      if (mounted) setState(() => _savingId = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final pinned = widget.wallets.where((w) => w.livePinned).length;
+    // Folded, the button still says when something is pinned: a choice
+    // that changes what Live follows is never out of sight entirely.
+    final label = !_open && pinned > 0
+        ? 'Advanced · ${pinned == 1 ? '1 wallet' : '$pinned wallets'} '
+              'watched live first'
+        : 'Advanced';
+    return Container(
+      margin: const EdgeInsets.only(top: GerfautSpacing.sm),
+      padding: const EdgeInsets.only(top: GerfautSpacing.xs),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: tokens.border)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // One node, read as a button that says whether it is open.
+          MergeSemantics(
+            child: Semantics(
+              expanded: _open,
+              child: GhostButton(
+                label: label,
+                icon: _open ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+                onPressed: () => setState(() => _open = !_open),
+              ),
+            ),
+          ),
+          if (_open) ...[
+            const SizedBox(height: GerfautSpacing.xs),
+            Text(
+              'Always watch live first',
+              style: tokens.bodySmall.copyWith(
+                fontWeight: FontWeight.w500,
+                fontVariations: const [FontVariation('wght', 500)],
+              ),
+            ),
+            Text(
+              'When Live cannot follow every address, the wallets turned '
+              'on here are followed first.',
+              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+            ),
+            for (final wallet in widget.wallets) ...[
+              const SizedBox(height: GerfautSpacing.sm),
+              SettingSwitch(
+                title: wallet.name,
+                value: wallet.livePinned,
+                onChanged: _savingId != null
+                    ? null
+                    : (pinned) => _pin(wallet, pinned),
+              ),
+              if (_failure?.id == wallet.id)
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    _failure!.message,
+                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                  ),
+                ),
+            ],
+          ],
+        ],
+      ),
     );
   }
 }

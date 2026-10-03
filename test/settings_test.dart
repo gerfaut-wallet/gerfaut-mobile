@@ -322,6 +322,155 @@ void main() {
     });
   });
 
+  group('live pins', () {
+    FakeBridge two({bool pinSecond = false}) => FakeBridge(
+      wallets: [
+        makeMeta(id: 'w1', name: 'Cold storage'),
+        makeMeta(id: 'w2', name: 'Spending', livePinned: pinSecond),
+      ],
+    );
+
+    testWidgets('the pins stay folded under Advanced until asked for', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        settingsApp(two(), section: SettingsSection.wallets),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Advanced'), findsOneWidget);
+      expect(find.text('Always watch live first'), findsNothing);
+      expect(
+        tester
+            .getSemantics(find.bySemanticsLabel('Advanced'))
+            .flagsCollection
+            .isExpanded,
+        Tristate.isFalse,
+      );
+
+      await tester.tap(find.text('Advanced'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Always watch live first'), findsOneWidget);
+      expect(
+        find.text(
+          'When Live cannot follow every address, the wallets turned on '
+          'here are followed first.',
+        ),
+        findsOneWidget,
+      );
+      // One switch a wallet, read with the wallet's name, all off.
+      final switches = tester
+          .widgetList<SettingSwitch>(find.byType(SettingSwitch))
+          .toList();
+      expect([for (final s in switches) s.title], ['Cold storage', 'Spending']);
+      expect(switches.every((s) => !s.value), isTrue);
+      expect(
+        tester
+            .getSemantics(find.bySemanticsLabel('Advanced'))
+            .flagsCollection
+            .isExpanded,
+        Tristate.isTrue,
+      );
+      handle.dispose();
+    });
+
+    testWidgets('a pin is stored and the switch follows the vault', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = two();
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.wallets),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Advanced'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.descendant(
+          of: find.widgetWithText(SettingSwitch, 'Spending'),
+          matching: find.byType(Switch),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(bridge.pinCalls, [(id: 'w2', pinned: true)]);
+      expect(
+        tester
+            .widget<SettingSwitch>(
+              find.widgetWithText(SettingSwitch, 'Spending'),
+            )
+            .value,
+        isTrue,
+      );
+      expect(find.text('Setting saved'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('folded, the button says how many wallets are pinned', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      await tester.pumpWidget(
+        settingsApp(two(pinSecond: true), section: SettingsSection.wallets),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Advanced · 1 wallet watched live first'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Advanced · 1 wallet watched live first'));
+      await tester.pumpAndSettle();
+      expect(find.text('Advanced'), findsOneWidget);
+    });
+
+    testWidgets('a refused pin is said under its wallet', (tester) async {
+      useTallSurface(tester);
+      final bridge = two()
+        ..onSetLivePinned = (id, pinned) {
+          throw const BridgeException('storage', 'The vault could not save.');
+        };
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.wallets),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Advanced'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.descendant(
+          of: find.widgetWithText(SettingSwitch, 'Cold storage'),
+          matching: find.byType(Switch),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('The vault could not save.'), findsOneWidget);
+      expect(
+        tester
+            .widget<SettingSwitch>(
+              find.widgetWithText(SettingSwitch, 'Cold storage'),
+            )
+            .value,
+        isFalse,
+      );
+    });
+
+    testWidgets('no wallet, no pins', (tester) async {
+      useTallSurface(tester);
+      await tester.pumpWidget(
+        settingsApp(FakeBridge(), section: SettingsSection.wallets),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Advanced'), findsNothing);
+    });
+  });
+
   group('wallet order', () {
     FakeBridge two() => FakeBridge(
       wallets: [

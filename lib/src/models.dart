@@ -368,6 +368,7 @@ class WalletMeta {
     required this.cachedBalance,
     required this.cachedTxCount,
     this.scanGap = 20,
+    this.livePinned = false,
   });
 
   factory WalletMeta.fromJson(Map<String, dynamic> json) {
@@ -391,6 +392,8 @@ class WalletMeta {
         cached['balance'] as Map<String, dynamic>,
       ),
       cachedTxCount: cached['tx_count'] as int,
+      // Left out by the core when false, and by every core before pins.
+      livePinned: json['live_pinned'] as bool? ?? false,
     );
   }
 
@@ -413,15 +416,20 @@ class WalletMeta {
   final BalanceSnapshot cachedBalance;
   final int cachedTxCount;
 
+  /// Live follows this wallet before the others when it cannot follow
+  /// every address. Off unless the user pinned it.
+  final bool livePinned;
+
   bool get isSingleAddress => kind is SingleAddressKind;
 
-  /// The same wallet with the name or the icon changed: what a rename
-  /// or an icon pick leaves behind.
-  WalletMeta copyWith({String? name, WalletIcon? icon}) {
+  /// The same wallet with the name, the icon or the pin changed: what a
+  /// rename, an icon pick or a pin leaves behind.
+  WalletMeta copyWith({String? name, WalletIcon? icon, bool? livePinned}) {
     return WalletMeta(
       id: id,
       name: name ?? this.name,
       icon: icon ?? this.icon,
+      livePinned: livePinned ?? this.livePinned,
       network: network,
       kind: kind,
       recognizedAs: recognizedAs,

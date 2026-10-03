@@ -432,6 +432,18 @@ pub async fn set_wallet_icon(id: String, icon: String) -> String {
     }
 }
 
+/// Puts a wallet ahead of the others in the live watch, or back among
+/// them. When the watch cannot follow every address, the pinned wallets
+/// are followed first. Kept in the vault; the watch takes the new order
+/// by itself.
+pub async fn set_wallet_live_pinned(id: String, pinned: bool) -> String {
+    let manager = try_json!(manager());
+    match manager.set_wallet_live_pinned(&id, pinned).await {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
 /// Puts the listed wallets in that order. Wallets left out keep their
 /// slots, so the list of one network reorders without moving another
 /// network's wallets. A repeated id is refused, an unknown one too.

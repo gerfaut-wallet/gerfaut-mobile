@@ -144,6 +144,10 @@ abstract class GerfautBridge {
   /// Changes the glyph a wallet shows next to its name.
   Future<void> setWalletIcon(String id, WalletIcon icon);
 
+  /// Puts a wallet ahead of the others in Live, or back among them: when
+  /// Live cannot follow every address, pinned wallets come first.
+  Future<void> setWalletLivePinned(String id, bool pinned);
+
   /// Puts the listed wallets in that order. Wallets left out keep their
   /// slots, so the list of one network reorders without moving another
   /// network's wallets.
@@ -527,6 +531,11 @@ class RustBridge implements GerfautBridge {
   @override
   Future<void> setWalletIcon(String id, WalletIcon icon) async {
     _ok(await rust.setWalletIcon(id: id, icon: icon.id));
+  }
+
+  @override
+  Future<void> setWalletLivePinned(String id, bool pinned) async {
+    _ok(await rust.setWalletLivePinned(id: id, pinned: pinned));
   }
 
   @override

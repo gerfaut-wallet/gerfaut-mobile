@@ -345,6 +345,7 @@ WalletMeta makeMeta({
   int totalSats = 0,
   int gapLimit = 20,
   SyncStamp? lastSync,
+  bool livePinned = false,
   WalletKind kind = const DescriptorsKind(
     external: 'wpkh(tpub.../0/*)#checksum',
     internal: 'wpkh(tpub.../1/*)#checksum',
@@ -363,6 +364,7 @@ WalletMeta makeMeta({
     lastSync: lastSync,
     cachedBalance: makeBalance(totalSats),
     cachedTxCount: 0,
+    livePinned: livePinned,
   );
 }
 
@@ -957,6 +959,22 @@ class FakeBridge implements GerfautBridge {
       throw BridgeException('wallet_not_found', 'wallet not found: $id');
     }
     _updateMeta(id, (meta) => meta.copyWith(icon: icon));
+  }
+
+  /// Every pin set or lifted, in order, for assertions.
+  final List<({String id, bool pinned})> pinCalls = [];
+
+  /// Pin hook; throw a [BridgeException] to have the core refuse it.
+  void Function(String id, bool pinned)? onSetLivePinned;
+
+  @override
+  Future<void> setWalletLivePinned(String id, bool pinned) async {
+    pinCalls.add((id: id, pinned: pinned));
+    onSetLivePinned?.call(id, pinned);
+    if (!wallets.any((w) => w.id == id)) {
+      throw BridgeException('wallet_not_found', 'wallet not found: $id');
+    }
+    _updateMeta(id, (meta) => meta.copyWith(livePinned: pinned));
   }
 
   /// Every order handed over, in order, for assertions.

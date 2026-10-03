@@ -7,11 +7,18 @@ import 'frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `channel_view`, `console_log_level`, `core_error_json`, `core_error_kind`, `decode_key`, `error_json`, `from_json`, `manager`, `now_unix`, `ok_json`, `parse_network_opt`, `parse_network`, `parse_variant`, `premium_base_url`, `premium_client`, `premium_error_kind`, `premium_public_key`, `premium_view`, `store_premium`, `to_json`
+// These functions are ignored because they are not marked as `pub`: `channel_view`, `console_log_level`, `core_error_json`, `core_error_kind`, `decode_key`, `error_json`, `from_json`, `manager`, `now_unix`, `ok_json`, `parse_network_opt`, `parse_network`, `parse_variant`, `premium_base_url`, `premium_client`, `premium_error_kind`, `premium_public_key`, `premium_view`, `refuse_oversized_nested_ur`, `refuse_oversized_ur`, `store_premium`, `to_json`
 
 /// Opens (or creates) the vault under `data_dir` with a 32-byte key given
 /// as 64 hex characters. Idempotent: once initialized, later calls (hot
 /// restarts) succeed without reopening.
+///
+/// The screens, the periodic task and the live watch each run in an
+/// isolate of their own, in this one process, and each calls this when
+/// it starts: two of them can call it at once. The vault takes one
+/// opener at a time, within a process as between two, so a second open
+/// would fail with `vault_in_use` instead of finding the first. One
+/// call opens, and any other waits for it and shares its manager.
 Future<String> initManager({required String dataDir, required String keyHex}) =>
     RustLib.instance.api.crateApiInitManager(dataDir: dataDir, keyHex: keyHex);
 
@@ -80,6 +87,15 @@ Future<String> renameWallet({required String id, required String name}) =>
 /// `landmark`, `piggy_bank`.
 Future<String> setWalletIcon({required String id, required String icon}) =>
     RustLib.instance.api.crateApiSetWalletIcon(id: id, icon: icon);
+
+/// Puts a wallet ahead of the others in the live watch, or back among
+/// them. When the watch cannot follow every address, the pinned wallets
+/// are followed first. Kept in the vault; the watch takes the new order
+/// by itself.
+Future<String> setWalletLivePinned({
+  required String id,
+  required bool pinned,
+}) => RustLib.instance.api.crateApiSetWalletLivePinned(id: id, pinned: pinned);
 
 /// Puts the listed wallets in that order. Wallets left out keep their
 /// slots, so the list of one network reorders without moving another
@@ -328,7 +344,9 @@ Future<String> premiumState() => RustLib.instance.api.crateApiPremiumState();
 /// device it may have, comes back as the error the field shows; nothing
 /// is stored then. An answer lost on the way keeps the connection under
 /// way, and trying again sends the same one. Another key is refused,
-/// `premium_key_change_pending`, while a key change has not finished.
+/// `premium_key_change_pending`, while a key change has not finished and
+/// this device still holds the token that could finish it; without the
+/// token the change was never applied, and connecting ends it.
 Future<String> premiumConnect({required String key}) =>
     RustLib.instance.api.crateApiPremiumConnect(key: key);
 
@@ -355,7 +373,9 @@ Future<String> premiumDevices() =>
 Future<String> premiumApproveDevice({required String id}) =>
     RustLib.instance.api.crateApiPremiumApproveDevice(id: id);
 
-/// Refuses a waiting device, or disconnects one with full access.
+/// Refuses a waiting device, or disconnects one with full access. This
+/// device's own id is refused, `premium_key_change_pending`, while its
+/// key change has not finished.
 Future<String> premiumRemoveDevice({required String id}) =>
     RustLib.instance.api.crateApiPremiumRemoveDevice(id: id);
 
@@ -381,7 +401,9 @@ Future<String> premiumFlushLogouts() =>
 ///
 /// The core draws the key and keeps it before the request leaves: an
 /// answer lost on the way leaves the change under way, which the view
-/// says, and the next call sends that same key rather than a new one.
+/// says, and the next call sends that same key rather than a new one. A
+/// device without its token sends nothing, `premium_no_device`, and a
+/// change under way ends there.
 Future<String> premiumChangeKey() =>
     RustLib.instance.api.crateApiPremiumChangeKey();
 
