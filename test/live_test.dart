@@ -219,7 +219,7 @@ void main() {
       final service = _Service(_bridge());
       await service.runner.run();
       expect(service.bridge.liveStartCalls, 1);
-      expect(service.told.last, ('status', 'Connecting'));
+      expect(service.told.last, ('status', 'Connecting…'));
       service.bridge.liveController.add(
         const LiveStatusChanged(LiveWatchStatus(state: WatchState.connected)),
       );
@@ -429,7 +429,7 @@ void main() {
           ),
         );
         await service.settle();
-        expect(service.told.last, ('status', 'Reconnecting'));
+        expect(service.told.last, ('status', 'Reconnecting…'));
         expect(
           service.told.where((t) => '${t.$2}'.contains('secret.example')),
           isEmpty,
@@ -1001,13 +1001,13 @@ void main() {
         liveStatusLine(
           running(const LiveWatchStatus(state: WatchState.reconnecting)),
         ),
-        'Reconnecting',
+        'Reconnecting…',
       );
       expect(
         liveStatusLine(
           running(const LiveWatchStatus(state: WatchState.connecting)),
         ),
-        'Connecting',
+        'Connecting…',
       );
       expect(
         liveStatusLine(const LiveState(checked: true)),

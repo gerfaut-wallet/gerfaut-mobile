@@ -296,10 +296,12 @@ String? liveStatusLine(LiveState live) {
     case WatchState.polling:
       return 'Polling every minute';
     case WatchState.reconnecting:
-      return 'Reconnecting';
+      return 'Reconnecting…';
+    // Off too while the service is up: the watch is on its way, which
+    // is what the switch above says.
     case WatchState.connecting:
     case WatchState.off:
-      return 'Connecting';
+      return 'Connecting…';
   }
 }
 
@@ -310,8 +312,8 @@ String liveNotificationText(LiveWatchStatus status) {
   final state = switch (status.state) {
     WatchState.connected => 'Connected to your server',
     WatchState.polling => 'Checking every minute',
-    WatchState.reconnecting => 'Reconnecting',
-    WatchState.connecting || WatchState.off => 'Connecting',
+    WatchState.reconnecting => 'Reconnecting…',
+    WatchState.connecting || WatchState.off => 'Connecting…',
   };
   return status.leavesSomeOut
       ? '$state · some addresses wait for syncs'
@@ -454,7 +456,7 @@ class LiveController extends Notifier<LiveState> {
       try {
         status = await ref.read(bridgeProvider).liveStatus();
       } catch (_) {
-        // The line says "Connecting" until the core answers.
+        // The line says "Connecting…" until the core answers.
       }
     }
     state = LiveState(
