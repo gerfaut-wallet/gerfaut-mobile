@@ -1702,6 +1702,34 @@ void main() {
     });
   });
 
+  test('the battery question is a trip the lock lets back in', () async {
+    final bridge = _bridge(
+      lock: const AppLock(kind: LockKind.pin, biometric: false),
+    )..lockSecret = '1234';
+    final platform = FakeLivePlatform();
+    final container = ProviderContainer(
+      overrides: [
+        bridgeProvider.overrideWithValue(bridge),
+        livePlatformProvider.overrideWithValue(platform),
+        disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+      ],
+    );
+    addTearDown(container.dispose);
+    final lock = container.read(lockProvider.notifier)
+      ..syncFromSettings(const AppLock(kind: LockKind.pin, biometric: false));
+    await lock.unlock('1234');
+    expect(container.read(lockProvider).locked, isFalse);
+
+    // The phone has no direct dialog: the list of apps opens, Gerfaut
+    // goes out of sight behind it, and comes back unlocked.
+    await container.read(liveProvider.notifier).requestBatteryExemption();
+    lock
+      ..noteHidden()
+      ..noteResumed();
+    expect(platform.calls, contains('askBattery'));
+    expect(container.read(lockProvider).locked, isFalse);
+  });
+
   group('notices the system no longer lets through', () {
     ProviderContainer withNotices(
       FakeBridge bridge,

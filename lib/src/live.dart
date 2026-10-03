@@ -26,11 +26,12 @@ import 'background.dart';
 import 'bridge.dart';
 import 'disguise.dart';
 import 'format.dart';
+import 'lock.dart';
 import 'models.dart';
 import 'notifications.dart';
 import 'state.dart';
-import 'vault_key.dart';
 import 'prefs.dart';
+import 'vault_key.dart';
 
 // --- the platform side, as the screens see it --------------------------
 
@@ -470,10 +471,16 @@ class LiveController extends Notifier<LiveState> {
     await refresh();
   }
 
+  /// Android's question about battery optimisation. Where a phone has
+  /// no direct dialog for it, the whole list of apps opens instead: a
+  /// screen of the system's that Gerfaut sends the user to, announced
+  /// so the lock does not land on the way back. A dialog over the app
+  /// leaves it in sight, and its return takes the announcement back.
   Future<bool> requestBatteryExemption() async {
+    final platform = ref.read(livePlatformProvider);
     final exempt = await ref
-        .read(livePlatformProvider)
-        .requestBatteryExemption();
+        .read(lockProvider.notifier)
+        .excursion(platform.requestBatteryExemption);
     state = state.copyWith(batteryExempt: exempt);
     return exempt;
   }
