@@ -94,4 +94,36 @@ void main() {
 
     expect(find.textContaining('€'), findsNothing);
   });
+
+  testWidgets('a hidden amount is said as one, not dot by dot', (tester) async {
+    final handle = tester.ensureSemantics();
+    final bridge = FakeBridge(
+      wallets: [makeMeta(totalSats: 123456)],
+      settings: const Settings(
+        activeNetwork: Network.mainnet,
+        backends: {},
+        appPrefs: {'mobile.masked': '1', 'onboarding.seen': '1'},
+      ),
+    );
+    await tester.pumpWidget(app(bridge));
+    await tester.pumpAndSettle();
+
+    // On screen the dots; read out, the words.
+    final balance = tester
+        .widgetList<RichText>(find.byType(RichText))
+        .map((r) => r.text.toPlainText(includeSemanticsLabels: false))
+        .where((text) => text.contains(maskedValue));
+    expect(balance, isNotEmpty);
+    expect(find.bySemanticsLabel(RegExp(maskedSpoken)), findsWidgets);
+    expect(find.bySemanticsLabel(RegExp('•')), findsNothing);
+    handle.dispose();
+  });
+
+  test('the mask is said in words, anything else as it is', () {
+    expect(
+      spokenIfMasked('It pays a fee of $maskedValue'),
+      'It pays a fee of Hidden amount',
+    );
+    expect(spokenIfMasked('0.001 BTC'), isNull);
+  });
 }

@@ -4,7 +4,9 @@
 
 import 'dart:async';
 
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 import 'package:gerfaut/src/apps.dart';
 import 'package:gerfaut/src/bridge.dart';
@@ -12,6 +14,7 @@ import 'package:gerfaut/src/clipboard.dart';
 import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/src/documents.dart';
 import 'package:gerfaut/src/electrum.dart';
+import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/home_widgets.dart';
 import 'package:gerfaut/src/identity.dart';
 import 'package:gerfaut/src/live.dart';
@@ -337,6 +340,16 @@ class FakeDocumentSaver implements DocumentSaver {
     return answer;
   }
 }
+
+/// Text on screen showing the mask, rich text included. Read as drawn:
+/// a screen reader is told "Hidden amount" in its place.
+Finder findMasked() => find.byWidgetPredicate(
+  (widget) =>
+      widget is RichText &&
+      widget.text
+          .toPlainText(includeSemanticsLabels: false)
+          .contains(maskedValue),
+);
 
 WalletMeta makeMeta({
   String id = 'w1',

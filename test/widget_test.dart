@@ -664,7 +664,7 @@ void main() {
     await pickFromMenu(tester, 'Hide balances');
 
     expect(find.textContaining('0.00123456', findRichText: true), findsNothing);
-    expect(find.textContaining('•••••', findRichText: true), findsWidgets);
+    expect(findMasked(), findsWidgets);
     expect(bridge.appPrefs['mobile.masked'], '1');
 
     // The entry now offers the way back, under the other label.

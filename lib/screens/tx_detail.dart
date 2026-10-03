@@ -242,6 +242,7 @@ class _Hero extends ConsumerWidget {
           alignment: Alignment.centerLeft,
           child: Text(
             masked ? maskedValue : formatAmountSigned(sats, unit),
+            semanticsLabel: masked ? maskedSpoken : null,
             style: tokens.amount,
             maxLines: 1,
           ),

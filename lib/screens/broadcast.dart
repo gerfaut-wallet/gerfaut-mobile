@@ -1202,7 +1202,11 @@ class _ConfirmDialog extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(feeLine, style: tokens.bodySmall),
+          Text(
+            feeLine,
+            semanticsLabel: spokenIfMasked(feeLine),
+            style: tokens.bodySmall,
+          ),
           const SizedBox(height: GerfautSpacing.sm),
           Text(
             'Once the network has it, this cannot be undone.',

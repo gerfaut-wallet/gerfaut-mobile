@@ -44,6 +44,7 @@ class BalanceAmount extends ConsumerWidget {
           child: Text.rich(
             TextSpan(
               text: masked ? maskedValue : primary,
+              semanticsLabel: masked ? maskedSpoken : null,
               style: tokens.amount,
               children: [
                 if (unit == AmountUnit.btc)
@@ -82,7 +83,7 @@ class PendingAmount extends ConsumerWidget {
     final unit = ref.watch(unitProvider);
     final figure = masked ? maskedValue : formatAmountSigned(sats, unit);
     return Semantics(
-      label: '$figure pending',
+      label: '${spokenIfMasked(figure) ?? figure} pending',
       excludeSemantics: true,
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -137,6 +138,7 @@ class UnitAmount extends ConsumerWidget {
       alignment: Alignment.centerRight,
       child: Text(
         masked ? maskedValue : formatAmount(value, unit),
+        semanticsLabel: masked ? maskedSpoken : null,
         style: tokens.figureOf(weight: FontWeight.w500),
         maxLines: 1,
         softWrap: false,
@@ -167,6 +169,7 @@ class ListAmount extends ConsumerWidget {
       children: [
         Text(
           masked ? maskedValue : formatAmountSigned(sats, unit),
+          semanticsLabel: masked ? maskedSpoken : null,
           style: tokens.figureOf(weight: FontWeight.w500, color: color),
           textAlign: TextAlign.right,
         ),
@@ -200,6 +203,7 @@ class StackedAmount extends ConsumerWidget {
       children: [
         Text(
           masked ? maskedValue : formatAmount(sats, unit),
+          semanticsLabel: masked ? maskedSpoken : null,
           style: tokens.figureOf(weight: FontWeight.w500),
           maxLines: 1,
           softWrap: false,
@@ -265,6 +269,7 @@ class IoListHeading extends ConsumerWidget {
         Flexible(
           child: Text(
             total,
+            semanticsLabel: spokenIfMasked(total),
             style: tokens.figureOf(
               size: 12,
               weight: FontWeight.w500,
@@ -316,7 +321,11 @@ class InlineAmount extends ConsumerWidget {
     final masked = ref.watch(maskedProvider);
     final unit = ref.watch(unitProvider);
     if (masked) {
-      return Text(maskedValue, style: tokens.figure);
+      return Text(
+        maskedValue,
+        semanticsLabel: maskedSpoken,
+        style: tokens.figure,
+      );
     }
     final fiat = fiatValueOf(ref, sats);
     return Text.rich(

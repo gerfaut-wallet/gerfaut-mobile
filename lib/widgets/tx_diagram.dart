@@ -369,7 +369,8 @@ class _BranchBox extends StatelessWidget {
       // The role is carried by an icon, and an icon is nothing to a
       // screen reader: it goes into the box's own name, or the reading
       // is an address and a number with no say in what they are.
-      label: '${role.name}, ${branch.label}, $amount',
+      label:
+          '${role.name}, ${branch.label}, ${spokenIfMasked(amount) ?? amount}',
       excludeSemantics: true,
       child: _Box(
         tokens: tokens,
@@ -512,6 +513,7 @@ class _Figure extends StatelessWidget {
       alignment: Alignment.centerLeft,
       child: Text(
         text,
+        semanticsLabel: spokenIfMasked(text),
         style: tokens
             .figureOf(
               size: _boxText,

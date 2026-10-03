@@ -14,6 +14,16 @@ const String groupSeparator = '\u00A0';
 /// Masked replacement for any amount.
 const String maskedValue = '•••••';
 
+/// What a screen reader says in place of [maskedValue]: left to itself
+/// it reads the dots one by one, "bullet, bullet, bullet".
+const String maskedSpoken = 'Hidden amount';
+
+/// [shown] as a screen reader should hear it, the mask said in words;
+/// null when there is no mask in it and the text reads as it is.
+String? spokenIfMasked(String shown) => shown.contains(maskedValue)
+    ? shown.replaceAll(maskedValue, maskedSpoken)
+    : null;
+
 /// `123456` -> `"0.00123456"` — always 8 decimals.
 String formatBtc(int sats) {
   final negative = sats < 0;
