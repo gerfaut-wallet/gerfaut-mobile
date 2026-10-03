@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../src/bridge.dart';
 import '../../src/format.dart';
 import '../../src/models.dart';
 import '../../src/state.dart';
@@ -198,6 +199,15 @@ class _RatePreview extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final price = ref.watch(priceProvider);
+    final error = price.error;
+    if (error is BridgeException && error.kind == priceNeedsTor) {
+      return Text(
+        'No price while Gerfaut goes through Tor: the price sources are '
+        "reached without it, and would see this phone's IP address. "
+        'Amounts show without fiat.',
+        style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+      );
+    }
     if (price.hasError) {
       return Text(
         'The price source did not answer. Amounts show without fiat until '

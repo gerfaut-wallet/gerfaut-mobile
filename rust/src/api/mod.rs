@@ -1540,9 +1540,22 @@ fn parse_variant<T: serde::de::DeserializeOwned>(
 /// `kraken`, `mempool_space`; `currency` is one of the `FiatCurrency`
 /// identifiers. The source must quote the currency: only CoinGecko
 /// serves the ones past the first seven. Returns a `PriceQuote`.
+///
+/// Refused, `price_needs_tor`, while anything this app sends goes
+/// through Tor. The price sources are reached in the clear: every
+/// minute they would see the phone's address, timed next to the Tor
+/// circuits it opens, which is what Tor is there to keep apart. Nothing
+/// is sent then, and the amounts show without fiat.
 pub async fn fetch_price(source: String, currency: String) -> String {
     let source: PriceSource = try_json!(parse_variant(&source, "price source"));
     let currency: FiatCurrency = try_json!(parse_variant(&currency, "currency"));
+    let manager = try_json!(manager());
+    if manager.uses_tor().await {
+        return error_json(
+            "price_needs_tor",
+            "the price is not fetched while Gerfaut goes through Tor",
+        );
+    }
     match gerfaut_core::price::fetch_price(source, currency).await {
         Ok(quote) => to_json(&quote),
         Err(e) => core_error_json(&e),

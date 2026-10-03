@@ -577,6 +577,12 @@ Future<String> usesTor() => RustLib.instance.api.crateApiUsesTor();
 /// `kraken`, `mempool_space`; `currency` is one of the `FiatCurrency`
 /// identifiers. The source must quote the currency: only CoinGecko
 /// serves the ones past the first seven. Returns a `PriceQuote`.
+///
+/// Refused, `price_needs_tor`, while anything this app sends goes
+/// through Tor. The price sources are reached in the clear: every
+/// minute they would see the phone's address, timed next to the Tor
+/// circuits it opens, which is what Tor is there to keep apart. Nothing
+/// is sent then, and the amounts show without fiat.
 Future<String> fetchPrice({required String source, required String currency}) =>
     RustLib.instance.api.crateApiFetchPrice(source: source, currency: currency);
 

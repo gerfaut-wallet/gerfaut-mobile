@@ -38,6 +38,10 @@ class BridgeException implements Exception {
   String toString() => message;
 }
 
+/// The price is refused while the app goes through Tor: the price
+/// sources would be reached in the clear.
+const String priceNeedsTor = 'price_needs_tor';
+
 /// What the page says when the core refuses wallet material handed to
 /// it: pasted, scanned, read from a file or from a backup.
 ///

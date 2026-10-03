@@ -112,6 +112,35 @@ void main() {
     expect(bridge.appPrefs['mobile.theme'], 'system');
   });
 
+  testWidgets('through Tor, no price is fetched and the line says why', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge()
+      ..onFetchPrice = (_, _) => throw const BridgeException(
+        priceNeedsTor,
+        'the price is not fetched while Gerfaut goes through Tor',
+      );
+    await tester.pumpWidget(
+      settingsApp(bridge, section: SettingsSection.general),
+    );
+    await tester.pumpAndSettle();
+    ProviderScope.containerOf(tester.element(find.byType(SettingsScreen)))
+        .read(fiatEnabledProvider.notifier)
+        .set(true);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'No price while Gerfaut goes through Tor: the price sources are '
+        "reached without it, and would see this phone's IP address. "
+        'Amounts show without fiat.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('did not answer'), findsNothing);
+  });
+
   testWidgets('the theme options carry a glyph each', (tester) async {
     useTallSurface(tester);
     await tester.pumpWidget(
