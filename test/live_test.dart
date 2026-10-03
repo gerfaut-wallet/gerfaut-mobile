@@ -1119,8 +1119,8 @@ void main() {
       )!;
       expect(
         fulcrum.fact,
-        'Your node did not take every address Live asked for. 2 000 '
-        'addresses of 1 wallet wait for the next sync instead.',
+        'Your node refuses some of the addresses Live asks it to follow. '
+        '2 000 addresses of 1 wallet wait for the next sync instead.',
       );
       expect(fulcrum.remedy, contains('max_subs_per_ip'));
       expect(
@@ -1135,8 +1135,76 @@ void main() {
         contains('--electrum-subscription-limit'),
       );
       expect(
+        liveCoverageNote(
+          refusedBy('mempool-electrs 3.1.0'),
+          ownNode: true,
+        )!.remedy,
+        contains('--electrum-max-subscriptions'),
+      );
+      // electrs as its author publishes it has no limit to raise.
+      expect(
+        liveCoverageNote(refusedBy('electrs/0.10.9'), ownNode: true)!.remedy,
+        isNull,
+      );
+      expect(
         liveCoverageNote(refusedBy(null), ownNode: true)!.remedy,
         'Raise the subscription limit of your server to follow them all.',
+      );
+    });
+
+    test('a public server that refuses is blamed, not the limits', () {
+      // mempool.space's Electrum takes 100 subscriptions a connection: a
+      // list of 150, far under the limits, leaves 50 out.
+      const refusing = LiveWatchStatus(
+        state: WatchState.connected,
+        watchedScripts: 150,
+        pushedScripts: 100,
+        leftOutScripts: 50,
+        leftOutWallets: 1,
+        wallets: [
+          WalletCoverage(
+            walletId: 'w-1',
+            coverage: Coverage.partial,
+            watchedScripts: 100,
+            leftOutScripts: 50,
+          ),
+        ],
+      );
+      expect(serverRefused(refusing), isTrue);
+      final note = liveCoverageNote(refusing, ownNode: false)!;
+      expect(
+        note.fact,
+        'The server refuses some of the addresses Live asks it to follow. '
+        '50 addresses of 1 wallet wait for the next sync instead.',
+      );
+      expect(note.remedy, contains('"This is my node"'));
+
+      // Every address heard, one of them by two wallets: past the caps,
+      // not refused.
+      const capped = LiveWatchStatus(
+        state: WatchState.connected,
+        watchedScripts: 3,
+        leftOutScripts: 50,
+        leftOutWallets: 1,
+        wallets: [
+          WalletCoverage(
+            walletId: 'w-1',
+            coverage: Coverage.partial,
+            watchedScripts: 2,
+            leftOutScripts: 50,
+          ),
+          WalletCoverage(
+            walletId: 'w-2',
+            coverage: Coverage.live,
+            watchedScripts: 2,
+            leftOutScripts: 0,
+          ),
+        ],
+      );
+      expect(serverRefused(capped), isFalse);
+      expect(
+        liveCoverageNote(capped, ownNode: false)!.fact,
+        startsWith('Live follows up to'),
       );
     });
 

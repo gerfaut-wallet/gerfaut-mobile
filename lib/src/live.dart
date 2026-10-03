@@ -343,38 +343,46 @@ final String ownNodeLiveLimit = groupThousands('20000');
   final wallets = _counted(status.leftOutWallets, 'wallet', 'wallets');
   final verb = status.leftOutScripts == 1 ? 'waits' : 'wait';
   final waiting = '$addresses of $wallets $verb for the next sync instead.';
-  if (ownNode && status.watchedScripts >= _ownNodeCap) {
-    return (
-      fact:
-          'Live follows up to $ownNodeLiveLimit addresses on your node. '
-          '$waiting',
-      remedy: null,
-    );
-  }
-  if (ownNode) {
-    return (
-      fact: 'Your node did not take every address Live asked for. $waiting',
-      remedy: _raiseLimit(status.serverSoftware),
-    );
-  }
-  return (
-    fact:
-        'Live follows up to $liveLimit addresses, $livePerWalletLimit per '
-        'wallet. $waiting',
-    remedy:
-        'Connect your own node and turn on "This is my node" in Network '
-        'to follow up to $ownNodeLiveLimit.',
-  );
+  // On the user's own node, a list below the cap that still leaves
+  // addresses out is the node refusing them, as much as a public server
+  // that takes fewer than the list holds.
+  final refused =
+      serverRefused(status) || (ownNode && status.watchedScripts < _ownNodeCap);
+  final fact = refused
+      ? '${ownNode ? 'Your node' : 'The server'} refuses some of the '
+            'addresses Live asks it to follow. $waiting'
+      : ownNode
+      ? 'Live follows up to $ownNodeLiveLimit addresses on your node. '
+            '$waiting'
+      : 'Live follows up to $liveLimit addresses, $livePerWalletLimit per '
+            'wallet. $waiting';
+  final remedy = ownNode
+      ? (refused ? _raiseLimit(status.serverSoftware) : null)
+      : 'Connect your own node and turn on "This is my node" in Network '
+            'to follow up to $ownNodeLiveLimit.';
+  return (fact: fact, remedy: remedy);
+}
+
+/// Whether the server Live last spoke to refused part of the list: the
+/// wallets then hear fewer addresses than the list holds. An address two
+/// wallets share counts for each of them, so this can miss a refusal but
+/// never makes one up. Without the wallets, nothing can be told.
+bool serverRefused(LiveWatchStatus status) {
+  if (status.wallets.isEmpty) return false;
+  final heard = status.wallets.fold(0, (sum, w) => sum + w.watchedScripts);
+  return heard < status.watchedScripts;
 }
 
 /// The most addresses Live lists on an own node, as the core caps it.
 const int _ownNodeCap = 20000;
 
 /// Where a node's owner lets it take more subscriptions, by what the
-/// server says it runs: the settings these servers document. Anything
-/// else gets the general advice.
-String _raiseLimit(String? software) {
-  final name = software?.toLowerCase() ?? '';
+/// server says it runs: the settings these servers document, as the
+/// desktop app names them. electrs as its author publishes it has no
+/// such limit, and nothing to raise. Anything else gets the general
+/// advice.
+String? _raiseLimit(String? software) {
+  final name = software?.trim().toLowerCase() ?? '';
   if (name.startsWith('fulcrum')) {
     return 'Raise max_subs_per_ip in the Fulcrum configuration to follow '
         'them all.';
@@ -383,10 +391,16 @@ String _raiseLimit(String? software) {
     return 'Raise COST_SOFT_LIMIT and COST_HARD_LIMIT in the ElectrumX '
         'settings to follow them all.';
   }
+  // Blockstream's electrs.
   if (name.startsWith('electrs-esplora')) {
     return 'Raise --electrum-subscription-limit on this electrs to follow '
         'them all.';
   }
+  if (name.startsWith('mempool-electrs')) {
+    return 'Raise --electrum-max-subscriptions on this electrs to follow '
+        'them all.';
+  }
+  if (name.startsWith('electrs/')) return null;
   return 'Raise the subscription limit of your server to follow them all.';
 }
 
