@@ -33,6 +33,14 @@
          recorded and no image leaves the device. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- The camera plugin declares any camera as required, and the merge
+         would keep that: stores would then hide Gerfaut from a tablet or
+         a Chromebook without one, when the scan is only a shortcut for
+         pasting. Optional here, over the plugin's word. -->
+    <uses-feature
+        android:name="android.hardware.camera.any"
+        android:required="false"
+        tools:replace="android:required" />
     <!-- Plugins merge permissions Gerfaut has no use for: the camera
          plugin brings the microphone (no sound is ever captured), the
          file plugins bring legacy external storage (files are opened
