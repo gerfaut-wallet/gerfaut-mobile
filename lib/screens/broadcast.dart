@@ -1324,6 +1324,8 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
 
   @override
   Widget build(BuildContext context) {
+    // "Sent 5 min ago" and "Checked …" move on their own.
+    ref.watch(relativeClockProvider);
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final record = widget.record;
     final status = _status;

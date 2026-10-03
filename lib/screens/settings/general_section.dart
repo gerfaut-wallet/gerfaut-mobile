@@ -199,6 +199,7 @@ class _RatePreview extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final price = ref.watch(priceProvider);
+    ref.watch(relativeClockProvider);
     final error = price.error;
     if (error is BridgeException && error.kind == priceNeedsTor) {
       return Text(

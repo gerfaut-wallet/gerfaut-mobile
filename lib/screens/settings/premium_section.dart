@@ -2565,14 +2565,16 @@ class _RecentAlertsCard extends ConsumerWidget {
 /// One event: a glyph in a 32px chip tinted by what happened, the
 /// wallet's name and the phrase, the relative time at the end. Touched,
 /// it opens the wallet, when this vault has it.
-class _AlertRow extends StatelessWidget {
+class _AlertRow extends ConsumerWidget {
   const _AlertRow({required this.event, required this.onTap});
 
   final PremiumEvent event;
   final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // "5 min ago" moves on its own.
+    ref.watch(relativeClockProvider);
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final (IconData icon, Color ink, Color chip) = switch (event.kind) {
       // Coins leaving is the one thing the app exists to shout about.

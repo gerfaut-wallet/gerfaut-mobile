@@ -273,6 +273,7 @@ class WatchOfflineBanner extends ConsumerWidget {
     final status = ref.watch(watchMonitorProvider);
     final premium = ref.watch(premiumStateProvider).valueOrNull;
     if (!watchBannerShows(status, premium)) return const SizedBox.shrink();
+    ref.watch(relativeClockProvider);
     final since = status.offlineSince!;
     final sinceLocal = DateTime.fromMillisecondsSinceEpoch(since * 1000);
     final today = DateTime.now();

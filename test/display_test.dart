@@ -234,4 +234,29 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining(r'$'), findsWidgets);
   });
+
+  testWidgets('the "ago" clock ticks on screen, and rests behind it', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [bridgeProvider.overrideWithValue(FakeBridge())],
+    );
+    addTearDown(container.dispose);
+    var ticks = 0;
+    container.listen(relativeClockProvider, (_, _) => ticks++);
+    await tester.pump(const Duration(seconds: 61));
+    expect(ticks, 2);
+
+    container.read(appInFrontProvider.notifier).state = false;
+    await tester.pump(const Duration(milliseconds: 1));
+    final away = ticks;
+    await tester.pump(const Duration(minutes: 10));
+    expect(ticks, away);
+
+    // Back on screen, the lines are drawn again at once.
+    container.read(appInFrontProvider.notifier).state = true;
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(ticks, away + 1);
+    container.dispose();
+  });
 }

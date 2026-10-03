@@ -275,6 +275,30 @@ final explorerAckProvider = NotifierProvider<ExplorerAckNotifier, bool>(
 /// false. Kept by the gate, from the app's lifecycle.
 final appInFrontProvider = StateProvider<bool>((ref) => true);
 
+/// Ticks every 30 seconds while the app is on screen. The lines that
+/// say how long ago something was, "Synced 5 min ago", are worked out
+/// when they are drawn: watching this draws them again, so a page left
+/// open does not say "just now" three hours later. Back on screen it
+/// ticks at once.
+class RelativeClock extends Notifier<int> {
+  Timer? _timer;
+
+  @override
+  int build() {
+    _timer?.cancel();
+    final inFront = ref.watch(appInFrontProvider);
+    ref.onDispose(() => _timer?.cancel());
+    if (inFront) {
+      _timer = Timer.periodic(const Duration(seconds: 30), (_) => state++);
+    }
+    return DateTime.now().millisecondsSinceEpoch;
+  }
+}
+
+final relativeClockProvider = NotifierProvider<RelativeClock, int>(
+  RelativeClock.new,
+);
+
 /// Current BTC price, refreshed every minute while fiat display is on
 /// and the app is on screen. Failures surface as an error state: amounts
 /// degrade to no fiat and the settings screen shows a quiet hint.
