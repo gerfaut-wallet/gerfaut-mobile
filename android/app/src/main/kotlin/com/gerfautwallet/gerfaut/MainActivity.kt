@@ -62,17 +62,31 @@ class MainActivity : FlutterFragmentActivity() {
                 save.result.success(false)
                 return@registerForActivityResult
             }
-            try {
-                val stream = contentResolver.openOutputStream(uri, "wt")
-                    ?: throw IOException("the document could not be opened for writing")
-                stream.use { it.write(save.bytes) }
-                save.result.success(true)
-            } catch (error: Exception) {
-                // An empty or half-written file under the chosen name would
-                // pass for the export: it goes before the failure is told.
-                discardDocument(uri)
-                save.result.error("write_failed", error.message, null)
-            }
+            // A provider may send the file over the network as it is
+            // written, as one may fetch it when it is read: written off
+            // the main thread, answered on it, or a slow cloud freezes
+            // the screen.
+            Thread {
+                val failure = try {
+                    val stream = contentResolver.openOutputStream(uri, "wt")
+                        ?: throw IOException("the document could not be opened for writing")
+                    stream.use { it.write(save.bytes) }
+                    null
+                } catch (error: Exception) {
+                    // An empty or half-written file under the chosen name
+                    // would pass for the export: it goes before the
+                    // failure is told.
+                    discardDocument(uri)
+                    error
+                }
+                runOnUiThread {
+                    if (failure == null) {
+                        save.result.success(true)
+                    } else {
+                        save.result.error("write_failed", failure.message, null)
+                    }
+                }
+            }.start()
         }
 
     // The file being picked: the call waiting for its bytes, and how
