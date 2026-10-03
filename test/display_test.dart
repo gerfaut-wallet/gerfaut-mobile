@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
+import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
@@ -164,5 +165,73 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1));
     expect(asked, 3);
     container.dispose();
+  });
+
+  testWidgets('a source that stops answering takes the fiat away with it', (
+    tester,
+  ) async {
+    var answering = true;
+    final bridge =
+        FakeBridge(
+            wallets: [makeMeta(totalSats: 123456)],
+            settings: const Settings(
+              activeNetwork: Network.mainnet,
+              backends: {},
+              appPrefs: {'display.fiat': '1', 'onboarding.seen': '1'},
+            ),
+          )
+          ..onFetchPrice = (source, currency) {
+            if (!answering) {
+              throw const BridgeException('sync', 'price: http 503');
+            }
+            return PriceQuote(
+              rate: 50000,
+              currency: currency,
+              source: source,
+              at: 1755000000,
+            );
+          };
+    await tester.pumpWidget(app(bridge));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('€'), findsWidgets);
+
+    answering = false;
+    await tester.pump(const Duration(seconds: 61));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('€'), findsNothing);
+  });
+
+  testWidgets('a quote in another currency is not shown as the new one', (
+    tester,
+  ) async {
+    final bridge =
+        FakeBridge(
+            wallets: [makeMeta(totalSats: 123456)],
+            settings: const Settings(
+              activeNetwork: Network.mainnet,
+              backends: {},
+              appPrefs: {'display.fiat': '1', 'onboarding.seen': '1'},
+            ),
+          )
+          ..onFetchPrice = (source, currency) => PriceQuote(
+            rate: 50000,
+            currency: currency,
+            source: source,
+            at: 1755000000,
+          );
+    await tester.pumpWidget(app(bridge));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('€'), findsWidgets);
+
+    // The euro quote is in hand when dollars are chosen: until the dollar
+    // quote lands, no figure claims to be in dollars.
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(GerfautApp)),
+    );
+    container.read(fiatCurrencyProvider.notifier).set(FiatCurrency.usd);
+    await tester.pump();
+    expect(find.textContaining('€'), findsNothing);
+    await tester.pumpAndSettle();
+    expect(find.textContaining(r'$'), findsWidgets);
   });
 }

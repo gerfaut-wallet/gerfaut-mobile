@@ -9,12 +9,20 @@ import 'facts.dart';
 
 /// Fiat value of an amount, when the display is enabled and a quote is
 /// available. Degrades to null, never to an error.
+///
+/// Only a quote that stands: after a failed fetch the provider still
+/// holds the last one, hours old maybe, and the settings say amounts
+/// show without fiat until the source answers. Nor one in a currency
+/// other than the one chosen, which a quote fetched before the change
+/// is until the next one lands.
 String? fiatValueOf(WidgetRef ref, int sats) {
   if (!ref.watch(fiatEnabledProvider) || ref.watch(maskedProvider)) {
     return null;
   }
-  final quote = ref.watch(priceProvider).valueOrNull;
-  if (quote == null) return null;
+  final price = ref.watch(priceProvider);
+  final quote = price.valueOrNull;
+  if (quote == null || price.hasError) return null;
+  if (quote.currency != ref.watch(fiatCurrencyProvider)) return null;
   return formatFiat(sats, quote.rate, quote.currency);
 }
 
