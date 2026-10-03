@@ -10,6 +10,7 @@ import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/disguise.dart';
+import 'package:gerfaut/src/live.dart';
 import 'package:gerfaut/src/vault_key.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:flutter/gestures.dart' show kLongPressTimeout, kPressTimeout;
@@ -458,6 +459,112 @@ void main() {
     expect(find.textContaining('Synced'), findsNothing);
     expect(find.textContaining('mempool.space'), findsNothing);
     expect(find.text('Never synced'), findsNothing);
+  });
+
+  group('live coverage on the cards', () {
+    Widget liveApp(FakeBridge bridge) {
+      return ProviderScope(
+        overrides: [
+          bridgeProvider.overrideWithValue(bridge),
+          disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+          livePlatformProvider.overrideWithValue(
+            FakeLivePlatform(running: true, wanted: true, batteryExempt: true),
+          ),
+        ],
+        child: const GerfautApp(),
+      );
+    }
+
+    FakeBridge liveBridge(LiveWatchStatus status) {
+      return FakeBridge(
+        wallets: [
+          makeMeta(id: 'w1', name: 'Savings'),
+          makeMeta(id: 'w2', name: 'Spending'),
+          makeMeta(id: 'w3', name: 'Archive'),
+        ],
+        settings: const Settings(
+          activeNetwork: Network.mainnet,
+          backends: {},
+          appPrefs: {
+            'onboarding.seen': '1',
+            'notify.new_tx': '1',
+            'notify.background': 'live',
+          },
+        ),
+      )..watchStatus = status;
+    }
+
+    testWidgets('each card says how much of it Live follows', (tester) async {
+      tester.view.physicalSize = const Size(800, 3600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final handle = tester.ensureSemantics();
+      final bridge = liveBridge(
+        const LiveWatchStatus(
+          state: WatchState.connected,
+          leftOutScripts: 1240,
+          leftOutWallets: 2,
+          wallets: [
+            WalletCoverage(
+              walletId: 'w1',
+              coverage: Coverage.live,
+              watchedScripts: 36,
+            ),
+            WalletCoverage(
+              walletId: 'w2',
+              coverage: Coverage.partial,
+              watchedScripts: 200,
+              leftOutScripts: 1040,
+            ),
+            WalletCoverage(
+              walletId: 'w3',
+              coverage: Coverage.syncOnly,
+              leftOutScripts: 200,
+            ),
+          ],
+        ),
+      );
+      await tester.pumpWidget(liveApp(bridge));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Live'), findsOneWidget);
+      expect(find.text('Partly live'), findsOneWidget);
+      expect(find.text('Next sync'), findsOneWidget);
+      // Read with its card, after the name and the balance.
+      expect(
+        find.bySemanticsLabel(
+          RegExp(
+            '^Spending\n.*\nPartly live: 1\u00A0040 addresses wait for the '
+            r'next sync$',
+          ),
+        ),
+        findsOneWidget,
+      );
+      handle.dispose();
+    });
+
+    testWidgets('with room for every address, no card says anything', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 3600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final bridge = liveBridge(
+        const LiveWatchStatus(
+          state: WatchState.connected,
+          wallets: [
+            WalletCoverage(walletId: 'w1', coverage: Coverage.live),
+            WalletCoverage(walletId: 'w2', coverage: Coverage.live),
+            WalletCoverage(walletId: 'w3', coverage: Coverage.live),
+          ],
+        ),
+      );
+      await tester.pumpWidget(liveApp(bridge));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Live'), findsNothing);
+      expect(find.text('Partly live'), findsNothing);
+    });
   });
 
   testWidgets('a failed sync still shows on the card', (tester) async {

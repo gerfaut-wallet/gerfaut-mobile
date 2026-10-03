@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../src/bridge.dart';
 import '../../src/electrum.dart';
+import '../../src/live.dart';
 import '../../src/models.dart';
 import '../../src/state.dart';
 import '../../theme/tokens.dart';
@@ -552,10 +553,11 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
               SettingSwitch(
                 title: 'This is my node',
                 hint:
-                    'Live follows up to 20,000 addresses on your own node, '
-                    'instead of 2,000. Leave it off for a server you do not '
-                    'run: a public server limits how many addresses one '
-                    'connection may follow, and refuses the rest.',
+                    'Live follows up to $ownNodeLiveLimit addresses on your '
+                    'own node, instead of $liveLimit. Leave it off for a '
+                    'server you do not run: a public server limits how many '
+                    'addresses one connection may follow, and refuses the '
+                    'rest.',
                 value: _ownNode,
                 onChanged: (on) => setState(() {
                   _ownNode = on;

@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/format.dart';
+import '../src/live.dart';
 import '../src/models.dart';
+import '../src/notifications.dart';
 import '../src/premium.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
@@ -16,6 +18,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/notice.dart';
 import '../widgets/overflow_menu.dart';
 import '../widgets/reorder.dart';
+import '../widgets/status_pill.dart';
 import '../widgets/sync_button.dart';
 import '../widgets/update_notice.dart';
 import '../widgets/wallet_icon.dart';
@@ -397,6 +400,20 @@ class _WalletListState extends ConsumerState<_WalletList> {
   Widget build(BuildContext context) {
     final shown = _inOrder();
     final errors = ref.watch(syncErrorsProvider);
+    // Each card says how much of it Live follows, but only while Live
+    // runs and cannot follow everything: with room for every address
+    // the badge would say "Live" on every card, which says nothing.
+    final live = ref.watch(liveProvider);
+    final liveChosen =
+        ref.watch(notifyNewTxProvider) &&
+        ref.watch(backgroundCheckProvider) == BackgroundCheck.live;
+    final coverage =
+        liveChosen &&
+            live.serviceRunning &&
+            live.status.state != WatchState.off &&
+            live.status.leftOutWallets > 0
+        ? live.status
+        : null;
     final refused = _refused;
     // A refused drop whose list has changed since says so, and keeps
     // the way out alone: a "Try again" with nothing left to try would
@@ -451,6 +468,7 @@ class _WalletListState extends ConsumerState<_WalletList> {
             child: _WalletCard(
               wallet: wallet,
               error: errors[wallet.id],
+              coverage: coverage?.coverageOf(wallet.id),
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute<void>(
@@ -476,10 +494,19 @@ class _WalletListState extends ConsumerState<_WalletList> {
 /// they shrink by the line they lost: more wallets fit on screen, which
 /// is the one thing this list has to do.
 class _WalletCard extends StatelessWidget {
-  const _WalletCard({required this.wallet, required this.onTap, this.error});
+  const _WalletCard({
+    required this.wallet,
+    required this.onTap,
+    this.error,
+    this.coverage,
+  });
 
   final WalletMeta wallet;
   final VoidCallback onTap;
+
+  /// How much of the wallet Live follows, while Live cannot follow
+  /// every wallet whole; null otherwise, and then nothing is said.
+  final WalletCoverage? coverage;
 
   /// The one exception to the rule above: a sync that failed contradicts
   /// the figure right above it, and a stale balance stated as fact is a
@@ -533,6 +560,10 @@ class _WalletCard extends StatelessWidget {
                   ),
                   const SizedBox(height: GerfautSpacing.sm),
                   BalanceAmount(sats: wallet.cachedBalance.total),
+                  if (coverage != null) ...[
+                    const SizedBox(height: GerfautSpacing.sm),
+                    LiveCoveragePill(coverage: coverage!),
+                  ],
                   if (error != null) ...[
                     const SizedBox(height: GerfautSpacing.sm),
                     // One line, amber: the reason is a tap away here,

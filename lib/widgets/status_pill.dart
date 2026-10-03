@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../src/format.dart';
 import '../src/models.dart';
 import '../theme/tokens.dart';
 
@@ -160,5 +161,44 @@ class AddressStatePill extends StatelessWidget {
         style: tokens.label.copyWith(fontSize: 11, color: color),
       ),
     );
+  }
+}
+
+/// How much of a wallet Live follows, said on its card while Live
+/// cannot follow every wallet whole. Neutral when all of it is
+/// followed; amber when a payment may wait for the next sync, which is
+/// the one thing the badge is there to say.
+class LiveCoveragePill extends StatelessWidget {
+  const LiveCoveragePill({super.key, required this.coverage});
+
+  final WalletCoverage coverage;
+
+  @override
+  Widget build(BuildContext context) {
+    final left = coverage.leftOutScripts;
+    final waiting = left == 1
+        ? '1 address waits'
+        : '${groupThousands('$left')} addresses wait';
+    return switch (coverage.coverage) {
+      Coverage.live => const StatusPill.tone(
+        tone: PillTone.neutral,
+        icon: LucideIcons.radio,
+        label: 'Live',
+        semanticLabel: 'Live: a payment to this wallet shows at once',
+      ),
+      Coverage.partial => StatusPill.tone(
+        tone: PillTone.pending,
+        icon: LucideIcons.radio,
+        label: 'Partly live',
+        semanticLabel: 'Partly live: $waiting for the next sync',
+      ),
+      Coverage.syncOnly => const StatusPill.tone(
+        tone: PillTone.pending,
+        icon: LucideIcons.clock,
+        label: 'Next sync',
+        semanticLabel:
+            'Next sync: a payment to this wallet shows at the next sync',
+      ),
+    };
   }
 }

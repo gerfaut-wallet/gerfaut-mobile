@@ -301,15 +301,62 @@ String? liveStatusLine(LiveState live) {
   }
 }
 
-/// The same, for the permanent notification: no host, ever.
+/// The same, for the permanent notification: no host, ever, and no
+/// count either. That Live leaves addresses to the syncs is said in a
+/// few words; how many, and what to do about it, is for the settings.
 String liveNotificationText(LiveWatchStatus status) {
-  return switch (status.state) {
+  final state = switch (status.state) {
     WatchState.connected => 'Connected to your server',
     WatchState.polling => 'Checking every minute',
     WatchState.reconnecting => 'Reconnecting',
     WatchState.connecting || WatchState.off => 'Connecting',
   };
+  return status.leavesSomeOut
+      ? '$state · some addresses wait for syncs'
+      : state;
 }
+
+/// The most addresses Live follows, as the core caps them: on a public
+/// server, in all and per wallet, then on a node the user says is
+/// theirs. Grouped the way every figure in the app is.
+final String liveLimit = groupThousands('2000');
+final String livePerWalletLimit = groupThousands('200');
+final String ownNodeLiveLimit = groupThousands('20000');
+
+/// What the settings say under the status line when Live cannot follow
+/// every address: how many wait for a sync instead, and what lifts the
+/// limit. Null while every address is followed. On a node already
+/// declared the user's own, the limit is all there is to say: nothing
+/// in the app lifts it further.
+({String fact, String? remedy})? liveCoverageNote(
+  LiveWatchStatus status, {
+  required bool ownNode,
+}) {
+  if (!status.leavesSomeOut) return null;
+  final addresses = _counted(status.leftOutScripts, 'address', 'addresses');
+  final wallets = _counted(status.leftOutWallets, 'wallet', 'wallets');
+  final verb = status.leftOutScripts == 1 ? 'waits' : 'wait';
+  final waiting = '$addresses of $wallets $verb for the next sync instead.';
+  if (ownNode) {
+    return (
+      fact:
+          'Live follows up to $ownNodeLiveLimit addresses on your node. '
+          '$waiting',
+      remedy: null,
+    );
+  }
+  return (
+    fact:
+        'Live follows up to $liveLimit addresses, $livePerWalletLimit per '
+        'wallet. $waiting',
+    remedy:
+        'Connect your own node and turn on "This is my node" in Network '
+        'to follow up to $ownNodeLiveLimit.',
+  );
+}
+
+String _counted(int count, String one, String many) =>
+    '${groupThousands('$count')} ${count == 1 ? one : many}';
 
 class LiveController extends Notifier<LiveState> {
   StreamSubscription<LiveEvent>? _events;

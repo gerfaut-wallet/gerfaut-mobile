@@ -939,6 +939,141 @@ void main() {
     });
   });
 
+  group('what Live leaves to the syncs', () {
+    const short = LiveWatchStatus(
+      state: WatchState.connected,
+      watchedScripts: 2000,
+      pushedScripts: 2000,
+      leftOutScripts: 1240,
+      leftOutWallets: 2,
+    );
+
+    test('a public server: how many wait, and what lifts the limit', () {
+      final note = liveCoverageNote(short, ownNode: false)!;
+      expect(
+        note.fact,
+        'Live follows up to 2 000 addresses, 200 per wallet. 1 240 '
+        'addresses of 2 wallets wait for the next sync instead.',
+      );
+      expect(
+        note.remedy,
+        'Connect your own node and turn on "This is my node" in Network to '
+        'follow up to 20 000.',
+      );
+    });
+
+    test('a node already declared: the limit alone', () {
+      final note = liveCoverageNote(short, ownNode: true)!;
+      expect(
+        note.fact,
+        'Live follows up to 20 000 addresses on your node. 1 240 addresses '
+        'of 2 wallets wait for the next sync instead.',
+      );
+      expect(note.remedy, isNull);
+    });
+
+    test('one address of one wallet is said in the singular', () {
+      final note = liveCoverageNote(
+        const LiveWatchStatus(
+          state: WatchState.polling,
+          leftOutScripts: 1,
+          leftOutWallets: 1,
+        ),
+        ownNode: false,
+      )!;
+      expect(
+        note.fact,
+        endsWith('1 address of 1 wallet waits for the next sync instead.'),
+      );
+    });
+
+    test('nothing to say while every address is followed or Live is off', () {
+      expect(
+        liveCoverageNote(
+          const LiveWatchStatus(state: WatchState.connected),
+          ownNode: false,
+        ),
+        isNull,
+      );
+      // Off, the counts are zero; a stale one is not believed either.
+      expect(
+        liveCoverageNote(
+          const LiveWatchStatus(leftOutScripts: 10, leftOutWallets: 1),
+          ownNode: false,
+        ),
+        isNull,
+      );
+    });
+
+    test('the permanent notification says it in a few words, no count', () {
+      expect(
+        liveNotificationText(short),
+        'Connected to your server · some addresses wait for syncs',
+      );
+      expect(
+        liveNotificationText(
+          const LiveWatchStatus(state: WatchState.connected),
+        ),
+        'Connected to your server',
+      );
+    });
+
+    testWidgets('the settings say it under the status, with the remedy', (
+      tester,
+    ) async {
+      final bridge = _bridge()..watchStatus = short;
+      final platform = FakeLivePlatform(
+        running: true,
+        wanted: true,
+        batteryExempt: true,
+      );
+      await _open(tester, _settings(bridge, platform: platform));
+      expect(
+        find.textContaining('1 240 addresses of 2 wallets'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('"This is my node"'), findsOneWidget);
+    });
+
+    testWidgets('on a declared node, no remedy is offered', (tester) async {
+      final bridge = _bridge(
+        backends: const {
+          Network.signet: CustomElectrum(
+            url: 'ssl://node.local:50002',
+            ownNode: true,
+          ),
+        },
+      )..watchStatus = short;
+      final platform = FakeLivePlatform(
+        running: true,
+        wanted: true,
+        batteryExempt: true,
+      );
+      await _open(tester, _settings(bridge, platform: platform));
+      expect(
+        find.textContaining('20 000 addresses on your node'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('"This is my node"'), findsNothing);
+    });
+
+    testWidgets('with room for every address, nothing is said', (tester) async {
+      final bridge = _bridge()
+        ..watchStatus = const LiveWatchStatus(
+          state: WatchState.connected,
+          watchedScripts: 120,
+          pushedScripts: 120,
+        );
+      final platform = FakeLivePlatform(
+        running: true,
+        wanted: true,
+        batteryExempt: true,
+      );
+      await _open(tester, _settings(bridge, platform: platform));
+      expect(find.textContaining('for the next sync'), findsNothing);
+    });
+  });
+
   group('choosing Live', () {
     const onPrefs = {'notify.new_tx': '1', 'notify.background': '900'};
 
@@ -1492,6 +1627,64 @@ void main() {
         ),
       );
       expect(LiveEvent.fromJson({'type': 'something_newer'}), isNull);
+    });
+
+    test('the status carries how much of each wallet is live', () {
+      final event =
+          LiveEvent.fromJson({
+                'type': 'status',
+                'state': 'connected',
+                'transport': 'electrum',
+                'server': 'electrum.blockstream.info',
+                'detail': null,
+                'watched_scripts': 2000,
+                'pushed_scripts': 2000,
+                'left_out_scripts': 1240,
+                'left_out_wallets': 2,
+                'wallets': [
+                  {
+                    'wallet_id': 'w1',
+                    'coverage': 'partial',
+                    'watched_scripts': 200,
+                    'left_out_scripts': 1040,
+                  },
+                  {
+                    'wallet_id': 'w2',
+                    'coverage': 'live',
+                    'watched_scripts': 36,
+                    'left_out_scripts': 0,
+                  },
+                  {
+                    'wallet_id': 'w3',
+                    'coverage': 'sync_only',
+                    'watched_scripts': 0,
+                    'left_out_scripts': 200,
+                  },
+                ],
+              })!
+              as LiveStatusChanged;
+      final status = event.status;
+      expect(status.leftOutScripts, 1240);
+      expect(status.leftOutWallets, 2);
+      expect(status.leavesSomeOut, isTrue);
+      expect(status.coverageOf('w1')!.coverage, Coverage.partial);
+      expect(status.coverageOf('w1')!.leftOutScripts, 1040);
+      expect(status.coverageOf('w2')!.coverage, Coverage.live);
+      expect(status.coverageOf('w3')!.coverage, Coverage.syncOnly);
+      expect(status.coverageOf('w4'), isNull);
+    });
+
+    test('a status from before the coverage reads as nothing left out', () {
+      final status = LiveWatchStatus.fromJson({
+        'state': 'connected',
+        'watched_scripts': 40,
+        'pushed_scripts': 40,
+      });
+      expect(status.leftOutScripts, 0);
+      expect(status.wallets, isEmpty);
+      expect(status.leavesSomeOut, isFalse);
+      // A coverage a newer core names is never taken for live.
+      expect(Coverage.fromId('something_newer'), Coverage.syncOnly);
     });
   });
 }

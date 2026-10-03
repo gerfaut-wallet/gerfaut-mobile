@@ -6,6 +6,7 @@ import '../../src/disguise.dart';
 import '../../src/live.dart';
 import '../../src/models.dart';
 import '../../src/notifications.dart';
+import '../../src/state.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/facts.dart';
@@ -134,6 +135,17 @@ class _LiveStatusState extends ConsumerState<_LiveStatus> {
     final line = liveStatusLine(live);
     if (line == null) return const SizedBox.shrink();
     final stopped = !live.serviceRunning;
+    final settings = ref.watch(settingsProvider).valueOrNull;
+    final note = stopped
+        ? null
+        : liveCoverageNote(
+            live.status,
+            ownNode: switch (settings?.backendFor(settings.activeNetwork)) {
+              CustomEsplora(:final ownNode) ||
+              CustomElectrum(:final ownNode) => ownNode,
+              _ => false,
+            },
+          );
     final connected =
         !stopped &&
         (live.status.state == WatchState.connected ||
@@ -175,6 +187,21 @@ class _LiveStatusState extends ConsumerState<_LiveStatus> {
                   child: row,
                 ),
         ),
+        if (note != null) ...[
+          const SizedBox(height: GerfautSpacing.xs),
+          // Amber words, no panel: Live works, only not for everything,
+          // and the line sits with the status it qualifies.
+          Text(
+            note.fact,
+            style: tokens.bodySmall.copyWith(color: tokens.pending),
+          ),
+          if (note.remedy != null)
+            Text(
+              note.remedy!,
+              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+            ),
+          const SizedBox(height: GerfautSpacing.xs),
+        ],
         if (!live.batteryExempt)
           Row(
             children: [

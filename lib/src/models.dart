@@ -1048,8 +1048,14 @@ class LiveWatchStatus {
     this.detail,
     this.watchedScripts = 0,
     this.pushedScripts = 0,
+    this.leftOutScripts = 0,
+    this.leftOutWallets = 0,
+    this.wallets = const [],
   });
 
+  /// A core from before the coverage was reported leaves its three
+  /// fields out: every wallet then reads as followed whole, which is
+  /// what such a core said by saying nothing.
   factory LiveWatchStatus.fromJson(Map<String, dynamic> json) {
     return LiveWatchStatus(
       state: WatchState.fromId(json['state'] as String?),
@@ -1058,6 +1064,12 @@ class LiveWatchStatus {
       detail: json['detail'] as String?,
       watchedScripts: json['watched_scripts'] as int? ?? 0,
       pushedScripts: json['pushed_scripts'] as int? ?? 0,
+      leftOutScripts: json['left_out_scripts'] as int? ?? 0,
+      leftOutWallets: json['left_out_wallets'] as int? ?? 0,
+      wallets: [
+        for (final wallet in json['wallets'] as List? ?? const [])
+          WalletCoverage.fromJson(wallet as Map<String, dynamic>),
+      ],
     );
   }
 
@@ -1071,6 +1083,86 @@ class LiveWatchStatus {
   final String? detail;
   final int watchedScripts;
   final int pushedScripts;
+
+  /// Scripts worth watching that the watch leaves to the regular syncs,
+  /// all wallets together: a payment to one of them shows at the next
+  /// sync, not at once.
+  final int leftOutScripts;
+
+  /// How many wallets those scripts belong to.
+  final int leftOutWallets;
+
+  /// How much of each wallet the watch hears, in the order of the list.
+  /// Empty while the watch is off.
+  final List<WalletCoverage> wallets;
+
+  /// The watch runs and cannot follow every address: the one case where
+  /// coverage is worth a word on screen.
+  bool get leavesSomeOut => state != WatchState.off && leftOutScripts > 0;
+
+  /// The coverage of one wallet, or null when the watch does not list
+  /// it.
+  WalletCoverage? coverageOf(String walletId) {
+    for (final wallet in wallets) {
+      if (wallet.walletId == walletId) return wallet;
+    }
+    return null;
+  }
+}
+
+/// How much of one wallet the live watch hears.
+enum Coverage {
+  /// Every address worth watching is followed: a payment shows at once.
+  live('live'),
+
+  /// The head of the wallet is followed, its unused addresses first: a
+  /// payment to the rest shows at the next sync.
+  partial('partial'),
+
+  /// None is: every payment shows at the next sync.
+  syncOnly('sync_only');
+
+  const Coverage(this.id);
+
+  final String id;
+
+  /// A value a newer core may add reads as the least promised: nothing
+  /// is said live that might not be.
+  static Coverage fromId(String? id) {
+    for (final coverage in Coverage.values) {
+      if (coverage.id == id) return coverage;
+    }
+    return Coverage.syncOnly;
+  }
+}
+
+/// One wallet as the live watch hears it.
+class WalletCoverage {
+  const WalletCoverage({
+    required this.walletId,
+    required this.coverage,
+    this.watchedScripts = 0,
+    this.leftOutScripts = 0,
+  });
+
+  factory WalletCoverage.fromJson(Map<String, dynamic> json) {
+    return WalletCoverage(
+      walletId: json['wallet_id'] as String,
+      coverage: Coverage.fromId(json['coverage'] as String?),
+      watchedScripts: json['watched_scripts'] as int? ?? 0,
+      leftOutScripts: json['left_out_scripts'] as int? ?? 0,
+    );
+  }
+
+  final String walletId;
+  final Coverage coverage;
+
+  /// Scripts of the wallet the watch hears, one it shares with another
+  /// wallet included.
+  final int watchedScripts;
+
+  /// Scripts of the wallet it leaves to the regular syncs.
+  final int leftOutScripts;
 }
 
 /// What a running live watch says.
@@ -1332,7 +1424,7 @@ class CustomElectrum extends BackendConfig {
   final String url;
 
   /// The user says they run this server, so Live may follow up to
-  /// 20,000 of their addresses on it instead of 2,000. The app cannot
+  /// 20 000 of their addresses on it instead of 2 000. The app cannot
   /// check it: a public server typed in by hand looks the same.
   ///
   /// Sent back with every save of the address: the core takes a config
