@@ -1071,8 +1071,13 @@ class WatchMonitor extends Notifier<WatchStatus> {
       // done its job, and the next one has to show again.
       final premium = ref.read(premiumStateProvider).valueOrNull;
       if (premium?.acknowledgedOfflineUntil != null) {
-        await bridge.premiumAcknowledgeOffline(null);
-        ref.invalidate(premiumStateProvider);
+        // A vault that would not take the write says nothing about the
+        // server, which has just answered: the beat counts all the same,
+        // and the next one tries the write again.
+        try {
+          await bridge.premiumAcknowledgeOffline(null);
+          ref.invalidate(premiumStateProvider);
+        } catch (_) {}
       }
     } catch (error) {
       // Turned away rather than out of reach: the vault says so now.

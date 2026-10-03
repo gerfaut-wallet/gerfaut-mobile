@@ -2588,6 +2588,28 @@ void main() {
       expect(find.byType(AlertBanner), findsNothing);
     });
 
+    testWidgets('a beat that answers counts, whatever the vault says after', (
+      tester,
+    ) async {
+      final bridge = watching()
+        // Acknowledged during an outage, and the vault will not take
+        // the write that clears it.
+        ..premiumAcknowledgedUntil = 1900000000
+        ..acknowledgeFails = true;
+      await tester.pumpWidget(wholeApp(bridge));
+      await tester.pumpAndSettle();
+      await tester.pump(heartbeatPeriod);
+      await tester.pumpAndSettle();
+      await tester.pump(heartbeatPeriod);
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(MaterialApp)),
+      );
+      expect(container.read(watchMonitorProvider).failures, 0);
+      expect(find.byType(AlertBanner), findsNothing);
+    });
+
     testWidgets('nothing beats while no wallet is watched', (tester) async {
       final bridge = premiumBridge(activated: true);
       await tester.pumpWidget(wholeApp(bridge));
