@@ -1085,14 +1085,59 @@ void main() {
       );
     });
 
-    test('a node already declared: the limit alone', () {
-      final note = liveCoverageNote(short, ownNode: true)!;
+    test('a node already declared, its list full: the limit alone', () {
+      final note = liveCoverageNote(
+        const LiveWatchStatus(
+          state: WatchState.connected,
+          watchedScripts: 20000,
+          pushedScripts: 20000,
+          leftOutScripts: 1240,
+          leftOutWallets: 2,
+        ),
+        ownNode: true,
+      )!;
       expect(
         note.fact,
         'Live follows up to 20 000 addresses on your node. 1 240 addresses '
         'of 2 wallets wait for the next sync instead.',
       );
       expect(note.remedy, isNull);
+    });
+
+    test('a node that refused some: the setting of its software', () {
+      LiveWatchStatus refusedBy(String? software) => LiveWatchStatus(
+        state: WatchState.connected,
+        watchedScripts: 12000,
+        pushedScripts: 10000,
+        leftOutScripts: 2000,
+        leftOutWallets: 1,
+        serverSoftware: software,
+      );
+      final fulcrum = liveCoverageNote(
+        refusedBy('Fulcrum 1.12.0'),
+        ownNode: true,
+      )!;
+      expect(
+        fulcrum.fact,
+        'Your node did not take every address Live asked for. 2 000 '
+        'addresses of 1 wallet wait for the next sync instead.',
+      );
+      expect(fulcrum.remedy, contains('max_subs_per_ip'));
+      expect(
+        liveCoverageNote(refusedBy('ElectrumX 1.18.0'), ownNode: true)!.remedy,
+        contains('COST_SOFT_LIMIT and COST_HARD_LIMIT'),
+      );
+      expect(
+        liveCoverageNote(
+          refusedBy('electrs-esplora 0.4.1'),
+          ownNode: true,
+        )!.remedy,
+        contains('--electrum-subscription-limit'),
+      );
+      expect(
+        liveCoverageNote(refusedBy(null), ownNode: true)!.remedy,
+        'Raise the subscription limit of your server to follow them all.',
+      );
     });
 
     test('one address of one wallet is said in the singular', () {
@@ -1158,15 +1203,25 @@ void main() {
       expect(find.textContaining('"This is my node"'), findsOneWidget);
     });
 
-    testWidgets('on a declared node, no remedy is offered', (tester) async {
-      final bridge = _bridge(
-        backends: const {
-          Network.signet: CustomElectrum(
-            url: 'ssl://node.local:50002',
-            ownNode: true,
-          ),
-        },
-      )..watchStatus = short;
+    testWidgets('on a declared node with its list full, no remedy', (
+      tester,
+    ) async {
+      final bridge =
+          _bridge(
+              backends: const {
+                Network.signet: CustomElectrum(
+                  url: 'ssl://node.local:50002',
+                  ownNode: true,
+                ),
+              },
+            )
+            ..watchStatus = const LiveWatchStatus(
+              state: WatchState.connected,
+              watchedScripts: 20000,
+              pushedScripts: 20000,
+              leftOutScripts: 1240,
+              leftOutWallets: 2,
+            );
       final platform = FakeLivePlatform(
         running: true,
         wanted: true,

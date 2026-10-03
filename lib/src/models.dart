@@ -1059,6 +1059,7 @@ class LiveWatchStatus {
     this.leftOutScripts = 0,
     this.leftOutWallets = 0,
     this.wallets = const [],
+    this.serverSoftware,
   });
 
   /// A core from before the coverage was reported leaves its three
@@ -1078,6 +1079,7 @@ class LiveWatchStatus {
         for (final wallet in json['wallets'] as List? ?? const [])
           WalletCoverage.fromJson(wallet as Map<String, dynamic>),
       ],
+      serverSoftware: json['server_software'] as String?,
     );
   }
 
@@ -1103,6 +1105,10 @@ class LiveWatchStatus {
   /// How much of each wallet the watch hears, in the order of the list.
   /// Empty while the watch is off.
   final List<WalletCoverage> wallets;
+
+  /// What an Electrum server says it runs, `Fulcrum 1.12.0` and the
+  /// like; null over the other transports and from an older core.
+  final String? serverSoftware;
 
   /// The watch runs and cannot follow every address: the one case where
   /// coverage is worth a word on screen.

@@ -325,9 +325,13 @@ final String ownNodeLiveLimit = groupThousands('20000');
 
 /// What the settings say under the status line when Live cannot follow
 /// every address: how many wait for a sync instead, and what lifts the
-/// limit. Null while every address is followed. On a node already
-/// declared the user's own, the limit is all there is to say: nothing
-/// in the app lifts it further.
+/// limit. Null while every address is followed.
+///
+/// On a node already declared the user's own, two things can leave
+/// addresses out. The list may have reached the 20,000 of an own node,
+/// and nothing in the app lifts that further. Or the node refused some
+/// of a shorter list: its own limit, which its owner can raise, named
+/// by the setting of the software it runs when that is known.
 ({String fact, String? remedy})? liveCoverageNote(
   LiveWatchStatus status, {
   required bool ownNode,
@@ -337,12 +341,18 @@ final String ownNodeLiveLimit = groupThousands('20000');
   final wallets = _counted(status.leftOutWallets, 'wallet', 'wallets');
   final verb = status.leftOutScripts == 1 ? 'waits' : 'wait';
   final waiting = '$addresses of $wallets $verb for the next sync instead.';
-  if (ownNode) {
+  if (ownNode && status.watchedScripts >= _ownNodeCap) {
     return (
       fact:
           'Live follows up to $ownNodeLiveLimit addresses on your node. '
           '$waiting',
       remedy: null,
+    );
+  }
+  if (ownNode) {
+    return (
+      fact: 'Your node did not take every address Live asked for. $waiting',
+      remedy: _raiseLimit(status.serverSoftware),
     );
   }
   return (
@@ -353,6 +363,29 @@ final String ownNodeLiveLimit = groupThousands('20000');
         'Connect your own node and turn on "This is my node" in Network '
         'to follow up to $ownNodeLiveLimit.',
   );
+}
+
+/// The most addresses Live lists on an own node, as the core caps it.
+const int _ownNodeCap = 20000;
+
+/// Where a node's owner lets it take more subscriptions, by what the
+/// server says it runs: the settings these servers document. Anything
+/// else gets the general advice.
+String _raiseLimit(String? software) {
+  final name = software?.toLowerCase() ?? '';
+  if (name.startsWith('fulcrum')) {
+    return 'Raise max_subs_per_ip in the Fulcrum configuration to follow '
+        'them all.';
+  }
+  if (name.startsWith('electrumx')) {
+    return 'Raise COST_SOFT_LIMIT and COST_HARD_LIMIT in the ElectrumX '
+        'settings to follow them all.';
+  }
+  if (name.startsWith('electrs-esplora')) {
+    return 'Raise --electrum-subscription-limit on this electrs to follow '
+        'them all.';
+  }
+  return 'Raise the subscription limit of your server to follow them all.';
 }
 
 String _counted(int count, String one, String many) =>
