@@ -1807,6 +1807,9 @@ mod tests {
             "expected value at line 1 column 1".to_owned(),
         ));
         assert_eq!(payload(&portal)["error"]["kind"], "premium_unreachable");
+        // A 4xx without the server's envelope comes the same way.
+        let proxy = CoreError::Premium(PremiumError::UnexpectedResponse("HTTP 403".to_owned()));
+        assert_eq!(payload(&proxy)["error"]["kind"], "premium_unreachable");
     }
 
     /// A certificate and a heartbeat that do not check out are one case:

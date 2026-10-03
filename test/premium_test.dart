@@ -141,6 +141,9 @@ void main() {
       for (final message in [
         'the premium server is unreachable: HTTP 307',
         'unexpected answer from the premium server: an answer over 2 MiB',
+        // A 4xx without the server's envelope: a captive portal, a
+        // proxy. The core reads it as the server out of reach.
+        'unexpected answer from the premium server: HTTP 403',
       ]) {
         final failure = premiumFailure(
           BridgeException('premium_unreachable', message),
