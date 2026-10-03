@@ -11,7 +11,6 @@
 
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -88,8 +87,21 @@ class VaultInUseException implements Exception {
 File _vaultFile(String dataDir) =>
     File('$dataDir${Platform.pathSeparator}$vaultFileName');
 
-/// Returns the vault key as 64 hex characters, generating and storing a
-/// fresh 32-byte key on first launch and reusing it afterwards.
+/// The key a first launch stores, drawn by the core once for the whole
+/// process: the isolates that start together on a first launch, the
+/// screens, the periodic task and the live watch, all get the same one,
+/// so whichever writes last stores the key the vault is sealed under.
+Future<String> drawFreshVaultKey() async {
+  final decoded = jsonDecode(await rust_api.freshVaultKey());
+  if (decoded is Map<String, dynamic> && decoded['key'] is String) {
+    return decoded['key'] as String;
+  }
+  final error = (decoded as Map<String, dynamic>)['error'];
+  throw StateError('no vault key could be drawn: $error');
+}
+
+/// Returns the vault key as 64 hex characters, storing a fresh 32-byte
+/// key on first launch and reusing it afterwards.
 ///
 /// A first launch is a directory with no vault in it, and nothing else:
 /// with a vault on disk, a key that is not there is never replaced,
@@ -98,6 +110,7 @@ File _vaultFile(String dataDir) =>
 Future<String> obtainVaultKeyHex({
   required String dataDir,
   VaultKeyStore store = const SecureVaultKeyStore(),
+  Future<String> Function() drawKey = drawFreshVaultKey,
 }) async {
   final vaultExists = await _vaultFile(dataDir).exists();
   final String? existing;
@@ -124,11 +137,10 @@ Future<String> obtainVaultKeyHex({
   // No vault to open: a first launch, or a vault set aside. A value
   // that is not a key would open nothing anyway, so a fresh one takes
   // its place.
-  final rng = Random.secure();
-  final hex = List<String>.generate(
-    32,
-    (_) => rng.nextInt(256).toRadixString(16).padLeft(2, '0'),
-  ).join();
+  final hex = await drawKey();
+  if (!_isValidKeyHex(hex)) {
+    throw StateError('the drawn vault key is not 64 hex characters');
+  }
   await store.write(hex);
   return hex;
 }

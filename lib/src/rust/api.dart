@@ -22,6 +22,18 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 Future<String> initManager({required String dataDir, required String keyHex}) =>
     RustLib.instance.api.crateApiInitManager(dataDir: dataDir, keyHex: keyHex);
 
+/// The key to store and open a new vault with, as 64 hex characters,
+/// for a first launch: no vault yet, and no key kept for one.
+///
+/// The screens, the periodic task and the live watch each start in an
+/// isolate of their own, and on a first launch each of them finds no
+/// vault and no key. Were each to draw its own, the vault would be
+/// sealed under the first key to reach [`init_manager`] while the
+/// storage kept whichever was written last, and the next launch could
+/// not open it. Drawn here, in one cell for the process, every caller
+/// gets the same key: they all store that one and open with it.
+Future<String> freshVaultKey() => RustLib.instance.api.crateApiFreshVaultKey();
+
 /// Classifies pasted or scanned wallet material. Returns the serialized
 /// `ParsedInput` to pass back to [`add_wallet`] after user confirmation.
 /// `script` is the user's script type choice for a lone extended key

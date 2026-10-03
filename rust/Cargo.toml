@@ -16,6 +16,9 @@ gerfaut-core = { path = "../../gerfaut-core", features = ["embedded-tor"] }
 # release build. The version flutter_rust_bridge already pulls in, so
 # nothing new is compiled.
 log = "0.4"
+# To draw the vault key of a first launch from the system's randomness;
+# the version the core already pulls in, so nothing new is compiled.
+rand = "0.9"
 serde = "1"
 serde_json = "1"
 tokio = { version = "1", features = ["sync"] }

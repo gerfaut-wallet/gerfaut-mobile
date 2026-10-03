@@ -32,6 +32,19 @@ class _FakeStore implements VaultKeyStore {
 const String goodKey =
     '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
+/// What the core draws for a first launch, here a key of sevens.
+final String drawnKey = '07' * 32;
+
+/// The core's draw, counted: once a process, whoever asks.
+class _Draw {
+  int calls = 0;
+
+  Future<String> call() async {
+    calls += 1;
+    return drawnKey;
+  }
+}
+
 void main() {
   late Directory dir;
 
@@ -48,17 +61,69 @@ void main() {
           .writeAsBytes([0x47, 0x46, 0x56, 0x41, 0x55, 0x4c, 0x54, 0x31]);
 
   group('obtaining the key', () {
-    test('a first launch draws a key and stores it', () async {
+    test('a first launch stores the key the core draws', () async {
       final store = _FakeStore();
-      final hex = await obtainVaultKeyHex(dataDir: dir.path, store: store);
-      expect(hex, matches(RegExp(r'^[0-9a-f]{64}$')));
-      expect(store.written, [hex]);
+      final draw = _Draw();
+      final hex = await obtainVaultKeyHex(
+        dataDir: dir.path,
+        store: store,
+        drawKey: draw.call,
+      );
+      expect(hex, drawnKey);
+      expect(store.written, [drawnKey]);
+      expect(draw.calls, 1);
+    });
+
+    test('isolates starting together store one and the same key', () async {
+      // Each isolate holds a storage handle of its own onto the same
+      // entry; the core hands every one of them the key it drew.
+      final store = _FakeStore();
+      final draw = _Draw();
+      final keys = await Future.wait([
+        for (var i = 0; i < 3; i++)
+          obtainVaultKeyHex(
+            dataDir: dir.path,
+            store: store,
+            drawKey: draw.call,
+          ),
+      ]);
+      expect(keys, [drawnKey, drawnKey, drawnKey]);
+      expect(store.value, drawnKey);
+    });
+
+    test('a key drawn wrong is never stored', () async {
+      final store = _FakeStore();
+      await expectLater(
+        obtainVaultKeyHex(
+          dataDir: dir.path,
+          store: store,
+          drawKey: () async => 'not a key',
+        ),
+        throwsStateError,
+      );
+      expect(store.written, isEmpty);
+    });
+
+    test('a stored key is never drawn again', () async {
+      final store = _FakeStore(value: goodKey);
+      final draw = _Draw();
+      final hex = await obtainVaultKeyHex(
+        dataDir: dir.path,
+        store: store,
+        drawKey: draw.call,
+      );
+      expect(hex, goodKey);
+      expect(draw.calls, 0);
     });
 
     test('a stored key is reused as it is', () async {
       final store = _FakeStore(value: goodKey);
       await writeVault();
-      final hex = await obtainVaultKeyHex(dataDir: dir.path, store: store);
+      final hex = await obtainVaultKeyHex(
+        dataDir: dir.path,
+        store: store,
+        drawKey: _Draw().call,
+      );
       expect(hex, goodKey);
       expect(store.written, isEmpty);
     });
@@ -69,7 +134,11 @@ void main() {
         await writeVault();
         final store = _FakeStore();
         await expectLater(
-          obtainVaultKeyHex(dataDir: dir.path, store: store),
+          obtainVaultKeyHex(
+            dataDir: dir.path,
+            store: store,
+            drawKey: _Draw().call,
+          ),
           throwsA(
             isA<VaultKeyMissingException>().having(
               (e) => e.detail,
@@ -87,7 +156,11 @@ void main() {
       await writeVault();
       final store = _FakeStore(value: 'Data has been reset');
       await expectLater(
-        obtainVaultKeyHex(dataDir: dir.path, store: store),
+        obtainVaultKeyHex(
+          dataDir: dir.path,
+          store: store,
+          drawKey: _Draw().call,
+        ),
         throwsA(
           isA<VaultKeyMissingException>().having(
             (e) => e.detail,
@@ -104,7 +177,11 @@ void main() {
       await writeVault();
       final store = _FakeStore(failure: StateError('keystore unavailable'));
       await expectLater(
-        obtainVaultKeyHex(dataDir: dir.path, store: store),
+        obtainVaultKeyHex(
+          dataDir: dir.path,
+          store: store,
+          drawKey: _Draw().call,
+        ),
         throwsA(
           isA<VaultKeyMissingException>().having(
             (e) => e.detail,
@@ -119,7 +196,11 @@ void main() {
     test('without a vault, a storage failure is a plain failure', () async {
       final store = _FakeStore(failure: StateError('keystore unavailable'));
       await expectLater(
-        obtainVaultKeyHex(dataDir: dir.path, store: store),
+        obtainVaultKeyHex(
+          dataDir: dir.path,
+          store: store,
+          drawKey: _Draw().call,
+        ),
         throwsStateError,
       );
       expect(store.written, isEmpty);
@@ -127,8 +208,12 @@ void main() {
 
     test('without a vault, a value that is not a key is replaced', () async {
       final store = _FakeStore(value: 'Data has been reset');
-      final hex = await obtainVaultKeyHex(dataDir: dir.path, store: store);
-      expect(hex, matches(RegExp(r'^[0-9a-f]{64}$')));
+      final hex = await obtainVaultKeyHex(
+        dataDir: dir.path,
+        store: store,
+        drawKey: _Draw().call,
+      );
+      expect(hex, drawnKey);
       expect(store.value, hex);
     });
   });
@@ -145,7 +230,11 @@ void main() {
 
       // The next bootstrap is a first launch again.
       final store = _FakeStore();
-      final hex = await obtainVaultKeyHex(dataDir: dir.path, store: store);
+      final hex = await obtainVaultKeyHex(
+        dataDir: dir.path,
+        store: store,
+        drawKey: _Draw().call,
+      );
       expect(store.written, [hex]);
     });
 

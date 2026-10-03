@@ -3818,6 +3818,7 @@ dependencies = [
  "flutter_rust_bridge",
  "gerfaut-core",
  "log",
+ "rand 0.9.5",
  "serde",
  "serde_json",
  "tokio",

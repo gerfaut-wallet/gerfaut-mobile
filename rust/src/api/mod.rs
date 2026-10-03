@@ -29,6 +29,7 @@ use gerfaut_core::store::VaultKey;
 use gerfaut_core::wallet::meta::{WalletIcon, WalletKind};
 use gerfaut_core::wallet::snapshot::SyncReport;
 use gerfaut_core::{CoreError, Network, WalletManager};
+use rand::TryRngCore;
 use serde_json::json;
 use std::sync::LazyLock;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -36,6 +37,10 @@ use tokio::sync::{Mutex, OnceCell, broadcast};
 
 /// The process-wide manager, set once by [`init_manager`].
 static MANAGER: OnceCell<WalletManager> = OnceCell::const_new();
+
+/// The key a first launch seals the vault under, drawn once for the
+/// whole process by [`fresh_vault_key`], as the manager is opened once.
+static FRESH_KEY: OnceCell<String> = OnceCell::const_new();
 
 #[flutter_rust_bridge::frb(init)]
 pub fn init_app() {
@@ -301,6 +306,32 @@ pub async fn init_manager(data_dir: String, key_hex: String) -> String {
     match opened {
         Ok(_) => ok_json(),
         Err(e) => core_error_json(&e),
+    }
+}
+
+/// The key to store and open a new vault with, as 64 hex characters,
+/// for a first launch: no vault yet, and no key kept for one.
+///
+/// The screens, the periodic task and the live watch each start in an
+/// isolate of their own, and on a first launch each of them finds no
+/// vault and no key. Were each to draw its own, the vault would be
+/// sealed under the first key to reach [`init_manager`] while the
+/// storage kept whichever was written last, and the next launch could
+/// not open it. Drawn here, in one cell for the process, every caller
+/// gets the same key: they all store that one and open with it.
+pub async fn fresh_vault_key() -> String {
+    let drawn = FRESH_KEY
+        .get_or_try_init(|| async {
+            let mut bytes = [0u8; 32];
+            rand::rngs::OsRng
+                .try_fill_bytes(&mut bytes)
+                .map_err(|e| error_json("random", format!("no randomness to draw a key: {e}")))?;
+            Ok::<String, String>(bytes.iter().map(|b| format!("{b:02x}")).collect())
+        })
+        .await;
+    match drawn {
+        Ok(key) => json!({ "key": key }).to_string(),
+        Err(e) => e,
     }
 }
 
@@ -1677,6 +1708,34 @@ mod tests {
             .err()
             .expect("the vault is held");
         assert_eq!(payload(&second)["error"]["kind"], "vault_in_use");
+    }
+
+    /// Isolates that find no vault together on a first launch are all
+    /// handed the one key, and it is a key: 64 hex characters.
+    #[test]
+    fn isolates_drawing_a_key_together_get_the_same_one() {
+        let start = std::sync::Arc::new(std::sync::Barrier::new(8));
+        let callers: Vec<_> = (0..8)
+            .map(|_| {
+                let start = start.clone();
+                std::thread::spawn(move || {
+                    let runtime = tokio::runtime::Builder::new_current_thread()
+                        .build()
+                        .unwrap();
+                    start.wait();
+                    runtime.block_on(fresh_vault_key())
+                })
+            })
+            .collect();
+        let keys: Vec<String> = callers
+            .into_iter()
+            .map(|caller| {
+                let answer: Value = serde_json::from_str(&caller.join().unwrap()).unwrap();
+                answer["key"].as_str().expect("a key").to_owned()
+            })
+            .collect();
+        assert!(decode_key(&keys[0]).is_ok(), "{}", keys[0]);
+        assert!(keys.iter().all(|key| key == &keys[0]), "{keys:?}");
     }
 
     /// The words of a refusal are the server's own, and nothing else:
