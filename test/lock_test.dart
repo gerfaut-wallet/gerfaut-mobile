@@ -652,6 +652,24 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(WelcomeScreen), findsOneWidget);
+
+      // Skipped, it lands back on About.
+      await tester.tap(find.text('Skip'));
+      await tester.pumpAndSettle();
+      expect(find.byType(WelcomeScreen), findsNothing);
+      expect(find.text('Show the welcome tour'), findsOneWidget);
+
+      // Read to the end, the last button closes it as well.
+      await tester.tap(find.text('Show the welcome tour'));
+      await tester.pumpAndSettle();
+      for (var page = 1; page < welcomePages.length; page++) {
+        await tester.tap(find.text('Next'));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.text('Get started'));
+      await tester.pumpAndSettle();
+      expect(find.byType(WelcomeScreen), findsNothing);
+      expect(find.text('Show the welcome tour'), findsOneWidget);
     });
   });
 

@@ -63,7 +63,14 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
     super.dispose();
   }
 
-  void _done() => ref.read(onboardingSeenProvider.notifier).markSeen();
+  /// Marks the tour seen. As the gate's first screen, that alone moves
+  /// on to the wallets; played again from About, it sits on a route of
+  /// its own, which is closed to land back where it was opened.
+  void _done() {
+    ref.read(onboardingSeenProvider.notifier).markSeen();
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) navigator.pop();
+  }
 
   void _goTo(BuildContext context, int target) {
     // A device asking for less motion gets the page, not the slide.
