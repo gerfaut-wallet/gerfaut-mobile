@@ -99,13 +99,21 @@ class BalancePayload {
   /// The wallets as the widget states them, in the order the home
   /// screen lists them. Masked, the figures go and the names stay: a
   /// name is allowed off the vault, an amount only when asked for.
+  ///
+  /// [locked], an app lock is set, and neither goes: the widget sits on
+  /// the home screen of a phone whose app is locked, for whoever holds
+  /// it, as a notification does, and says what a notification says
+  /// then, which is nothing of the wallets. The total stays, masked, so
+  /// the widget still shows when it was last brought up to date.
   factory BalancePayload.of(
     List<WalletMeta> wallets, {
     required AmountUnit unit,
     required bool masked,
+    bool locked = false,
     DateTime? now,
   }) {
-    String figure(int sats) => masked ? maskedValue : formatAmount(sats, unit);
+    String figure(int sats) =>
+        masked || locked ? maskedValue : formatAmount(sats, unit);
     var sum = 0;
     for (final wallet in wallets) {
       sum += wallet.cachedBalance.total;
@@ -113,8 +121,9 @@ class BalancePayload {
     return BalancePayload(
       total: figure(sum),
       rows: [
-        for (final wallet in wallets.take(maxRows))
-          (name: wallet.name, figure: figure(wallet.cachedBalance.total)),
+        if (!locked)
+          for (final wallet in wallets.take(maxRows))
+            (name: wallet.name, figure: figure(wallet.cachedBalance.total)),
       ],
       synced: syncedLine(wallets, now: now),
     );
@@ -377,6 +386,12 @@ class WidgetFeed {
     _ref.listen(unitProvider, republish);
     _ref.listen(maskedProvider, republish);
     _ref.listen(widgetBalancesProvider, republish);
+    // A lock set or taken off changes what the balance widget may say.
+    _ref.listen(settingsProvider, (previous, next) {
+      final before = previous?.valueOrNull?.appLock != null;
+      final now = next.valueOrNull?.appLock != null;
+      if (next.hasValue && before != now) publish();
+    });
     _ref.listen(installedWidgetsProvider, (_, next) {
       if (next.isLoading) return;
       final installed = next.valueOrNull;
@@ -443,6 +458,7 @@ class WidgetFeed {
         wallets,
         unit: _ref.read(unitProvider),
         masked: _ref.read(maskedProvider) || !_ref.read(widgetBalancesProvider),
+        locked: settings.appLock != null,
       ),
       network: NetworkPayload.of(wallets, network: settings.activeNetwork),
     );
@@ -533,6 +549,7 @@ Future<bool> refreshWidgets({
         wallets,
         unit: AmountUnit.fromId(prefs[Pref.unit]) ?? AmountUnit.btc,
         masked: prefs[Pref.masked] == '1' || prefs[Pref.widgetBalances] != '1',
+        locked: settings.appLock != null,
         now: now,
       ),
       network: NetworkPayload.of(wallets, network: network, now: now),

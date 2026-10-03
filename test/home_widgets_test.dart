@@ -10,6 +10,7 @@ import 'package:gerfaut/src/home_widgets.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/setting_switch.dart';
 
 import 'fakes.dart';
 
@@ -174,6 +175,23 @@ void main() {
       );
       expect(sats.total, formatSats(100050000));
       expect(sats.rows.first.figure, formatSats(100000000));
+    });
+
+    test('under an app lock, no name and no figure', () {
+      final payload = BalancePayload.of(
+        wallets,
+        unit: AmountUnit.btc,
+        masked: false,
+        locked: true,
+        now: _now,
+      );
+      expect(payload.total, maskedValue);
+      expect(payload.rows, isEmpty);
+      final data = payload.toData();
+      expect(data[WidgetKeys.balanceRowName(1)], isNull);
+      expect(data[WidgetKeys.balanceRowFigure(1)], isNull);
+      // When it was last brought up to date still shows.
+      expect(payload.synced, isNotEmpty);
     });
 
     test('masked, the names stay and every figure goes', () {
@@ -603,6 +621,46 @@ void main() {
       await tester.pumpAndSettle();
       expect(bridge.appPrefs['widgets.balances'], '0');
       expect(board.data[WidgetKeys.balanceTotal], maskedValue);
+    });
+
+    testWidgets('under an app lock the switch is greyed and says why', (
+      tester,
+    ) async {
+      final bridge = _bridge()
+        ..lock = const AppLock(kind: LockKind.pin, biometric: false)
+        ..lockSecret = '1234';
+      bridge.appPrefs['widgets.balances'] = '1';
+      final board = FakeWidgetBoard(installed: {HomeWidgets.balance});
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            bridgeProvider.overrideWithValue(bridge),
+            widgetBoardProvider.overrideWithValue(board),
+            widgetSchedulerProvider.overrideWithValue((wanted) async {}),
+          ],
+          child: MaterialApp(
+            theme: themeFrom(GerfautTokens.light, Brightness.light),
+            home: const Scaffold(body: WidgetsSection()),
+          ),
+        ),
+      );
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(WidgetsSection)),
+      );
+      container.read(widgetBalancesProvider.notifier).hydrate('1');
+      container.read(widgetFeedProvider);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Off while an app lock is set'),
+        findsOneWidget,
+      );
+      expect(
+        tester.widget<SettingSwitch>(find.byType(SettingSwitch)).onChanged,
+        isNull,
+      );
+      expect(board.data[WidgetKeys.balanceTotal], maskedValue);
+      expect(board.data[WidgetKeys.balanceRowName(1)], isNull);
     });
 
     testWidgets('disguised, the card says the widgets are off', (tester) async {
