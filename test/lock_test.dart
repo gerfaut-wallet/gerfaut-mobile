@@ -355,6 +355,35 @@ void main() {
       expect(bridge.lockCalls, isEmpty);
     });
 
+    testWidgets('a PIN field offers digits and takes nothing else', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      await tester.pumpWidget(settingsApp(FakeBridge()));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find
+            .descendant(
+              of: find.byType(SecuritySection),
+              matching: find.byType(Switch),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+
+      final secret = find.descendant(
+        of: find.byKey(const Key('lock.secret')),
+        matching: find.byType(TextField),
+      );
+      expect(
+        tester.widget<TextField>(secret).keyboardType,
+        TextInputType.number,
+      );
+      await tester.enterText(secret, '12ab34');
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(secret).controller!.text, '1234');
+    });
+
     testWidgets('turning it off asks for the secret in place', (tester) async {
       useTallSurface(tester);
       final bridge = locked();

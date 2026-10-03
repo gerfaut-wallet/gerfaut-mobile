@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/tokens.dart';
@@ -18,6 +19,7 @@ class PasswordField extends StatefulWidget {
     this.onChanged,
     this.onSubmitted,
     this.autofocus = false,
+    this.pin = false,
   });
 
   /// Caption above the field, also what assistive technology reads.
@@ -31,6 +33,11 @@ class PasswordField extends StatefulWidget {
   /// Keyboard action; null leaves the key inert.
   final VoidCallback? onSubmitted;
   final bool autofocus;
+
+  /// A PIN: the digit keyboard, digits only and twelve at most, which is
+  /// what the core takes. A letter could not be typed rather than be
+  /// refused after the sheet has closed.
+  final bool pin;
 
   @override
   State<PasswordField> createState() => _PasswordFieldState();
@@ -64,6 +71,13 @@ class _PasswordFieldState extends State<PasswordField> {
             autofocus: widget.autofocus,
             autocorrect: false,
             enableSuggestions: false,
+            keyboardType: widget.pin ? TextInputType.number : null,
+            inputFormatters: widget.pin
+                ? [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(12),
+                  ]
+                : null,
             // 16px, or the field zooms on some keyboards.
             style: tokens.body,
             onChanged: (_) => widget.onChanged?.call(),

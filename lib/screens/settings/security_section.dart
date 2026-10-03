@@ -323,13 +323,17 @@ class _SetLockSheetState extends State<_SetLockSheet> {
 
   /// What is wrong with the pair, in the core's own terms so the screen
   /// never promises something the core would refuse.
+  /// The core's own rules, checked before the sheet closes: a refusal
+  /// after it would take the typing with it. Lengths are counted in
+  /// characters, as the core counts them, not in UTF-16 units.
   String? _check() {
     final secret = _secretController.text;
+    final length = secret.characters.length;
     if (_kind == LockKind.pin) {
-      if (secret.length < 4 || secret.length > 12) {
+      if (length < 4 || length > 12 || !RegExp(r'^\d+$').hasMatch(secret)) {
         return 'A PIN is 4 to 12 digits.';
       }
-    } else if (secret.length < 8) {
+    } else if (length < 8) {
       return 'A password is at least 8 characters.';
     }
     if (_confirmController.text != secret) return 'The two entries differ.';
@@ -399,6 +403,7 @@ class _SetLockSheetState extends State<_SetLockSheet> {
                 label: _kind == LockKind.pin
                     ? 'Current PIN'
                     : 'Current password',
+                pin: _kind == LockKind.pin,
                 controller: _currentController,
                 onChanged: () => setState(() => _problem = null),
               ),
@@ -407,6 +412,7 @@ class _SetLockSheetState extends State<_SetLockSheet> {
             PasswordField(
               key: const Key('lock.secret'),
               label: _kind == LockKind.pin ? 'New PIN' : 'New password',
+              pin: _kind == LockKind.pin,
               controller: _secretController,
               onChanged: () => setState(() => _problem = null),
             ),
@@ -414,15 +420,20 @@ class _SetLockSheetState extends State<_SetLockSheet> {
             PasswordField(
               key: const Key('lock.confirm'),
               label: 'Confirm',
+              pin: _kind == LockKind.pin,
               controller: _confirmController,
               onChanged: () => setState(() => _problem = null),
               onSubmitted: _submit,
             ),
             if (_problem != null) ...[
               const SizedBox(height: GerfautSpacing.sm),
-              Text(
-                _problem!,
-                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+              // Said aloud as it appears.
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  _problem!,
+                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                ),
               ),
             ],
             const SizedBox(height: GerfautSpacing.md),
@@ -495,6 +506,7 @@ class _ConfirmSecretSheetState extends State<_ConfirmSecretSheet> {
           PasswordField(
             key: const Key('lock.current'),
             label: widget.kind == LockKind.pin ? 'PIN' : 'Password',
+            pin: widget.kind == LockKind.pin,
             controller: _controller,
             autofocus: true,
             onSubmitted: () => Navigator.of(context).pop(_controller.text),
