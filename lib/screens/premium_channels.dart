@@ -747,35 +747,40 @@ class _EmailField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    return TextField(
-      controller: controller,
-      autofocus: true,
-      autocorrect: false,
-      enableSuggestions: false,
-      keyboardType: TextInputType.emailAddress,
-      textCapitalization: TextCapitalization.none,
-      style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
-      onChanged: (_) => onChanged(),
-      onSubmitted: onSubmitted == null ? null : (_) => onSubmitted!(),
-      decoration: InputDecoration(
-        hintText: 'you@example.org',
-        hintStyle: tokens.data.copyWith(
-          fontSize: tokens.body.fontSize,
-          color: tokens.textMuted,
-        ),
-        filled: true,
-        fillColor: tokens.surfaceSunken,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: GerfautSpacing.md,
-          vertical: GerfautSpacing.sm,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(GerfautRadius.sm),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(GerfautRadius.sm),
-          borderSide: BorderSide(color: tokens.premium, width: 2),
+    // The caption above is a widget of its own: the box names itself,
+    // and keeps the name once the hint is gone.
+    return Semantics(
+      label: 'E-mail address',
+      child: TextField(
+        controller: controller,
+        autofocus: true,
+        autocorrect: false,
+        enableSuggestions: false,
+        keyboardType: TextInputType.emailAddress,
+        textCapitalization: TextCapitalization.none,
+        style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
+        onChanged: (_) => onChanged(),
+        onSubmitted: onSubmitted == null ? null : (_) => onSubmitted!(),
+        decoration: InputDecoration(
+          hintText: 'you@example.org',
+          hintStyle: tokens.data.copyWith(
+            fontSize: tokens.body.fontSize,
+            color: tokens.textMuted,
+          ),
+          filled: true,
+          fillColor: tokens.surfaceSunken,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: GerfautSpacing.md,
+            vertical: GerfautSpacing.sm,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(GerfautRadius.sm),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(GerfautRadius.sm),
+            borderSide: BorderSide(color: tokens.premium, width: 2),
+          ),
         ),
       ),
     );

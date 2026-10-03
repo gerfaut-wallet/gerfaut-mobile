@@ -209,56 +209,64 @@ class _ConfirmItsYouSheetState extends ConsumerState<ConfirmItsYouSheet> {
               const SizedBox(height: GerfautSpacing.md),
               // The field names itself, as on the lock screen: one word in
               // the box, heard by a screen reader on the box itself.
-              TextField(
-                key: const Key('identity.secret'),
-                controller: _controller,
-                autofocus: true,
-                obscureText: _hidden,
-                enabled: !blocked,
-                autocorrect: false,
-                enableSuggestions: false,
-                keyboardType: _pin ? TextInputType.number : TextInputType.text,
-                inputFormatters: _pin
-                    ? [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(12),
-                      ]
-                    : null,
-                style: tokens.body,
-                textInputAction: TextInputAction.done,
-                onChanged: (_) => setState(() => _message = null),
-                onSubmitted: (_) => _confirm(),
-                decoration: InputDecoration(
-                  // The caption above is what the eye reads; the hint is
-                  // what a screen reader hears on the field itself.
-                  hintText: label,
-                  hintStyle: tokens.body.copyWith(color: tokens.textMuted),
-                  filled: true,
-                  fillColor: tokens.surfaceSunken,
-                  constraints: const BoxConstraints(minHeight: 44),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: GerfautSpacing.md,
-                    vertical: GerfautSpacing.sm + GerfautSpacing.xs,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(GerfautRadius.sm),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(GerfautRadius.sm),
-                    borderSide: BorderSide(color: tokens.primary, width: 2),
-                  ),
-                  suffixIcon: _pin
-                      ? null
-                      : IconButton(
-                          tooltip: _hidden ? 'Show password' : 'Hide password',
-                          onPressed: () => setState(() => _hidden = !_hidden),
-                          icon: Icon(
-                            _hidden ? LucideIcons.eye : LucideIcons.eyeOff,
-                            size: 18,
-                            color: tokens.textMuted,
+              Semantics(
+                // Named for good, not only by the hint a digit wipes out.
+                label: _pin ? 'PIN' : 'Password',
+                child: TextField(
+                  key: const Key('identity.secret'),
+                  controller: _controller,
+                  autofocus: true,
+                  obscureText: _hidden,
+                  enabled: !blocked,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  keyboardType: _pin
+                      ? TextInputType.number
+                      : TextInputType.text,
+                  inputFormatters: _pin
+                      ? [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(12),
+                        ]
+                      : null,
+                  style: tokens.body,
+                  textInputAction: TextInputAction.done,
+                  onChanged: (_) => setState(() => _message = null),
+                  onSubmitted: (_) => _confirm(),
+                  decoration: InputDecoration(
+                    // The caption above is what the eye reads; the hint is
+                    // what a screen reader hears on the field itself.
+                    hintText: label,
+                    hintStyle: tokens.body.copyWith(color: tokens.textMuted),
+                    filled: true,
+                    fillColor: tokens.surfaceSunken,
+                    constraints: const BoxConstraints(minHeight: 44),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: GerfautSpacing.md,
+                      vertical: GerfautSpacing.sm + GerfautSpacing.xs,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                      borderSide: BorderSide(color: tokens.primary, width: 2),
+                    ),
+                    suffixIcon: _pin
+                        ? null
+                        : IconButton(
+                            tooltip: _hidden
+                                ? 'Show password'
+                                : 'Hide password',
+                            onPressed: () => setState(() => _hidden = !_hidden),
+                            icon: Icon(
+                              _hidden ? LucideIcons.eye : LucideIcons.eyeOff,
+                              size: 18,
+                              color: tokens.textMuted,
+                            ),
                           ),
-                        ),
+                  ),
                 ),
               ),
               if (note != null) ...[

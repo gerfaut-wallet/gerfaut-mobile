@@ -213,6 +213,19 @@ void main() {
       );
     });
 
+    testWidgets('the field keeps its name once digits are typed', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(app(locked()));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), '12');
+      await tester.pumpAndSettle();
+      expect(tester.getSemantics(find.byType(TextField)).label, 'PIN');
+      handle.dispose();
+    });
+
     testWidgets('a phone that confirms opens the app without the secret', (
       tester,
     ) async {

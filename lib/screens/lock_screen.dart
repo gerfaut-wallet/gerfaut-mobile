@@ -147,52 +147,58 @@ class _LockScreenState extends ConsumerState<LockScreen> {
               const SizedBox(height: GerfautSpacing.lg),
               Center(child: Text('Locked', style: tokens.h2)),
               const SizedBox(height: GerfautSpacing.lg),
-              TextField(
-                controller: _controller,
-                autofocus: true,
-                obscureText: _hidden,
-                enabled: !blocked,
-                autocorrect: false,
-                enableSuggestions: false,
-                keyboardType: pin ? TextInputType.number : TextInputType.text,
-                inputFormatters: pin
-                    ? [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(12),
-                      ]
-                    : null,
-                style: tokens.body,
-                textAlign: pin ? TextAlign.center : TextAlign.start,
-                onChanged: (_) => setState(() => _message = null),
-                onSubmitted: (_) => _unlock(),
-                decoration: InputDecoration(
-                  hintText: pin ? 'PIN' : 'Password',
-                  hintStyle: tokens.body.copyWith(color: tokens.textMuted),
-                  filled: true,
-                  fillColor: tokens.surfaceSunken,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: GerfautSpacing.md,
-                    vertical: GerfautSpacing.sm + GerfautSpacing.xs,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(GerfautRadius.sm),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(GerfautRadius.sm),
-                    borderSide: BorderSide(color: tokens.primary, width: 2),
-                  ),
-                  suffixIcon: pin
-                      ? null
-                      : IconButton(
-                          tooltip: _hidden ? 'Show password' : 'Hide password',
-                          onPressed: () => setState(() => _hidden = !_hidden),
-                          icon: Icon(
-                            _hidden ? LucideIcons.eye : LucideIcons.eyeOff,
-                            size: 18,
-                            color: tokens.textMuted,
+              Semantics(
+                // The hint goes as soon as a digit is typed: the name stays.
+                label: pin ? 'PIN' : 'Password',
+                child: TextField(
+                  controller: _controller,
+                  autofocus: true,
+                  obscureText: _hidden,
+                  enabled: !blocked,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  keyboardType: pin ? TextInputType.number : TextInputType.text,
+                  inputFormatters: pin
+                      ? [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(12),
+                        ]
+                      : null,
+                  style: tokens.body,
+                  textAlign: pin ? TextAlign.center : TextAlign.start,
+                  onChanged: (_) => setState(() => _message = null),
+                  onSubmitted: (_) => _unlock(),
+                  decoration: InputDecoration(
+                    hintText: pin ? 'PIN' : 'Password',
+                    hintStyle: tokens.body.copyWith(color: tokens.textMuted),
+                    filled: true,
+                    fillColor: tokens.surfaceSunken,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: GerfautSpacing.md,
+                      vertical: GerfautSpacing.sm + GerfautSpacing.xs,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                      borderSide: BorderSide(color: tokens.primary, width: 2),
+                    ),
+                    suffixIcon: pin
+                        ? null
+                        : IconButton(
+                            tooltip: _hidden
+                                ? 'Show password'
+                                : 'Hide password',
+                            onPressed: () => setState(() => _hidden = !_hidden),
+                            icon: Icon(
+                              _hidden ? LucideIcons.eye : LucideIcons.eyeOff,
+                              size: 18,
+                              color: tokens.textMuted,
+                            ),
                           ),
-                        ),
+                  ),
                 ),
               ),
               if (note != null) ...[
