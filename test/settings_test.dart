@@ -1059,6 +1059,36 @@ void main() {
       expect(saved.toJson(), {'type': 'public_esplora'});
     });
 
+    testWidgets('a chosen server gives way to Automatic again', (tester) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge(
+        settings: const Settings(
+          activeNetwork: Network.mainnet,
+          backends: {
+            Network.mainnet: PublicEsplora(server: 'blockstream.info'),
+          },
+          appPrefs: {},
+        ),
+      );
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
+      await tester.pumpAndSettle();
+      expect(serverField(tester).value, 'blockstream.info');
+
+      // Picked from the menu as a finger would, not handed to the field.
+      await tester.tap(find.byType(GerfautSelect<String?>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Automatic').last);
+      await tester.pumpAndSettle();
+      expect(serverField(tester).value, isNull);
+
+      await tester.tap(find.text('Save backend'));
+      await tester.pumpAndSettle();
+      final saved = bridge.savedBackends[Network.mainnet]! as PublicEsplora;
+      expect(saved.server, isNull);
+    });
+
     testWidgets('every server of the network is offered, protocol included', (
       tester,
     ) async {

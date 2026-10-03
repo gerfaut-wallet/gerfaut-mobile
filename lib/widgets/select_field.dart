@@ -106,10 +106,10 @@ class _GerfautSelectState<T> extends State<GerfautSelect<T>> {
 
   Future<void> _open() async {
     final wide = MediaQuery.sizeOf(context).width >= _anchoredFrom;
-    final T? picked = wide
+    final picked = wide
         ? await _showAnchored<T>(context, widget)
         : await _showSheet<T>(context, widget);
-    if (picked != null && mounted) widget.onChanged?.call(picked);
+    if (picked != null && mounted) widget.onChanged?.call(picked.value);
   }
 
   @override
@@ -194,15 +194,27 @@ class _GerfautSelectState<T> extends State<GerfautSelect<T>> {
   }
 }
 
+/// What a menu closes with: the option picked, wrapped. An option may
+/// be null itself, as "Automatic" is among the public servers, and a
+/// bare null could not tell that pick from a menu closed on nothing.
+class _Picked<T> {
+  const _Picked(this.value);
+
+  final T value;
+}
+
 /// The options under the field, on a floating card. Pops with the
-/// value picked, or null.
-Future<T?> _showAnchored<T>(BuildContext context, GerfautSelect<T> select) {
+/// value picked, or null when closed without a pick.
+Future<_Picked<T>?> _showAnchored<T>(
+  BuildContext context,
+  GerfautSelect<T> select,
+) {
   final box = context.findRenderObject()! as RenderBox;
   final overlay =
       Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
   final origin = box.localToGlobal(Offset.zero, ancestor: overlay);
   final field = origin & box.size;
-  return Navigator.of(context).push<T>(
+  return Navigator.of(context).push<_Picked<T>>(
     _AnchoredMenuRoute<T>(
       select: select,
       field: field,
@@ -213,10 +225,13 @@ Future<T?> _showAnchored<T>(BuildContext context, GerfautSelect<T> select) {
 }
 
 /// The options as a sheet from the bottom of a phone screen.
-Future<T?> _showSheet<T>(BuildContext context, GerfautSelect<T> select) {
+Future<_Picked<T>?> _showSheet<T>(
+  BuildContext context,
+  GerfautSelect<T> select,
+) {
   final tokens = Theme.of(context).extension<GerfautTokens>()!;
   final maxHeight = MediaQuery.sizeOf(context).height * _sheetShare;
-  return showModalBottomSheet<T>(
+  return showModalBottomSheet<_Picked<T>>(
     context: context,
     backgroundColor: tokens.surface,
     isScrollControlled: true,
@@ -269,7 +284,7 @@ Future<T?> _showSheet<T>(BuildContext context, GerfautSelect<T> select) {
               GerfautSpacing.sm + 2,
               GerfautSpacing.md,
             ),
-            onPick: (value) => Navigator.of(sheetContext).pop(value),
+            onPick: (value) => Navigator.of(sheetContext).pop(_Picked(value)),
           ),
         ),
       ],
@@ -279,7 +294,7 @@ Future<T?> _showSheet<T>(BuildContext context, GerfautSelect<T> select) {
 
 /// A menu that sits right under (or, short of room, above) its field,
 /// with a transparent barrier: the page stays in view.
-class _AnchoredMenuRoute<T> extends PopupRoute<T> {
+class _AnchoredMenuRoute<T> extends PopupRoute<_Picked<T>> {
   _AnchoredMenuRoute({
     required this.select,
     required this.field,
@@ -365,7 +380,8 @@ class _AnchoredMenuRoute<T> extends PopupRoute<T> {
                   child: _OptionList<T>(
                     select: select,
                     padding: const EdgeInsets.all(GerfautSpacing.xs + 2),
-                    onPick: (value) => Navigator.of(context).pop(value),
+                    onPick: (value) =>
+                        Navigator.of(context).pop(_Picked(value)),
                   ),
                 ),
               ),
