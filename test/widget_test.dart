@@ -531,7 +531,7 @@ void main() {
 
       expect(find.text('Live'), findsOneWidget);
       expect(find.text('Partly live'), findsOneWidget);
-      expect(find.text('Next sync'), findsOneWidget);
+      expect(find.text('At next sync'), findsOneWidget);
       // Read with its card, after the name and the balance.
       expect(
         find.bySemanticsLabel(

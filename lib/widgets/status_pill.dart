@@ -195,9 +195,9 @@ class LiveCoveragePill extends StatelessWidget {
       Coverage.syncOnly => const StatusPill.tone(
         tone: PillTone.pending,
         icon: LucideIcons.clock,
-        label: 'Next sync',
+        label: 'At next sync',
         semanticLabel:
-            'Next sync: a payment to this wallet shows at the next sync',
+            'At next sync: a payment to this wallet shows at the next sync',
       ),
     };
   }
