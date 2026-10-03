@@ -356,6 +356,9 @@ class _WalletListState extends ConsumerState<_WalletList> {
       _order = ids;
       _refused = null;
     });
+    // The lock may take the screen away during the round trip: the list
+    // is read again through the container, which outlives it.
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
       await ref.read(bridgeProvider).reorderWallets(ids);
       // Read the vault back, then let the local order go: the provider
@@ -363,15 +366,15 @@ class _WalletListState extends ConsumerState<_WalletList> {
       // back on the way, and an order set elsewhere afterwards — in the
       // settings, say — is followed here rather than overruled by a
       // drop long since landed. A newer drop keeps its own until then.
-      ref.invalidate(walletsProvider);
-      await ref.read(walletsProvider.future);
+      container.invalidate(walletsProvider);
+      await container.read(walletsProvider.future);
       if (!mounted || !identical(_order, ids)) return;
       setState(() => _order = null);
     } catch (error) {
       if (!mounted) return;
       // The vault kept whatever order it had: read it back rather than
       // trust the list in hand, and show that one under the note.
-      ref.invalidate(walletsProvider);
+      container.invalidate(walletsProvider);
       setState(() {
         _order = null;
         _refused = (ids: ids, reason: '$error');

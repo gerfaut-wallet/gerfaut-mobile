@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -495,6 +497,56 @@ void main() {
     await tester.pumpAndSettle();
     // The text stays for correction.
     expect(find.text('0200000001deadbeef'), findsOneWidget);
+  });
+
+  testWidgets('a send that outlives its screen is still remembered', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    final sent = Completer<BroadcastReport>();
+    final bridge = FakeBridge()
+      ..onPreview = ((_, _) => makePreview())
+      ..onBroadcast = ((_, _) => sent.future);
+    // A container of the test's own: it outlives the screen, as the
+    // app's does.
+    final container = ProviderContainer(
+      overrides: [
+        bridgeProvider.overrideWithValue(bridge),
+        disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: themeFrom(GerfautTokens.light, Brightness.light),
+          home: const BroadcastScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await preview(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Broadcast'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Broadcast').last);
+    await tester.pump();
+
+    // The lock takes the screen away while the transaction travels.
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: SizedBox()),
+      ),
+    );
+    sent.complete(
+      BroadcastReport(txid: fakeTxid, backend: 'mempool.space', at: 1),
+    );
+    await tester.pumpAndSettle();
+
+    expect(container.read(recentBroadcastsProvider).map((b) => b.txid), [
+      fakeTxid,
+    ]);
   });
 
   testWidgets('sending asks first, then follows the transaction', (

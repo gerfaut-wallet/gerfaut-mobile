@@ -188,6 +188,10 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
       _sending = true;
       _sendError = null;
     });
+    // Held before the await: a transaction sent while the lock took the
+    // screen away is still kept among the recent broadcasts, so its
+    // status is followed. `ref` dies with the screen.
+    final recent = ref.read(recentBroadcastsProvider.notifier);
     try {
       final report = await ref
           .read(bridgeProvider)
@@ -198,7 +202,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
         hex: hex,
         at: report.at,
       );
-      ref.read(recentBroadcastsProvider.notifier).add(record);
+      recent.add(record);
       if (!mounted) return;
       setState(() => _sent = (record: record, backend: report.backend));
     } on BridgeException catch (error) {

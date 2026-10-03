@@ -93,16 +93,20 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
       _gapLimitController.text = '$current';
       return;
     }
+    // Committed on blur, which leaving the page is too: the views are
+    // read again through the container, which outlives the page.
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
       await ref.read(bridgeProvider).setGapLimit(parsed);
+      container.invalidate(settingsProvider);
+      container.invalidate(walletsProvider);
+      container.invalidate(snapshotProvider);
+      if (!mounted) return;
       _seededGapLimit = parsed;
       _gapLimitController.text = '$parsed';
-      ref.invalidate(settingsProvider);
-      ref.invalidate(walletsProvider);
-      ref.invalidate(snapshotProvider);
-      if (mounted) _toast('Setting saved');
+      _toast('Setting saved');
     } catch (_) {
-      _gapLimitController.text = '$current';
+      if (mounted) _gapLimitController.text = '$current';
     }
   }
 
@@ -114,14 +118,16 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
   Future<void> _rename(String id) async {
     final name = _renameController.text.trim();
     if (name.isEmpty) return;
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
       await ref.read(bridgeProvider).renameWallet(id, name);
-      ref.invalidate(walletsProvider);
-      ref.invalidate(snapshotProvider(id));
+      container.invalidate(walletsProvider);
+      container.invalidate(snapshotProvider(id));
+      if (!mounted) return;
       setState(() => _renamingId = null);
       _toast('Setting saved');
     } catch (error) {
-      setState(() => _walletError = '$error');
+      if (mounted) setState(() => _walletError = '$error');
     }
   }
 
@@ -185,10 +191,11 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
     final chosen = await WalletIconPicker.show(context, current: wallet.icon);
     if (chosen == null || chosen == wallet.icon || !mounted) return;
     setState(() => _walletError = null);
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
       await ref.read(bridgeProvider).setWalletIcon(wallet.id, chosen);
-      ref.invalidate(walletsProvider);
-      ref.invalidate(snapshotProvider(wallet.id));
+      container.invalidate(walletsProvider);
+      container.invalidate(snapshotProvider(wallet.id));
       if (mounted) _toast('Setting saved');
     } catch (error) {
       if (mounted) setState(() => _walletError = '$error');
@@ -219,14 +226,15 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
       _order = ids;
       _walletError = null;
     });
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
       await ref.read(bridgeProvider).reorderWallets(ids);
       // Read the vault back, then let the local order go: nothing snaps
       // back on the way, and an order set on the home screen afterwards
       // is followed here rather than overruled by a drop long since
       // landed. A newer drop keeps its own until then.
-      ref.invalidate(walletsProvider);
-      await ref.read(walletsProvider.future);
+      container.invalidate(walletsProvider);
+      await container.read(walletsProvider.future);
       if (!mounted || !identical(_order, ids)) return;
       setState(() => _order = null);
     } catch (error) {

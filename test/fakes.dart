@@ -1076,8 +1076,13 @@ class FakeBridge implements GerfautBridge {
     );
   }
 
+  /// Network switch hook; throw a [BridgeException] to have the vault
+  /// refuse it.
+  void Function(Network network)? onSetActiveNetwork;
+
   @override
   Future<void> setActiveNetwork(Network network) async {
+    onSetActiveNetwork?.call(network);
     lastActiveNetworkSet = network;
     _store(activeNetwork: network);
   }

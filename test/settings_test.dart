@@ -1026,6 +1026,26 @@ void main() {
     });
   });
 
+  testWidgets('a network switch the vault refuses is said, nothing moves', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge()
+      ..onSetActiveNetwork = (_) {
+        throw const BridgeException('storage', 'The vault could not save.');
+      };
+    await tester.pumpWidget(
+      settingsApp(bridge, section: SettingsSection.network),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Signet'));
+    await tester.pumpAndSettle();
+    expect(find.text('The vault could not save.'), findsOneWidget);
+    expect(find.text('Setting saved'), findsNothing);
+    expect(find.text('Backend · Mainnet'), findsOneWidget);
+  });
+
   group('public server choice', () {
     testWidgets('the public backend defaults to the automatic rotation', (
       tester,

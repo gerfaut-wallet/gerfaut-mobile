@@ -80,6 +80,9 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
   /// the button that asked, until the form changes.
   String? _saveError;
 
+  /// Why the last switch of network was refused.
+  String? _networkError;
+
   /// The last scanned address names a Tor hidden service. Said under the
   /// fields for as long as they hold what was scanned: a keystroke or
   /// another backend option and the fact no longer describes them.
@@ -135,10 +138,19 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
+  /// Switches the workspace network. A refusal is said under the
+  /// cards; the lists are read again even if the page was left meanwhile.
   Future<void> _setNetwork(Network network) async {
-    await ref.read(bridgeProvider).setActiveNetwork(network);
-    ref.invalidate(settingsProvider);
-    ref.invalidate(walletsProvider);
+    final container = ProviderScope.containerOf(context, listen: false);
+    setState(() => _networkError = null);
+    try {
+      await ref.read(bridgeProvider).setActiveNetwork(network);
+    } on BridgeException catch (error) {
+      if (mounted) setState(() => _networkError = error.message);
+      return;
+    }
+    container.invalidate(settingsProvider);
+    container.invalidate(walletsProvider);
     if (mounted) _toast('Setting saved');
   }
 
@@ -400,6 +412,16 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
               'Only wallets on the selected network are shown.',
               style: tokens.bodySmall.copyWith(color: tokens.textMuted),
             ),
+            if (_networkError != null) ...[
+              const SizedBox(height: GerfautSpacing.xs),
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  _networkError!,
+                  style: tokens.bodySmall.copyWith(color: tokens.pending),
+                ),
+              ),
+            ],
           ],
         ),
         SectionCard(

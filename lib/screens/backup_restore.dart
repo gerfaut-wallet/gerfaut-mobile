@@ -236,7 +236,8 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
       );
       // The workspace follows the restored wallets when none of them is
       // on the active network, otherwise they would land invisible.
-      var active = (await ref.read(settingsProvider.future)).activeNetwork;
+      var active = (await container.read(settingsProvider.future))
+          .activeNetwork;
       final added = report.added;
       if (added.isNotEmpty && !added.any((w) => w.network == active)) {
         active = added.first.network;
