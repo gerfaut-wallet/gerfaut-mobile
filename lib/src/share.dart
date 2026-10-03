@@ -2,6 +2,7 @@
 // behind small interfaces so widget tests substitute fakes instead of
 // touching the path_provider and share_plus plugins.
 
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -9,27 +10,52 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-/// Writes a CSV somewhere temporary and offers it to the system share
-/// sheet under `filename`.
+/// Offers a CSV to the system share sheet under `filename`.
 abstract class CsvSharer {
   Future<void> shareCsv({required String csv, required String filename});
 }
 
-/// The real sharer: a file in the app's temporary directory, then the
-/// platform share sheet. The file never leaves the device unless the
-/// user picks a target that sends it.
+/// The real sharer: the text goes straight to the share sheet, as a
+/// backup does, never written by Gerfaut to a file of its own. A history
+/// left in the cache, amounts, txids and labels in the clear, would
+/// outlive the wallet it came from and the vault that keeps it sealed.
 class SystemCsvSharer implements CsvSharer {
   const SystemCsvSharer();
 
   @override
   Future<void> shareCsv({required String csv, required String filename}) async {
-    final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}${Platform.pathSeparator}$filename');
-    await file.writeAsString(csv);
+    await forgetCsvCopies();
     await SharePlus.instance.share(
-      ShareParams(files: [XFile(file.path, mimeType: 'text/csv')]),
+      ShareParams(
+        files: [
+          XFile.fromData(
+            Uint8List.fromList(utf8.encode(csv)),
+            mimeType: 'text/csv',
+            name: filename,
+          ),
+        ],
+        fileNameOverrides: [filename],
+      ),
     );
   }
+}
+
+/// Deletes the histories earlier builds wrote to the cache to share
+/// them, and never deleted. Answers how many went.
+Future<int> forgetCsvCopies([Directory? cache]) async {
+  final dir = cache ?? await getTemporaryDirectory();
+  var gone = 0;
+  try {
+    await for (final entry in dir.list()) {
+      if (entry is File && entry.path.endsWith('-transactions.csv')) {
+        await entry.delete();
+        gone++;
+      }
+    }
+  } on FileSystemException {
+    // A cache that cannot be listed holds nothing to delete here.
+  }
+  return gone;
 }
 
 /// The sharer in use. Widget tests override this with a fake.

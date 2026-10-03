@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -326,5 +327,19 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  test('histories left in the cache by earlier builds are deleted', () async {
+    final cache = await Directory.systemTemp.createTemp('gerfaut-cache');
+    addTearDown(() => cache.delete(recursive: true));
+    final old = File(
+      '${cache.path}${Platform.pathSeparator}savings-transactions.csv',
+    )..writeAsStringSync('txid,amount');
+    final other = File('${cache.path}${Platform.pathSeparator}keep.txt')
+      ..writeAsStringSync('not ours');
+
+    expect(await forgetCsvCopies(cache), 1);
+    expect(old.existsSync(), isFalse);
+    expect(other.existsSync(), isTrue);
   });
 }
