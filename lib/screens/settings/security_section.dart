@@ -16,6 +16,7 @@ import '../../widgets/choice_group.dart';
 import '../../widgets/notice.dart';
 import '../../widgets/password_field.dart';
 import '../../widgets/section_card.dart';
+import '../../widgets/setting_switch.dart';
 import '../confirm_identity.dart';
 
 /// The settings card that turns the lock on and changes its secret.
@@ -207,36 +208,14 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
       icon: LucideIcons.lock,
       title: 'Security',
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'App lock',
-                    style: tokens.bodySmall.copyWith(
-                      fontWeight: FontWeight.w500,
-                      fontVariations: const [FontVariation('wght', 500)],
-                    ),
-                  ),
-                  Text(
-                    'Asked when Gerfaut opens and every time it comes back '
-                    'from the background. The vault is encrypted either way; '
-                    'the lock is what stops someone holding your unlocked '
-                    'phone.',
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: GerfautSpacing.sm),
-            Switch(
-              value: lock != null,
-              onChanged: (on) => on ? _setLock() : _turnOff(lock!.kind),
-            ),
-          ],
+        SettingSwitch(
+          title: 'App lock',
+          hint:
+              'Asked when Gerfaut opens and every time it comes back from '
+              'the background. The vault is encrypted either way; the lock '
+              'is what stops someone holding your unlocked phone.',
+          value: lock != null,
+          onChanged: (on) => on ? _setLock() : _turnOff(lock!.kind),
         ),
         if (lock != null) ...[
           const SizedBox(height: GerfautSpacing.sm),
@@ -258,55 +237,22 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
           ),
           if (canBiometrics) ...[
             const SizedBox(height: GerfautSpacing.md),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Unlock with biometrics',
-                    style: tokens.bodySmall.copyWith(
-                      fontWeight: FontWeight.w500,
-                      fontVariations: const [FontVariation('wght', 500)],
-                    ),
-                  ),
-                ),
-                Switch(
-                  value: lock.biometric,
-                  onChanged: (on) => _setBiometric(on, lock.kind),
-                ),
-              ],
+            SettingSwitch(
+              title: 'Unlock with biometrics',
+              value: lock.biometric,
+              onChanged: (on) => _setBiometric(on, lock.kind),
             ),
           ],
           const SizedBox(height: GerfautSpacing.md),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Disguise the app',
-                      style: tokens.bodySmall.copyWith(
-                        fontWeight: FontWeight.w500,
-                        fontVariations: const [FontVariation('wght', 500)],
-                      ),
-                    ),
-                    Text(
-                      'Shows a calculator in the launcher. Open the wallet by '
-                      'typing your PIN, then =.',
-                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: GerfautSpacing.sm),
-              Switch(
-                value: disguised,
-                // A password is not something you type into a calculator:
-                // the disguise needs a PIN lock.
-                onChanged: pinLock ? _setDisguise : null,
-              ),
-            ],
+          SettingSwitch(
+            title: 'Disguise the app',
+            hint:
+                'Shows a calculator in the launcher. Open the wallet by '
+                'typing your PIN, then =.',
+            value: disguised,
+            // A password is not something you type into a calculator: the
+            // disguise needs a PIN lock.
+            onChanged: pinLock ? _setDisguise : null,
           ),
           if (!pinLock) ...[
             const SizedBox(height: GerfautSpacing.xs),

@@ -11,6 +11,7 @@ import '../../widgets/buttons.dart';
 import '../../widgets/facts.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/select_field.dart';
+import '../../widgets/setting_switch.dart';
 import 'live_sheet.dart';
 
 /// The settings card for what Gerfaut says on its own: a notice when a
@@ -46,36 +47,14 @@ class NotificationsSection extends ConsumerWidget {
       icon: LucideIcons.bell,
       title: 'Notifications',
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'New transactions',
-                    style: tokens.bodySmall.copyWith(
-                      fontWeight: FontWeight.w500,
-                      fontVariations: const [FontVariation('wght', 500)],
-                    ),
-                  ),
-                  Text(
-                    'A notification when a sync finds a transaction you '
-                    'have not seen. Amounts follow the display unit and '
-                    'stay hidden while balances are masked.',
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: GerfautSpacing.sm),
-            Switch(
-              value: on,
-              onChanged: (next) =>
-                  ref.read(notifyNewTxProvider.notifier).set(next),
-            ),
-          ],
+        SettingSwitch(
+          title: 'New transactions',
+          hint:
+              'A notification when a sync finds a transaction you have not '
+              'seen. Amounts follow the display unit and stay hidden while '
+              'balances are masked.',
+          value: on,
+          onChanged: (next) => ref.read(notifyNewTxProvider.notifier).set(next),
         ),
         if (refused) ...[
           const SizedBox(height: GerfautSpacing.sm),

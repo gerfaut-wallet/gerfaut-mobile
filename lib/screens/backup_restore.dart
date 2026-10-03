@@ -17,6 +17,7 @@ import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/password_field.dart';
 import '../widgets/pinned_action_form.dart';
+import '../widgets/setting_switch.dart';
 import 'scan.dart';
 
 /// Opens the system file picker; tests hand back a file of their own.
@@ -403,37 +404,13 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
         ),
         if (preview.hasSettings) ...[
           const SizedBox(height: GerfautSpacing.md),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Apply node settings',
-                      style: tokens.bodySmall.copyWith(
-                        fontWeight: FontWeight.w500,
-                        fontVariations: const [FontVariation('wght', 500)],
-                      ),
-                    ),
-                    Text(
-                      'Replaces your backend choice, accepted certificates '
-                      "and gap limit with the backup's.",
-                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: GerfautSpacing.sm),
-              Switch(
-                value: _applySettings,
-                activeThumbColor: tokens.onPrimary,
-                activeTrackColor: tokens.primary,
-                inactiveThumbColor: tokens.textMuted,
-                inactiveTrackColor: tokens.surfaceSunken,
-                onChanged: (value) => setState(() => _applySettings = value),
-              ),
-            ],
+          SettingSwitch(
+            title: 'Apply node settings',
+            hint:
+                'Replaces your backend choice, accepted certificates and gap '
+                "limit with the backup's.",
+            value: _applySettings,
+            onChanged: (value) => setState(() => _applySettings = value),
           ),
           if (preview.backends.isNotEmpty ||
               preview.electrumHosts.isNotEmpty) ...[

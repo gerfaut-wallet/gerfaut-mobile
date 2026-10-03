@@ -11,6 +11,7 @@ import '../../src/updates.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/section_card.dart';
+import '../../widgets/setting_switch.dart';
 import '../welcome.dart';
 
 export '../../src/updates.dart' show appVersion;
@@ -126,42 +127,17 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
           ],
         ),
         const SizedBox(height: GerfautSpacing.md),
-        // One node for a screen reader: the switch is read with its name.
-        MergeSemantics(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Check automatically',
-                      style: tokens.bodySmall.copyWith(
-                        fontWeight: FontWeight.w500,
-                        fontVariations: const [FontVariation('wght', 500)],
-                      ),
-                    ),
-                    Text(
-                      'Once a day at most, when you open Gerfaut, it asks '
-                      'GitHub for the latest release. GitHub sees your IP '
-                      'address and nothing about your wallets. When one of '
-                      'your nodes is a .onion address, the request goes '
-                      'through Tor instead, or not at all if Tor cannot be '
-                      'reached. Nothing is asked while the app is disguised.',
-                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: GerfautSpacing.sm),
-              Switch(
-                value: automatic,
-                onChanged: (on) =>
-                    ref.read(updateProvider.notifier).setAutomatic(on),
-              ),
-            ],
-          ),
+        SettingSwitch(
+          title: 'Check automatically',
+          hint:
+              'Once a day at most, when you open Gerfaut, it asks GitHub for '
+              'the latest release. GitHub sees your IP address and nothing '
+              'about your wallets. When one of your nodes is a .onion '
+              'address, the request goes through Tor instead, or not at all '
+              'if Tor cannot be reached. Nothing is asked while the app is '
+              'disguised.',
+          value: automatic,
+          onChanged: (on) => ref.read(updateProvider.notifier).setAutomatic(on),
         ),
         const SizedBox(height: GerfautSpacing.sm),
         Align(

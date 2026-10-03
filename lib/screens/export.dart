@@ -18,6 +18,7 @@ import '../widgets/buttons.dart';
 import '../widgets/choice_group.dart';
 import '../widgets/notice.dart';
 import '../widgets/premium_pill.dart';
+import '../widgets/setting_switch.dart';
 
 /// Where an exported file goes: written where the user points, or
 /// handed to the system share sheet.
@@ -242,88 +243,26 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                         setState(() => _direction = direction),
                   ),
                   const SizedBox(height: GerfautSpacing.md),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Include pending',
-                              style: tokens.bodySmall.copyWith(
-                                fontWeight: FontWeight.w500,
-                                fontVariations: const [
-                                  FontVariation('wght', 500),
-                                ],
-                              ),
-                            ),
-                            Text(
-                              'Pending transactions have no date yet: they '
-                              'only export without date bounds.',
-                              style: tokens.bodySmall.copyWith(
-                                color: tokens.textMuted,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: GerfautSpacing.sm),
-                      Switch(
-                        value: _includePending,
-                        activeThumbColor: tokens.onPrimary,
-                        activeTrackColor: tokens.primary,
-                        inactiveThumbColor: tokens.textMuted,
-                        inactiveTrackColor: tokens.surfaceSunken,
-                        onChanged: (value) =>
-                            setState(() => _includePending = value),
-                      ),
-                    ],
+                  SettingSwitch(
+                    title: 'Include pending',
+                    hint:
+                        'Pending transactions have no date yet: they only '
+                        'export without date bounds.',
+                    value: _includePending,
+                    onChanged: (value) =>
+                        setState(() => _includePending = value),
                   ),
                   const SizedBox(height: GerfautSpacing.md),
                   Divider(height: 1, thickness: 1, color: tokens.border),
                   const SizedBox(height: GerfautSpacing.md),
                   // The premium teaser states what the server will add,
                   // nothing more: no nagging, no dead-end tap target.
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Wrap(
-                              spacing: GerfautSpacing.sm,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                Text(
-                                  'Fiat value at transaction time',
-                                  style: tokens.bodySmall.copyWith(
-                                    fontWeight: FontWeight.w500,
-                                    fontVariations: const [
-                                      FontVariation('wght', 500),
-                                    ],
-                                  ),
-                                ),
-                                const PremiumPill(),
-                              ],
-                            ),
-                            Text(
-                              "Adds the price at each transaction's date to "
-                              'the file.',
-                              style: tokens.bodySmall.copyWith(
-                                color: tokens.textMuted,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: GerfautSpacing.sm),
-                      Switch(
-                        value: false,
-                        inactiveThumbColor: tokens.textMuted,
-                        inactiveTrackColor: tokens.surfaceSunken,
-                        onChanged: null,
-                      ),
-                    ],
+                  const SettingSwitch(
+                    title: 'Fiat value at transaction time',
+                    badge: PremiumPill(),
+                    hint: "Adds the price at each transaction's date to the file.",
+                    value: false,
+                    onChanged: null,
                   ),
                 ],
               ),

@@ -496,19 +496,22 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
                   const SizedBox(width: GerfautSpacing.md),
                   Padding(
                     padding: const EdgeInsets.only(bottom: GerfautSpacing.sm),
-                    child: Row(
-                      children: [
-                        Switch(
-                          value: _tls,
-                          activeThumbColor: tokens.onPrimary,
-                          activeTrackColor: tokens.primary,
-                          inactiveThumbColor: tokens.textMuted,
-                          inactiveTrackColor: tokens.surfaceSunken,
-                          onChanged: (value) => setState(() => _tls = value),
-                        ),
-                        const SizedBox(width: GerfautSpacing.xs),
-                        Text('TLS', style: tokens.bodySmall),
-                      ],
+                    // One node: the switch is read with its name.
+                    child: MergeSemantics(
+                      child: Row(
+                        children: [
+                          Switch(
+                            value: _tls,
+                            activeThumbColor: tokens.onPrimary,
+                            activeTrackColor: tokens.primary,
+                            inactiveThumbColor: tokens.textMuted,
+                            inactiveTrackColor: tokens.surfaceSunken,
+                            onChanged: (value) => setState(() => _tls = value),
+                          ),
+                          const SizedBox(width: GerfautSpacing.xs),
+                          Text('TLS', style: tokens.bodySmall),
+                        ],
+                      ),
                     ),
                   ),
                 ],

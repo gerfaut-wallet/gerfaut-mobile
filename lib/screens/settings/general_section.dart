@@ -10,6 +10,7 @@ import '../../widgets/choice_group.dart';
 import '../../widgets/facts.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/select_field.dart';
+import '../../widgets/setting_switch.dart';
 
 /// The General section: how amounts are shown, and which theme the app
 /// wears. Two cards, Display and Appearance.
@@ -53,39 +54,12 @@ class GeneralSection extends ConsumerWidget {
               onChanged: (unit) => ref.read(unitProvider.notifier).set(unit),
             ),
             const SizedBox(height: GerfautSpacing.md),
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Fiat value',
-                        style: tokens.bodySmall.copyWith(
-                          fontWeight: FontWeight.w500,
-                          fontVariations: const [FontVariation('wght', 500)],
-                        ),
-                      ),
-                      Text(
-                        'Shows the fiat value next to every amount.',
-                        style: tokens.bodySmall.copyWith(
-                          color: tokens.textMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: GerfautSpacing.sm),
-                Switch(
-                  value: ref.watch(fiatEnabledProvider),
-                  activeThumbColor: tokens.onPrimary,
-                  activeTrackColor: tokens.primary,
-                  inactiveThumbColor: tokens.textMuted,
-                  inactiveTrackColor: tokens.surfaceSunken,
-                  onChanged: (value) =>
-                      ref.read(fiatEnabledProvider.notifier).set(value),
-                ),
-              ],
+            SettingSwitch(
+              title: 'Fiat value',
+              hint: 'Shows the fiat value next to every amount.',
+              value: ref.watch(fiatEnabledProvider),
+              onChanged: (value) =>
+                  ref.read(fiatEnabledProvider.notifier).set(value),
             ),
             if (ref.watch(fiatEnabledProvider)) ...[
               const SizedBox(height: GerfautSpacing.md),

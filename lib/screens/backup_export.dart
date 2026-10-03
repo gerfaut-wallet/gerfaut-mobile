@@ -19,6 +19,7 @@ import '../widgets/facts.dart';
 import '../widgets/notice.dart';
 import '../widgets/password_field.dart';
 import '../widgets/pinned_action_form.dart';
+import '../widgets/setting_switch.dart';
 import 'backup_qr.dart';
 
 /// Shortest password the core accepts, after trimming. Checked here too
@@ -280,37 +281,11 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
           onChanged: (scope) => setState(() => _scope = scope),
         ),
         const SizedBox(height: GerfautSpacing.md),
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Include node settings',
-                    style: tokens.bodySmall.copyWith(
-                      fontWeight: FontWeight.w500,
-                      fontVariations: const [FontVariation('wght', 500)],
-                    ),
-                  ),
-                  Text(
-                    'Your backend choice, accepted certificates and gap '
-                    'limit.',
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: GerfautSpacing.sm),
-            Switch(
-              value: _includeSettings,
-              activeThumbColor: tokens.onPrimary,
-              activeTrackColor: tokens.primary,
-              inactiveThumbColor: tokens.textMuted,
-              inactiveTrackColor: tokens.surfaceSunken,
-              onChanged: (value) => setState(() => _includeSettings = value),
-            ),
-          ],
+        SettingSwitch(
+          title: 'Include node settings',
+          hint: 'Your backend choice, accepted certificates and gap limit.',
+          value: _includeSettings,
+          onChanged: (value) => setState(() => _includeSettings = value),
         ),
         const SizedBox(height: GerfautSpacing.md),
         PasswordField(
