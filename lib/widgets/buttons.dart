@@ -199,14 +199,30 @@ class GhostButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.icon,
+    this.expanded,
   });
 
   final String label;
   final VoidCallback? onPressed;
   final IconData? icon;
 
+  /// For a button that folds a part of the page in and out: whether it
+  /// is open, said to a screen reader with the button. Null for any
+  /// other button.
+  final bool? expanded;
+
   @override
   Widget build(BuildContext context) {
+    final expanded = this.expanded;
+    final button = _button(context);
+    if (expanded == null) return button;
+    // One node: the button, and whether what it folds is open.
+    return MergeSemantics(
+      child: Semantics(expanded: expanded, child: button),
+    );
+  }
+
+  Widget _button(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     return SizedBox(
       height: 44,

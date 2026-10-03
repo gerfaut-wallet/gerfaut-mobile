@@ -712,27 +712,38 @@ class _RawTransactionState extends State<_RawTransaction> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        InkWell(
-          borderRadius: BorderRadius.circular(GerfautRadius.sm),
-          onTap: () => setState(() => _open = !_open),
-          child: Padding(
-            // 44px tap target around a one-line disclosure.
-            padding: const EdgeInsets.symmetric(
-              vertical: GerfautSpacing.sm + GerfautSpacing.xs,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  _open ? LucideIcons.chevronDown : LucideIcons.chevronRight,
-                  size: 14,
-                  color: tokens.textMuted,
+        // One node: a button that says whether the raw bytes are open.
+        MergeSemantics(
+          child: Semantics(
+            button: true,
+            expanded: _open,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(GerfautRadius.sm),
+              onTap: () => setState(() => _open = !_open),
+              child: Padding(
+                // 44px tap target around a one-line disclosure.
+                padding: const EdgeInsets.symmetric(
+                  vertical: GerfautSpacing.sm + GerfautSpacing.xs,
                 ),
-                const SizedBox(width: GerfautSpacing.xs),
-                // Tracked and uppercase, the label runs past the edge of
-                // a phone at a large text size: it wraps instead.
-                Flexible(child: FieldLabel('Raw transaction', tokens: tokens)),
-              ],
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _open
+                          ? LucideIcons.chevronDown
+                          : LucideIcons.chevronRight,
+                      size: 14,
+                      color: tokens.textMuted,
+                    ),
+                    const SizedBox(width: GerfautSpacing.xs),
+                    // Tracked and uppercase, the label runs past the edge of
+                    // a phone at a large text size: it wraps instead.
+                    Flexible(
+                      child: FieldLabel('Raw transaction', tokens: tokens),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),

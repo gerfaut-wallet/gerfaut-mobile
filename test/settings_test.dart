@@ -1046,6 +1046,40 @@ void main() {
     expect(find.text('Backend · Mainnet'), findsOneWidget);
   });
 
+  testWidgets('the network and backend cards read as one choice of many', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(
+      settingsApp(FakeBridge(), section: SettingsSection.network),
+    );
+    await tester.pumpAndSettle();
+
+    final mainnet = tester.getSemantics(
+      find.bySemanticsLabel(RegExp('^Mainnet')),
+    );
+    expect(mainnet.flagsCollection.isSelected, Tristate.isTrue);
+    expect(mainnet.flagsCollection.isInMutuallyExclusiveGroup, isTrue);
+    final signet = tester.getSemantics(
+      find.bySemanticsLabel(RegExp('^Signet')),
+    );
+    expect(signet.flagsCollection.isSelected, Tristate.isFalse);
+    final public = tester.getSemantics(
+      find.bySemanticsLabel(RegExp('^Public API')),
+    );
+    expect(public.flagsCollection.isSelected, Tristate.isTrue);
+    // The card titles are headings to jump between.
+    expect(
+      tester
+          .getSemantics(find.bySemanticsLabel('Network').first)
+          .flagsCollection
+          .isHeader,
+      isTrue,
+    );
+    handle.dispose();
+  });
+
   group('public server choice', () {
     testWidgets('the public backend defaults to the automatic rotation', (
       tester,

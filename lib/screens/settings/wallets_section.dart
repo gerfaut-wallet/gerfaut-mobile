@@ -507,16 +507,11 @@ class _LivePinsState extends ConsumerState<_LivePins> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // One node, read as a button that says whether it is open.
-          MergeSemantics(
-            child: Semantics(
-              expanded: _open,
-              child: GhostButton(
-                label: label,
-                icon: _open ? LucideIcons.chevronUp : LucideIcons.chevronDown,
-                onPressed: () => setState(() => _open = !_open),
-              ),
-            ),
+          GhostButton(
+            label: label,
+            icon: _open ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+            expanded: _open,
+            onPressed: () => setState(() => _open = !_open),
           ),
           if (_open) ...[
             const SizedBox(height: GerfautSpacing.xs),

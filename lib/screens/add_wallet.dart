@@ -467,6 +467,7 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
             child: GhostButton(
               label: 'Advanced',
               icon: _advanced ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+              expanded: _advanced,
               onPressed: () => setState(() => _advanced = !_advanced),
             ),
           ),

@@ -556,6 +556,7 @@ class _AddressCardState extends State<_AddressCard> {
                   icon: _expanded
                       ? LucideIcons.chevronUp
                       : LucideIcons.chevronDown,
+                  expanded: _expanded,
                   onPressed: () => setState(() => _expanded = !_expanded),
                 ),
               ),

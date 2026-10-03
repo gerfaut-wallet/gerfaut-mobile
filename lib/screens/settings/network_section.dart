@@ -664,41 +664,53 @@ class _NetworkCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    return InkWell(
-      borderRadius: BorderRadius.circular(GerfautRadius.md),
-      onTap: selected ? null : onTap,
-      child: Container(
-        padding: const EdgeInsets.all(GerfautSpacing.sm + GerfautSpacing.xs),
-        decoration: BoxDecoration(
-          color: selected ? tokens.surfaceSunken : tokens.surface,
+    // One of four, read as such: which one is in use, among how many.
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        inMutuallyExclusiveGroup: true,
+        selected: selected,
+        child: InkWell(
           borderRadius: BorderRadius.circular(GerfautRadius.md),
-          border: Border.all(color: selected ? tokens.primary : tokens.border),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+          onTap: selected ? null : onTap,
+          child: Container(
+            padding: const EdgeInsets.all(
+              GerfautSpacing.sm + GerfautSpacing.xs,
+            ),
+            decoration: BoxDecoration(
+              color: selected ? tokens.surfaceSunken : tokens.surface,
+              borderRadius: BorderRadius.circular(GerfautRadius.md),
+              border: Border.all(
+                color: selected ? tokens.primary : tokens.border,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text(
-                    entry.network.label,
-                    style: tokens.bodySmall.copyWith(
-                      color: selected ? tokens.primary : tokens.text,
-                      fontWeight: FontWeight.w500,
-                      fontVariations: const [FontVariation('wght', 500)],
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        entry.network.label,
+                        style: tokens.bodySmall.copyWith(
+                          color: selected ? tokens.primary : tokens.text,
+                          fontWeight: FontWeight.w500,
+                          fontVariations: const [FontVariation('wght', 500)],
+                        ),
+                      ),
                     ),
-                  ),
+                    if (selected)
+                      Icon(LucideIcons.check, size: 15, color: tokens.primary),
+                  ],
                 ),
-                if (selected)
-                  Icon(LucideIcons.check, size: 15, color: tokens.primary),
+                const SizedBox(height: 2),
+                Text(
+                  entry.hint,
+                  style: tokens.label.copyWith(color: tokens.textMuted),
+                ),
               ],
             ),
-            const SizedBox(height: 2),
-            Text(
-              entry.hint,
-              style: tokens.label.copyWith(color: tokens.textMuted),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -899,63 +911,73 @@ class _BackendOption extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final selected = value == groupValue;
-    return InkWell(
-      borderRadius: BorderRadius.circular(GerfautRadius.md),
-      onTap: () => onChanged(value),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: GerfautSpacing.sm),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // The dot rides the first line of a label that wraps, by
-            // measurement — the 2px nudge it replaces was right at one
-            // font size and wrong at every other.
-            FirstLine(
-              style: tokens.bodySmall,
-              child: Container(
-                width: 20,
-                height: 20,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: selected ? tokens.primary : tokens.border,
-                    width: 2,
+    // One of three, read as such: the drawn circle says nothing aloud.
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        inMutuallyExclusiveGroup: true,
+        selected: selected,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(GerfautRadius.md),
+          onTap: () => onChanged(value),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: GerfautSpacing.sm),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // The dot rides the first line of a label that wraps, by
+                // measurement — the 2px nudge it replaces was right at one
+                // font size and wrong at every other.
+                FirstLine(
+                  style: tokens.bodySmall,
+                  child: Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: selected ? tokens.primary : tokens.border,
+                        width: 2,
+                      ),
+                    ),
+                    child: selected
+                        ? Center(
+                            child: Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: tokens.primary,
+                              ),
+                            ),
+                          )
+                        : null,
                   ),
                 ),
-                child: selected
-                    ? Center(
-                        child: Container(
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: tokens.primary,
-                          ),
+                const SizedBox(width: GerfautSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: tokens.bodySmall.copyWith(
+                          fontWeight: FontWeight.w500,
+                          fontVariations: const [FontVariation('wght', 500)],
                         ),
-                      )
-                    : null,
-              ),
-            ),
-            const SizedBox(width: GerfautSpacing.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: tokens.bodySmall.copyWith(
-                      fontWeight: FontWeight.w500,
-                      fontVariations: const [FontVariation('wght', 500)],
-                    ),
+                      ),
+                      Text(
+                        hint,
+                        style: tokens.bodySmall.copyWith(
+                          color: tokens.textMuted,
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    hint,
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

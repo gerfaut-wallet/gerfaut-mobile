@@ -169,10 +169,22 @@ class _SectionTitle extends StatelessWidget {
           // width: at a doubled text scale on a narrow frame a one-word
           // title ran off the card rather than wrapping onto a second
           // line. With an action at the end, the title takes the rest.
+          // A heading for a screen reader too: one swipe from section to
+          // section, as the eye goes from card to card.
           if (trailing == null)
-            Flexible(child: Text(title, style: tokens.h2))
+            Flexible(
+              child: Semantics(
+                header: true,
+                child: Text(title, style: tokens.h2),
+              ),
+            )
           else ...[
-            Expanded(child: Text(title, style: tokens.h2)),
+            Expanded(
+              child: Semantics(
+                header: true,
+                child: Text(title, style: tokens.h2),
+              ),
+            ),
             const SizedBox(width: GerfautSpacing.sm),
             trailing!,
           ],
