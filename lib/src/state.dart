@@ -73,11 +73,12 @@ final addressListProvider = FutureProvider.family<AddressList, String>((
 /// `lookahead` unused addresses past it, 200 at most: the core skips
 /// one a payment already reached, and a descriptor without a wildcard
 /// gives its one address alone. Peeking retires nothing.
-final receiveProvider =
-    FutureProvider.family<
-      List<AddressEntry>,
-      ({String walletId, int lookahead})
-    >((ref, key) {
+///
+/// Read afresh each time Receive opens, and again after every sync of
+/// any wallet: an address a payment just reached is never offered to
+/// the next payer.
+final receiveProvider = FutureProvider.autoDispose
+    .family<List<AddressEntry>, ({String walletId, int lookahead})>((ref, key) {
       return ref
           .watch(bridgeProvider)
           .receiveAddresses(key.walletId, key.lookahead);
@@ -388,6 +389,9 @@ class SyncController extends Notifier<Set<String>> {
       ref.invalidate(addressListProvider);
     }
     ref.invalidate(txDetailProvider);
+    // Keyed by wallet and lookahead: every address on offer is read
+    // again, since the one shown may be the one just paid.
+    ref.invalidate(receiveProvider);
   }
 
   /// A sync that did not start here changed this wallet: the live
