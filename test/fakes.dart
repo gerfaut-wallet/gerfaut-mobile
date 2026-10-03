@@ -70,7 +70,6 @@ class FakeLivePlatform implements LivePlatform {
     this.wanted = false,
     this.batteryExempt = false,
     this.grantsExemption = true,
-    this.startSucceeds = true,
     this.maker = 'Google',
     this.opensAppSettings = true,
   });
@@ -79,7 +78,6 @@ class FakeLivePlatform implements LivePlatform {
   bool wanted;
   bool batteryExempt;
   bool grantsExemption;
-  bool startSucceeds;
   String maker;
   bool opensAppSettings;
 
@@ -90,8 +88,8 @@ class FakeLivePlatform implements LivePlatform {
   Future<bool> start() async {
     calls.add('start');
     wanted = true;
-    running = startSucceeds;
-    return startSucceeds;
+    running = true;
+    return true;
   }
 
   @override
@@ -647,7 +645,6 @@ class FakeBridge implements GerfautBridge {
   int syncWalletCalls = 0;
   int syncAllCalls = 0;
   int loadMoreHistoryCalls = 0;
-  Network? lastActiveNetworkSet;
 
   /// History round hook; the default reports nothing left to fetch.
   /// Throw a [BridgeException] to simulate a failed round.
@@ -1083,7 +1080,6 @@ class FakeBridge implements GerfautBridge {
   @override
   Future<void> setActiveNetwork(Network network) async {
     onSetActiveNetwork?.call(network);
-    lastActiveNetworkSet = network;
     _store(activeNetwork: network);
   }
 
@@ -1118,12 +1114,8 @@ class FakeBridge implements GerfautBridge {
   /// that cannot answer. The default serves [defaultPublicServers].
   List<PublicServer> Function(Network network)? onPublicServers;
 
-  /// Every network the catalogue was asked for, for assertions.
-  final List<Network> publicServerCalls = [];
-
   @override
   Future<List<PublicServer>> publicServers(Network network) async {
-    publicServerCalls.add(network);
     final servers = onPublicServers;
     if (servers != null) return servers(network);
     return defaultPublicServers[network] ?? const [];
@@ -1631,9 +1623,6 @@ class FakeBridge implements GerfautBridge {
 
   /// Unix seconds the fake server's key is paid until: January 2027.
   int premiumPaidUntil = 1800000000;
-
-  /// The network the fake server watches, as it names it.
-  String premiumNetwork = 'bitcoin';
 
   /// What the vault holds: the key, the claims of its certificate, the
   /// consents, and the banner acknowledgement. Tests seed them directly.
@@ -2336,7 +2325,7 @@ class FakeBridge implements GerfautBridge {
       paidUntil: claims?.expiresAt,
       wallets: premiumWatched.length,
       channels: premiumChannelList.length,
-      network: premiumNetwork,
+      network: 'bitcoin',
     );
   }
 
