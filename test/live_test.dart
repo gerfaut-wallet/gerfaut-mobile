@@ -481,9 +481,14 @@ void main() {
         restartAfter: const Duration(milliseconds: 20),
       );
       await service.runner.run();
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+      // The first run was refused the moment it was listened to: the
+      // watch is free from now, before the restart is due, however
+      // slowly the clock of a busy machine runs.
+      expect(bridge.liveStartCalls, 1);
       bridge.runRefusal = null;
-      await Future<void>.delayed(const Duration(milliseconds: 80));
+      for (var i = 0; i < 200 && bridge.liveStartCalls < 2; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
       expect(bridge.liveStartCalls, 2);
       service.bridge.liveController.add(LiveTransaction(_live('after', 1)));
       service.bridge.liveController.add(LiveWalletSynced(_report()));
