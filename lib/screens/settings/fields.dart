@@ -9,6 +9,7 @@ import '../../theme/tokens.dart';
 class MonoField extends StatelessWidget {
   const MonoField({
     super.key,
+    required this.label,
     required this.controller,
     required this.hint,
     required this.onChanged,
@@ -18,6 +19,10 @@ class MonoField extends StatelessWidget {
     this.onSubmitted,
   });
 
+  /// What a screen reader calls the field. The caption above it is a
+  /// widget of its own, and the hint is an example: read alone, a field
+  /// is "node.example.org, edit box", which names nothing.
+  final String label;
   final TextEditingController controller;
   final String hint;
   final VoidCallback onChanged;
@@ -28,6 +33,10 @@ class MonoField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return Semantics(label: label, child: _field());
+  }
+
+  Widget _field() {
     return TextField(
       controller: controller,
       focusNode: focusNode,

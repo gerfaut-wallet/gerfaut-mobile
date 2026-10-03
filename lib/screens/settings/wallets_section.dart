@@ -357,6 +357,7 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
           SizedBox(
             width: 72,
             child: MonoField(
+              label: 'Gap limit',
               controller: _gapLimitController,
               hint: '1-500',
               numeric: true,
@@ -513,23 +514,26 @@ class _WalletRow extends StatelessWidget {
                     ? Row(
                         children: [
                           Expanded(
-                            child: TextField(
-                              controller: renameController,
-                              autofocus: true,
-                              style: tokens.body,
-                              onSubmitted: (_) => onRenameSubmit(),
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor: tokens.surfaceSunken,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: GerfautSpacing.sm,
-                                  vertical: GerfautSpacing.xs,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(
-                                    GerfautRadius.sm,
+                            child: Semantics(
+                              label: 'Wallet name',
+                              child: TextField(
+                                controller: renameController,
+                                autofocus: true,
+                                style: tokens.body,
+                                onSubmitted: (_) => onRenameSubmit(),
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor: tokens.surfaceSunken,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: GerfautSpacing.sm,
+                                    vertical: GerfautSpacing.xs,
                                   ),
-                                  borderSide: BorderSide.none,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(
+                                      GerfautRadius.sm,
+                                    ),
+                                    borderSide: BorderSide.none,
+                                  ),
                                 ),
                               ),
                             ),

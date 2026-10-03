@@ -299,34 +299,41 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
             : () => _parse(_rawController.text),
       ),
       children: [
-        Text(
-          'DESCRIPTOR, EXTENDED PUBLIC KEY, OR ADDRESS',
-          style: tokens.label.copyWith(color: tokens.textMuted),
+        // Read once, on the field: its hint is an example descriptor, a
+        // string of brackets nobody needs spelled out as its name.
+        ExcludeSemantics(
+          child: Text(
+            'DESCRIPTOR, EXTENDED PUBLIC KEY, OR ADDRESS',
+            style: tokens.label.copyWith(color: tokens.textMuted),
+          ),
         ),
         const SizedBox(height: GerfautSpacing.sm),
-        TextField(
-          controller: _rawController,
-          maxLines: 5,
-          autocorrect: false,
-          enableSuggestions: false,
-          style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
-          onChanged: (_) => setState(() {}),
-          decoration: InputDecoration(
-            hintText: 'wpkh([fingerprint/84h/0h/0h]xpub.../0/*)',
-            hintStyle: tokens.data.copyWith(
-              fontSize: tokens.body.fontSize,
-              color: tokens.textMuted,
-            ),
-            filled: true,
-            fillColor: tokens.surfaceSunken,
-            contentPadding: const EdgeInsets.all(GerfautSpacing.md),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(GerfautRadius.sm),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(GerfautRadius.sm),
-              borderSide: BorderSide(color: tokens.primary, width: 2),
+        Semantics(
+          label: 'Descriptor, extended public key, or address',
+          child: TextField(
+            controller: _rawController,
+            maxLines: 5,
+            autocorrect: false,
+            enableSuggestions: false,
+            style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: 'wpkh([fingerprint/84h/0h/0h]xpub.../0/*)',
+              hintStyle: tokens.data.copyWith(
+                fontSize: tokens.body.fontSize,
+                color: tokens.textMuted,
+              ),
+              filled: true,
+              fillColor: tokens.surfaceSunken,
+              contentPadding: const EdgeInsets.all(GerfautSpacing.md),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                borderSide: BorderSide(color: tokens.primary, width: 2),
+              ),
             ),
           ),
         ),
@@ -501,29 +508,37 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
           ],
         ],
         const SizedBox(height: GerfautSpacing.md),
-        Text('NAME', style: tokens.label.copyWith(color: tokens.textMuted)),
+        ExcludeSemantics(
+          child: Text(
+            'NAME',
+            style: tokens.label.copyWith(color: tokens.textMuted),
+          ),
+        ),
         const SizedBox(height: GerfautSpacing.sm),
-        TextField(
-          controller: _nameController,
-          autofocus: true,
-          style: tokens.body,
-          onChanged: (_) => setState(() {}),
-          decoration: InputDecoration(
-            hintText: 'Cold storage',
-            hintStyle: tokens.body.copyWith(color: tokens.textMuted),
-            filled: true,
-            fillColor: tokens.surfaceSunken,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: GerfautSpacing.md,
-              vertical: GerfautSpacing.sm,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(GerfautRadius.sm),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(GerfautRadius.sm),
-              borderSide: BorderSide(color: tokens.primary, width: 2),
+        Semantics(
+          label: 'Wallet name',
+          child: TextField(
+            controller: _nameController,
+            autofocus: true,
+            style: tokens.body,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: 'Cold storage',
+              hintStyle: tokens.body.copyWith(color: tokens.textMuted),
+              filled: true,
+              fillColor: tokens.surfaceSunken,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: GerfautSpacing.md,
+                vertical: GerfautSpacing.sm,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                borderSide: BorderSide(color: tokens.primary, width: 2),
+              ),
             ),
           ),
         ),
@@ -592,42 +607,46 @@ class _PathField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label.toUpperCase(),
-          style: tokens.label.copyWith(color: tokens.textMuted),
-        ),
-        const SizedBox(height: GerfautSpacing.xs),
-        TextField(
-          controller: controller,
-          autocorrect: false,
-          enableSuggestions: false,
-          style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: tokens.data.copyWith(
-              fontSize: tokens.body.fontSize,
-              color: tokens.textMuted,
-            ),
-            filled: true,
-            fillColor: tokens.surfaceSunken,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: GerfautSpacing.md,
-              vertical: GerfautSpacing.sm + GerfautSpacing.xs,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(GerfautRadius.sm),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(GerfautRadius.sm),
-              borderSide: BorderSide(color: tokens.primary, width: 2),
+    // One node: the field is read with its caption, not as the example
+    // path its hint shows.
+    return MergeSemantics(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: tokens.label.copyWith(color: tokens.textMuted),
+          ),
+          const SizedBox(height: GerfautSpacing.xs),
+          TextField(
+            controller: controller,
+            autocorrect: false,
+            enableSuggestions: false,
+            style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: tokens.data.copyWith(
+                fontSize: tokens.body.fontSize,
+                color: tokens.textMuted,
+              ),
+              filled: true,
+              fillColor: tokens.surfaceSunken,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: GerfautSpacing.md,
+                vertical: GerfautSpacing.sm + GerfautSpacing.xs,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                borderSide: BorderSide(color: tokens.primary, width: 2),
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

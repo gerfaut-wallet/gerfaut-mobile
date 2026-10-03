@@ -92,40 +92,44 @@ void openExplorer(BuildContext context, WidgetRef ref, String url) {
                     style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                   ),
                   const SizedBox(height: GerfautSpacing.sm),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(GerfautRadius.sm),
-                    onTap: () => setState(() => skipNextTime = !skipNextTime),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: GerfautSpacing.sm + 2,
-                      ),
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: Checkbox(
-                              value: skipNextTime,
-                              activeColor: tokens.primary,
-                              checkColor: tokens.onPrimary,
-                              side: BorderSide(
-                                color: tokens.textMuted,
-                                width: 1.5,
+                  // One node: the box is read with its sentence.
+                  MergeSemantics(
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                      onTap: () => setState(() => skipNextTime = !skipNextTime),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: GerfautSpacing.sm + 2,
+                        ),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: Checkbox(
+                                value: skipNextTime,
+                                activeColor: tokens.primary,
+                                checkColor: tokens.onPrimary,
+                                side: BorderSide(
+                                  color: tokens.textMuted,
+                                  width: 1.5,
+                                ),
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                onChanged: (value) => setState(
+                                  () => skipNextTime = value ?? false,
+                                ),
                               ),
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
-                              onChanged: (value) =>
-                                  setState(() => skipNextTime = value ?? false),
                             ),
-                          ),
-                          const SizedBox(width: GerfautSpacing.sm),
-                          Expanded(
-                            child: Text(
-                              'Do not show this warning again',
-                              style: tokens.bodySmall,
+                            const SizedBox(width: GerfautSpacing.sm),
+                            Expanded(
+                              child: Text(
+                                'Do not show this warning again',
+                                style: tokens.bodySmall,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),

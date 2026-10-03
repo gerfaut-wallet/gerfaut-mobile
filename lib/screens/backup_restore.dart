@@ -583,49 +583,55 @@ class _WalletRow extends StatelessWidget {
     final detail = enabled
         ? '${wallet.network.label} · $kind'
         : '${wallet.network.label} · $kind · Already watched';
-    return InkWell(
-      onTap: enabled ? () => onChanged!(!chosen) : null,
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 44),
-        padding: const EdgeInsets.symmetric(
-          horizontal: GerfautSpacing.sm,
-          vertical: GerfautSpacing.xs,
-        ),
-        child: Row(
-          children: [
-            Checkbox(
-              value: enabled && chosen,
-              activeColor: tokens.primary,
-              checkColor: tokens.onPrimary,
-              side: BorderSide(color: tokens.border, width: 2),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(GerfautRadius.sm),
+    // One node: the box is read with the wallet it restores, not as a
+    // nameless "not checked".
+    return MergeSemantics(
+      child: InkWell(
+        onTap: enabled ? () => onChanged!(!chosen) : null,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 44),
+          padding: const EdgeInsets.symmetric(
+            horizontal: GerfautSpacing.sm,
+            vertical: GerfautSpacing.xs,
+          ),
+          child: Row(
+            children: [
+              Checkbox(
+                value: enabled && chosen,
+                activeColor: tokens.primary,
+                checkColor: tokens.onPrimary,
+                side: BorderSide(color: tokens.border, width: 2),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                ),
+                onChanged: enabled
+                    ? (value) => onChanged!(value ?? false)
+                    : null,
               ),
-              onChanged: enabled ? (value) => onChanged!(value ?? false) : null,
-            ),
-            const SizedBox(width: GerfautSpacing.xs),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    wallet.name,
-                    style: tokens.bodySmall.copyWith(
-                      color: enabled ? tokens.text : tokens.textMuted,
-                      fontWeight: FontWeight.w500,
-                      fontVariations: const [FontVariation('wght', 500)],
+              const SizedBox(width: GerfautSpacing.xs),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      wallet.name,
+                      style: tokens.bodySmall.copyWith(
+                        color: enabled ? tokens.text : tokens.textMuted,
+                        fontWeight: FontWeight.w500,
+                        fontVariations: const [FontVariation('wght', 500)],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    detail,
-                    style: tokens.label.copyWith(color: tokens.textMuted),
-                  ),
-                ],
+                    Text(
+                      detail,
+                      style: tokens.label.copyWith(color: tokens.textMuted),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

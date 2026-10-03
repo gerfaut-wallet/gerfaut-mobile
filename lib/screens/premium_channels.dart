@@ -863,12 +863,16 @@ class _WebhookChannelScreenState extends ConsumerState<WebhookChannelScreen> {
             ),
 
             children: [
-              Text(
-                'URL',
-                style: tokens.label.copyWith(color: tokens.textMuted),
+              // The field says its own name; the caption is for the eye.
+              ExcludeSemantics(
+                child: Text(
+                  'URL',
+                  style: tokens.label.copyWith(color: tokens.textMuted),
+                ),
               ),
               const SizedBox(height: GerfautSpacing.sm),
               MonoField(
+                label: 'Webhook URL',
                 controller: _urlController,
                 hint: 'https://example.org/gerfaut',
                 onChanged: () => setState(() {}),

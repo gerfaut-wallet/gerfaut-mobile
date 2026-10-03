@@ -264,33 +264,40 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
           child: ListView(
             padding: const EdgeInsets.all(GerfautSpacing.md),
             children: [
-              FieldLabel('Signed transaction or PSBT', tokens: tokens),
+              // Read once, on the field: its hint is an example, not a
+              // name.
+              ExcludeSemantics(
+                child: FieldLabel('Signed transaction or PSBT', tokens: tokens),
+              ),
               const SizedBox(height: GerfautSpacing.sm),
-              TextField(
-                controller: _inputController,
-                minLines: 4,
-                maxLines: 8,
-                autocorrect: false,
-                enableSuggestions: false,
-                keyboardType: TextInputType.multiline,
-                style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  hintText: 'cHNidP8B… (base64) or 02000000… (hex)',
-                  hintStyle: tokens.data.copyWith(
-                    fontSize: tokens.body.fontSize,
-                    color: tokens.textMuted,
-                  ),
-                  filled: true,
-                  fillColor: tokens.surfaceSunken,
-                  contentPadding: const EdgeInsets.all(GerfautSpacing.md),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(GerfautRadius.sm),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(GerfautRadius.sm),
-                    borderSide: BorderSide(color: tokens.primary, width: 2),
+              Semantics(
+                label: 'Signed transaction or PSBT',
+                child: TextField(
+                  controller: _inputController,
+                  minLines: 4,
+                  maxLines: 8,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  keyboardType: TextInputType.multiline,
+                  style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    hintText: 'cHNidP8B… (base64) or 02000000… (hex)',
+                    hintStyle: tokens.data.copyWith(
+                      fontSize: tokens.body.fontSize,
+                      color: tokens.textMuted,
+                    ),
+                    filled: true,
+                    fillColor: tokens.surfaceSunken,
+                    contentPadding: const EdgeInsets.all(GerfautSpacing.md),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                      borderSide: BorderSide(color: tokens.primary, width: 2),
+                    ),
                   ),
                 ),
               ),

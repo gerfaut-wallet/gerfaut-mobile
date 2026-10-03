@@ -45,49 +45,57 @@ class _PasswordFieldState extends State<PasswordField> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          widget.label.toUpperCase(),
-          style: tokens.label.copyWith(color: tokens.textMuted),
+        // Read once, on the field: the caption is for the eye.
+        ExcludeSemantics(
+          child: Text(
+            widget.label.toUpperCase(),
+            style: tokens.label.copyWith(color: tokens.textMuted),
+          ),
         ),
         const SizedBox(height: GerfautSpacing.sm),
-        TextField(
-          controller: widget.controller,
-          focusNode: widget.focusNode,
-          obscureText: _hidden,
-          autofocus: widget.autofocus,
-          autocorrect: false,
-          enableSuggestions: false,
-          // 16px, or the field zooms on some keyboards.
-          style: tokens.body,
-          onChanged: (_) => widget.onChanged?.call(),
-          onSubmitted: (_) => widget.onSubmitted?.call(),
-          textInputAction: widget.onSubmitted == null
-              ? TextInputAction.next
-              : TextInputAction.done,
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: tokens.surfaceSunken,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: GerfautSpacing.md,
-              vertical: GerfautSpacing.sm + GerfautSpacing.xs,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(GerfautRadius.sm),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(GerfautRadius.sm),
-              borderSide: BorderSide(color: tokens.primary, width: 2),
-            ),
-            suffixIcon: IconButton(
-              tooltip: _hidden
-                  ? 'Show ${widget.label}'
-                  : 'Hide ${widget.label}',
-              onPressed: () => setState(() => _hidden = !_hidden),
-              icon: Icon(
-                _hidden ? LucideIcons.eye : LucideIcons.eyeOff,
-                size: 18,
-                color: tokens.textMuted,
+        // Named on the field itself rather than merged with the caption:
+        // the eye inside it stays a button of its own.
+        Semantics(
+          label: widget.label,
+          child: TextField(
+            controller: widget.controller,
+            focusNode: widget.focusNode,
+            obscureText: _hidden,
+            autofocus: widget.autofocus,
+            autocorrect: false,
+            enableSuggestions: false,
+            // 16px, or the field zooms on some keyboards.
+            style: tokens.body,
+            onChanged: (_) => widget.onChanged?.call(),
+            onSubmitted: (_) => widget.onSubmitted?.call(),
+            textInputAction: widget.onSubmitted == null
+                ? TextInputAction.next
+                : TextInputAction.done,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: tokens.surfaceSunken,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: GerfautSpacing.md,
+                vertical: GerfautSpacing.sm + GerfautSpacing.xs,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                borderSide: BorderSide(color: tokens.primary, width: 2),
+              ),
+              suffixIcon: IconButton(
+                tooltip: _hidden
+                    ? 'Show ${widget.label}'
+                    : 'Hide ${widget.label}',
+                onPressed: () => setState(() => _hidden = !_hidden),
+                icon: Icon(
+                  _hidden ? LucideIcons.eye : LucideIcons.eyeOff,
+                  size: 18,
+                  color: tokens.textMuted,
+                ),
               ),
             ),
           ),

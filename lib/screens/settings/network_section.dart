@@ -425,12 +425,15 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
             ],
             if (_backendKind == 'custom_esplora') ...[
               const SizedBox(height: GerfautSpacing.sm),
-              FieldLabel('Server URL', tokens: tokens),
+              // The field below says its own name; the caption is for
+              // the eye.
+              ExcludeSemantics(child: FieldLabel('Server URL', tokens: tokens)),
               const SizedBox(height: GerfautSpacing.sm),
               Row(
                 children: [
                   Expanded(
                     child: MonoField(
+                      label: 'Server URL',
                       controller: _esploraController,
                       hint: 'https://node.example.org:3002/api',
                       onChanged: _onBackendFieldChanged,
@@ -452,12 +455,15 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
             ],
             if (_backendKind == 'custom_electrum') ...[
               const SizedBox(height: GerfautSpacing.sm),
-              FieldLabel('Host', tokens: tokens),
+              // The field below says its own name; the caption is for
+              // the eye.
+              ExcludeSemantics(child: FieldLabel('Host', tokens: tokens)),
               const SizedBox(height: GerfautSpacing.sm),
               Row(
                 children: [
                   Expanded(
                     child: MonoField(
+                      label: 'Host',
                       controller: _hostController,
                       hint: 'node.example.org or xxxxxxxx.onion',
                       onChanged: _onBackendFieldChanged,
@@ -481,9 +487,12 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        FieldLabel('Port', tokens: tokens),
+                        ExcludeSemantics(
+                          child: FieldLabel('Port', tokens: tokens),
+                        ),
                         const SizedBox(height: GerfautSpacing.sm),
                         MonoField(
+                          label: 'Port',
                           controller: _portController,
                           hint: '50002',
                           numeric: true,
