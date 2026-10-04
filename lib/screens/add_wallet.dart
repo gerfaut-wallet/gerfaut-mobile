@@ -99,16 +99,32 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
   /// picked afterwards rebuilds that same wallet on it.
   ImportOptions _asked = const ImportOptions();
 
+  /// The parse asked last. Only its answer is taken: picks made in a row
+  /// are answered in any order, and an older answer landing after a
+  /// newer one would put back what the user had moved away from.
+  int _parsing = 0;
+
+  /// The network of the parse asked last, while its answer is awaited;
+  /// null when that parse was not a pick of one.
+  Network? _picked;
+
+  /// Asks the core for [input]. On [network] when given, otherwise on
+  /// the one shown. The network shown changes only with the answer for
+  /// it, so the first address and the network the wallet is added on
+  /// always go together.
   Future<void> _parse(
     String input, {
     ScriptKind? script,
     DerivationChoice? derivation,
+    Network? network,
   }) async {
+    final asked = ++_parsing;
+    _picked = network;
     setState(() => _error = null);
     // A re-parse keeps the network the user already picked; a new input
     // starts on the one on screen. The core derives the first address
     // for it, so the address shown is the one the wallet will give.
-    var preferred = _network;
+    var preferred = network ?? _network;
     if (preferred == null) {
       try {
         preferred = (await ref.read(settingsProvider.future)).activeNetwork;
@@ -126,7 +142,8 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
       final parsed = await ref
           .read(bridgeProvider)
           .parseInputWithOptions(input, options);
-      if (!mounted) return;
+      if (!mounted || asked != _parsing) return;
+      _picked = null;
       final scanned = _scanned;
       setState(() {
         _parsed = parsed;
@@ -140,8 +157,13 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
       });
       _seedDerivation(parsed);
     } on BridgeException catch (error) {
+      // Refused, what was shown stays: the network with its address.
+      if (!mounted || asked != _parsing) return;
+      _picked = null;
       setState(() => _error = materialRefusal(error));
     } catch (error) {
+      if (!mounted || asked != _parsing) return;
+      _picked = null;
       setState(() => _error = '$error');
     }
   }
@@ -162,13 +184,20 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
   /// the core for it again, on the wallet as it stands. A regtest
   /// wallet shown a signet address would be compared with the wrong one.
   void _chooseNetwork(Network? network) {
-    if (network == null || network == _network) return;
-    setState(() => _network = network);
+    if (network == null || network == (_picked ?? _network)) return;
+    if (network == _network) {
+      // Back on the network shown before the last pick was answered:
+      // that answer, landing later, would move away from it.
+      _picked = null;
+      _parsing++;
+      return;
+    }
     // ignore: unawaited_futures
     _parse(
       _rawController.text.trim(),
       script: _asked.script,
       derivation: _asked.derivation,
+      network: network,
     );
   }
 
@@ -328,6 +357,9 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
   }
 
   void _back() {
+    // An answer still on its way would bring the step just left back.
+    _parsing++;
+    _picked = null;
     setState(() {
       _parsed = null;
       _network = null;

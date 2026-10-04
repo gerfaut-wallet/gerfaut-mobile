@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:file_selector/file_selector.dart';
@@ -13,6 +14,7 @@ import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/choice_group.dart';
 import 'package:gerfaut/widgets/notice.dart';
 import 'package:gerfaut/widgets/select_field.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -326,6 +328,123 @@ void main() {
     expect(bridge.parseOptions.last.network, Network.signet);
     expect(find.text('tb1q0signet0preview'), findsOneWidget);
     expect(find.text('bcrt1q0regtest0preview'), findsNothing);
+  });
+
+  group('networks picked in a row', () {
+    /// The network the choices show as picked.
+    Network? shownNetwork(WidgetTester tester) => tester
+        .widget<ChoiceGroup<Network?>>(find.byType(ChoiceGroup<Network?>))
+        .value;
+
+    Future<void> confirmStep(WidgetTester tester, FakeBridge bridge) async {
+      await tester.pumpWidget(screen(bridge));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField),
+        'wpkh([9a6a2580/84h/1h/0h]tpub.../<0;1>/*)',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> pick(WidgetTester tester, String network) async {
+      await tester.ensureVisible(find.text(network));
+      await tester.pump();
+      await tester.tap(find.text(network));
+      await tester.pump();
+    }
+
+    ParsedInput on(Network network) => makeParsedInput(
+      previewAddress: switch (network) {
+        Network.testnet4 => 'tb1q0testnet0preview',
+        Network.regtest => 'bcrt1q0regtest0preview',
+        _ => 'tb1q0signet0preview',
+      },
+    );
+
+    testWidgets('an older answer landing last is dropped', (tester) async {
+      final answers = <Network, Completer<ParsedInput>>{};
+      final bridge = FakeBridge()
+        ..onParseWithOptions = (_, options) {
+          final network = options.network;
+          if (network != Network.testnet4 && network != Network.regtest) {
+            return on(Network.signet);
+          }
+          return (answers[network!] = Completer<ParsedInput>()).future;
+        };
+      await confirmStep(tester, bridge);
+      expect(shownNetwork(tester), Network.signet);
+
+      await pick(tester, 'Testnet 4');
+      await pick(tester, 'Regtest');
+      // Nothing answered yet: the network shown is still the one of the
+      // address shown.
+      expect(shownNetwork(tester), Network.signet);
+      expect(find.text('tb1q0signet0preview'), findsOneWidget);
+
+      // The newer pick is answered first, the older one after it.
+      answers[Network.regtest]!.complete(on(Network.regtest));
+      await tester.pumpAndSettle();
+      answers[Network.testnet4]!.complete(on(Network.testnet4));
+      await tester.pumpAndSettle();
+
+      expect(shownNetwork(tester), Network.regtest);
+      expect(find.text('bcrt1q0regtest0preview'), findsOneWidget);
+      expect(find.text('tb1q0testnet0preview'), findsNothing);
+
+      await tester.enterText(find.byType(TextField), 'Lab');
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView), const Offset(0, -600));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Add wallet'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add wallet'));
+      await tester.pumpAndSettle();
+      expect(bridge.wallets.single.network, Network.regtest);
+    });
+
+    testWidgets('going back before the answer keeps the network shown', (
+      tester,
+    ) async {
+      final answers = <Network, Completer<ParsedInput>>{};
+      final bridge = FakeBridge()
+        ..onParseWithOptions = (_, options) {
+          final network = options.network;
+          if (network != Network.testnet4) return on(Network.signet);
+          return (answers[network!] = Completer<ParsedInput>()).future;
+        };
+      await confirmStep(tester, bridge);
+
+      await pick(tester, 'Testnet 4');
+      await pick(tester, 'Signet');
+      answers[Network.testnet4]!.complete(on(Network.testnet4));
+      await tester.pumpAndSettle();
+      expect(shownNetwork(tester), Network.signet);
+      expect(find.text('tb1q0signet0preview'), findsOneWidget);
+    });
+
+    testWidgets('a refused pick keeps the network and its address', (
+      tester,
+    ) async {
+      final bridge = FakeBridge()
+        ..onParseWithOptions = (_, options) {
+          if (options.network == Network.testnet4) {
+            throw const BridgeException('descriptor', 'no key for testnet 4');
+          }
+          return on(options.network ?? Network.signet);
+        };
+      await confirmStep(tester, bridge);
+
+      await pick(tester, 'Testnet 4');
+      await tester.pumpAndSettle();
+      expect(shownNetwork(tester), Network.signet);
+      expect(find.text('tb1q0signet0preview'), findsOneWidget);
+      expect(
+        find.text('This descriptor could not be used: no key for testnet 4'),
+        findsOneWidget,
+      );
+    });
   });
 
   testWidgets('private material is refused in words that say what to bring', (
