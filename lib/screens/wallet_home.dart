@@ -543,7 +543,8 @@ class _TxList extends ConsumerWidget {
         }),
       );
     } on BridgeException catch (error) {
-      failure.state = error.message;
+      // The page may have gone meanwhile, and its note with it.
+      if (context.mounted) failure.state = error.message;
     }
   }
 
