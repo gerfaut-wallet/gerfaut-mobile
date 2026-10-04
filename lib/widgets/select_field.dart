@@ -142,9 +142,14 @@ class _GerfautSelectState<T> extends State<GerfautSelect<T>> {
           borderRadius: BorderRadius.circular(GerfautRadius.sm),
           onTap: enabled ? _open : null,
           onFocusChange: (focused) => setState(() => _focused = focused),
+          // At least 44 high, and taller when the system text is large:
+          // a fixed height would cut the value in half at 200 %.
           child: Container(
-            height: 44,
-            padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
+            constraints: const BoxConstraints(minHeight: 44),
+            padding: const EdgeInsets.symmetric(
+              horizontal: GerfautSpacing.md,
+              vertical: GerfautSpacing.xs,
+            ),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(GerfautRadius.sm),
               border: Border.all(

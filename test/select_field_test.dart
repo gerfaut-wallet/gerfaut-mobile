@@ -106,6 +106,22 @@ Container rowOf(WidgetTester tester, String title) {
 }
 
 void main() {
+  testWidgets('at a large text size the field grows instead of cutting', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+        child: host([]),
+      ),
+    );
+    final field = find.byType(GerfautSelect<String>);
+    expect(tester.getSize(field).height, greaterThan(44));
+    final value = tester.getRect(find.text('EUR'));
+    expect(tester.getRect(field).contains(value.topLeft), isTrue);
+    expect(tester.getRect(field).contains(value.bottomLeft), isTrue);
+  });
+
   testWidgets('the field reads as an input and names its value', (
     tester,
   ) async {
