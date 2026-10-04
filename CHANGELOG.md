@@ -353,7 +353,9 @@ The first release: Gerfaut for Android.
   While Gerfaut is closed, it asks for the price only through a Tor that is
   already running, such as the one a sync started or Orbot, and otherwise
   keeps the last price with the time it was fetched.
-- While an app lock is set, the balance widget names no wallet.
+- While an app lock is set, the balance widget shows no wallet name and no
+  amount, and "Show balances on widgets" in Settings › Widgets is greyed out
+  until the lock is removed.
 - Under the calculator disguise, a vault that fails to open shows the
   calculator, not Gerfaut's error page.
 - A transaction history shared as CSV no longer stays in the app's cache:
