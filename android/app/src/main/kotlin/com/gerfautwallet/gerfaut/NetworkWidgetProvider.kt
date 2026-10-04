@@ -23,6 +23,7 @@ class NetworkWidgetProvider : GerfautWidgetProvider() {
         return RemoteViews(context.packageName, R.layout.widget_network).apply {
             opensApp(context)
             line(
+                context,
                 R.id.network_height,
                 data.getString("network.height", null)
                     ?: context.getString(R.string.widget_placeholder),
@@ -32,6 +33,7 @@ class NetworkWidgetProvider : GerfautWidgetProvider() {
                 if (compact) View.GONE else View.VISIBLE,
             )
             line(
+                context,
                 R.id.network_footer,
                 if (compact) null else data.getString("network.footer", null),
             )

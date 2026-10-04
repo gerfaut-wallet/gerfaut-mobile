@@ -60,11 +60,11 @@ abstract class GerfautWidgetProvider : HomeWidgetProvider() {
     }
 
     // Shows a line when the app said something, hides it when not.
-    protected fun RemoteViews.line(viewId: Int, value: String?) {
+    protected fun RemoteViews.line(context: Context, viewId: Int, value: String?) {
         if (value == null) {
             setViewVisibility(viewId, View.GONE)
         } else {
-            figure(viewId, value)
+            figure(context, viewId, value)
             setViewVisibility(viewId, View.VISIBLE)
         }
     }
@@ -72,26 +72,22 @@ abstract class GerfautWidgetProvider : HomeWidgetProvider() {
     // Writes a figure, described in words for a screen reader where
     // what is drawn would be read as symbols: the mask one dot at a
     // time, the dash of a value not known yet as "dash". Anything else
-    // reads as written.
-    protected fun RemoteViews.figure(viewId: Int, value: String) {
+    // reads as written. The mask and the dash are read from
+    // strings_widget.xml, as the layouts draw them and as the app
+    // writes them (lib/src/format.dart).
+    protected fun RemoteViews.figure(context: Context, viewId: Int, value: String) {
+        val mask = context.getString(R.string.widget_masked_placeholder)
         setTextViewText(viewId, value)
         setContentDescription(
             viewId,
             when {
-                value.contains(MASK) -> value.replace(MASK, MASK_SPOKEN)
-                value == PLACEHOLDER -> PLACEHOLDER_SPOKEN
+                value.contains(mask) ->
+                    value.replace(mask, context.getString(R.string.widget_masked_spoken))
+                value == context.getString(R.string.widget_placeholder) ->
+                    context.getString(R.string.widget_placeholder_spoken)
                 else -> null
             },
         )
-    }
-
-    private companion object {
-        // As the app writes them (lib/src/format.dart), and as
-        // strings_widget.xml says them.
-        const val MASK = "•••••"
-        const val MASK_SPOKEN = "Hidden amount"
-        const val PLACEHOLDER = "—"
-        const val PLACEHOLDER_SPOKEN = "Not known yet"
     }
 
     // The smallest height the launcher may draw this instance at, in

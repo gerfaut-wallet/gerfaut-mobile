@@ -27,12 +27,13 @@ class PriceWidgetProvider : GerfautWidgetProvider() {
         return RemoteViews(context.packageName, R.layout.widget_price).apply {
             opensApp(context)
             line(
+                context,
                 R.id.price_figure,
                 data.getString("price.figure", null)
                     ?: context.getString(R.string.widget_placeholder),
             )
-            line(R.id.price_change, change)
-            line(R.id.price_as_of, asOf(context, data, change, options))
+            line(context, R.id.price_change, change)
+            line(context, R.id.price_as_of, asOf(context, data, change, options))
             // A single cell has room for the figure alone; its time
             // comes back with the second row.
             setViewVisibility(
