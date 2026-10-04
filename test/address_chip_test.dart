@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
@@ -179,6 +180,33 @@ void main() {
     expect(node.label, 'Copy transaction ID starting f4184fc5');
     // Nothing of the truncated text drawn inside is read after it.
     expect(find.bySemanticsLabel(RegExp('…')), findsNothing);
+    handle.dispose();
+  });
+
+  testWidgets('a screen reader double tap copies, as a finger does', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    String? copied;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied = (call.arguments as Map)['text'] as String?;
+          }
+          return null;
+        });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null),
+    );
+
+    await tester.pumpWidget(host(const AddressChip(value: txid)));
+    final node = tester.getSemantics(find.byType(AddressChip));
+    expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    node.owner!.performAction(node.id, SemanticsAction.tap);
+    await tester.pump();
+    expect(copied, txid);
+    await tester.pump(const Duration(milliseconds: 1600));
     handle.dispose();
   });
 

@@ -137,9 +137,12 @@ class _AddressChipState extends State<AddressChip> {
         : double.infinity;
     // The label is the whole of what is read: the truncated value drawn
     // inside would be read again after it, cut in the middle.
+    // Excluding what is drawn inside drops its tap too: the node carries
+    // the action itself, or a screen reader's double tap copies nothing.
     return Semantics(
       button: true,
       excludeSemantics: true,
+      onTap: _copy,
       label: [
         'Copy',
         if (widget.kind != null) widget.kind!,
