@@ -516,6 +516,26 @@ final widgetFeedProvider = Provider<WidgetFeed>((ref) => WidgetFeed(ref));
 
 // --- the background refresh --------------------------------------------
 
+/// Whether the background refresh may ask for the price without Tor
+/// being started for it.
+///
+/// With a .onion node the core sends the price through Tor, and nothing
+/// at all while Tor cannot be had. Asked from here, that route would
+/// start the built-in client every quarter hour for one figure: a
+/// bootstrap of up to a minute and a half, on battery, behind the
+/// launcher. So the price follows only a Tor that already runs: the
+/// built-in client once something else in this process brought it up
+/// (a sync, the live watch, the open app), or the Tor app chosen as
+/// System, which the core only knocks on and never starts. Otherwise
+/// nothing is asked, and the widget keeps the last price with the time
+/// it carries. Nothing goes out in the clear either way: the core sees
+/// to that whatever this says.
+Future<bool> priceWithoutStartingTor(GerfautBridge bridge) async {
+  if (!await bridge.usesTor()) return true;
+  final tor = await bridge.torStatus();
+  return tor.mode == TorMode.system || tor.bootstrapped;
+}
+
 /// What Android runs every quarter hour while widgets are placed and
 /// Gerfaut is closed: open the vault, read what the placed widgets
 /// show, fetch the price if one of them needs it, publish. It never
@@ -540,7 +560,9 @@ Future<bool> refreshWidgets({
     if (installed.contains(HomeWidgets.price)) {
       final choice = priceChoice(prefs);
       try {
-        quote = await bridge.fetchPrice(choice.source, choice.currency);
+        if (await priceWithoutStartingTor(bridge)) {
+          quote = await bridge.fetchPrice(choice.source, choice.currency);
+        }
       } catch (_) {
         // The last quote stays up, with the time it carries.
       }

@@ -578,6 +578,78 @@ void main() {
       expect(board.data[WidgetKeys.priceFigure], 'kept');
       expect(board.data[WidgetKeys.balanceSynced], 'Synced 2 h ago');
     });
+
+    test('with a .onion node, the price follows a Tor that already runs '
+        'and never has one started for it', () async {
+      // Asked from here, the core's route would bring the built-in Tor
+      // up every quarter hour for one figure. It follows a Tor already
+      // running, or the widget keeps what it had.
+      TorStatus tor(TorMode mode, {bool up = false}) => TorStatus(
+        mode: mode,
+        socksProxy: '127.0.0.1:9050',
+        via: up ? TorVia.embedded : null,
+        socks: null,
+        running: up,
+        bootstrapped: up,
+        bootstrapPercent: up ? 100 : 0,
+        error: null,
+        embeddedAvailable: true,
+      );
+      Future<({int asks, String? figure, String? asOf})> run({
+        required bool usesTor,
+        required TorStatus status,
+      }) async {
+        final bridge = _bridge();
+        bridge.usesTorValue = usesTor;
+        bridge.onTorStatus = (_) => status;
+        var asks = 0;
+        bridge.onFetchPrice = (source, currency) {
+          asks++;
+          return _quote;
+        };
+        final board = FakeWidgetBoard(
+          installed: {HomeWidgets.price, HomeWidgets.balance},
+        );
+        board.data[WidgetKeys.priceFigure] = 'kept';
+        board.data[WidgetKeys.priceAsOf] = 'as of 09:41';
+        final ok = await refreshWidgets(
+          bridge: bridge,
+          board: board,
+          bootstrap: () async {},
+          now: _now,
+        );
+        expect(ok, isTrue);
+        // The rest of the run goes on as ever.
+        expect(board.data[WidgetKeys.balanceSynced], 'Synced 2 h ago');
+        return (
+          asks: asks,
+          figure: board.data[WidgetKeys.priceFigure],
+          asOf: board.data[WidgetKeys.priceAsOf],
+        );
+      }
+
+      final fresh = PricePayload.of(_quote);
+
+      // Built-in Tor, not running in this process: nothing is asked,
+      // and the last price stays up with its time.
+      for (final mode in [TorMode.auto, TorMode.embedded]) {
+        final idle = await run(usesTor: true, status: tor(mode));
+        expect(idle, (asks: 0, figure: 'kept', asOf: 'as of 09:41'));
+      }
+
+      // Already up for a sync or the live watch: the price goes through it.
+      final up = await run(usesTor: true, status: tor(TorMode.auto, up: true));
+      expect(up, (asks: 1, figure: fresh.figure, asOf: fresh.asOf));
+
+      // A Tor app chosen as System: the core knocks on it and starts
+      // nothing, and refuses if nothing answers.
+      final system = await run(usesTor: true, status: tor(TorMode.system));
+      expect(system, (asks: 1, figure: fresh.figure, asOf: fresh.asOf));
+
+      // No .onion node: the price is asked as before, whatever Tor does.
+      final clear = await run(usesTor: false, status: tor(TorMode.auto));
+      expect(clear, (asks: 1, figure: fresh.figure, asOf: fresh.asOf));
+    });
   });
 
   group('the widgets settings', () {

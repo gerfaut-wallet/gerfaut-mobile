@@ -339,6 +339,10 @@ The first release: Gerfaut for Android.
   reach, because the price sources would otherwise see the phone's IP
   address. The Tor card says so. The price is also no longer asked for while
   the app is out of sight.
+- With a .onion node, the price widget never starts Tor for the price alone.
+  While Gerfaut is closed, it asks for the price only through a Tor that is
+  already running, such as the one a sync started or Orbot, and otherwise
+  keeps the last price with the time it was fetched.
 - While an app lock is set, the balance widget names no wallet.
 - Under the calculator disguise, a vault that fails to open shows the
   calculator, not Gerfaut's error page.
