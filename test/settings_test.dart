@@ -397,6 +397,10 @@ void main() {
       expect([for (final s in switches) s.title], ['Cold storage', 'Spending']);
       expect(switches.every((s) => !s.value), isTrue);
       expect(
+        find.bySemanticsLabel(RegExp('^Always watch Spending live first')),
+        findsOneWidget,
+      );
+      expect(
         tester
             .getSemantics(find.bySemanticsLabel('Advanced'))
             .flagsCollection

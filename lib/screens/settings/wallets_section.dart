@@ -531,6 +531,7 @@ class _LivePinsState extends ConsumerState<_LivePins> {
               const SizedBox(height: GerfautSpacing.sm),
               SettingSwitch(
                 title: wallet.name,
+                semanticLabel: 'Always watch ${wallet.name} live first',
                 value: wallet.livePinned,
                 onChanged: _savingId != null
                     ? null

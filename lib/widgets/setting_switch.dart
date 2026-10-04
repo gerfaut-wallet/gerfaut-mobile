@@ -18,6 +18,7 @@ class SettingSwitch extends StatelessWidget {
   const SettingSwitch({
     super.key,
     required this.title,
+    this.semanticLabel,
     this.hint,
     this.badge,
     required this.value,
@@ -25,6 +26,10 @@ class SettingSwitch extends StatelessWidget {
   });
 
   final String title;
+
+  /// Read in place of the title, for a name that does not say on its
+  /// own what the switch does: a wallet's name in a list of them.
+  final String? semanticLabel;
 
   /// What the setting does, or why it cannot be changed, in a muted
   /// line under the name. Null for a name that says it all.
@@ -42,6 +47,7 @@ class SettingSwitch extends StatelessWidget {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final name = Text(
       title,
+      semanticsLabel: semanticLabel,
       style: tokens.bodySmall.copyWith(
         fontWeight: FontWeight.w500,
         fontVariations: const [FontVariation('wght', 500)],
