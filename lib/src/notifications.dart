@@ -493,8 +493,8 @@ class NotifyNewTxNotifier extends Notifier<bool> {
   /// app comes back: a long press on a notice silences its channel, and
   /// the permission is taken back in the system settings, both without
   /// a word to the app. Said under the setting when they no longer get
-  /// through, and Live, which would keep a connection open for nothing,
-  /// goes back to a periodic check.
+  /// through; Live, which would keep a connection open for nothing,
+  /// waits for them (see [LiveController.resume]).
   Future<void> checkSystem() async {
     final refused = ref.read(notificationsRefusedProvider.notifier);
     if (!state) {
@@ -509,12 +509,6 @@ class NotifyNewTxNotifier extends Notifier<bool> {
       return;
     }
     refused.state = !deliverable;
-    if (!deliverable &&
-        ref.read(backgroundCheckProvider) == BackgroundCheck.live) {
-      await ref
-          .read(backgroundCheckProvider.notifier)
-          .set(BackgroundCheck.quarterHour);
-    }
   }
 }
 

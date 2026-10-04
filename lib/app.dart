@@ -255,7 +255,11 @@ void _startUpdateSession(WidgetRef ref) {
 /// line with the setting that check may have changed.
 Future<void> _checkNoticesThenLive(WidgetRef ref) async {
   await ref.read(notifyNewTxProvider.notifier).checkSystem();
-  await ref.read(liveProvider.notifier).resume();
+  try {
+    await ref.read(liveProvider.notifier).resume();
+  } catch (_) {
+    // The next return to the screen brings the service in line again.
+  }
 }
 
 /// What the app shows once the vault is open: the lock while it is

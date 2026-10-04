@@ -423,11 +423,22 @@ class LiveController extends Notifier<LiveState> {
       ref.read(notifyNewTxProvider) &&
       ref.read(backgroundCheckProvider) == BackgroundCheck.live;
 
+  /// Live was stopped here because Android stopped letting the notices
+  /// through: the setting still says Live, and it starts again once
+  /// they get through. Not a Stop pressed on its notification, which
+  /// the platform flag alone would not tell apart.
+  bool _heldForNotices = false;
+
   /// Called once the preferences are in, and each time the app comes
   /// back on screen. Listens to the core, and brings the service in line
   /// with the setting: started when it should run and does not, and the
   /// setting taken back to a periodic check when Live was stopped from
   /// its notification while no Dart code could write that down.
+  ///
+  /// While Android lets no notice through, the service is stopped and
+  /// the setting left as it is: a connection kept open to say nothing
+  /// costs battery for nothing, and the choice of Live is the user's,
+  /// for when the notices get through again.
   Future<void> resume() async {
     _events ??= ref
         .read(bridgeProvider)
@@ -437,6 +448,20 @@ class LiveController extends Notifier<LiveState> {
     final platform = ref.read(livePlatformProvider);
     if (ref.read(disguiseProvider).disguised) {
       await _fallBack();
+      return;
+    }
+    if (ref.read(notificationsRefusedProvider)) {
+      if (await platform.isWanted() || await platform.isRunning()) {
+        _heldForNotices = true;
+        await platform.stop();
+      }
+      await refresh();
+      return;
+    }
+    if (_heldForNotices) {
+      _heldForNotices = false;
+      await platform.start();
+      await refresh();
       return;
     }
     if (!await platform.isWanted()) {

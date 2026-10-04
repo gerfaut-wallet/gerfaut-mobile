@@ -122,7 +122,12 @@ class NotificationsSection extends ConsumerWidget {
           ],
           onChanged: disguised ? null : (check) => _choose(context, ref, check),
         ),
-        if (on && cadence == BackgroundCheck.live && !disguised) ...[
+        // While the notices are blocked, Live waits for them: the line
+        // above says why, and a status would only say it is stopped.
+        if (on &&
+            cadence == BackgroundCheck.live &&
+            !disguised &&
+            !refused) ...[
           const SizedBox(height: GerfautSpacing.sm),
           const _LiveStatus(),
         ],

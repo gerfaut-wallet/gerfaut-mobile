@@ -1867,31 +1867,43 @@ void main() {
       return container;
     }
 
-    test('are said, and Live goes back to a periodic check', () async {
+    /// What the app does each time it comes back on screen.
+    Future<void> comeBack(ProviderContainer container) async {
+      await container.read(notifyNewTxProvider.notifier).checkSystem();
+      await container.read(liveProvider.notifier).resume();
+    }
+
+    test('are said, and Live waits for them, the choice kept', () async {
       final bridge = _bridge();
       final platform = FakeLivePlatform(running: true, wanted: true);
       final notices = FakeNotifications()..deliverableNow = false;
       final container = withNotices(bridge, platform, notices);
 
-      await container.read(notifyNewTxProvider.notifier).checkSystem();
+      await comeBack(container);
 
       expect(container.read(notificationsRefusedProvider), isTrue);
       expect(platform.calls, ['stop']);
-      expect(bridge.appPrefs['notify.background'], '900');
+      expect(container.read(liveProvider).serviceRunning, isFalse);
+      // Live is still the choice, in the vault and on screen.
+      expect(bridge.appPrefs['notify.background'], isNot('900'));
+      expect(container.read(backgroundCheckProvider), BackgroundCheck.live);
       // The notice itself stays on: it is the system that stops it.
       expect(container.read(notifyNewTxProvider), isTrue);
     });
 
-    test('let through again, nothing more is said', () async {
+    test('let through again, Live starts again by itself', () async {
       final bridge = _bridge();
       final platform = FakeLivePlatform(running: true, wanted: true);
       final notices = FakeNotifications()..deliverableNow = false;
       final container = withNotices(bridge, platform, notices);
-      await container.read(notifyNewTxProvider.notifier).checkSystem();
+      await comeBack(container);
 
       notices.deliverableNow = true;
-      await container.read(notifyNewTxProvider.notifier).checkSystem();
+      await comeBack(container);
       expect(container.read(notificationsRefusedProvider), isFalse);
+      expect(platform.calls, ['stop', 'start']);
+      expect(container.read(liveProvider).serviceRunning, isTrue);
+      expect(container.read(backgroundCheckProvider), BackgroundCheck.live);
     });
 
     test('with the notice off, the system is not asked', () async {

@@ -94,6 +94,8 @@ The first release: Gerfaut for Android.
 - When Android stops letting Gerfaut's notifications through, from the
   system settings or by blocking the channel, Settings › Notifications says
   so in amber under New transactions, with a button to the system settings.
+  Live stops meanwhile, since it would have nothing to say, and starts again
+  once they get through.
 - While the app is disguised, the notification settings are greyed out, with
   a line that says why: a notification would show the name Gerfaut. The
   sheet that turns the disguise on says so before you confirm and, with
