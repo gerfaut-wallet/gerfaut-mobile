@@ -97,10 +97,6 @@ flutter:
     - family: Instrument Sans
       fonts:
         - asset: assets/fonts/instrument-sans/InstrumentSans-Variable.ttf
-        - asset: assets/fonts/instrument-sans/InstrumentSans-Italic-Variable.ttf
-          style: italic
     - family: JetBrains Mono
       fonts:
         - asset: assets/fonts/jetbrains-mono/JetBrainsMono-Variable.ttf
-        - asset: assets/fonts/jetbrains-mono/JetBrainsMono-Italic-Variable.ttf
-          style: italic
