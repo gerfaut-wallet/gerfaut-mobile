@@ -59,26 +59,39 @@ abstract class GerfautWidgetProvider : HomeWidgetProvider() {
         )
     }
 
-    // Shows a line when the app said something, hides it when not. A
-    // masked figure is described in words for a screen reader, which
-    // would read the dots one by one; anything else reads as written.
+    // Shows a line when the app said something, hides it when not.
     protected fun RemoteViews.line(viewId: Int, value: String?) {
         if (value == null) {
             setViewVisibility(viewId, View.GONE)
         } else {
-            setTextViewText(viewId, value)
-            setContentDescription(
-                viewId,
-                if (value.contains(MASK)) value.replace(MASK, MASK_SPOKEN) else null,
-            )
+            figure(viewId, value)
             setViewVisibility(viewId, View.VISIBLE)
         }
     }
 
+    // Writes a figure, described in words for a screen reader where
+    // what is drawn would be read as symbols: the mask one dot at a
+    // time, the dash of a value not known yet as "dash". Anything else
+    // reads as written.
+    protected fun RemoteViews.figure(viewId: Int, value: String) {
+        setTextViewText(viewId, value)
+        setContentDescription(
+            viewId,
+            when {
+                value.contains(MASK) -> value.replace(MASK, MASK_SPOKEN)
+                value == PLACEHOLDER -> PLACEHOLDER_SPOKEN
+                else -> null
+            },
+        )
+    }
+
     private companion object {
-        // As the app writes them (lib/src/format.dart).
+        // As the app writes them (lib/src/format.dart), and as
+        // strings_widget.xml says them.
         const val MASK = "•••••"
         const val MASK_SPOKEN = "Hidden amount"
+        const val PLACEHOLDER = "—"
+        const val PLACEHOLDER_SPOKEN = "Not known yet"
     }
 
     // The smallest height the launcher may draw this instance at, in

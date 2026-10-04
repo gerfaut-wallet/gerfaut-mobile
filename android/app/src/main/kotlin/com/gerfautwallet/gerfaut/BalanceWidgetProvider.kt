@@ -35,7 +35,7 @@ class BalanceWidgetProvider : GerfautWidgetProvider() {
                     setViewVisibility(rowId, View.GONE)
                 } else {
                     setTextViewText(nameId, name)
-                    setTextViewText(
+                    figure(
                         figureId,
                         data.getString("balance.row${index + 1}.figure", null)
                             ?: context.getString(R.string.widget_masked_placeholder),
