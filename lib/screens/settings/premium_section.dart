@@ -120,6 +120,14 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   void initState() {
     super.initState();
     _keyController.addListener(() => setState(() {}));
+    // What the server says of the channels and the alerts moves on its
+    // own: a channel stops delivering, an alert goes out. The page asks
+    // again each time it opens, the last answer on screen meanwhile.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.invalidate(premiumChannelsProvider);
+      ref.invalidate(premiumEventsProvider);
+    });
   }
 
   @override

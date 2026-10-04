@@ -2223,6 +2223,43 @@ void main() {
       expect(bridge.premiumChannelList, hasLength(1));
     });
 
+    testWidgets('the page asks for the channels again each time it opens', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumChannelList.add(
+        const PremiumChannel(
+          id: 'ch8',
+          kind: ChannelKind.webhook,
+          target: 'https://hooks.example.org/gerfaut',
+          linked: true,
+          createdAt: 1,
+        ),
+      );
+      await tester.pumpWidget(premiumApp(bridge, root: true));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Premium').first);
+      await tester.pumpAndSettle();
+      expect(find.text('Not delivering'), findsNothing);
+
+      // An hour of failures later, on the server.
+      bridge.premiumChannelList[0] = const PremiumChannel(
+        id: 'ch8',
+        kind: ChannelKind.webhook,
+        target: 'https://hooks.example.org/gerfaut',
+        linked: true,
+        createdAt: 1,
+        failingSince: 1,
+        lastFailure: 'HTTP 502',
+      );
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Premium').first);
+      await tester.pumpAndSettle();
+      expect(find.text('Not delivering'), findsOneWidget);
+    });
+
     testWidgets('a channel the server turned off says so, in amber', (
       tester,
     ) async {
