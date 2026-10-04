@@ -528,7 +528,9 @@ class LiveService : Service() {
             val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val refusals = prefs.getInt(PREF_REFUSALS, 0)
             prefs.edit().putInt(PREF_REFUSALS, refusals + 1).apply()
-            val doubled = HEARTBEAT_MS shl refusals.coerceAtMost(MAX_DOUBLINGS)
+            // The first refusal already doubles the wait: the heartbeat
+            // that met it was the normal one.
+            val doubled = HEARTBEAT_MS shl (refusals + 1).coerceAtMost(MAX_DOUBLINGS)
             return doubled.coerceAtMost(MAX_BACK_OFF_MS)
         }
 
