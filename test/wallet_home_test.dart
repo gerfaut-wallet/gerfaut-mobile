@@ -322,6 +322,49 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('a refused name keeps the dialog up, with the reason', (
+    tester,
+  ) async {
+    final meta = makeMeta();
+    final bridge = _RefusingRename(
+      wallets: [meta],
+      snapshots: {'w1': makeSnapshot(meta: meta)},
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [bridgeProvider.overrideWithValue(bridge)],
+        child: MaterialApp(
+          theme: themeFrom(GerfautTokens.light, Brightness.light),
+          home: const WalletHomeScreen(walletId: 'w1'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Cold storage'));
+    await tester.pumpAndSettle();
+    final field = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(field, 'Vault');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.text('the vault could not be written'), findsOneWidget);
+    expect(tester.widget<TextField>(field).controller?.text, 'Vault');
+    expect(find.text('Wallet renamed'), findsNothing);
+
+    bridge.refusing = false;
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('Wallet renamed'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('leaving mid-rename does not fault on a dead screen', (
     tester,
   ) async {
@@ -672,6 +715,20 @@ void main() {
 }
 
 /// The bridge of [FakeBridge], whose UTXO reads can be held or refused.
+class _RefusingRename extends FakeBridge {
+  _RefusingRename({required super.wallets, required super.snapshots});
+
+  bool refusing = true;
+
+  @override
+  Future<void> renameWallet(String id, String name) async {
+    if (refusing) {
+      throw const BridgeException('storage', 'the vault could not be written');
+    }
+    return super.renameWallet(id, name);
+  }
+}
+
 class _UtxoBridge extends FakeBridge {
   _UtxoBridge({required super.wallets, required super.snapshots, super.utxos});
 

@@ -57,24 +57,26 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
   /// through the one call that writes a name.
   Future<void> _rename(String current) async {
     final messenger = ScaffoldMessenger.of(context);
-    final name = await showDialog<String>(
+    // Held before the dialog: the name is written even if the page goes
+    // meanwhile, and refreshing the lists must not touch a dead `ref`.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final bridge = ref.read(bridgeProvider);
+    final renamed = await showDialog<bool>(
       context: context,
-      builder: (_) => _RenameDialog(current: current),
+      builder: (_) => _RenameDialog(
+        current: current,
+        // The dialog makes the call and stays up on a refusal, the
+        // reason under the field: a toast would be gone before it is
+        // read, and the name typed with it.
+        onSave: (name) async {
+          await bridge.renameWallet(widget.walletId, name);
+          container.invalidate(walletsProvider);
+          container.invalidate(snapshotProvider(widget.walletId));
+        },
+      ),
     );
-    // Empty or unchanged: the dialog closes and nothing is written.
-    if (name == null || name.isEmpty || name == current) return;
-    try {
-      await ref.read(bridgeProvider).renameWallet(widget.walletId, name);
-      // The name is written either way; what is left is refreshing a
-      // screen that may be gone. Touching `ref` after the widget is
-      // disposed throws on a call nothing was waiting for.
-      if (!mounted) return;
-      ref.invalidate(walletsProvider);
-      ref.invalidate(snapshotProvider(widget.walletId));
-      messenger.showSnackBar(const SnackBar(content: Text('Wallet renamed')));
-    } on BridgeException catch (error) {
-      messenger.showSnackBar(SnackBar(content: Text('$error')));
-    }
+    if (renamed != true || !mounted) return;
+    messenger.showSnackBar(const SnackBar(content: Text('Wallet renamed')));
   }
 
   @override
@@ -358,9 +360,12 @@ class _CoverageLine extends StatelessWidget {
 /// rides above the soft keyboard on its own: [Dialog] adds the view
 /// insets to its inset padding.
 class _RenameDialog extends StatefulWidget {
-  const _RenameDialog({required this.current});
+  const _RenameDialog({required this.current, required this.onSave});
 
   final String current;
+
+  /// Writes the name; a [BridgeException] keeps the dialog up.
+  final Future<void> Function(String name) onSave;
 
   @override
   State<_RenameDialog> createState() => _RenameDialogState();
@@ -368,6 +373,10 @@ class _RenameDialog extends StatefulWidget {
 
 class _RenameDialogState extends State<_RenameDialog> {
   late final _controller = TextEditingController(text: widget.current);
+  bool _saving = false;
+
+  /// What the core said when it refused the name.
+  String? _refusal;
 
   @override
   void dispose() {
@@ -375,7 +384,27 @@ class _RenameDialogState extends State<_RenameDialog> {
     super.dispose();
   }
 
-  void _save() => Navigator.of(context).pop(_controller.text.trim());
+  Future<void> _save() async {
+    if (_saving) return;
+    final name = _controller.text.trim();
+    // Empty or unchanged: the dialog closes and nothing is written.
+    if (name.isEmpty || name == widget.current) {
+      Navigator.of(context).pop(false);
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _refusal = null;
+    });
+    try {
+      await widget.onSave(name);
+      if (mounted) Navigator.of(context).pop(true);
+    } on BridgeException catch (error) {
+      if (mounted) setState(() => _refusal = error.message);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -388,36 +417,60 @@ class _RenameDialogState extends State<_RenameDialog> {
       title: Text('Rename wallet', style: tokens.h2),
       // The title is the field's label: a second one over a single
       // prefilled field would say the same word twice.
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        textInputAction: TextInputAction.done,
-        style: tokens.body,
-        onSubmitted: (_) => _save(),
-        decoration: InputDecoration(
-          filled: true,
-          fillColor: tokens.surfaceSunken,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: GerfautSpacing.md,
-            vertical: GerfautSpacing.sm,
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(GerfautRadius.sm),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(GerfautRadius.sm),
-            borderSide: BorderSide(color: tokens.primary, width: 2),
-          ),
-        ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _field(tokens),
+          if (_refusal != null) ...[
+            const SizedBox(height: GerfautSpacing.sm),
+            Semantics(
+              liveRegion: true,
+              child: Text(
+                _refusal!,
+                style: tokens.bodySmall.copyWith(color: tokens.pending),
+              ),
+            ),
+          ],
+        ],
       ),
       actions: [
         GhostButton(
           label: 'Cancel',
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
         ),
-        PrimaryButton(label: 'Save', onPressed: _save),
+        PrimaryButton(
+          label: _saving ? 'Saving…' : 'Save',
+          onPressed: _saving ? null : _save,
+        ),
       ],
+    );
+  }
+
+  Widget _field(GerfautTokens tokens) {
+    return TextField(
+      controller: _controller,
+      autofocus: true,
+      enabled: !_saving,
+      textInputAction: TextInputAction.done,
+      style: tokens.body,
+      onSubmitted: (_) => _save(),
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: tokens.surfaceSunken,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: GerfautSpacing.md,
+          vertical: GerfautSpacing.sm,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(GerfautRadius.sm),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(GerfautRadius.sm),
+          borderSide: BorderSide(color: tokens.primary, width: 2),
+        ),
+      ),
     );
   }
 }
@@ -449,6 +502,13 @@ class _TabLabel extends StatelessWidget {
   }
 }
 
+/// Why the last "Load older transactions" failed, per wallet, said
+/// under the button until the next try: a toast would be gone before
+/// it is read.
+final _olderFailureProvider = StateProvider.autoDispose.family<String?, String>(
+  (ref, walletId) => null,
+);
+
 /// Transactions are list rows, never cards: they scan vertically.
 /// 48px rows, hairline separators, figures right-aligned.
 class _TxList extends ConsumerWidget {
@@ -469,6 +529,8 @@ class _TxList extends ConsumerWidget {
   /// Fetches one more round and states what it brought back.
   Future<void> _loadOlder(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
+    final failure = ref.read(_olderFailureProvider(walletId).notifier);
+    failure.state = null;
     try {
       final added = await ref.read(historyProvider.notifier).loadMore(walletId);
       if (added == null) return;
@@ -482,7 +544,7 @@ class _TxList extends ConsumerWidget {
         ),
       );
     } on BridgeException catch (error) {
-      messenger.showSnackBar(SnackBar(content: Text('$error')));
+      failure.state = error.message;
     }
   }
 
@@ -504,6 +566,7 @@ class _TxList extends ConsumerWidget {
 
     ref.watch(historyProvider);
     final loading = ref.read(historyProvider.notifier).isLoading(walletId);
+    final olderFailure = ref.watch(_olderFailureProvider(walletId));
 
     return ListView.separated(
       itemCount: sorted.length + (truncated ? 1 : 0),
@@ -521,6 +584,17 @@ class _TxList extends ConsumerWidget {
                   icon: LucideIcons.chevronDown,
                   onPressed: loading ? null : () => _loadOlder(context, ref),
                 ),
+                if (olderFailure != null) ...[
+                  const SizedBox(height: GerfautSpacing.sm),
+                  Semantics(
+                    liveRegion: true,
+                    child: Text(
+                      'Older transactions could not be loaded. $olderFailure',
+                      style: tokens.bodySmall.copyWith(color: tokens.pending),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: GerfautSpacing.sm),
                 Text(
                   'This address has a long history: it loads in rounds. '
