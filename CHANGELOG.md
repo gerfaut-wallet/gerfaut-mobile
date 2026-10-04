@@ -305,6 +305,16 @@ The first release: Gerfaut for Android.
   would watch the wallet without its change.
 - When the server itself refuses addresses, Settings › Notifications says
   so, instead of blaming Live's own limits.
+- When a server refuses some of your addresses, Live now asks it again for
+  all of them a day later, or an hour later when it refused every one.
+  Before, it waited until you changed the server or restarted Gerfaut, so a
+  server that refused every address could leave Live off for days.
+- In Add a wallet, a QR code that gives no derivation path now says that
+  Gerfaut assumes receive and change addresses, and asks you to compare the
+  first address with your signer.
+- The price widget now gives the date of a price that is not from today, as
+  in "as of Oct 03, 09:41". It used to give the time alone, so a price kept
+  for days read like one from this morning.
 - "Synced 5 min ago" and the other "ago" lines move on while a page stays
   open.
 - A page that fails to load, such as a wallet, its UTXOs, a transaction or
