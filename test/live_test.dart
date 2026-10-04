@@ -485,6 +485,36 @@ void main() {
       expect(service.bridge.liveStartCalls, 2);
     });
 
+    test('a watch started again is held up while it reconnects', () async {
+      final service = _Service(
+        _bridge(),
+        restartAfter: const Duration(milliseconds: 20),
+      );
+      await service.runner.run();
+      const reconnecting = LiveStatusChanged(
+        LiveWatchStatus(state: WatchState.reconnecting),
+      );
+      service.bridge.liveController.add(reconnecting);
+      await service.settle();
+      service.bridge.liveController.add(const LiveStopped());
+      for (var i = 0; i < 200 && service.bridge.liveStartCalls < 2; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(service.bridge.liveStartCalls, 2);
+      final holds = service.awake.where((call) => call == 'hold').length;
+
+      // The new run's first word is the same as the old run's last: it
+      // is still news, and the phone stays up for it.
+      service.bridge.liveController.add(reconnecting);
+      await service.settle();
+      await service.settle();
+      expect(
+        service.awake.where((call) => call == 'hold').length,
+        greaterThan(holds),
+      );
+      await service.runner.stop(revert: false);
+    });
+
     test('a run refused, the watch held elsewhere, is tried again', () async {
       final bridge = _bridge()
         ..runRefusal = const BridgeException(

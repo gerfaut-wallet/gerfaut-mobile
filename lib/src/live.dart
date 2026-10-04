@@ -839,6 +839,9 @@ class LiveRunner {
     if (run != _run) return;
     _started = false;
     _events = null;
+    // The next run starts from nothing: its first word, "connecting",
+    // is news and keeps the phone up, whatever this one said last.
+    _lastState = null;
     final ended = _ended;
     if (ended != null && !ended.isCompleted) ended.complete();
     if (!_stopping) {
