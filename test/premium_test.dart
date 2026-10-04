@@ -2340,6 +2340,51 @@ void main() {
       expect(find.text('Remove'), findsOneWidget);
     });
 
+    testWidgets('every channel that delivers reads Linked, as on desktop', (
+      tester,
+    ) async {
+      // Only a linked Telegram channel used to say so: an ntfy topic, a
+      // webhook or a confirmed address showed no state at all.
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      bridge.premiumChannelList.addAll(const [
+        PremiumChannel(
+          id: 'ch10',
+          kind: ChannelKind.ntfy,
+          target: 'abc…xyz',
+          linked: true,
+          createdAt: 1,
+        ),
+        PremiumChannel(
+          id: 'ch11',
+          kind: ChannelKind.webhook,
+          target: 'https://hooks.example.org/gerfaut',
+          linked: true,
+          createdAt: 1,
+        ),
+        PremiumChannel(
+          id: 'ch12',
+          kind: ChannelKind.email,
+          target: 'l…c@example.org',
+          linked: true,
+          createdAt: 1,
+        ),
+        PremiumChannel(
+          id: 'ch13',
+          kind: ChannelKind.telegram,
+          target: '12••••89',
+          linked: true,
+          createdAt: 1,
+        ),
+      ]);
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Linked'), findsNWidgets(4));
+      expect(find.text('Not delivering'), findsNothing);
+      expect(find.textContaining('Waiting for'), findsNothing);
+    });
+
     testWidgets('a failure younger than an hour changes nothing', (
       tester,
     ) async {

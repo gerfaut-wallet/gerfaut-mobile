@@ -2145,8 +2145,8 @@ class _RemoveChannelQuestion extends StatelessWidget {
 const String removeChannelQuestion =
     'Remove this channel? Gerfaut stops sending alerts to it at once.';
 
-/// One channel: its glyph, its kind, the masked target under it, the
-/// state as a pill when it has one, and the actions under a menu.
+/// One channel: its glyph, its kind, the masked target under it, its
+/// state as a pill, and the actions under a menu.
 ///
 /// A channel the server turned off reads as such before anything
 /// else: the pill says nothing is delivered, and the menu offers no
@@ -2220,23 +2220,27 @@ class _ChannelRow extends StatelessWidget {
                         icon: LucideIcons.triangleAlert,
                         label: 'Not delivering',
                       )
-                    else if (channel.kind == ChannelKind.telegram)
-                      channel.linked
-                          ? const StatusPill.tone(
-                              tone: PillTone.neutral,
-                              icon: LucideIcons.link,
-                              label: 'Linked',
-                            )
-                          : const StatusPill.tone(
-                              tone: PillTone.pending,
-                              icon: LucideIcons.clock,
-                              label: 'Waiting for the bot',
-                            )
+                    else if (channel.kind == ChannelKind.telegram &&
+                        !channel.linked)
+                      const StatusPill.tone(
+                        tone: PillTone.pending,
+                        icon: LucideIcons.clock,
+                        label: 'Waiting for the bot',
+                      )
                     else if (awaitingCode)
                       const StatusPill.tone(
                         tone: PillTone.pending,
                         icon: LucideIcons.clock,
                         label: 'Waiting for the code',
+                      )
+                    else
+                      // Every channel that delivers says so, whatever
+                      // its kind, as on the desktop: a row with no
+                      // state read as one nobody had checked.
+                      const StatusPill.tone(
+                        tone: PillTone.neutral,
+                        icon: LucideIcons.link,
+                        label: 'Linked',
                       ),
                   ],
                 ),
