@@ -852,6 +852,9 @@ void main() {
         tester.widget<SettingSwitch>(find.byType(SettingSwitch)).onChanged,
         isNull,
       );
+      // Drawn off, as the line under it says, the choice kept for later.
+      expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+      expect(container.read(widgetBalancesProvider), isTrue);
       expect(board.data[WidgetKeys.balanceTotal], maskedValue);
       expect(board.data[WidgetKeys.balanceRowName(1)], isNull);
     });

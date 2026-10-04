@@ -37,7 +37,9 @@ class WidgetsSection extends ConsumerWidget {
               : 'A widget is read over the shoulder: balances stay masked '
                     'until this is on, and whenever amounts are hidden in '
                     'the app.',
-          value: on,
+          // Drawn off while the lock holds it off, as the hint says; the
+          // choice itself is kept.
+          value: on && !locked,
           onChanged: locked
               ? null
               : (next) => ref.read(widgetBalancesProvider.notifier).set(next),
