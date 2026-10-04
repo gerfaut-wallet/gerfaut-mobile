@@ -278,7 +278,11 @@ void main() {
       );
       await service.runner.run();
       service.bridge.liveController.add(LiveTransaction(_live('cc', 1)));
-      await Future<void>.delayed(const Duration(milliseconds: 60));
+      // However slowly a busy machine runs the clock: said within two
+      // seconds, and once.
+      for (var i = 0; i < 200 && service.notifications.posted.isEmpty; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
       expect(service.notifications.posted, hasLength(1));
     });
 
@@ -339,6 +343,13 @@ void main() {
   });
 
   group('the service starts, ticks and stops', () {
+    // The wake-lock tests run on the test clock: the windows are seconds
+    // long, as in the app, and no machine's load can stretch one past
+    // the next check. Each ends a minute on, every window run out, so
+    // no timer outlives it.
+    Future<void> settled(WidgetTester tester) =>
+        tester.pump(const Duration(minutes: 1));
+
     test('stands down when Live is not what the settings ask for', () async {
       final service = _Service(
         _bridge(prefs: {'notify.new_tx': '1', 'notify.background': '900'}),
@@ -466,7 +477,11 @@ void main() {
       await service.runner.run();
       expect(service.bridge.liveStartCalls, 1);
       service.bridge.liveController.add(const LiveStopped());
-      await Future<void>.delayed(const Duration(milliseconds: 80));
+      // However slowly a busy machine runs the clock: started again
+      // within two seconds.
+      for (var i = 0; i < 200 && service.bridge.liveStartCalls < 2; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
       expect(service.bridge.liveStartCalls, 2);
     });
 
@@ -509,77 +524,79 @@ void main() {
       expect(service.told.where((t) => t.$1 == 'status'), hasLength(1));
     });
 
-    test(
+    testWidgets(
       'a tick keeps the phone up while the core checks, then lets go',
-      () async {
-        final service = _Service(
-          _bridge(),
-          quietAfter: const Duration(milliseconds: 30),
-        );
+      (tester) async {
+        final service = _Service(_bridge());
         await service.runner.run();
         await service.send('tick');
         expect(service.holding, isTrue);
-        await Future<void>.delayed(const Duration(milliseconds: 60));
+        await tester.pump(const Duration(seconds: 4));
+        expect(service.holding, isTrue);
+        await tester.pump(const Duration(seconds: 2));
         expect(service.awake.last, 'release');
+        await settled(tester);
       },
     );
 
-    test('an arrival keeps the phone up until it is announced', () async {
+    testWidgets('an arrival keeps the phone up until it is announced', (
+      tester,
+    ) async {
       final service = _Service(
         _bridge(),
-        quietAfter: const Duration(milliseconds: 20),
-        flushAfter: const Duration(milliseconds: 80),
+        quietAfter: const Duration(seconds: 1),
+        flushAfter: const Duration(seconds: 3),
       );
       await service.runner.run();
       service.bridge.liveController.add(LiveTransaction(_live('aa', 5000)));
-      await service.settle();
+      await tester.pump();
       expect(service.holding, isTrue);
 
       // Quiet for longer than the window, the announcement still to say.
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await tester.pump(const Duration(seconds: 2));
       expect(service.notifications.posted, isEmpty);
       expect(service.holding, isTrue);
 
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump(const Duration(seconds: 2));
       expect(service.notifications.posted, hasLength(1));
       expect(service.awake.last, 'release');
+      await settled(tester);
     });
 
-    test('a reconnection keeps the phone up for longer', () async {
-      final service = _Service(
-        _bridge(),
-        quietAfter: const Duration(milliseconds: 20),
-        connectingFor: const Duration(milliseconds: 120),
-      );
+    testWidgets('a reconnection keeps the phone up for longer', (tester) async {
+      final service = _Service(_bridge());
       await service.runner.run();
       service.bridge.liveController.add(
         const LiveStatusChanged(
           LiveWatchStatus(state: WatchState.reconnecting),
         ),
       );
-      await Future<void>.delayed(const Duration(milliseconds: 60));
+      await tester.pump(const Duration(seconds: 20));
       expect(service.holding, isTrue);
 
       // Connected: a moment more for the catch-up, then sleep.
       service.bridge.liveController.add(
         const LiveStatusChanged(LiveWatchStatus(state: WatchState.connected)),
       );
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await tester.pump(const Duration(seconds: 6));
       expect(service.awake.last, 'release');
+      await settled(tester);
     });
 
-    test('a status that changes nothing keeps nobody up', () async {
-      final service = _Service(
-        _bridge(),
-        quietAfter: const Duration(milliseconds: 20),
-      );
+    testWidgets('a status that changes nothing keeps nobody up', (
+      tester,
+    ) async {
+      final service = _Service(_bridge());
       await service.runner.run();
-      const connected = LiveStatusChanged(
-        LiveWatchStatus(state: WatchState.connected, pushedScripts: 10),
+      service.bridge.liveController.add(
+        const LiveStatusChanged(
+          LiveWatchStatus(state: WatchState.connected, pushedScripts: 10),
+        ),
       );
-      service.bridge.liveController.add(connected);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      expect(service.awake, ['hold', 'release']);
+      await tester.pump(const Duration(seconds: 6));
+      final holds = service.awake.where((call) => call == 'hold').length;
+      expect(service.awake.last, 'release');
 
       // The next round recounts, in the same state: nothing to wait for.
       service.bridge.liveController.add(
@@ -587,8 +604,9 @@ void main() {
           LiveWatchStatus(state: WatchState.connected, pushedScripts: 20),
         ),
       );
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      expect(service.awake, ['hold', 'release']);
+      await tester.pump(const Duration(seconds: 6));
+      expect(service.awake.where((call) => call == 'hold'), hasLength(holds));
+      await settled(tester);
     });
 
     test('a stop lets the phone sleep once it is over', () async {
