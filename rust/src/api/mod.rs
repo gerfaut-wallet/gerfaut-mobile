@@ -356,10 +356,11 @@ pub async fn parse_input(input: String, script: Option<String>) -> String {
     }
 }
 
-/// Classifies wallet material with the advanced choices of the import
-/// screen: `options_json` is a serialized `ImportOptions` (script type
-/// and derivation paths), both parts optional. Everything the input
-/// fixes by itself ignores them.
+/// Classifies wallet material with the choices of the import screen:
+/// `options_json` is a serialized `ImportOptions` (script type,
+/// derivation paths, and the network the wallet goes to), all
+/// optional. Everything the input fixes by itself ignores the first
+/// two; the network decides the first address shown.
 pub async fn parse_input_with_options(input: String, options_json: String) -> String {
     try_json!(refuse_oversized_ur(&input));
     let options: ImportOptions = try_json!(from_json(&options_json, "ImportOptions"));

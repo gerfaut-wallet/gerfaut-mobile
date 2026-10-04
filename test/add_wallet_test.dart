@@ -249,7 +249,10 @@ void main() {
     await tester.tap(find.text('Taproot (P2TR)').last);
     await tester.pumpAndSettle();
 
-    expect(bridge.parseScripts, [null, ScriptKind.taproot]);
+    // The network picked asked for the same key again, on testnet 4,
+    // and the script picked after it kept that network.
+    expect(bridge.parseScripts, [null, null, ScriptKind.taproot]);
+    expect(bridge.parseOptions.last.network, Network.testnet4);
     // The core answered with new descriptors and a new first address.
     expect(find.text('tb1p0taproot0preview'), findsOneWidget);
     expect(find.text('tb1q0segwit0preview'), findsNothing);
@@ -274,6 +277,47 @@ void main() {
     await tester.pumpAndSettle();
     expect(bridge.addWalletCalls, 1);
     expect(bridge.wallets.single.network, Network.testnet4);
+  });
+
+  testWidgets('the first address shown is the one of the network picked', (
+    tester,
+  ) async {
+    // Regtest was shown the signet address, which no regtest wallet
+    // ever gives: the core derives it for the network asked, starting
+    // with the one on screen.
+    final bridge =
+        FakeBridge(
+            settings: const Settings(
+              activeNetwork: Network.regtest,
+              backends: {},
+              appPrefs: {},
+            ),
+          )
+          ..onParseWithOptions = (_, options) => makeParsedInput(
+            previewAddress: options.network == Network.regtest
+                ? 'bcrt1q0regtest0preview'
+                : 'tb1q0signet0preview',
+          );
+    await tester.pumpWidget(screen(bridge));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byType(TextField),
+      'wpkh([9a6a2580/84h/1h/0h]tpub.../<0;1>/*)',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    expect(bridge.parseOptions.single.network, Network.regtest);
+    expect(find.text('bcrt1q0regtest0preview'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Signet'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Signet'));
+    await tester.pumpAndSettle();
+    expect(bridge.parseOptions.last.network, Network.signet);
+    expect(find.text('tb1q0signet0preview'), findsOneWidget);
+    expect(find.text('bcrt1q0regtest0preview'), findsNothing);
   });
 
   testWidgets('private material is refused in words that say what to bring', (

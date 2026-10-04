@@ -82,25 +82,41 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
     super.dispose();
   }
 
+  /// What the last parse that went through was asked, so a network
+  /// picked afterwards rebuilds that same wallet on it.
+  ImportOptions _asked = const ImportOptions();
+
   Future<void> _parse(
     String input, {
     ScriptKind? script,
     DerivationChoice? derivation,
   }) async {
     setState(() => _error = null);
+    // A re-parse keeps the network the user already picked; a new input
+    // starts on the one on screen. The core derives the first address
+    // for it, so the address shown is the one the wallet will give.
+    var preferred = _network;
+    if (preferred == null) {
+      try {
+        preferred = (await ref.read(settingsProvider.future)).activeNetwork;
+      } on Object {
+        // No settings to read: the first candidate stands.
+      }
+      if (!mounted) return;
+    }
+    final options = ImportOptions(
+      script: script,
+      derivation: derivation,
+      network: preferred,
+    );
     try {
       final parsed = await ref
           .read(bridgeProvider)
-          .parseInputWithOptions(
-            input,
-            ImportOptions(script: script, derivation: derivation),
-          );
+          .parseInputWithOptions(input, options);
       if (!mounted) return;
-      // A re-parse keeps the network the user already picked.
-      final preferred =
-          _network ?? ref.read(settingsProvider).valueOrNull?.activeNetwork;
       setState(() {
         _parsed = parsed;
+        _asked = options;
         _network = preferred != null && parsed.networks.contains(preferred)
             ? preferred
             : parsed.networks.first;
@@ -122,6 +138,20 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
       _rawController.text.trim(),
       script: chosen,
       derivation: _advanced ? _derivation() : null,
+    );
+  }
+
+  /// The first address belongs to a network: picking another one asks
+  /// the core for it again, on the wallet as it stands. A regtest
+  /// wallet shown a signet address would be compared with the wrong one.
+  void _chooseNetwork(Network? network) {
+    if (network == null || network == _network) return;
+    setState(() => _network = network);
+    // ignore: unawaited_futures
+    _parse(
+      _rawController.text.trim(),
+      script: _asked.script,
+      derivation: _asked.derivation,
     );
   }
 
@@ -583,7 +613,7 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
                 enabled: parsed.networks.length > 1,
               ),
           ],
-          onChanged: (candidate) => setState(() => _network = candidate),
+          onChanged: _chooseNetwork,
         ),
         if (_error != null) ...[
           const SizedBox(height: GerfautSpacing.md),

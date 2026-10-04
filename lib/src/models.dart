@@ -269,17 +269,22 @@ class DerivationChoice {
   int get hashCode => Object.hash(receive, change, origin);
 }
 
-/// The advanced choices of the import screen, both optional. Inputs
-/// that fix their own script type and paths ignore them.
+/// The choices of the import screen, all optional. Inputs that fix
+/// their own script type and paths ignore those two.
 class ImportOptions {
-  const ImportOptions({this.script, this.derivation});
+  const ImportOptions({this.script, this.derivation, this.network});
 
   final ScriptKind? script;
   final DerivationChoice? derivation;
 
+  /// The network the wallet is about to be added on: the first address
+  /// comes back derived for it when the input allows it.
+  final Network? network;
+
   Map<String, dynamic> toJson() => {
     'script': script?.id,
     'derivation': derivation?.toJson(),
+    'network': network?.id,
   };
 }
 

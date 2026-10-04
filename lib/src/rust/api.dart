@@ -41,10 +41,11 @@ Future<String> freshVaultKey() => RustLib.instance.api.crateApiFreshVaultKey();
 Future<String> parseInput({required String input, String? script}) =>
     RustLib.instance.api.crateApiParseInput(input: input, script: script);
 
-/// Classifies wallet material with the advanced choices of the import
-/// screen: `options_json` is a serialized `ImportOptions` (script type
-/// and derivation paths), both parts optional. Everything the input
-/// fixes by itself ignores them.
+/// Classifies wallet material with the choices of the import screen:
+/// `options_json` is a serialized `ImportOptions` (script type,
+/// derivation paths, and the network the wallet goes to), all
+/// optional. Everything the input fixes by itself ignores the first
+/// two; the network decides the first address shown.
 Future<String> parseInputWithOptions({
   required String input,
   required String optionsJson,
