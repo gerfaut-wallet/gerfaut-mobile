@@ -93,6 +93,11 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
   /// app can be resumed before the previous start has finished.
   bool _starting = false;
 
+  /// The app is in front. A start runs across several awaits, and the
+  /// app may leave during any of them: a start that finds it gone lets
+  /// the sensor go instead of streaming behind the launcher.
+  bool _inFront = true;
+
   /// The decoder itself broke down, as opposed to a frame that simply
   /// held no code. The second is the normal case and says nothing; the
   /// first would otherwise look exactly like a camera pointed at a
@@ -119,25 +124,30 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.resumed:
+        _inFront = true;
         if (_controller == null) unawaited(_start());
       case AppLifecycleState.inactive:
       case AppLifecycleState.paused:
       case AppLifecycleState.hidden:
         // The camera belongs to whatever is in front: a scanner left
         // behind keeps neither the sensor nor the lamp.
+        _inFront = false;
         unawaited(_stop());
       case AppLifecycleState.detached:
         break;
     }
   }
 
+  /// The start is no longer wanted: the scanner closed, or the app left.
+  bool get _abandoned => _closed || !mounted || !_inFront;
+
   Future<void> _start() async {
-    if (_starting || _closed) return;
+    if (_starting || _abandoned) return;
     _starting = true;
     try {
       await zxing.zx.startCameraProcessing();
       final cameras = await availableCameras();
-      if (_closed || !mounted) return;
+      if (_abandoned) return;
       if (cameras.isEmpty) {
         setState(() => _feed = _Feed.unavailable);
         return;
@@ -156,12 +166,12 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
         imageFormatGroup: ImageFormatGroup.yuv420,
       );
       await controller.initialize();
-      if (_closed || !mounted) {
+      if (_abandoned) {
         await controller.dispose();
         return;
       }
       await controller.startImageStream(_onImage);
-      if (_closed || !mounted) {
+      if (_abandoned) {
         await controller.dispose();
         return;
       }
