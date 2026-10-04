@@ -35,6 +35,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.IOException
+import java.util.UUID
 
 // A fragment activity, which is what the biometric prompt attaches to.
 class MainActivity : FlutterFragmentActivity() {
@@ -124,9 +125,12 @@ class MainActivity : FlutterFragmentActivity() {
     // The call waiting for the battery question to be answered.
     private var pendingExemption: MethodChannel.Result? = null
 
-    // The secret last copied, while it may still be on the clipboard,
-    // and when it went there: it is taken off a minute later.
-    private var sensitiveCopy: String? = null
+    // The mark of the secret last copied, while it may still be on the
+    // clipboard, and when it went there: it is taken off a minute later.
+    // The mark, never the text: the secret is not kept here, and the
+    // clip is recognised by its description alone (see below).
+    private var sensitiveMark: String? = null
+    private var sensitiveStamp = 0L
     private var sensitiveCopiedAt = 0L
     private val main = Handler(Looper.getMainLooper())
     private val clearSensitive = Runnable { clearSensitiveIfOurs() }
@@ -352,13 +356,20 @@ class MainActivity : FlutterFragmentActivity() {
     private fun copySensitive(text: String) {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = ClipData.newPlainText("", text)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            clip.description.extras = PersistableBundle().apply {
+        val mark = UUID.randomUUID().toString()
+        clip.description.extras = PersistableBundle().apply {
+            putString(COPY_MARK, mark)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
             }
         }
         clipboard.setPrimaryClip(clip)
-        sensitiveCopy = text
+        sensitiveMark = mark
+        sensitiveStamp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            clipboard.primaryClipDescription?.timestamp ?: 0L
+        } else {
+            0L
+        }
         sensitiveCopiedAt = SystemClock.elapsedRealtime()
         main.removeCallbacks(clearSensitive)
         main.postDelayed(clearSensitive, SENSITIVE_CLEAR_MS)
@@ -372,20 +383,29 @@ class MainActivity : FlutterFragmentActivity() {
     // Android lets only the app in front read the clipboard. A minute
     // that runs out while Gerfaut is behind another app is caught up the
     // moment Gerfaut has the focus again.
+    //
+    // Only the clip's description is read, never its content. From
+    // Android 12, reading the content of a clip another app copied puts
+    // up a toast with the reader's name, "Gerfaut pasted from your
+    // clipboard", over whatever is on screen: over the calculator, when
+    // the app is disguised. The description carries the mark this app
+    // put on its own copy, and the time the system stamped it with.
     private fun clearSensitiveIfOurs() {
-        val copied = sensitiveCopy ?: return
+        val mark = sensitiveMark ?: return
         if (SystemClock.elapsedRealtime() - sensitiveCopiedAt < SENSITIVE_CLEAR_MS) return
         if (!hasWindowFocus()) return
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val current = try {
-            clipboard.primaryClip?.takeIf { it.itemCount > 0 }
-                ?.getItemAt(0)?.coerceToText(this)?.toString()
+        val description = try {
+            clipboard.primaryClipDescription
         } catch (_: Exception) {
             // Unreadable: nothing is cleared on a guess.
             return
         }
-        sensitiveCopy = null
-        if (current != copied) return
+        sensitiveMark = null
+        val marked = description?.extras?.getString(COPY_MARK) == mark
+        val stamped = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            sensitiveStamp != 0L && description?.timestamp == sensitiveStamp
+        if (!marked && !stamped) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             clipboard.clearPrimaryClip()
         } else {
@@ -742,6 +762,10 @@ class MainActivity : FlutterFragmentActivity() {
 
         // As on the desktop app: a minute on the clipboard, then gone.
         const val SENSITIVE_CLEAR_MS = 60_000L
+
+        // The key of the mark on a sensitive copy. Plain on purpose: a
+        // clipboard manager that lists extras must find no app's name.
+        const val COPY_MARK = "mark"
         const val CALCULATOR_LIGHT = 0xFFF5F5F5.toInt()
         const val CALCULATOR_DARK = 0xFF121212.toInt()
     }
