@@ -429,7 +429,7 @@ class _RenameDialogState extends State<_RenameDialog> {
               liveRegion: true,
               child: Text(
                 _refusal!,
-                style: tokens.bodySmall.copyWith(color: tokens.pending),
+                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
               ),
             ),
           ],
