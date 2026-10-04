@@ -1728,6 +1728,9 @@ mod tests {
             .err()
             .expect("the vault is held");
         assert_eq!(payload(&second)["error"]["kind"], "vault_in_use");
+        // The manager stays open for the process, so a system that keeps
+        // open files in place may refuse: the folder is left then.
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Isolates that find no vault together on a first launch are all
