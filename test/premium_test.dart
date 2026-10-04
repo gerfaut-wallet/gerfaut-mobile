@@ -2411,6 +2411,86 @@ void main() {
       }
     });
 
+    testWidgets('a test the server answered reads the channels again', (
+      tester,
+    ) async {
+      // The server keeps what a test did on the channel. "Not
+      // delivering" used to stay until the next read, even after a
+      // test that went through.
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      PremiumChannel ntfy({int? failingSince, String? lastFailure}) =>
+          PremiumChannel(
+            id: 'ch8',
+            kind: ChannelKind.ntfy,
+            target: 'abc…xyz',
+            linked: true,
+            createdAt: 1,
+            lastSentAt: now - 86400,
+            failingSince: failingSince,
+            lastFailure: lastFailure,
+          );
+      bridge.premiumChannelList.add(
+        ntfy(failingSince: now - 7200, lastFailure: 'the channel answered 404'),
+      );
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+      expect(find.text('Not delivering'), findsOneWidget);
+
+      int reads() => bridge.premiumCalls.where((c) => c == 'channels').length;
+      String? reason() => tester
+          .widgetList<GerfautNotice>(find.byType(GerfautNotice))
+          .singleWhere((n) => n.message.startsWith('Nothing has reached'))
+          .detail;
+      Future<void> sendTest() async {
+        await tester.tap(find.byTooltip('More for ntfy'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Send a test'));
+        await tester.pumpAndSettle();
+      }
+
+      // Never reached the server: nothing changed there, and asking
+      // again would only take the rows away.
+      bridge.onPremiumTestChannel = (_) => throw const BridgeException(
+        'premium_unreachable',
+        'connection refused',
+      );
+      var before = reads();
+      await sendTest();
+      expect(reads(), before);
+      expect(find.text('Not delivering'), findsOneWidget);
+      expect(reason(), 'the channel answered 404');
+
+      // Refused: the server kept the new reason, and the row gives it.
+      bridge.onPremiumTestChannel = (_) {
+        bridge.premiumChannelList[0] = ntfy(
+          failingSince: now - 7200,
+          lastFailure: 'the channel answered 502',
+        );
+        throw const BridgeException(
+          'premium_rejected',
+          'the channel answered 502',
+        );
+      };
+      before = reads();
+      await sendTest();
+      expect(reads(), before + 1);
+      expect(find.text('Not delivering'), findsOneWidget);
+      expect(reason(), 'the channel answered 502');
+
+      // Through: the warning goes at once.
+      bridge.onPremiumTestChannel = (_) {
+        bridge.premiumChannelList[0] = ntfy();
+      };
+      before = reads();
+      await sendTest();
+      expect(reads(), before + 1);
+      expect(find.text('Not delivering'), findsNothing);
+      expect(pillsOf(tester, 'Linked').single.icon, LucideIcons.check);
+      expect(find.text('Test sent to ntfy'), findsOneWidget);
+    });
+
     testWidgets('a failure younger than an hour changes nothing', (
       tester,
     ) async {

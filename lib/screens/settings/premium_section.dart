@@ -632,6 +632,13 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   /// failure under the card goes.
   void _confirmed() => setState(() => _channelsError = null);
 
+  /// Sends a test to a channel. The server keeps what the test did on
+  /// the channel, clearing its failing when it went through and giving
+  /// the reason when it did not, so the list is read again whenever the
+  /// server answered: a channel that delivers again drops "Not
+  /// delivering" at once, not at the next read. A test that never
+  /// reached it changed nothing there, and asking again would only put
+  /// "could not be asked" in place of the rows.
   Future<void> _test(PremiumChannel channel, {bool quiet = false}) async {
     final container = _container;
     final bridge = _bridge;
@@ -639,13 +646,17 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
       _busyChannelId = channel.id;
       _channelsError = null;
     });
+    var answered = false;
     try {
       await bridge.premiumTestChannel(channel.id);
+      answered = true;
       if (mounted && !quiet) _toast('Test sent to ${channel.kind.label}');
     } on BridgeException catch (error) {
+      answered = premiumFailureKind(error.kind) == PremiumFailureKind.refused;
       rereadIfDisowned(container, error);
       if (mounted) setState(() => _channelsError = error);
     } finally {
+      if (answered) container.invalidate(premiumChannelsProvider);
       if (mounted) setState(() => _busyChannelId = null);
     }
   }

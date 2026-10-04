@@ -130,7 +130,7 @@ The first release: Gerfaut for Android.
   do about it.
 - A Premium channel that has delivered nothing for an hour or more reads
   "Not delivering", with the last error the server got and what to do for
-  that kind of channel.
+  that kind of channel. A test that goes through clears the warning at once.
 - Forgetting the key can take the account with it: the server then deletes
   the wallets it watches, the channels and the log, and whatever paid time
   the key had left goes with them. Premium calls go through Tor whenever the
