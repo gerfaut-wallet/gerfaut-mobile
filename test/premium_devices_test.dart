@@ -922,7 +922,7 @@ void main() {
       await tester.tap(licenceCopy);
       await tester.pumpAndSettle();
       expect(clipboard.copied, ['abcd-efgh-ijkm-npqr']);
-      expect(find.text('Key copied'), findsOneWidget);
+      expect(find.text('Key copied for 1 minute'), findsOneWidget);
       await tester.pump(const Duration(seconds: 5));
 
       bridge.premiumKeySaved = true;

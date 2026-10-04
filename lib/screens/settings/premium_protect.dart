@@ -104,8 +104,9 @@ class _ProtectAccountCardState extends ConsumerState<ProtectAccountCard> {
     final key = widget.view.keyDisplay ?? widget.view.key;
     if (key == null) return;
     final messenger = ScaffoldMessenger.of(context);
+    final bool timed;
     try {
-      await ref.read(sensitiveClipboardProvider).copy(key);
+      timed = await ref.read(sensitiveClipboardProvider).copy(key);
     } catch (_) {
       // Said under the step, where it was asked, and it stays.
       if (mounted) setState(() => _copyFailed = true);
@@ -113,7 +114,9 @@ class _ProtectAccountCardState extends ConsumerState<ProtectAccountCard> {
     }
     if (!mounted) return;
     setState(() => _copyFailed = false);
-    messenger.showSnackBar(const SnackBar(content: Text('Key copied')));
+    messenger.showSnackBar(
+      SnackBar(content: Text(copiedWords('Key copied', timed: timed))),
+    );
   }
 
   @override

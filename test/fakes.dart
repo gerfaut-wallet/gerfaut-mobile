@@ -280,10 +280,15 @@ class FakeSensitiveClipboard implements SensitiveClipboard {
   bool fails;
   final List<String> copied = [];
 
+  /// Whether the platform takes the copy off a minute later, as the
+  /// Android activity does.
+  bool timed = true;
+
   @override
-  Future<void> copy(String text) async {
+  Future<bool> copy(String text) async {
     if (fails) throw PlatformException(code: 'clipboard');
     copied.add(text);
+    return timed;
   }
 }
 

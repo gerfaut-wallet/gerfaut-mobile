@@ -796,7 +796,7 @@ void main() {
       await tester.tap(find.byTooltip('Copy descriptor'));
       await tester.pump();
       expect(clipboard.copied, [snapshot.descriptor]);
-      expect(find.text('Copied'), findsOneWidget);
+      expect(find.text('Copied for 1 minute'), findsOneWidget);
       // Let the feedback timer run out before the tree goes away.
       await tester.pump(const Duration(seconds: 2));
     });

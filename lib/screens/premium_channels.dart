@@ -215,10 +215,13 @@ class _NtfyChannelScreenState extends ConsumerState<NtfyChannelScreen> {
     // The topic is the whole secret of the channel: anyone holding it
     // subscribes to the alerts of this account. It does not belong in
     // the system's clipboard preview or its history.
-    await ref.read(sensitiveClipboardProvider).copy(widget.subscribeUrl);
+    final timed = await ref
+        .read(sensitiveClipboardProvider)
+        .copy(widget.subscribeUrl);
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Copied')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(copiedWords('Copied', timed: timed))),
+    );
   }
 
   Future<void> _openApp() async {
@@ -438,10 +441,13 @@ class _TelegramChannelScreenState extends ConsumerState<TelegramChannelScreen> {
   /// account's alerts, so it stays out of the clipboard's preview and
   /// history, as the ntfy topic does.
   Future<void> _copyCode() async {
-    await ref.read(sensitiveClipboardProvider).copy('/start ${widget.code}');
+    final timed = await ref
+        .read(sensitiveClipboardProvider)
+        .copy('/start ${widget.code}');
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Copied')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(copiedWords('Copied', timed: timed))),
+    );
   }
 
   @override

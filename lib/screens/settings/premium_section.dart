@@ -227,16 +227,18 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
   /// it and keeps none in its history. A copy that fails says so under
   /// the buttons, where it was asked, and stays until the next one
   /// works: a toast would be gone before the empty clipboard was found.
-  /// True once it is there.
-  Future<bool> _copy(String key) async {
+  /// Null when the copy failed; otherwise whether the clipboard lets
+  /// go of the key by itself a minute later.
+  Future<bool?> _copy(String key) async {
+    final bool timed;
     try {
-      await ref.read(sensitiveClipboardProvider).copy(key);
+      timed = await ref.read(sensitiveClipboardProvider).copy(key);
     } catch (_) {
       if (mounted) setState(() => _copyFailed = true);
-      return false;
+      return null;
     }
     if (mounted) setState(() => _copyFailed = false);
-    return true;
+    return timed;
   }
 
   /// "Copy key", offered on the licence until the key is saved.
@@ -244,8 +246,11 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
     final key = view.keyDisplay ?? view.key;
     if (key == null) return;
     final messenger = ScaffoldMessenger.of(context);
-    if (await _copy(key)) {
-      messenger.showSnackBar(const SnackBar(content: Text('Key copied')));
+    final timed = await _copy(key);
+    if (timed != null) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(copiedWords('Key copied', timed: timed))),
+      );
     }
   }
 
@@ -260,10 +265,14 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
     final key = view.key;
     if (key != null && !view.keyChangePending) {
       final messenger = ScaffoldMessenger.of(context);
-      if (await _copy(key)) {
+      final timed = await _copy(key);
+      if (timed != null) {
         messenger.showSnackBar(
-          const SnackBar(
-            content: Text('Key copied, paste it on the renewal page'),
+          SnackBar(
+            content: Text(
+              '${copiedWords('Key copied', timed: timed)}, paste it on the '
+              'renewal page',
+            ),
           ),
         );
       }

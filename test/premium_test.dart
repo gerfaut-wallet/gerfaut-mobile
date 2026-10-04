@@ -855,7 +855,7 @@ void main() {
       // The key travels by the guarded clipboard, and the line says so.
       expect(clipboard.copied, [bridge.premiumKey]);
       expect(
-        find.text('Key copied, paste it on the renewal page'),
+        find.text('Key copied for 1 minute, paste it on the renewal page'),
         findsOneWidget,
       );
       await tester.pump(const Duration(seconds: 5));

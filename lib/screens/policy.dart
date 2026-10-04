@@ -622,11 +622,12 @@ class _CodeBoxState extends ConsumerState<_CodeBox> {
     // A descriptor names every address of a wallet, present and future,
     // and the policy read off it says who can spend and when. Neither
     // belongs in the system's clipboard preview or its history.
-    await ref.read(sensitiveClipboardProvider).copy(widget.text);
+    final timed = await ref.read(sensitiveClipboardProvider).copy(widget.text);
     if (!mounted) return;
     setState(() => _copied = true);
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Copied')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(copiedWords('Copied', timed: timed))),
+    );
     await Future<void>.delayed(const Duration(milliseconds: 1500));
     if (mounted) setState(() => _copied = false);
   }

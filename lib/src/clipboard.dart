@@ -22,8 +22,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// knows the flag. Behind an interface so no test ever reaches the
 /// platform.
 abstract class SensitiveClipboard {
-  Future<void> copy(String text);
+  /// True when the clipboard lets go of [text] by itself a minute
+  /// later; false for a plain copy, which stays.
+  Future<bool> copy(String text);
 }
+
+/// How long a sensitive copy stays on the clipboard, as the Android
+/// activity counts it.
+const String sensitiveCopyStays = '1 minute';
+
+/// The confirmation after a copy: "Key copied", or "Key copied for 1
+/// minute" when the clipboard lets go of it by itself, in the desktop
+/// app's words.
+String copiedWords(String words, {required bool timed}) =>
+    timed ? '$words for $sensitiveCopyStays' : words;
 
 /// The real one: a method channel the Android activity answers, which
 /// builds the clip with the flag on it.
@@ -33,15 +45,17 @@ class SystemSensitiveClipboard implements SensitiveClipboard {
   static const MethodChannel _channel = MethodChannel('gerfaut/window');
 
   @override
-  Future<void> copy(String text) async {
+  Future<bool> copy(String text) async {
     try {
       await _channel.invokeMethod<void>('copySensitive', text);
+      return true;
     } on PlatformException {
       await _plain(text);
     } on MissingPluginException {
       // A platform without the channel, such as a widget test.
       await _plain(text);
     }
+    return false;
   }
 
   /// The clipboard every other copy in Gerfaut uses.
