@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/add_wallet.dart';
+import 'package:gerfaut/screens/scan.dart';
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
@@ -18,12 +19,19 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'fakes.dart';
 
-Widget screen(FakeBridge bridge, {Future<XFile?> Function()? filePicker}) {
+Widget screen(
+  FakeBridge bridge, {
+  Future<XFile?> Function()? filePicker,
+  CameraBuilder? cameraBuilder,
+}) {
   return ProviderScope(
     overrides: [bridgeProvider.overrideWithValue(bridge)],
     child: MaterialApp(
       theme: themeFrom(GerfautTokens.light, Brightness.light),
-      home: AddWalletScreen(filePicker: filePicker),
+      home: AddWalletScreen(
+        filePicker: filePicker,
+        cameraBuilder: cameraBuilder,
+      ),
     ),
   );
 }
@@ -402,6 +410,73 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('a scanned code says the branches it named none of', (
+    tester,
+  ) async {
+    // The core read a crypto-output whose key gives no child path as
+    // receive and change: it says so beside the text it gave. The notice
+    // stays with that text, through a network picked, and goes once the
+    // field holds something else.
+    const scannedText = 'wpkh([9a6a2580/84h/1h/0h]tpub.../<0;1>/*)';
+    final asked = <String>[];
+    final bridge =
+        FakeBridge(
+            onParse: (input) {
+              asked.add(input);
+              return makeParsedInput();
+            },
+          )
+          ..onAssembleQr = (_) => const QrProgress(
+            format: QrFormat.ur,
+            received: 1,
+            total: 1,
+            complete: true,
+            text: scannedText,
+            warnings: [InputWarning.assumedBranches],
+          );
+    ValueChanged<String>? camera;
+    await tester.pumpWidget(
+      screen(
+        bridge,
+        cameraBuilder: (onFrame) {
+          camera = onFrame;
+          return const SizedBox.expand();
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Scan'));
+    await tester.pumpAndSettle();
+    camera!('ur:crypto-output/payload');
+    await tester.pumpAndSettle();
+
+    final notice = find.text(
+      'This QR code carries no derivation path, so Gerfaut assumes receive '
+      'and change addresses. Compare the first address with your signer.',
+    );
+    expect(find.text('NAME'), findsOneWidget);
+    expect(notice, findsOneWidget);
+    expect(asked.single, scannedText);
+
+    await tester.ensureVisible(find.text('Testnet 4'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Testnet 4'));
+    await tester.pumpAndSettle();
+    expect(bridge.parseOptions.last.network, Network.testnet4);
+    expect(notice, findsOneWidget);
+
+    await tester.ensureVisible(find.text('Back'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Back'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'wpkh(tpub.../0/*)');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    expect(find.text('NAME'), findsOneWidget);
+    expect(notice, findsNothing);
   });
 
   testWidgets('a descriptor offers no derivation to change', (tester) async {

@@ -195,8 +195,8 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
   /// which is plainly what was meant. Nothing is saved: the fields are
   /// filled and the person still presses Save.
   Future<void> _scanBackend() async {
-    final text = await Navigator.of(context).push<String>(
-      MaterialPageRoute<String>(
+    final scanned = await Navigator.of(context).push<QrProgress>(
+      MaterialPageRoute<QrProgress>(
         builder: (_) => ScanScreen(
           caption: NetworkSection.backendScanCaption,
           // A test seam of ScanScreen; this screen only forwards its
@@ -206,6 +206,7 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
         ),
       ),
     );
+    final text = scanned?.text;
     if (text == null || text.trim().isEmpty || !mounted) return;
     final ScannedBackend backend;
     try {

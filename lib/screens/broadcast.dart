@@ -164,12 +164,13 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
   }
 
   Future<void> _scan() async {
-    final text = await Navigator.of(context).push<String>(
-      MaterialPageRoute<String>(
+    final scanned = await Navigator.of(context).push<QrProgress>(
+      MaterialPageRoute<QrProgress>(
         builder: (_) =>
             const ScanScreen(caption: ScanScreen.transactionCaption),
       ),
     );
+    final text = scanned?.text;
     if (text == null || text.trim().isEmpty || !mounted) return;
     _inputController.text = text.trim();
     await _decode();

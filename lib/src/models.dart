@@ -96,6 +96,11 @@ enum InputWarning {
     'non_standard_derivation',
     'The paths chosen are not the usual 0/* and 1/*: compare the first '
         'address with your wallet.',
+  ),
+  assumedBranches(
+    'assumed_branches',
+    'This QR code carries no derivation path, so Gerfaut assumes receive '
+        'and change addresses. Compare the first address with your signer.',
   );
 
   const InputWarning(this.id, this.label);
@@ -1877,6 +1882,7 @@ class QrProgress {
     required this.total,
     required this.complete,
     this.text,
+    this.warnings = const [],
   });
 
   factory QrProgress.fromJson(Map<String, dynamic> json) {
@@ -1886,6 +1892,9 @@ class QrProgress {
       total: json['total'] as int,
       complete: json['complete'] as bool,
       text: json['text'] as String?,
+      warnings: ((json['warnings'] as List?) ?? const [])
+          .map((w) => InputWarning.fromId(w as String))
+          .toList(),
     );
   }
 
@@ -1900,6 +1909,10 @@ class QrProgress {
 
   /// The assembled text, once [complete].
   final String? text;
+
+  /// What the core assumed reading the code, which [text] no longer
+  /// shows: said with the warnings of that text.
+  final List<InputWarning> warnings;
 
   /// True while an animated code is still being collected.
   bool get inProgress => total > 1 && !complete;

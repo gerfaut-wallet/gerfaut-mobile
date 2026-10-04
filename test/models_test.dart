@@ -104,6 +104,37 @@ void main() {
     });
   });
 
+  group('QrProgress.fromJson', () {
+    test('reads what the core assumed reading the code', () {
+      final progress = QrProgress.fromJson({
+        'format': 'ur',
+        'received': 1,
+        'total': 1,
+        'complete': true,
+        'text': 'wpkh([9a6a2580/84h/1h/0h]tpub.../<0;1>/*)',
+        'warnings': ['assumed_branches'],
+      });
+      expect(progress.warnings, [InputWarning.assumedBranches]);
+      expect(
+        progress.warnings.single.label,
+        'This QR code carries no derivation path, so Gerfaut assumes '
+        'receive and change addresses. Compare the first address with '
+        'your signer.',
+      );
+    });
+
+    test('reads no warning when the answer has none', () {
+      final progress = QrProgress.fromJson({
+        'format': 'plain',
+        'received': 1,
+        'total': 1,
+        'complete': true,
+        'text': 'wpkh(tpub.../0/*)',
+      });
+      expect(progress.warnings, isEmpty);
+    });
+  });
+
   group('WalletMeta.fromJson', () {
     test('reads the scan gap', () {
       final meta = WalletMeta.fromJson(_metaJson());

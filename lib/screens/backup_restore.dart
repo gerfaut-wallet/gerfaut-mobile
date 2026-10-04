@@ -158,8 +158,8 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
   }
 
   Future<void> _scan() async {
-    final text = await Navigator.of(context).push<String>(
-      MaterialPageRoute<String>(
+    final scanned = await Navigator.of(context).push<QrProgress>(
+      MaterialPageRoute<QrProgress>(
         builder: (_) => ScanScreen(
           caption: BackupRestoreScreen.scanCaption,
           // A test seam of ScanScreen; this screen only forwards its
@@ -169,6 +169,7 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
         ),
       ),
     );
+    final text = scanned?.text;
     if (text == null || text.trim().isEmpty || !mounted) return;
     _landed(text.trim(), const _BackupSource.qr());
   }

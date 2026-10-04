@@ -24,11 +24,18 @@ import 'wallet_home.dart';
 /// Detection is never silent — the user validates before anything is
 /// stored.
 class AddWalletScreen extends ConsumerStatefulWidget {
-  const AddWalletScreen({super.key, @visibleForTesting this.filePicker});
+  const AddWalletScreen({
+    super.key,
+    @visibleForTesting this.filePicker,
+    @visibleForTesting this.cameraBuilder,
+  });
 
   /// Stands in for the system's file picker, so a test can answer it
   /// without a platform under the test binding.
   final Future<XFile?> Function()? filePicker;
+
+  /// Replaces the camera view of the scanner; tests push frames by hand.
+  final CameraBuilder? cameraBuilder;
 
   @override
   ConsumerState<AddWalletScreen> createState() => _AddWalletScreenState();
@@ -41,6 +48,12 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
   ParsedInput? _parsed;
   Network? _network;
   bool _adding = false;
+
+  /// What the core assumed reading the last code scanned, which the text
+  /// it gave no longer shows; and of that, what goes with [_parsed]: the
+  /// warnings of a parse of that very text.
+  ({String text, List<InputWarning> warnings})? _scanned;
+  List<InputWarning> _assumed = const [];
 
   /// The advanced disclosure, and what it holds. The fields survive a
   /// re-parse: a user who tried one branch tries the next from there.
@@ -114,8 +127,12 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
           .read(bridgeProvider)
           .parseInputWithOptions(input, options);
       if (!mounted) return;
+      final scanned = _scanned;
       setState(() {
         _parsed = parsed;
+        _assumed = scanned != null && scanned.text == input.trim()
+            ? scanned.warnings
+            : const [];
         _asked = options;
         _network = preferred != null && parsed.networks.contains(preferred)
             ? preferred
@@ -233,12 +250,21 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
   static const int _maxMaterialBytes = 64 * 1024;
 
   Future<void> _scan() async {
-    final text = await Navigator.of(context).push<String>(
-      MaterialPageRoute<String>(builder: (_) => const ScanScreen()),
+    final scanned = await Navigator.of(context).push<QrProgress>(
+      MaterialPageRoute<QrProgress>(
+        builder: (_) => ScanScreen(
+          // A test seam of ScanScreen; this screen only forwards its
+          // own, which is null outside a test.
+          // ignore: invalid_use_of_visible_for_testing_member
+          cameraBuilder: widget.cameraBuilder,
+        ),
+      ),
     );
-    if (text == null || text.trim().isEmpty) return;
-    _rawController.text = text.trim();
-    await _parse(text.trim());
+    final text = scanned?.text?.trim();
+    if (scanned == null || text == null || text.isEmpty || !mounted) return;
+    _scanned = (text: text, warnings: scanned.warnings);
+    _rawController.text = text;
+    await _parse(text);
   }
 
   Future<void> _submit() async {
@@ -465,7 +491,10 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
         // What was recognized stays in the card; what was not gets its
         // own panel. Amber, never red: none of these costs the user
         // funds or privacy, they state a convention that was applied.
-        for (final warning in parsed.warnings) ...[
+        for (final warning in [
+          ...parsed.warnings,
+          ..._assumed.where((assumed) => !parsed.warnings.contains(assumed)),
+        ]) ...[
           const SizedBox(height: GerfautSpacing.gutter),
           GerfautNotice(tone: NoticeTone.info, message: warning.label),
         ],

@@ -15,7 +15,8 @@ typedef CameraBuilder = Widget Function(ValueChanged<String> onFrame);
 /// Camera QR scanner for wallet material. Collects the distinct frames
 /// the camera decodes, lets the core assemble them (a plain code, or a
 /// UR or BBQr envelope animated over several frames) and pops with the
-/// assembled text; the caller feeds it to the input classifier.
+/// completed [QrProgress]: the assembled text, which the caller feeds to
+/// the input classifier, and what the core assumed reading the code.
 class ScanScreen extends ConsumerStatefulWidget {
   const ScanScreen({
     super.key,
@@ -161,7 +162,7 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
             return;
           }
           _done = true;
-          Navigator.of(context).pop(text);
+          Navigator.of(context).pop(progress);
           return;
         }
         setState(() {
