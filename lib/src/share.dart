@@ -58,29 +58,48 @@ class SystemCsvSharer implements CsvSharer {
   }
 }
 
-/// Deletes the histories left in the cache to share them: at its top,
-/// where earlier builds wrote them, and in the folder share_plus makes
-/// for each file it is handed, which goes too once empty. Answers how
-/// many histories went.
+/// Deletes the histories left in the cache to share them. Only the two
+/// places that hold them are read, not the whole cache, which this runs
+/// over at every start: its top, where earlier builds wrote them, and
+/// the folders right under it, one for each file share_plus is handed
+/// from memory and its own `share_plus` it copies them to. A folder
+/// emptied here goes too. Answers how many histories went.
 Future<int> forgetCsvCopies([Directory? cache]) async {
   final dir = cache ?? await getTemporaryDirectory();
   var gone = 0;
-  final emptied = <Directory>{};
   try {
-    await for (final entry in dir.list(recursive: true)) {
-      if (entry is File && entry.path.endsWith('-transactions.csv')) {
-        await entry.delete();
-        gone++;
-        if (entry.parent.path != dir.path) emptied.add(entry.parent);
+    await for (final entry in dir.list(followLinks: false)) {
+      if (entry is File) {
+        if (await _forgetCsv(entry)) gone++;
+      } else if (entry is Directory) {
+        gone += await _forgetCsvIn(entry);
       }
-    }
-    for (final folder in emptied) {
-      if (await folder.list().isEmpty) await folder.delete();
     }
   } on FileSystemException {
     // A cache that cannot be listed holds nothing to delete here.
   }
   return gone;
+}
+
+/// The histories in one folder, not below it; the folder goes once
+/// they have left it empty.
+Future<int> _forgetCsvIn(Directory folder) async {
+  var gone = 0;
+  try {
+    await for (final entry in folder.list(followLinks: false)) {
+      if (entry is File && await _forgetCsv(entry)) gone++;
+    }
+    if (gone > 0 && await folder.list().isEmpty) await folder.delete();
+  } on FileSystemException {
+    // A folder that cannot be read holds nothing of ours.
+  }
+  return gone;
+}
+
+Future<bool> _forgetCsv(File file) async {
+  if (!file.path.endsWith('-transactions.csv')) return false;
+  await file.delete();
+  return true;
 }
 
 /// The sharer in use. Widget tests override this with a fake.

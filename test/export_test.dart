@@ -367,4 +367,25 @@ void main() {
       expect(kept.existsSync(), isTrue);
     },
   );
+
+  test('the copy share_plus keeps goes, and nothing deeper is read', () async {
+    final cache = await Directory.systemTemp.createTemp('gerfaut-cache');
+    addTearDown(() => cache.delete(recursive: true));
+    final sep = Platform.pathSeparator;
+    // Where share_plus copies a file before handing it to another app.
+    final shareFolder = Directory('${cache.path}${sep}share_plus')
+      ..createSync();
+    final copied = File('${shareFolder.path}${sep}savings-transactions.csv')
+      ..writeAsStringSync('txid,amount');
+    // Two levels down is no place a share writes to: left unread.
+    final deep = Directory('${cache.path}${sep}some${sep}deeper')
+      ..createSync(recursive: true);
+    final elsewhere = File('${deep.path}${sep}other-transactions.csv')
+      ..writeAsStringSync('txid,amount');
+
+    expect(await forgetCsvCopies(cache), 1);
+    expect(copied.existsSync(), isFalse);
+    expect(shareFolder.existsSync(), isFalse);
+    expect(elsewhere.existsSync(), isTrue);
+  });
 }
