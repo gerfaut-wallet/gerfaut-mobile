@@ -21,6 +21,7 @@ import '../widgets/password_field.dart';
 import '../widgets/pinned_action_form.dart';
 import '../widgets/setting_switch.dart';
 import 'backup_qr.dart';
+import '../widgets/toast.dart';
 
 /// Shortest password the core accepts, after trimming. Checked here too
 /// so a short one is told before anything is sealed.
@@ -169,7 +170,7 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
       );
       // A dialog waved away says nothing: the backup is still here.
       if (saved) {
-        messenger.showSnackBar(const SnackBar(content: Text('Saved')));
+        messenger.showSnackBar(Toast('Saved'));
       }
     } on DocumentSaveException catch (error) {
       _fail('The file could not be saved.', detail: error.message);

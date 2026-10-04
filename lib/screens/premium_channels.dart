@@ -19,6 +19,7 @@ import '../widgets/password_field.dart';
 import '../widgets/pinned_action_form.dart';
 import '../widgets/status_pill.dart';
 import 'settings/fields.dart';
+import '../widgets/toast.dart';
 
 /// The Lucide glyph of a channel kind, the same on every surface.
 IconData channelGlyph(ChannelKind kind) => switch (kind) {
@@ -219,9 +220,8 @@ class _NtfyChannelScreenState extends ConsumerState<NtfyChannelScreen> {
         .read(sensitiveClipboardProvider)
         .copy(widget.subscribeUrl);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(copiedWords('Copied', timed: timed))),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(Toast(copiedWords('Copied', timed: timed)));
   }
 
   Future<void> _openApp() async {
@@ -445,9 +445,8 @@ class _TelegramChannelScreenState extends ConsumerState<TelegramChannelScreen> {
         .read(sensitiveClipboardProvider)
         .copy('/start ${widget.code}');
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(copiedWords('Copied', timed: timed))),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(Toast(copiedWords('Copied', timed: timed)));
   }
 
   @override

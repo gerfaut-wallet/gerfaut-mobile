@@ -19,6 +19,7 @@ import '../widgets/choice_group.dart';
 import '../widgets/notice.dart';
 import '../widgets/premium_pill.dart';
 import '../widgets/setting_switch.dart';
+import '../widgets/toast.dart';
 
 /// Where an exported file goes: written where the user points, or
 /// handed to the system share sheet.
@@ -149,7 +150,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
           );
           // A dialog waved away says nothing: the filters are still here.
           if (saved) {
-            messenger.showSnackBar(SnackBar(content: Text('$rows saved')));
+            messenger.showSnackBar(Toast('$rows saved'));
           }
         case _Destination.share:
           final sharer = ref.read(csvSharerProvider);
@@ -157,7 +158,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
             await lock.excursion(
               () => sharer.shareCsv(csv: result.csv, filename: filename),
             );
-            messenger.showSnackBar(SnackBar(content: Text('$rows exported')));
+            messenger.showSnackBar(Toast('$rows exported'));
           } catch (_) {
             // No sheet came up: nothing left the screen.
             _fail('The share sheet could not be opened.');

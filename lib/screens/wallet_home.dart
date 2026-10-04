@@ -25,6 +25,7 @@ import 'export.dart';
 import 'policy.dart';
 import 'receive.dart';
 import 'tx_detail.dart';
+import '../widgets/toast.dart';
 
 /// Home of one wallet: balance, freshness, transactions and UTXOs.
 /// The one primary action, Receive, sits at the bottom under the thumb.
@@ -76,7 +77,7 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
       ),
     );
     if (renamed != true || !mounted) return;
-    messenger.showSnackBar(const SnackBar(content: Text('Wallet renamed')));
+    messenger.showSnackBar(Toast('Wallet renamed'));
   }
 
   @override
@@ -535,13 +536,11 @@ class _TxList extends ConsumerWidget {
       final added = await ref.read(historyProvider.notifier).loadMore(walletId);
       if (added == null) return;
       messenger.showSnackBar(
-        SnackBar(
-          content: Text(switch (added) {
-            0 => 'History is complete',
-            1 => '1 older transaction',
-            _ => '$added older transactions',
-          }),
-        ),
+        Toast(switch (added) {
+          0 => 'History is complete',
+          1 => '1 older transaction',
+          _ => '$added older transactions',
+        }),
       );
     } on BridgeException catch (error) {
       failure.state = error.message;

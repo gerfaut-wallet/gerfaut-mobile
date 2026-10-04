@@ -15,6 +15,7 @@ import '../../widgets/section_card.dart';
 import '../../widgets/status_pill.dart';
 import '../confirm_identity.dart';
 import 'premium_error_note.dart';
+import '../../widgets/toast.dart';
 
 /// What the Devices card can be asked to do about one device.
 enum DeviceAction {
@@ -146,8 +147,7 @@ class _DevicesCardState extends ConsumerState<DevicesCard> {
       if (!mounted) return;
       setState(() => _asking = null);
       // The row itself says what changed; the toast only confirms it.
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(_done(action))));
+      ScaffoldMessenger.of(context).showSnackBar(Toast(_done(action)));
     } on BridgeException catch (error) {
       if (mounted) setState(() => _error = error);
     } finally {

@@ -19,6 +19,7 @@ import '../widgets/password_field.dart';
 import '../widgets/pinned_action_form.dart';
 import '../widgets/setting_switch.dart';
 import 'scan.dart';
+import '../widgets/toast.dart';
 
 /// Opens the system file picker; tests hand back a file of their own.
 typedef BackupFilePicker = Future<XFile?> Function();
@@ -257,7 +258,7 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
       );
       if (!mounted) return;
       navigator.pop();
-      messenger.showSnackBar(SnackBar(content: Text(_restoredMessage(report))));
+      messenger.showSnackBar(Toast(_restoredMessage(report)));
     } on BridgeException catch (error) {
       if (mounted) setState(() => _error = _messageOf(error));
     } finally {

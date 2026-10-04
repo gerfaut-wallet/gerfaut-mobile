@@ -17,6 +17,7 @@ import '../widgets/count_badge.dart';
 import '../widgets/load_failure.dart';
 import '../widgets/notice.dart';
 import '../widgets/status_pill.dart';
+import '../widgets/toast.dart';
 
 /// Side of the small QR code in the address block; tapping it opens the
 /// large one.
@@ -75,8 +76,7 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
     await Clipboard.setData(ClipboardData(text: address));
     if (!mounted) return;
     setState(() => _copied = true);
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Copied')));
+    ScaffoldMessenger.of(context).showSnackBar(Toast('Copied'));
     await Future<void>.delayed(const Duration(milliseconds: 1500));
     if (mounted) setState(() => _copied = false);
   }

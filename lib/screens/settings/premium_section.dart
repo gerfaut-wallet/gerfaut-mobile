@@ -27,6 +27,7 @@ import '../wallet_home.dart';
 import 'premium_devices.dart';
 import 'premium_error_note.dart';
 import 'premium_protect.dart';
+import '../../widgets/toast.dart';
 
 /// How often the server is asked again while a wallet's first scan
 /// runs, and for how long before the asking stops.
@@ -140,8 +141,7 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
       ProviderScope.containerOf(context, listen: false);
 
   void _toast(String message) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(Toast(message));
   }
 
   /// Asks whoever holds the phone to prove they own it, holding every
@@ -248,9 +248,7 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
     final messenger = ScaffoldMessenger.of(context);
     final timed = await _copy(key);
     if (timed != null) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(copiedWords('Key copied', timed: timed))),
-      );
+      messenger.showSnackBar(Toast(copiedWords('Key copied', timed: timed)));
     }
   }
 
@@ -268,11 +266,9 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
       final timed = await _copy(key);
       if (timed != null) {
         messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              '${copiedWords('Key copied', timed: timed)}, paste it on the '
-              'renewal page',
-            ),
+          Toast(
+            '${copiedWords('Key copied', timed: timed)}, paste it on the '
+            'renewal page',
           ),
         );
       }

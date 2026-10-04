@@ -18,6 +18,7 @@ import '../scan.dart';
 import 'certificates.dart';
 import 'fields.dart';
 import 'tor_section.dart';
+import '../../widgets/toast.dart';
 
 /// Said when the certificate check did not get through: the backend is
 /// saved all the same, and the question comes back on first contact.
@@ -134,8 +135,7 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
   }
 
   void _toast(String message) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(Toast(message));
   }
 
   /// Switches the workspace network. A refusal is said under the

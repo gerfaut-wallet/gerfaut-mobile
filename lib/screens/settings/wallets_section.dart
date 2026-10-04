@@ -17,6 +17,7 @@ import '../../widgets/status_pill.dart';
 import '../../widgets/wallet_icon.dart';
 import '../confirm_identity.dart';
 import 'fields.dart';
+import '../../widgets/toast.dart';
 
 /// The Wallets section: the gap limit every wallet shares, then the
 /// wallets of the active network in the order the home screen lists
@@ -113,8 +114,7 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
   }
 
   void _toast(String message) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(Toast(message));
   }
 
   Future<void> _rename(String id) async {
@@ -481,7 +481,7 @@ class _LivePinsState extends ConsumerState<_LivePins> {
     try {
       await ref.read(bridgeProvider).setWalletLivePinned(wallet.id, pinned);
       container.invalidate(walletsProvider);
-      messenger.showSnackBar(const SnackBar(content: Text('Setting saved')));
+      messenger.showSnackBar(Toast('Setting saved'));
     } on BridgeException catch (error) {
       if (mounted) {
         setState(() => _failure = (id: wallet.id, message: error.message));

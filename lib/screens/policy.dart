@@ -13,6 +13,7 @@ import '../widgets/app_bar.dart';
 import '../widgets/facts.dart';
 import '../widgets/notice.dart';
 import '../widgets/status_pill.dart';
+import '../widgets/toast.dart';
 
 /// What the descriptor says: who can spend, under which locks, and
 /// whether each path is open right now. One page per wallet, a tap
@@ -624,9 +625,8 @@ class _CodeBoxState extends ConsumerState<_CodeBox> {
     final timed = await ref.read(sensitiveClipboardProvider).copy(widget.text);
     if (!mounted) return;
     setState(() => _copied = true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(copiedWords('Copied', timed: timed))),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(Toast(copiedWords('Copied', timed: timed)));
     await Future<void>.delayed(const Duration(milliseconds: 1500));
     if (mounted) setState(() => _copied = false);
   }

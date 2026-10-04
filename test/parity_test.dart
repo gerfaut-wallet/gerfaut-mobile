@@ -16,6 +16,7 @@ import 'package:gerfaut/widgets/notice.dart';
 import 'package:gerfaut/widgets/tx_diagram.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
+import 'package:gerfaut/widgets/toast.dart';
 
 import 'fakes.dart';
 import 'menu.dart';
@@ -113,6 +114,12 @@ Widget txDetailApp(FakeBridge bridge) {
 }
 
 void main() {
+  test('a toast stays three seconds, as on the desktop app', () {
+    final toast = Toast('Setting saved');
+    expect(toast.duration, const Duration(seconds: 3));
+    expect((toast.content as Text).data, 'Setting saved');
+  });
+
   testWidgets('switching the unit changes every rendered amount', (
     tester,
   ) async {

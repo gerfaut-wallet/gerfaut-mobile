@@ -12,6 +12,7 @@ import '../../widgets/buttons.dart';
 import '../../widgets/notice.dart';
 import '../../widgets/section_card.dart';
 import '../settings.dart';
+import '../../widgets/toast.dart';
 
 /// Where each of the three steps stands.
 typedef ProtectSteps = ({bool secondDevice, bool appLock, bool keySaved});
@@ -114,9 +115,7 @@ class _ProtectAccountCardState extends ConsumerState<ProtectAccountCard> {
     }
     if (!mounted) return;
     setState(() => _copyFailed = false);
-    messenger.showSnackBar(
-      SnackBar(content: Text(copiedWords('Key copied', timed: timed))),
-    );
+    messenger.showSnackBar(Toast(copiedWords('Key copied', timed: timed)));
   }
 
   @override

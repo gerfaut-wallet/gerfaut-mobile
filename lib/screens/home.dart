@@ -26,6 +26,7 @@ import 'add_wallet.dart';
 import 'broadcast.dart';
 import 'settings.dart';
 import 'wallet_home.dart';
+import '../widgets/toast.dart';
 
 /// Home: the wallets of the active workspace network as cards, or the
 /// empty state. Pull down to sync them all; the one primary action sits
@@ -195,14 +196,12 @@ class HomeScreen extends ConsumerWidget {
                     final synced = report.reports.length;
                     final failed = report.failures.length;
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          failed == 0
-                              ? (synced == 1
-                                    ? '1 wallet synced'
-                                    : '$synced wallets synced')
-                              : '$synced synced, $failed failed',
-                        ),
+                      Toast(
+                        failed == 0
+                            ? (synced == 1
+                                  ? '1 wallet synced'
+                                  : '$synced wallets synced')
+                            : '$synced synced, $failed failed',
                       ),
                     );
                   },
