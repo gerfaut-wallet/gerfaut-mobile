@@ -432,7 +432,13 @@ class _QrDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
-    final side = min(size.width, size.height) - 2 * GerfautSpacing.xl;
+    // The lines under the code keep their room: the address, up to
+    // three lines, and the way out.
+    const under = 160.0;
+    final side = max(
+      120.0,
+      min(size.width, size.height - under) - 2 * GerfautSpacing.xl,
+    );
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.escape): () =>
@@ -451,6 +457,21 @@ class _QrDialog extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _QrCard(address: address, side: side),
+                  const SizedBox(height: GerfautSpacing.md),
+                  // The address under its code, whole, as on the desktop
+                  // app: whoever scans it can compare both ends with
+                  // what their screen shows.
+                  SizedBox(
+                    width: side,
+                    child: Text(
+                      address,
+                      textAlign: TextAlign.center,
+                      style: GerfautTokens.dark.data.copyWith(
+                        color: GerfautTokens.dark.text,
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: GerfautSpacing.md),
                   Text(
                     'Tap anywhere to close',

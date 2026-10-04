@@ -435,6 +435,17 @@ void main() {
             .first,
       );
       expect((card.decoration! as BoxDecoration).color, GerfautQr.background);
+      // Under it, the address in full, in mono: both ends to compare.
+      final under = tester
+          .widgetList<Text>(find.byType(Text))
+          .where(
+            (text) =>
+                text.style?.fontFamily == GerfautFonts.data &&
+                text.style?.color == GerfautTokens.dark.text,
+          )
+          .toList();
+      expect(under, hasLength(1));
+      expect(under.single.data, 'tb1qexample');
 
       await tester.tap(find.text('Tap anywhere to close'));
       await tester.pumpAndSettle();
