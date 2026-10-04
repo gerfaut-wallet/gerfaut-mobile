@@ -168,9 +168,12 @@ class SettingsScreen extends ConsumerWidget {
       case SettingsSection.notifications:
         if (!ref.watch(notifyNewTxProvider)) return 'Off';
         final cadence = ref.watch(backgroundCheckProvider);
-        return cadence == BackgroundCheck.off
-            ? 'On · while the app is open'
-            : 'On · ${cadence.label.toLowerCase()}';
+        // Live is a name, and keeps its capital; a cadence reads on.
+        return switch (cadence) {
+          BackgroundCheck.off => 'On · while the app is open',
+          BackgroundCheck.live => 'On · Live',
+          _ => 'On · ${cadence.label.toLowerCase()}',
+        };
       case SettingsSection.backup:
         return 'Export or restore the wallet list';
       case SettingsSection.about:

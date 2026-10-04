@@ -2312,6 +2312,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('sats · EUR · Dark theme'), findsOneWidget);
       expect(find.text('On · every 15 min'), findsOneWidget);
+
+      // Live is a name: it keeps its capital.
+      container.read(backgroundCheckProvider.notifier).hydrate('live');
+      await tester.pumpAndSettle();
+      expect(find.text('On · Live'), findsOneWidget);
     });
 
     testWidgets('each row opens a page titled after it, with its cards', (
