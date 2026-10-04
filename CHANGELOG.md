@@ -48,7 +48,9 @@ The first release: Gerfaut for Android.
   and still slowed after a restart, and a calculator disguise for the icon.
 - A secret copied from the app, an extended key, an ntfy topic or the
   account key, is marked sensitive on the clipboard: the system shows no
-  preview of it and keeps it out of its history.
+  preview of it and keeps it out of its history. It also leaves the
+  clipboard a minute later, unless you copied something else since, and the
+  confirmation says "for 1 minute".
 - Home screen widgets for the price, the balance (hidden by default) and the
   block height.
 - Local notifications when a sync finds something new. Nothing leaves the
@@ -75,6 +77,27 @@ The first release: Gerfaut for Android.
   on there and opens Gerfaut's app info page, where most of them live. No
   app can flip those switches for you. A step that only repeats Android's
   battery exemption is left out once you have granted it.
+- A "This is my node" switch under the address of your own Electrum or
+  Esplora server, in Settings › Network. When it is on, Live follows up to
+  20 000 addresses instead of 2 000. Leave it off for a server you do not
+  run: it would refuse most of them, and learn every one. Saving the server
+  address again keeps the switch as it was.
+- When Live cannot follow every address, Settings › Notifications says how
+  many addresses of how many wallets are checked at the next sync instead,
+  and how to lift the limit. Each wallet then shows "Live", "Partly live" or
+  "At next sync" on its card, on its page and in Settings › Wallets. On your
+  own node, if the server itself refuses addresses, the note names the
+  server setting that lets it follow more.
+- Settings › Wallets › Advanced › "Always watch live first" picks the
+  wallets Live follows before the others when it cannot follow every
+  address.
+- When Android stops letting Gerfaut's notifications through, from the
+  system settings or by blocking the channel, Settings › Notifications says
+  so in amber under New transactions, with a button to the system settings.
+- While the app is disguised, the notification settings are greyed out, with
+  a line that says why: a notification would show the name Gerfaut. The
+  sheet that turns the disguise on says so before you confirm and, with
+  Premium on, adds that its alerts still reach your channels.
 - A transaction is announced once when it appears and once when it confirms,
   whichever part of the app saw it first. A fee bump brings no second
   notice, and its confirmation takes the place of the pending one. An
@@ -103,6 +126,9 @@ The first release: Gerfaut for Android.
   before; a Telegram channel names the chat it reaches; a webhook the server
   turned off, because it points at a private address, says so with what to
   do about it.
+- A Premium channel that has delivered nothing for an hour or more reads
+  "Not delivering", with the last error the server got and what to do for
+  that kind of channel.
 - Forgetting the key can take the account with it: the server then deletes
   the wallets it watches, the channels and the log, and whatever paid time
   the key had left goes with them. Premium calls go through Tor whenever the
@@ -192,6 +218,10 @@ The first release: Gerfaut for Android.
 ### Changed
 
 - Syncs use far less data. Gerfaut now downloads only what a wallet does not have yet, and a payment that Live notices costs a few kilobytes instead of the wallet's whole history. A wallet is still read in full when the vault opens and once a day.
+- Fiat values group their thousands with a space, like amounts in BTC and
+  sats.
+- In Add a wallet, the script type choices give the address prefixes of the
+  wallet's network, such as tb1q on signet and testnet4.
 - Broadcast warns in red when a signature leaves the outputs open
   (SIGHASH_NONE or SIGHASH_SINGLE). Whoever relays such a transaction can
   send that money elsewhere, so the page tells you not to send it as it is.
@@ -253,3 +283,55 @@ The first release: Gerfaut for Android.
   Settings now reads "Not activated" as soon as the server answers, instead
   of showing the old key until the app restarts. Every other Premium action
   behaves the same.
+- With the screen off, Live now keeps the phone awake while it checks the
+  server, and until it has announced a new transaction, so the notification
+  arrives within seconds rather than at the next check. A status that
+  changes nothing keeps nothing awake.
+- When Android refuses to restart Live, Gerfaut waits longer before each new
+  attempt, instead of waking the phone every few minutes.
+- Receive offers a fresh address after every sync, Live's included. It used
+  to keep showing an address that had just been paid, until the app
+  restarted.
+- Picking "Automatic" as the public server works again after choosing a
+  named one.
+- The welcome tour opened from Settings › About now closes with Skip and Get
+  started.
+- A restore or a broadcast interrupted by the app lock now finishes: the
+  restored wallets show, and the transaction joins Recent broadcasts.
+- Policy › Descriptor shows and copies the whole wallet as one multipath
+  descriptor, with /<0;1>/*. It used to give the receive branch alone, which
+  would watch the wallet without its change.
+- When the server itself refuses addresses, Settings › Notifications says
+  so, instead of blaming Live's own limits.
+- "Synced 5 min ago" and the other "ago" lines move on while a page stays
+  open.
+- A page that fails to load, such as a wallet, its UTXOs, a transaction or
+  the wallet list, says why and offers Try again. A list of UTXOs that
+  failed to load no longer reads as an empty one.
+- A refused rename stays in its dialog with the reason, and a failed "Load
+  older transactions" says why under the button, instead of in a toast gone
+  before you read it.
+- TalkBack names every switch, field and checkbox, reads errors aloud, says
+  "Hidden amount" instead of reading out dots, and reads a transaction ID
+  once.
+- Every small target, the address chips included, is now at least 44 dp
+  high.
+- The app lock sheet takes only digits for a PIN, on the number keyboard,
+  and counts its length the way the app does when it saves it.
+- Saving a file to a slow cloud provider no longer freezes the screen.
+- Gerfaut no longer requires a camera to install. Scanning stays optional.
+- A double tap on the switch that hands a wallet to Premium opens one
+  consent page, not two.
+- A wallet added on another network opens even when switching to that
+  network fails.
+
+### Security
+
+- The price is no longer fetched while Gerfaut goes through Tor, since the
+  price sources would see the phone's address. Amounts then show without
+  fiat. The price is also no longer asked for while the app is out of sight.
+- While an app lock is set, the balance widget names no wallet.
+- Under the calculator disguise, a vault that fails to open shows the
+  calculator, not Gerfaut's error page.
+- Sharing the transaction history as CSV no longer leaves a copy in the
+  app's cache.
