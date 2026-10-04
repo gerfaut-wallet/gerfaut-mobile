@@ -283,15 +283,23 @@ final appInFrontProvider = StateProvider<bool>((ref) => true);
 class RelativeClock extends Notifier<int> {
   Timer? _timer;
 
+  /// A count, not the time: every build and every tick must change the
+  /// value, or the lines that watch it are not drawn again. Two builds
+  /// within one millisecond would read the same time.
+  int _beats = 0;
+
   @override
   int build() {
     _timer?.cancel();
     final inFront = ref.watch(appInFrontProvider);
     ref.onDispose(() => _timer?.cancel());
     if (inFront) {
-      _timer = Timer.periodic(const Duration(seconds: 30), (_) => state++);
+      _timer = Timer.periodic(
+        const Duration(seconds: 30),
+        (_) => state = ++_beats,
+      );
     }
-    return DateTime.now().millisecondsSinceEpoch;
+    return ++_beats;
   }
 }
 
