@@ -326,12 +326,19 @@ The first release: Gerfaut for Android.
   consent page, not two.
 - A wallet added on another network opens even when switching to that
   network fails.
+- On the import screen, the first address now belongs to the network you
+  pick, and changes when you pick another one. A key added on regtest shows
+  its bcrt1 address, not the tb1 address of signet.
+- Every Premium channel that delivers now reads "Linked", as on the desktop.
+  Before, only a linked Telegram channel did.
 
 ### Security
 
-- The price is no longer fetched while Gerfaut goes through Tor, since the
-  price sources would see the phone's address. Amounts then show without
-  fiat. The price is also no longer asked for while the app is out of sight.
+- The price now goes through Tor whenever one of your nodes is a .onion
+  address, on any network, and is not asked at all while Tor is out of
+  reach, because the price sources would otherwise see the phone's IP
+  address. The Tor card says so. The price is also no longer asked for while
+  the app is out of sight.
 - While an app lock is set, the balance widget names no wallet.
 - Under the calculator disguise, a vault that fails to open shows the
   calculator, not Gerfaut's error page.
