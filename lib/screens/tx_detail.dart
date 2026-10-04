@@ -245,7 +245,9 @@ class _Hero extends ConsumerWidget {
           child: Text(
             masked ? maskedValue : formatAmountSigned(sats, unit),
             semanticsLabel: masked ? maskedSpoken : null,
-            style: tokens.amount,
+            // 28 px: the net of one transaction, a step under the
+            // balance a wallet's page leads with.
+            style: tokens.figureOf(size: 28, weight: FontWeight.w600),
             maxLines: 1,
           ),
         ),
