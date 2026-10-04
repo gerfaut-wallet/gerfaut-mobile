@@ -139,7 +139,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                     margin: const EdgeInsets.symmetric(horizontal: 3),
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: i == _index ? tokens.primary : tokens.border,
+                      color: i == _index ? tokens.primary : tokens.textMuted,
                     ),
                   ),
               ],

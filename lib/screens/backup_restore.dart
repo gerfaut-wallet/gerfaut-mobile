@@ -600,7 +600,7 @@ class _WalletRow extends StatelessWidget {
                 value: enabled && chosen,
                 activeColor: tokens.primary,
                 checkColor: tokens.onPrimary,
-                side: BorderSide(color: tokens.border, width: 2),
+                side: BorderSide(color: tokens.textMuted, width: 2),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(GerfautRadius.sm),
                 ),

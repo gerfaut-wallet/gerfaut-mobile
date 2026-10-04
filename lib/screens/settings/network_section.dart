@@ -934,8 +934,10 @@ class _BackendOption extends StatelessWidget {
                     height: 20,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
+                      // A control's edge, not a card's: Ardoise, which
+                      // holds 3:1 on both surfaces where Brume does not.
                       border: Border.all(
-                        color: selected ? tokens.primary : tokens.border,
+                        color: selected ? tokens.primary : tokens.textMuted,
                         width: 2,
                       ),
                     ),
