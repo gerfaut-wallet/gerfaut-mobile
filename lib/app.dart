@@ -24,6 +24,7 @@ import 'theme/tokens.dart';
 import 'widgets/buttons.dart';
 import 'widgets/notice.dart';
 import 'src/prefs.dart';
+import 'src/share.dart';
 
 /// Root widget: both Toundra themes, light by default, and the startup
 /// bootstrap (Rust bridge + encrypted vault) before the home screen.
@@ -191,6 +192,8 @@ class _Hydrated extends ConsumerWidget {
         // when Android lets it start. Not before the notices are known
         // to get through: Live is there to say things.
         unawaited(_checkNoticesThenLive(ref));
+        // A history shared last time may still sit in the cache.
+        unawaited(ref.read(csvSharerProvider).forgetCopies());
       }
       // The vault says whether a lock exists, every time it is read:
       // the first reading with one in it is what puts the screen up.

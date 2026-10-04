@@ -25,6 +25,9 @@ class FakeCsvSharer implements CsvSharer {
   Future<void> shareCsv({required String csv, required String filename}) async {
     shared.add((csv: csv, filename: filename));
   }
+
+  @override
+  Future<void> forgetCopies() async {}
 }
 
 TxSummary tx(String txid, int netSats, {int? timestamp}) {
@@ -342,4 +345,26 @@ void main() {
     expect(old.existsSync(), isFalse);
     expect(other.existsSync(), isTrue);
   });
+
+  test(
+    'the copy the share sheet was handed goes too, folder and all',
+    () async {
+      final cache = await Directory.systemTemp.createTemp('gerfaut-cache');
+      addTearDown(() => cache.delete(recursive: true));
+      final sep = Platform.pathSeparator;
+      // Where share_plus writes a file it is handed from memory.
+      final folder = Directory('${cache.path}${sep}0b5f6d2e-uuid')
+        ..createSync();
+      final shared = File('${folder.path}${sep}savings-transactions.csv')
+        ..writeAsStringSync('txid,amount');
+      final backup = Directory('${cache.path}${sep}other-uuid')..createSync();
+      final kept = File('${backup.path}${sep}wallets.gerfaut')
+        ..writeAsStringSync('sealed');
+
+      expect(await forgetCsvCopies(cache), 1);
+      expect(shared.existsSync(), isFalse);
+      expect(folder.existsSync(), isFalse);
+      expect(kept.existsSync(), isTrue);
+    },
+  );
 }

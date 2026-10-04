@@ -333,5 +333,6 @@ The first release: Gerfaut for Android.
 - While an app lock is set, the balance widget names no wallet.
 - Under the calculator disguise, a vault that fails to open shows the
   calculator, not Gerfaut's error page.
-- Sharing the transaction history as CSV no longer leaves a copy in the
-  app's cache.
+- A transaction history shared as CSV no longer stays in the app's cache:
+  Gerfaut deletes the copy the share sheet needed at the next share, or when
+  it next starts.

@@ -13,14 +13,32 @@ import 'package:share_plus/share_plus.dart';
 /// Offers a CSV to the system share sheet under `filename`.
 abstract class CsvSharer {
   Future<void> shareCsv({required String csv, required String filename});
+
+  /// Deletes the histories earlier shares left in the cache.
+  Future<void> forgetCopies();
 }
 
 /// The real sharer: the text goes straight to the share sheet, as a
 /// backup does, never written by Gerfaut to a file of its own. A history
 /// left in the cache, amounts, txids and labels in the clear, would
 /// outlive the wallet it came from and the vault that keeps it sealed.
+///
+/// The share sheet still needs a file, and share_plus writes one into a
+/// folder of its own under the cache, which it never deletes. That copy
+/// goes at the next share, and each time the app starts: not right
+/// after the sheet closes, when the app it went to may still be reading
+/// it.
 class SystemCsvSharer implements CsvSharer {
   const SystemCsvSharer();
+
+  @override
+  Future<void> forgetCopies() async {
+    try {
+      await forgetCsvCopies();
+    } catch (_) {
+      // No cache to reach, as in a test: nothing to delete.
+    }
+  }
 
   @override
   Future<void> shareCsv({required String csv, required String filename}) async {
@@ -40,17 +58,24 @@ class SystemCsvSharer implements CsvSharer {
   }
 }
 
-/// Deletes the histories earlier builds wrote to the cache to share
-/// them, and never deleted. Answers how many went.
+/// Deletes the histories left in the cache to share them: at its top,
+/// where earlier builds wrote them, and in the folder share_plus makes
+/// for each file it is handed, which goes too once empty. Answers how
+/// many histories went.
 Future<int> forgetCsvCopies([Directory? cache]) async {
   final dir = cache ?? await getTemporaryDirectory();
   var gone = 0;
+  final emptied = <Directory>{};
   try {
-    await for (final entry in dir.list()) {
+    await for (final entry in dir.list(recursive: true)) {
       if (entry is File && entry.path.endsWith('-transactions.csv')) {
         await entry.delete();
         gone++;
+        if (entry.parent.path != dir.path) emptied.add(entry.parent);
       }
+    }
+    for (final folder in emptied) {
+      if (await folder.list().isEmpty) await folder.delete();
     }
   } on FileSystemException {
     // A cache that cannot be listed holds nothing to delete here.
