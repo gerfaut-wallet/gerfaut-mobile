@@ -404,9 +404,18 @@ class _PremiumSectionState extends ConsumerState<PremiumSection> {
       setState(() => _confirmUnwatchId = wallet.id);
       return;
     }
+    if (_busyWalletIds.contains(wallet.id)) return;
     if (!view.consented(wallet.id)) {
       // Once per wallet, never replayed: the yes is kept in the vault.
-      final yes = await PremiumConsentScreen.ask(context, wallet);
+      // The row is held while the question is up: a second tap would
+      // stack a second question, and two yeses send the wallet twice.
+      setState(() => _busyWalletIds.add(wallet.id));
+      final bool yes;
+      try {
+        yes = await PremiumConsentScreen.ask(context, wallet);
+      } finally {
+        if (mounted) setState(() => _busyWalletIds.remove(wallet.id));
+      }
       if (!yes || !mounted) return;
     }
     await _askForWallet(wallet.id, () => _bridge.premiumWatchWallet(wallet.id));

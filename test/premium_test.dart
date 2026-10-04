@@ -989,6 +989,32 @@ void main() {
       expect(switchOf(tester, 'Donations').value, isTrue);
     });
 
+    testWidgets('a double tap asks once and sends the wallet once', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = premiumBridge(activated: true);
+      await tester.pumpWidget(premiumApp(bridge));
+      await tester.pumpAndSettle();
+
+      final row = find.descendant(
+        of: find.widgetWithText(Row, 'Donations').last,
+        matching: find.byType(Switch),
+      );
+      await tester.tap(row);
+      await tester.tap(row, warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(find.byType(PremiumConsentScreen), findsOneWidget);
+
+      await tester.tap(find.text('Watch this wallet'));
+      await tester.pumpAndSettle();
+      expect(find.byType(PremiumConsentScreen), findsNothing);
+      expect(
+        bridge.premiumCalls.where((call) => call == 'watch:w2'),
+        hasLength(1),
+      );
+    });
+
     testWidgets('a wallet the server refused says why, in its words', (
       tester,
     ) async {
