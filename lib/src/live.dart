@@ -495,6 +495,12 @@ class LiveController extends Notifier<LiveState> {
   /// leaves it in sight, and its return takes the announcement back.
   Future<bool> requestBatteryExemption() async {
     final platform = ref.read(livePlatformProvider);
+    // Already exempt, nothing comes up and nothing returns: a trip
+    // announced for it would wait to excuse the next real absence.
+    if (await platform.isBatteryExempt()) {
+      state = state.copyWith(batteryExempt: true);
+      return true;
+    }
     final exempt = await ref
         .read(lockProvider.notifier)
         .excursion(platform.requestBatteryExemption);

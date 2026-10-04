@@ -1816,6 +1816,36 @@ void main() {
     expect(container.read(lockProvider).locked, isFalse);
   });
 
+  test('a battery question with nothing to ask excuses no absence', () async {
+    final bridge = _bridge(
+      lock: const AppLock(kind: LockKind.pin, biometric: false),
+    )..lockSecret = '1234';
+    final platform = FakeLivePlatform(batteryExempt: true);
+    final container = ProviderContainer(
+      overrides: [
+        bridgeProvider.overrideWithValue(bridge),
+        livePlatformProvider.overrideWithValue(platform),
+        disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+      ],
+    );
+    addTearDown(container.dispose);
+    final lock = container.read(lockProvider.notifier)
+      ..syncFromSettings(const AppLock(kind: LockKind.pin, biometric: false));
+    await lock.unlock('1234');
+
+    // Exempt already: no system screen opens, so the next time the app
+    // goes out of sight is a real absence, and it locks.
+    expect(
+      await container.read(liveProvider.notifier).requestBatteryExemption(),
+      isTrue,
+    );
+    expect(platform.calls, isNot(contains('askBattery')));
+    lock
+      ..noteHidden()
+      ..noteResumed();
+    expect(container.read(lockProvider).locked, isTrue);
+  });
+
   group('notices the system no longer lets through', () {
     ProviderContainer withNotices(
       FakeBridge bridge,
