@@ -1846,6 +1846,37 @@ void main() {
     expect(container.read(lockProvider).locked, isFalse);
   });
 
+  test('a battery question that opens nothing excuses no absence', () async {
+    final bridge = _bridge(
+      lock: const AppLock(kind: LockKind.pin, biometric: false),
+    )..lockSecret = '1234';
+    final platform = FakeLivePlatform(opensBatteryQuestion: false);
+    final container = ProviderContainer(
+      overrides: [
+        bridgeProvider.overrideWithValue(bridge),
+        livePlatformProvider.overrideWithValue(platform),
+        disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+      ],
+    );
+    addTearDown(container.dispose);
+    final lock = container.read(lockProvider.notifier)
+      ..syncFromSettings(const AppLock(kind: LockKind.pin, biometric: false));
+    await lock.unlock('1234');
+
+    // Neither the question nor the list exists on this phone: nothing
+    // came up, so the next time the app goes out of sight it locks.
+    expect(
+      await container.read(liveProvider.notifier).requestBatteryExemption(),
+      isFalse,
+    );
+    expect(platform.calls, contains('askBattery'));
+    expect(container.read(liveProvider).batteryExempt, isFalse);
+    lock
+      ..noteHidden()
+      ..noteResumed();
+    expect(container.read(lockProvider).locked, isTrue);
+  });
+
   test('a battery question with nothing to ask excuses no absence', () async {
     final bridge = _bridge(
       lock: const AppLock(kind: LockKind.pin, biometric: false),

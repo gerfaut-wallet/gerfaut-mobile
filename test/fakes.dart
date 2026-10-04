@@ -74,6 +74,7 @@ class FakeLivePlatform implements LivePlatform {
     this.held = false,
     this.batteryExempt = false,
     this.grantsExemption = true,
+    this.opensBatteryQuestion = true,
     this.maker = 'Google',
     this.opensAppSettings = true,
   });
@@ -86,6 +87,9 @@ class FakeLivePlatform implements LivePlatform {
   bool held;
   bool batteryExempt;
   bool grantsExemption;
+
+  /// Whether the phone has the battery question, or at least its list.
+  bool opensBatteryQuestion;
   String maker;
   bool opensAppSettings;
 
@@ -130,8 +134,9 @@ class FakeLivePlatform implements LivePlatform {
   Future<bool> isBatteryExempt() async => batteryExempt;
 
   @override
-  Future<bool> requestBatteryExemption() async {
+  Future<bool?> requestBatteryExemption() async {
     calls.add('askBattery');
+    if (!opensBatteryQuestion) return null;
     if (grantsExemption) batteryExempt = true;
     return batteryExempt;
   }

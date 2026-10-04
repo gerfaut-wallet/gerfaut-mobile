@@ -67,8 +67,9 @@ abstract class LivePlatform {
   Future<bool> isBatteryExempt();
 
   /// Puts Android's own question to the user and answers whether the
-  /// app is exempt once they are back.
-  Future<bool> requestBatteryExemption();
+  /// app is exempt once they are back. Null when no screen came up: the
+  /// phone has neither the question nor the list it stands for.
+  Future<bool?> requestBatteryExemption();
 
   /// `Build.MANUFACTURER`, as the phone spells it.
   Future<String> manufacturer();
@@ -116,8 +117,17 @@ class SystemLivePlatform implements LivePlatform {
   Future<bool> isBatteryExempt() => _ask('isBatteryExempt', false);
 
   @override
-  Future<bool> requestBatteryExemption() =>
-      _ask('requestBatteryExemption', false);
+  Future<bool?> requestBatteryExemption() async {
+    try {
+      return await _channel.invokeMethod<bool>('requestBatteryExemption');
+    } on MissingPluginException {
+      return null;
+    } on PlatformException catch (error) {
+      // Busy: the question asked a moment ago is on its way up, and its
+      // trip with it. Any other failure came before anything opened.
+      return error.code == 'busy' ? false : null;
+    }
+  }
 
   @override
   Future<String> manufacturer() => _ask('manufacturer', '');
@@ -542,9 +552,15 @@ class LiveController extends Notifier<LiveState> {
       state = state.copyWith(batteryExempt: true);
       return true;
     }
-    final exempt = await ref
+    final answer = await ref
         .read(lockProvider.notifier)
-        .excursion(platform.requestBatteryExemption);
+        .excursion(
+          platform.requestBatteryExemption,
+          // Neither the question nor the list opened: there was no trip,
+          // and the next absence is a real one.
+          shown: (answer) => answer != null,
+        );
+    final exempt = answer ?? false;
     state = state.copyWith(batteryExempt: exempt);
     return exempt;
   }

@@ -280,7 +280,9 @@ class MainActivity : FlutterFragmentActivity() {
     // exemption Android 12 and later will not let a killed service come
     // back by itself, which is the whole reason for asking. Where the
     // direct question is not to be had, the list it stands for opens
-    // instead. Answers whether the app is exempt once the user is back.
+    // instead. Answers whether the app is exempt once the user is back,
+    // and null when neither opened: no screen came up, so the app never
+    // left.
     private fun requestBatteryExemption(result: MethodChannel.Result) {
         if (isBatteryExempt()) {
             result.success(true)
@@ -304,7 +306,7 @@ class MainActivity : FlutterFragmentActivity() {
                 pendingExemption = null
             }
         }
-        result.success(false)
+        result.success(null)
     }
 
     // Opens this app's own page in the system settings. Every maker
