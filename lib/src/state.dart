@@ -323,7 +323,18 @@ class PriceNotifier extends AsyncNotifier<PriceQuote?> {
     if (!enabled) return null;
     // Out of sight nothing is asked, and no clock runs: the quote in
     // hand stays, and a fresh one is asked the moment the app is back.
-    if (!inFront) return state.valueOrNull;
+    // A failure stands too: returned as a value, the quote it had
+    // hidden would come back on every amount as if it were fresh.
+    if (!inFront) {
+      final kept = state;
+      if (kept.hasError) {
+        Error.throwWithStackTrace(
+          kept.error!,
+          kept.stackTrace ?? StackTrace.current,
+        );
+      }
+      return kept.valueOrNull;
+    }
     ref.onDispose(() => _timer?.cancel());
     // Scheduled before the fetch so failures retry on the same cadence.
     _timer = Timer(const Duration(seconds: 60), () => ref.invalidateSelf());

@@ -167,6 +167,39 @@ void main() {
     container.dispose();
   });
 
+  testWidgets('a failure out of sight stays a failure', (tester) async {
+    var answering = true;
+    final bridge = FakeBridge()
+      ..onFetchPrice = (source, currency) {
+        if (!answering) {
+          throw const BridgeException('backend', 'the source is down');
+        }
+        return PriceQuote(
+          rate: 50000,
+          currency: currency,
+          source: source,
+          at: 1755000000,
+        );
+      };
+    final container = ProviderContainer(
+      overrides: [bridgeProvider.overrideWithValue(bridge)],
+    );
+    addTearDown(container.dispose);
+    container.read(fiatEnabledProvider.notifier).hydrate('1');
+    container.listen(priceProvider, (_, _) {});
+    await tester.pump();
+    answering = false;
+    await tester.pump(const Duration(seconds: 61));
+    expect(container.read(priceProvider).hasError, isTrue);
+
+    // Behind the launcher, the old quote does not come back as fresh.
+    container.read(appInFrontProvider.notifier).state = false;
+    await tester.pump();
+    await tester.pump(const Duration(minutes: 10));
+    expect(container.read(priceProvider).hasError, isTrue);
+    container.dispose();
+  });
+
   testWidgets('a source that stops answering takes the fiat away with it', (
     tester,
   ) async {
