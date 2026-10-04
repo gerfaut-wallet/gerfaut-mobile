@@ -399,6 +399,23 @@ void main() {
     expect(find.text('Add a wallet'), findsOneWidget);
   });
 
+  testWidgets('a wallet list that cannot be read is asked for again', (
+    tester,
+  ) async {
+    final bridge = _ListFails();
+    await tester.pumpWidget(app(bridge, bootstrap: () async {}));
+    await tester.pumpAndSettle();
+    expect(find.text('The wallets could not be loaded.'), findsOneWidget);
+    expect(find.text('the list could not be read'), findsOneWidget);
+    // The vault opened: nothing blames it.
+    expect(find.textContaining('vault'), findsNothing);
+
+    bridge.failing = false;
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+    expect(find.text('No wallets yet'), findsOneWidget);
+  });
+
   testWidgets('nothing asks the core before the vault is open', (tester) async {
     final bridge = _ClosedUntilOpen();
     await tester.pumpWidget(
@@ -1019,6 +1036,27 @@ class _GatedVault extends FakeBridge {
   Future<List<WalletMeta>> listWallets([Network? network]) async {
     listed++;
     await gate?.future;
+    return super.listWallets(network);
+  }
+}
+
+class _ListFails extends FakeBridge {
+  _ListFails()
+    : super(
+        settings: const Settings(
+          activeNetwork: Network.mainnet,
+          backends: {},
+          appPrefs: {'onboarding.seen': '1'},
+        ),
+      );
+
+  bool failing = true;
+
+  @override
+  Future<List<WalletMeta>> listWallets([Network? network]) async {
+    if (failing) {
+      throw const BridgeException('storage', 'the list could not be read');
+    }
     return super.listWallets(network);
   }
 }

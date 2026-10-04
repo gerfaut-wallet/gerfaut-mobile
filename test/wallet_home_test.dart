@@ -809,10 +809,19 @@ void _utxoTests() {
       expect(find.text('Confirmed'), findsOneWidget);
     });
 
-    testWidgets('a list that cannot be read says so', (tester) async {
-      await _openUtxos(tester, fails: true);
-      expect(find.text('UTXOs could not be loaded.'), findsOneWidget);
+    testWidgets('a list that cannot be read says so, and asks again', (
+      tester,
+    ) async {
+      final bridge = await _openUtxos(tester, fails: true);
+      expect(find.text('The UTXOs could not be loaded.'), findsOneWidget);
+      expect(find.text('vault read failed'), findsOneWidget);
       expect(find.text('No unspent outputs'), findsNothing);
+
+      bridge.fails = false;
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+      expect(find.text('The UTXOs could not be loaded.'), findsNothing);
+      expect(find.text('Confirmed'), findsOneWidget);
     });
 
     testWidgets('no coins: says what the tab is for', (tester) async {

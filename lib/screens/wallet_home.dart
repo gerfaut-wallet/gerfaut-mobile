@@ -15,6 +15,7 @@ import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/count_badge.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/load_failure.dart';
 import '../widgets/overflow_menu.dart';
 import '../widgets/status_pill.dart';
 import '../widgets/sync_button.dart';
@@ -173,11 +174,11 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
         child: loaded != null
             ? _buildLoaded(loaded, syncing)
             : switch (snapshot) {
-                AsyncError() => Center(
-                  child: Text(
-                    'This wallet could not be loaded.',
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  ),
+                AsyncError(:final error) => LoadFailure(
+                  what: 'This wallet',
+                  error: error,
+                  onRetry: () =>
+                      ref.invalidate(snapshotProvider(widget.walletId)),
                 ),
                 _ => Center(
                   child: Text(
@@ -633,9 +634,16 @@ class _UtxoList extends ConsumerWidget {
     final value = utxos.isLoading || !utxos.hasError ? utxos.valueOrNull : null;
 
     if (value == null) {
+      if (utxos.hasError) {
+        return LoadFailure(
+          what: 'The UTXOs',
+          error: utxos.error,
+          onRetry: () => ref.invalidate(utxosProvider(walletId)),
+        );
+      }
       return Center(
         child: Text(
-          utxos.hasError ? 'UTXOs could not be loaded.' : 'Loading UTXOs…',
+          'Loading UTXOs…',
           style: tokens.bodySmall.copyWith(color: tokens.textMuted),
         ),
       );

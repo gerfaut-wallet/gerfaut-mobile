@@ -14,6 +14,7 @@ import '../widgets/amounts.dart';
 import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/count_badge.dart';
+import '../widgets/load_failure.dart';
 import '../widgets/notice.dart';
 import '../widgets/status_pill.dart';
 
@@ -117,11 +118,10 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
       appBar: GerfautAppBar.text('Receive'),
       body: SafeArea(
         child: addresses.hasError
-            ? Center(
-                child: Text(
-                  'The receive address could not be derived.',
-                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                ),
+            ? LoadFailure(
+                what: 'The receive address',
+                error: addresses.error,
+                onRetry: () => ref.invalidate(receiveProvider),
               )
             : entry == null
             ? Center(
@@ -164,12 +164,20 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
     bool single,
   ) {
     final list = audit.valueOrNull;
+    if (list == null && audit.hasError) {
+      return [
+        LoadFailure(
+          what: 'The addresses',
+          error: audit.error,
+          centered: false,
+          onRetry: () => ref.invalidate(addressListProvider(widget.walletId)),
+        ),
+      ];
+    }
     if (list == null) {
       return [
         Text(
-          audit.hasError
-              ? 'Addresses could not be loaded.'
-              : 'Loading addresses…',
+          'Loading addresses…',
           style: tokens.bodySmall.copyWith(color: tokens.textMuted),
         ),
       ];

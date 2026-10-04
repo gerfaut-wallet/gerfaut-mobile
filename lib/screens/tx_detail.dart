@@ -14,6 +14,7 @@ import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/explorer_link.dart';
 import '../widgets/facts.dart';
+import '../widgets/load_failure.dart';
 import '../widgets/status_pill.dart';
 import '../widgets/tx_diagram.dart';
 
@@ -46,10 +47,11 @@ class TxDetailScreen extends ConsumerWidget {
       body: SafeArea(
         child: switch (detail) {
           AsyncData(:final value) => _Detail(detail: value, network: network),
-          AsyncError() => Center(
-            child: Text(
-              'This transaction could not be loaded.',
-              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+          AsyncError(:final error) => LoadFailure(
+            what: 'This transaction',
+            error: error,
+            onRetry: () => ref.invalidate(
+              txDetailProvider((walletId: walletId, txid: txid)),
             ),
           ),
           _ => Center(

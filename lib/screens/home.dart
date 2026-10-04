@@ -14,6 +14,7 @@ import '../widgets/app_bar.dart';
 import '../widgets/brand.dart';
 import '../widgets/buttons.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/load_failure.dart';
 import '../widgets/notice.dart';
 import '../widgets/overflow_menu.dart';
 import '../widgets/reorder.dart';
@@ -143,6 +144,13 @@ class HomeScreen extends ConsumerWidget {
             const UpdateNotice(),
             Expanded(
               child: switch ((settings, wallets)) {
+                // The wallets alone failed: the vault is open, and the
+                // list can be asked for again.
+                (AsyncData(), AsyncError(:final error)) => LoadFailure(
+                  what: 'The wallets',
+                  error: error,
+                  onRetry: () => ref.invalidate(walletsProvider),
+                ),
                 (AsyncError(), _) || (_, AsyncError()) => Center(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
