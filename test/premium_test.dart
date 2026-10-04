@@ -563,7 +563,7 @@ void main() {
 
       await tester.tap(find.text('Forget this key'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Forget the key'));
+      await tester.tap(find.widgetWithText(DangerButton, 'Forget this key'));
       await tester.pumpAndSettle();
       expect(bridge.premiumKey, isNull);
       // The yes given for a wallet outlives the key.
@@ -593,7 +593,10 @@ void main() {
 
       await tester.tap(find.text('Forget this key'));
       await tester.pumpAndSettle();
-      expect(find.text('Forget the key'), findsOneWidget);
+      expect(
+        find.widgetWithText(DangerButton, 'Forget this key'),
+        findsOneWidget,
+      );
 
       // Ticked, the confirmation says what nothing brings back — the
       // paid time among it — and the button says what it does. Amber,
@@ -605,7 +608,10 @@ void main() {
       expect(note.tone, NoticeTone.info);
       expect(note.message, contains('This cannot be undone'));
       expect(note.message, contains('paid time the key had left goes with it'));
-      expect(find.text('Forget the key'), findsNothing);
+      expect(
+        find.widgetWithText(DangerButton, 'Forget this key'),
+        findsNothing,
+      );
       expect(find.text('Delete and forget'), findsOneWidget);
       expect(bridge.premiumAccountDeleted, isFalse);
 
@@ -614,7 +620,10 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Forget this key'));
       await tester.pumpAndSettle();
-      expect(find.text('Forget the key'), findsOneWidget);
+      expect(
+        find.widgetWithText(DangerButton, 'Forget this key'),
+        findsOneWidget,
+      );
 
       await tester.tap(find.text('Also delete everything on the server'));
       await tester.pumpAndSettle();
@@ -747,7 +756,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Forget this key'));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(DangerButton, 'Forget the key'));
+      await tester.tap(find.widgetWithText(DangerButton, 'Forget this key'));
       await tester.pump();
       expect(find.text('Forgetting…'), findsOneWidget);
 
