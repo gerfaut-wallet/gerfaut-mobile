@@ -223,8 +223,13 @@ class MainActivity : FlutterFragmentActivity() {
                         LiveService.stop(this)
                         result.success(null)
                     }
+                    "hold" -> {
+                        LiveService.hold(this)
+                        result.success(null)
+                    }
                     "isRunning" -> result.success(LiveService.isRunning)
                     "isWanted" -> result.success(LiveService.isWanted(this))
+                    "isHeld" -> result.success(LiveService.isHeld(this))
                     "isBatteryExempt" -> result.success(isBatteryExempt())
                     "requestBatteryExemption" -> requestBatteryExemption(result)
                     "manufacturer" -> result.success(Build.MANUFACTURER ?: "")

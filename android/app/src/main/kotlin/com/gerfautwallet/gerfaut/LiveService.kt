@@ -484,6 +484,7 @@ class LiveService : Service() {
         private const val NOTIFICATION_ID = 0x4C495645
         private const val PREFS = "gerfaut.live"
         private const val PREF_WANTED = "wanted"
+        private const val PREF_HELD = "held"
         private const val PREF_REFUSALS = "refusals"
         private const val DISGUISE_MARKER = "disguised"
         private const val STATUS_MAX = 80
@@ -539,10 +540,20 @@ class LiveService : Service() {
                 .edit().remove(PREF_REFUSALS).apply()
         }
 
+        // Whatever is said of Live from here on ends a hold: it only
+        // ever paused what the user had chosen.
         fun setWanted(context: Context, wanted: Boolean) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .edit().putBoolean(PREF_WANTED, wanted).apply()
+                .edit().putBoolean(PREF_WANTED, wanted).remove(PREF_HELD).apply()
         }
+
+        // Whether the app stopped Live because Android let no
+        // notification through, to start it again once they get
+        // through. Kept beside the flag, so the pause outlives the
+        // process.
+        fun isHeld(context: Context): Boolean =
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getBoolean(PREF_HELD, false)
 
         // The marker the activity keeps while the launcher shows the
         // calculator. Disguised, nothing of Gerfaut may run in sight.
@@ -566,6 +577,20 @@ class LiveService : Service() {
         // there is one to tell.
         fun stop(context: Context) {
             setWanted(context, false)
+            leave(context)
+        }
+
+        // Stopped from the app while Android lets no notification
+        // through. Not wanted meanwhile, so neither a boot nor the
+        // heartbeat brings it back; held, so the app starts it again
+        // once they get through.
+        fun hold(context: Context) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit().putBoolean(PREF_WANTED, false).putBoolean(PREF_HELD, true).apply()
+            leave(context)
+        }
+
+        private fun leave(context: Context) {
             cancelHeartbeat(context)
             val running = instance ?: return
             running.quit(revert = false)

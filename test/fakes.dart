@@ -71,6 +71,7 @@ class FakeLivePlatform implements LivePlatform {
   FakeLivePlatform({
     this.running = false,
     this.wanted = false,
+    this.held = false,
     this.batteryExempt = false,
     this.grantsExemption = true,
     this.maker = 'Google',
@@ -79,6 +80,10 @@ class FakeLivePlatform implements LivePlatform {
 
   bool running;
   bool wanted;
+
+  /// Kept as the platform keeps it, outside any one process: a test
+  /// hands the same fake to a fresh container to stand for a restart.
+  bool held;
   bool batteryExempt;
   bool grantsExemption;
   String maker;
@@ -91,6 +96,7 @@ class FakeLivePlatform implements LivePlatform {
   Future<bool> start() async {
     calls.add('start');
     wanted = true;
+    held = false;
     running = true;
     return true;
   }
@@ -99,8 +105,20 @@ class FakeLivePlatform implements LivePlatform {
   Future<void> stop() async {
     calls.add('stop');
     wanted = false;
+    held = false;
     running = false;
   }
+
+  @override
+  Future<void> hold() async {
+    calls.add('hold');
+    wanted = false;
+    held = true;
+    running = false;
+  }
+
+  @override
+  Future<bool> isHeld() async => held;
 
   @override
   Future<bool> isRunning() async => running;

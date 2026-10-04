@@ -1912,7 +1912,8 @@ void main() {
       await comeBack(container);
 
       expect(container.read(notificationsRefusedProvider), isTrue);
-      expect(platform.calls, ['stop']);
+      expect(platform.calls, ['hold']);
+      expect(platform.held, isTrue);
       expect(container.read(liveProvider).serviceRunning, isFalse);
       // Live is still the choice, in the vault and on screen.
       expect(bridge.appPrefs['notify.background'], isNot('900'));
@@ -1931,9 +1932,79 @@ void main() {
       notices.deliverableNow = true;
       await comeBack(container);
       expect(container.read(notificationsRefusedProvider), isFalse);
-      expect(platform.calls, ['stop', 'start']);
+      expect(platform.calls, ['hold', 'start']);
+      expect(platform.held, isFalse);
       expect(container.read(liveProvider).serviceRunning, isTrue);
       expect(container.read(backgroundCheckProvider), BackgroundCheck.live);
+    });
+
+    test('the hold outlives the process, and Live comes back', () async {
+      final bridge = _bridge();
+      final platform = FakeLivePlatform(running: true, wanted: true);
+      final notices = FakeNotifications()..deliverableNow = false;
+      final before = withNotices(bridge, platform, notices);
+      await comeBack(before);
+      // The process dies while the notices are still blocked.
+      before.dispose();
+
+      // The next open, a new process: the notices get through again.
+      notices.deliverableNow = true;
+      final after = withNotices(bridge, platform, notices);
+      await comeBack(after);
+      expect(platform.calls, ['hold', 'start']);
+      expect(after.read(liveProvider).serviceRunning, isTrue);
+      // Never taken for a Stop pressed on the notification.
+      expect(after.read(backgroundCheckProvider), BackgroundCheck.live);
+      expect(bridge.appPrefs['notify.background'], isNot('900'));
+    });
+
+    test('held across a restart while still blocked, it waits', () async {
+      final bridge = _bridge();
+      final platform = FakeLivePlatform(running: true, wanted: true);
+      final notices = FakeNotifications()..deliverableNow = false;
+      final before = withNotices(bridge, platform, notices);
+      await comeBack(before);
+      before.dispose();
+
+      final after = withNotices(bridge, platform, notices);
+      await comeBack(after);
+      expect(platform.calls, ['hold']);
+      expect(platform.held, isTrue);
+      expect(after.read(backgroundCheckProvider), BackgroundCheck.live);
+    });
+
+    test('another choice ends the hold, and nothing restarts', () async {
+      final bridge = _bridge();
+      final platform = FakeLivePlatform(running: true, wanted: true);
+      final notices = FakeNotifications()..deliverableNow = false;
+      final container = withNotices(bridge, platform, notices);
+      await comeBack(container);
+
+      await container
+          .read(backgroundCheckProvider.notifier)
+          .set(BackgroundCheck.hour);
+      expect(platform.held, isFalse);
+
+      notices.deliverableNow = true;
+      await comeBack(container);
+      expect(platform.calls, ['hold', 'stop']);
+      expect(platform.running, isFalse);
+      expect(container.read(backgroundCheckProvider), BackgroundCheck.hour);
+    });
+
+    test('a hold left behind is ended where Live is not chosen', () async {
+      final bridge = _bridge(
+        prefs: {'notify.new_tx': '1', 'notify.background': '3600'},
+      );
+      final platform = FakeLivePlatform(held: true);
+      final notices = FakeNotifications();
+      final container = withNotices(bridge, platform, notices);
+      container.read(backgroundCheckProvider.notifier).hydrate('3600');
+
+      await comeBack(container);
+      expect(platform.calls, ['stop']);
+      expect(platform.held, isFalse);
+      expect(platform.running, isFalse);
     });
 
     test('with the notice off, the system is not asked', () async {

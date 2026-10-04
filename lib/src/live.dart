@@ -42,8 +42,19 @@ abstract class LivePlatform {
   /// False when Android would not start it.
   Future<bool> start();
 
-  /// Records that Live is no longer wanted and stops the service.
+  /// Records that Live is no longer wanted and stops the service. Ends
+  /// a hold too.
   Future<void> stop();
+
+  /// Stops the service while Android lets no notification through, and
+  /// records it as held: no longer wanted, so nothing restarts it
+  /// meanwhile, and meant to start again once they get through. Kept by
+  /// the platform, so the hold outlives the process. [start] and [stop]
+  /// end it.
+  Future<void> hold();
+
+  /// Whether Live was held, and nothing said of it since.
+  Future<bool> isHeld();
 
   Future<bool> isRunning();
 
@@ -88,6 +99,12 @@ class SystemLivePlatform implements LivePlatform {
 
   @override
   Future<void> stop() => _ask<Object?>('stop', null);
+
+  @override
+  Future<void> hold() => _ask<Object?>('hold', null);
+
+  @override
+  Future<bool> isHeld() => _ask('isHeld', false);
 
   @override
   Future<bool> isRunning() => _ask('isRunning', false);
@@ -423,43 +440,42 @@ class LiveController extends Notifier<LiveState> {
       ref.read(notifyNewTxProvider) &&
       ref.read(backgroundCheckProvider) == BackgroundCheck.live;
 
-  /// Live was stopped here because Android stopped letting the notices
-  /// through: the setting still says Live, and it starts again once
-  /// they get through. Not a Stop pressed on its notification, which
-  /// the platform flag alone would not tell apart.
-  bool _heldForNotices = false;
-
   /// Called once the preferences are in, and each time the app comes
   /// back on screen. Listens to the core, and brings the service in line
   /// with the setting: started when it should run and does not, and the
   /// setting taken back to a periodic check when Live was stopped from
   /// its notification while no Dart code could write that down.
   ///
-  /// While Android lets no notice through, the service is stopped and
-  /// the setting left as it is: a connection kept open to say nothing
-  /// costs battery for nothing, and the choice of Live is the user's,
-  /// for when the notices get through again.
+  /// While Android lets no notice through, the service is held: stopped,
+  /// and the setting left as it is. A connection kept open to say
+  /// nothing costs battery for nothing, and the choice of Live is the
+  /// user's, for when the notices get through again. The platform keeps
+  /// the hold, so a process that dies meanwhile does not take it for a
+  /// Stop pressed on the notification, which clears the flag alike.
   Future<void> resume() async {
     _events ??= ref
         .read(bridgeProvider)
         .liveEvents()
         .listen(_onEvent, onError: (_) {});
-    if (!_chosen) return;
     final platform = ref.read(livePlatformProvider);
+    if (!_chosen) {
+      // Live is no longer the choice: a hold left from when it was
+      // must not start it again later.
+      if (await platform.isHeld()) await platform.stop();
+      return;
+    }
     if (ref.read(disguiseProvider).disguised) {
       await _fallBack();
       return;
     }
     if (ref.read(notificationsRefusedProvider)) {
       if (await platform.isWanted() || await platform.isRunning()) {
-        _heldForNotices = true;
-        await platform.stop();
+        await platform.hold();
       }
       await refresh();
       return;
     }
-    if (_heldForNotices) {
-      _heldForNotices = false;
+    if (await platform.isHeld()) {
       await platform.start();
       await refresh();
       return;
