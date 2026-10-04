@@ -877,16 +877,23 @@ const PLATFORM: DevicePlatform = DevicePlatform::Android;
 pub fn premium_debug_endpoint(base_url: String, public_key: String) -> String {
     #[cfg(debug_assertions)]
     {
-        if !base_url.trim().is_empty() {
-            // SAFETY: called once, from the app's start, before the
-            // manager is opened and before any premium call reads the
-            // environment; nothing else in the process writes it.
-            unsafe { std::env::set_var("GERFAUT_PREMIUM_URL", base_url.trim()) };
-        }
-        if !public_key.trim().is_empty() {
-            // SAFETY: as above.
-            unsafe { std::env::set_var("GERFAUT_PREMIUM_PUBLIC_KEY", public_key.trim()) };
-        }
+        // Every isolate that starts calls this (the screens, the
+        // periodic check, Live), and they share one process: only the
+        // first is let through, so the environment is written once,
+        // before the manager that reads it exists.
+        static ONCE: std::sync::Once = std::sync::Once::new();
+        ONCE.call_once(|| {
+            if !base_url.trim().is_empty() {
+                // SAFETY: inside the `Once`, by the first isolate to
+                // start, before it opens the manager: no other thread
+                // of the process reads or writes the environment yet.
+                unsafe { std::env::set_var("GERFAUT_PREMIUM_URL", base_url.trim()) };
+            }
+            if !public_key.trim().is_empty() {
+                // SAFETY: as above.
+                unsafe { std::env::set_var("GERFAUT_PREMIUM_PUBLIC_KEY", public_key.trim()) };
+            }
+        });
     }
     #[cfg(not(debug_assertions))]
     let _ = (base_url, public_key);
