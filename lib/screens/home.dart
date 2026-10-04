@@ -5,7 +5,6 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../src/format.dart';
 import '../src/live.dart';
 import '../src/models.dart';
-import '../src/notifications.dart';
 import '../src/premium.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
@@ -404,20 +403,6 @@ class _WalletListState extends ConsumerState<_WalletList> {
   Widget build(BuildContext context) {
     final shown = _inOrder();
     final errors = ref.watch(syncErrorsProvider);
-    // Each card says how much of it Live follows, but only while Live
-    // runs and cannot follow everything: with room for every address
-    // the badge would say "Live" on every card, which says nothing.
-    final live = ref.watch(liveProvider);
-    final liveChosen =
-        ref.watch(notifyNewTxProvider) &&
-        ref.watch(backgroundCheckProvider) == BackgroundCheck.live;
-    final coverage =
-        liveChosen &&
-            live.serviceRunning &&
-            live.status.state != WatchState.off &&
-            live.status.leftOutWallets > 0
-        ? live.status
-        : null;
     final refused = _refused;
     // A refused drop whose list has changed since says so, and keeps
     // the way out alone: a "Try again" with nothing left to try would
@@ -472,7 +457,9 @@ class _WalletListState extends ConsumerState<_WalletList> {
             child: _WalletCard(
               wallet: wallet,
               error: errors[wallet.id],
-              coverage: coverage?.coverageOf(wallet.id),
+              // How much of it Live follows, only while Live runs and
+              // cannot follow everything.
+              coverage: ref.watch(walletCoverageProvider(wallet.id)),
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute<void>(

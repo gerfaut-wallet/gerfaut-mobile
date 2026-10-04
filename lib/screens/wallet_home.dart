@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/bridge.dart';
 import '../src/format.dart';
+import '../src/live.dart';
 import '../src/models.dart';
 import '../src/policy_text.dart';
 import '../src/state.dart';
@@ -205,6 +206,7 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final syncError = ref.watch(syncErrorsProvider)[widget.walletId];
     final note = _balanceNote(snapshot, syncError);
+    final coverage = ref.watch(walletCoverageProvider(widget.walletId));
     // A note about the sync outranks the pending line: a figure whose
     // source is in doubt is not one to detail.
     final pending = note == null ? snapshot.balance.pendingNetSats : null;
@@ -228,6 +230,10 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                   syncing: syncing,
                   error: syncError,
                 ),
+                if (coverage != null) ...[
+                  const SizedBox(height: GerfautSpacing.sm),
+                  _CoverageLine(coverage: coverage),
+                ],
                 const SizedBox(height: GerfautSpacing.md),
                 // The balance as a dashboard figure: its own bordered
                 // surface, with the role spelled out above it.
@@ -315,6 +321,34 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// How much of the wallet Live follows, under the sync line while Live
+/// cannot follow every wallet whole: the badge, and how many addresses
+/// wait when some do.
+class _CoverageLine extends StatelessWidget {
+  const _CoverageLine({required this.coverage});
+
+  final WalletCoverage coverage;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final waits = coverage.coverage != Coverage.live;
+    return Wrap(
+      spacing: GerfautSpacing.sm,
+      runSpacing: GerfautSpacing.xs,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        LiveCoveragePill(coverage: coverage, said: waits),
+        if (waits)
+          Text(
+            waitingWords(coverage),
+            style: tokens.label.copyWith(color: tokens.textMuted),
+          ),
+      ],
     );
   }
 }

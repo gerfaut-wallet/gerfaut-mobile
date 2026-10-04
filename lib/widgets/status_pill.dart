@@ -164,41 +164,44 @@ class AddressStatePill extends StatelessWidget {
   }
 }
 
-/// How much of a wallet Live follows, said on its card while Live
-/// cannot follow every wallet whole. Neutral when all of it is
-/// followed; amber when a payment may wait for the next sync, which is
-/// the one thing the badge is there to say.
+/// How much of a wallet Live follows, said while Live cannot follow
+/// every wallet whole. Neutral when all of it is followed; amber when a
+/// payment may wait for the next sync, which is the one thing the badge
+/// is there to say. One glyph per state, each a different shape, so the
+/// state reads without its colour: the antenna for a wallet heard
+/// whole, a broken ring for one heard in part, the clock for one that
+/// waits. How many addresses wait is read out with it.
 class LiveCoveragePill extends StatelessWidget {
-  const LiveCoveragePill({super.key, required this.coverage});
+  const LiveCoveragePill({
+    super.key,
+    required this.coverage,
+    this.said = false,
+  });
 
   final WalletCoverage coverage;
 
+  /// The count of waiting addresses is written next to the pill: it is
+  /// not read out twice.
+  final bool said;
+
   @override
   Widget build(BuildContext context) {
-    final left = coverage.leftOutScripts;
-    final waiting = left == 1
-        ? '1 address waits'
-        : '${groupThousands('$left')} addresses wait';
-    return switch (coverage.coverage) {
-      Coverage.live => const StatusPill.tone(
-        tone: PillTone.neutral,
-        icon: LucideIcons.radio,
-        label: 'Live',
-        semanticLabel: 'Live: a payment to this wallet shows at once',
-      ),
-      Coverage.partial => StatusPill.tone(
-        tone: PillTone.pending,
-        icon: LucideIcons.radio,
-        label: 'Partly live',
-        semanticLabel: 'Partly live: $waiting for the next sync',
-      ),
-      Coverage.syncOnly => const StatusPill.tone(
-        tone: PillTone.pending,
-        icon: LucideIcons.clock,
-        label: 'At next sync',
-        semanticLabel:
-            'At next sync: a payment to this wallet shows at the next sync',
-      ),
+    final label = switch (coverage.coverage) {
+      Coverage.live => 'Live',
+      Coverage.partial => 'Partly live',
+      Coverage.syncOnly => 'At next sync',
     };
+    return StatusPill.tone(
+      tone: coverage.coverage == Coverage.live
+          ? PillTone.neutral
+          : PillTone.pending,
+      icon: switch (coverage.coverage) {
+        Coverage.live => LucideIcons.radio,
+        Coverage.partial => LucideIcons.circleDotDashed,
+        Coverage.syncOnly => LucideIcons.clock,
+      },
+      label: label,
+      semanticLabel: said ? label : '$label. ${waitingWords(coverage)}',
+    );
   }
 }

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/backup_restore.dart';
+import 'package:gerfaut/screens/settings.dart';
 import 'package:gerfaut/screens/calculator.dart';
 import 'package:gerfaut/screens/wallet_home.dart';
 import 'package:gerfaut/src/bridge.dart';
@@ -12,6 +13,7 @@ import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/src/live.dart';
+import 'package:gerfaut/src/notifications.dart';
 import 'package:gerfaut/src/vault_key.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:flutter/gestures.dart' show kLongPressTimeout, kPressTimeout;
@@ -478,7 +480,7 @@ void main() {
     }
 
     FakeBridge liveBridge(LiveWatchStatus status) {
-      return FakeBridge(
+      final bridge = FakeBridge(
         wallets: [
           makeMeta(id: 'w1', name: 'Savings'),
           makeMeta(id: 'w2', name: 'Spending'),
@@ -494,6 +496,10 @@ void main() {
           },
         ),
       )..watchStatus = status;
+      for (final meta in bridge.wallets) {
+        bridge.snapshots[meta.id] = makeSnapshot(meta: meta);
+      }
+      return bridge;
     }
 
     testWidgets('each card says how much of it Live follows', (tester) async {
@@ -536,13 +542,106 @@ void main() {
       expect(
         find.bySemanticsLabel(
           RegExp(
-            '^Spending\n.*\nPartly live: 1\u00A0040 addresses wait for the '
-            r'next sync$',
+            '^Spending\n.*\nPartly live\\. 1\u00A0040 addresses wait for the '
+            r'next sync\.$',
           ),
         ),
         findsOneWidget,
       );
       handle.dispose();
+    });
+
+    const short = LiveWatchStatus(
+      state: WatchState.connected,
+      leftOutScripts: 1240,
+      leftOutWallets: 2,
+      wallets: [
+        WalletCoverage(walletId: 'w1', coverage: Coverage.live),
+        WalletCoverage(
+          walletId: 'w2',
+          coverage: Coverage.partial,
+          watchedScripts: 200,
+          leftOutScripts: 1040,
+        ),
+        WalletCoverage(
+          walletId: 'w3',
+          coverage: Coverage.syncOnly,
+          leftOutScripts: 200,
+        ),
+      ],
+    );
+
+    testWidgets('the page of a wallet says how many of its addresses wait', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 3600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(liveApp(liveBridge(short)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Spending'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Partly live'), findsOneWidget);
+      expect(
+        find.text('1\u00A0040 addresses wait for the next sync.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a wallet Live hears whole says only so on its page', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 3600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(liveApp(liveBridge(short)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Savings'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Live'), findsOneWidget);
+      expect(find.textContaining('for the next sync'), findsNothing);
+    });
+
+    testWidgets('the wallet list in the settings carries the badges', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 3600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            bridgeProvider.overrideWithValue(liveBridge(short)),
+            livePlatformProvider.overrideWithValue(
+              FakeLivePlatform(
+                running: true,
+                wanted: true,
+                batteryExempt: true,
+              ),
+            ),
+          ],
+          child: MaterialApp(
+            theme: themeFrom(GerfautTokens.light, Brightness.light),
+            home: const SettingsScreen(section: SettingsSection.wallets),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // What the app's gate does at launch: the preferences, then the
+      // watch.
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(SettingsScreen)),
+      );
+      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      container.read(backgroundCheckProvider.notifier).hydrate('live');
+      await container.read(liveProvider.notifier).refresh();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Live'), findsOneWidget);
+      expect(find.text('Partly live'), findsOneWidget);
+      expect(find.text('At next sync'), findsOneWidget);
     });
 
     testWidgets('with room for every address, no card says anything', (

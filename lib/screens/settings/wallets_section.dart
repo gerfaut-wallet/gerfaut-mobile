@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../src/bridge.dart';
+import '../../src/live.dart';
 import '../../src/models.dart';
 import '../../src/premium.dart';
 import '../../src/state.dart';
@@ -12,6 +13,7 @@ import '../../widgets/notice.dart';
 import '../../widgets/reorder.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/setting_switch.dart';
+import '../../widgets/status_pill.dart';
 import '../../widgets/wallet_icon.dart';
 import '../confirm_identity.dart';
 import 'fields.dart';
@@ -410,6 +412,7 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
       confirmingRemove: _confirmRemoveId == wallet.id,
       removing: _removingId == wallet.id,
       watchedByServer: watchedByServer,
+      coverage: ref.watch(walletCoverageProvider(wallet.id)),
       renameController: _renameController,
       onRenameStart: () {
         setState(() {
@@ -564,6 +567,7 @@ class _WalletRow extends StatelessWidget {
     required this.confirmingRemove,
     required this.removing,
     required this.watchedByServer,
+    required this.coverage,
     required this.renameController,
     required this.onRenameStart,
     required this.onRenameSubmit,
@@ -592,6 +596,10 @@ class _WalletRow extends StatelessWidget {
   /// The server watches this wallet: removing it here takes it off the
   /// server as well, alert history included, and the note says so.
   final bool watchedByServer;
+
+  /// How much of the wallet Live follows, while Live cannot follow
+  /// every wallet whole; null otherwise.
+  final WalletCoverage? coverage;
   final TextEditingController renameController;
   final VoidCallback onRenameStart;
   final VoidCallback onRenameSubmit;
@@ -712,6 +720,10 @@ class _WalletRow extends StatelessWidget {
                               color: tokens.textMuted,
                             ),
                           ),
+                          if (coverage != null) ...[
+                            const SizedBox(height: GerfautSpacing.xs),
+                            LiveCoveragePill(coverage: coverage!),
+                          ],
                         ],
                       ),
               ),

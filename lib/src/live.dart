@@ -553,6 +553,28 @@ final liveProvider = NotifierProvider<LiveController, LiveState>(
   LiveController.new,
 );
 
+/// How much of one wallet Live follows, or null when there is nothing
+/// to say: Live is not chosen or not running, or it has room for every
+/// address, and then every wallet is live and a badge on each would say
+/// nothing.
+final walletCoverageProvider = Provider.family<WalletCoverage?, String>((
+  ref,
+  walletId,
+) {
+  final chosen =
+      ref.watch(notifyNewTxProvider) &&
+      ref.watch(backgroundCheckProvider) == BackgroundCheck.live;
+  if (!chosen) return null;
+  final live = ref.watch(liveProvider);
+  final status = live.status;
+  if (!live.serviceRunning ||
+      !status.leavesSomeOut ||
+      status.leftOutWallets == 0) {
+    return null;
+  }
+  return status.coverageOf(walletId);
+});
+
 // --- the service side ---------------------------------------------------
 
 /// How long a burst of announcements waits for the sync report that

@@ -374,3 +374,14 @@ String formatFiatPrice(double rate, FiatCurrency currency) {
   );
   return _grouped(formatter, rate);
 }
+
+/// What a wallet's Live badge leaves out: how many of its addresses
+/// wait for the next sync.
+String waitingWords(WalletCoverage coverage) {
+  final left = coverage.leftOutScripts;
+  if (left == 0) return 'Every address is followed live.';
+  final count = groupThousands('$left');
+  return left == 1
+      ? '1 address waits for the next sync.'
+      : '$count addresses wait for the next sync.';
+}
