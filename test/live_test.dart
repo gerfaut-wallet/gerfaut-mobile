@@ -1093,8 +1093,8 @@ void main() {
       final note = liveCoverageNote(short, ownNode: false)!;
       expect(
         note.fact,
-        'Live follows up to 2 000 addresses, 200 per wallet. 1 240 '
-        'addresses of 2 wallets wait for the next sync instead.',
+        'Live follows at most 200 addresses per wallet and 2 000 in all. '
+        '1 240 addresses of 2 wallets are checked at the next sync instead.',
       );
       expect(
         note.remedy,
@@ -1116,8 +1116,8 @@ void main() {
       )!;
       expect(
         note.fact,
-        'Live follows up to 20 000 addresses on your node. 1 240 addresses '
-        'of 2 wallets wait for the next sync instead.',
+        'Live follows at most 20 000 addresses, even on your own node. '
+        '1 240 addresses of 2 wallets are checked at the next sync instead.',
       );
       expect(note.remedy, isNull);
     });
@@ -1138,7 +1138,7 @@ void main() {
       expect(
         fulcrum.fact,
         'Your node refuses some of the addresses Live asks it to follow. '
-        '2 000 addresses of 1 wallet wait for the next sync instead.',
+        '2 000 addresses of 1 wallet are checked at the next sync instead.',
       );
       expect(fulcrum.remedy, contains('max_subs_per_ip'));
       expect(
@@ -1193,7 +1193,7 @@ void main() {
       expect(
         note.fact,
         'The server refuses some of the addresses Live asks it to follow. '
-        '50 addresses of 1 wallet wait for the next sync instead.',
+        '50 addresses of 1 wallet are checked at the next sync instead.',
       );
       expect(note.remedy, contains('"This is my node"'));
 
@@ -1222,7 +1222,7 @@ void main() {
       expect(serverRefused(capped), isFalse);
       expect(
         liveCoverageNote(capped, ownNode: false)!.fact,
-        startsWith('Live follows up to'),
+        startsWith('Live follows at most'),
       );
     });
 
@@ -1237,7 +1237,7 @@ void main() {
       )!;
       expect(
         note.fact,
-        endsWith('1 address of 1 wallet waits for the next sync instead.'),
+        endsWith('1 address of 1 wallet is checked at the next sync instead.'),
       );
     });
 
@@ -1315,7 +1315,7 @@ void main() {
       );
       await _open(tester, _settings(bridge, platform: platform));
       expect(
-        find.textContaining('20 000 addresses on your node'),
+        find.textContaining('20 000 addresses, even on your own node'),
         findsOneWidget,
       );
       expect(find.textContaining('"This is my node"'), findsNothing);

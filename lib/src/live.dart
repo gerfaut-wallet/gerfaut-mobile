@@ -343,8 +343,9 @@ final String ownNodeLiveLimit = groupThousands('20000');
   if (!status.leavesSomeOut) return null;
   final addresses = _counted(status.leftOutScripts, 'address', 'addresses');
   final wallets = _counted(status.leftOutWallets, 'wallet', 'wallets');
-  final verb = status.leftOutScripts == 1 ? 'waits' : 'wait';
-  final waiting = '$addresses of $wallets $verb for the next sync instead.';
+  final verb = status.leftOutScripts == 1 ? 'is' : 'are';
+  final waiting =
+      '$addresses of $wallets $verb checked at the next sync instead.';
   // On the user's own node, a list below the cap that still leaves
   // addresses out is the node refusing them, as much as a public server
   // that takes fewer than the list holds.
@@ -354,10 +355,10 @@ final String ownNodeLiveLimit = groupThousands('20000');
       ? '${ownNode ? 'Your node' : 'The server'} refuses some of the '
             'addresses Live asks it to follow. $waiting'
       : ownNode
-      ? 'Live follows up to $ownNodeLiveLimit addresses on your node. '
-            '$waiting'
-      : 'Live follows up to $liveLimit addresses, $livePerWalletLimit per '
-            'wallet. $waiting';
+      ? 'Live follows at most $ownNodeLiveLimit addresses, even on your '
+            'own node. $waiting'
+      : 'Live follows at most $livePerWalletLimit addresses per wallet '
+            'and $liveLimit in all. $waiting';
   final remedy = ownNode
       ? (refused ? _raiseLimit(status.serverSoftware) : null)
       : 'Connect your own node and turn on "This is my node" in Network '

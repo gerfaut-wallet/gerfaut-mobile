@@ -575,11 +575,10 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
               SettingSwitch(
                 title: 'This is my node',
                 hint:
-                    'Live follows up to $ownNodeLiveLimit addresses on your '
-                    'own node, instead of $liveLimit. Leave it off for a '
-                    'server you do not run: a public server limits how many '
-                    'addresses one connection may follow, and refuses the '
-                    'rest.',
+                    'Live then follows up to $ownNodeLiveLimit addresses '
+                    'instead of $liveLimit. Leave it off for a server you do '
+                    'not run: it would refuse most of them, and learn every '
+                    'one.',
                 value: _ownNode,
                 onChanged: (on) => setState(() {
                   _ownNode = on;

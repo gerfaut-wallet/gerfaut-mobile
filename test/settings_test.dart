@@ -1772,7 +1772,7 @@ void main() {
 
       expect(tester.widget<Switch>(ownNodeSwitch()).value, isFalse);
       expect(
-        find.textContaining('Live follows up to 20 000 addresses'),
+        find.textContaining('Live then follows up to 20 000 addresses'),
         findsOneWidget,
       );
       await tester.tap(ownNodeSwitch());
