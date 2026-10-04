@@ -251,18 +251,6 @@ class DerivationChoice {
     'origin': origin,
   };
 
-  DerivationChoice copyWith({
-    String? receive,
-    String? Function()? change,
-    String? Function()? origin,
-  }) {
-    return DerivationChoice(
-      receive: receive ?? this.receive,
-      change: change == null ? this.change : change(),
-      origin: origin == null ? this.origin : origin(),
-    );
-  }
-
   @override
   bool operator ==(Object other) =>
       other is DerivationChoice &&

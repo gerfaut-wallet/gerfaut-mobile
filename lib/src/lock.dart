@@ -96,14 +96,9 @@ class LockState {
   /// screen rather than guessing.
   final bool loaded;
 
-  LockState copyWith({
-    AppLock? lock,
-    bool clearLock = false,
-    bool? locked,
-    bool? loaded,
-  }) {
+  LockState copyWith({AppLock? lock, bool? locked, bool? loaded}) {
     return LockState(
-      lock: clearLock ? null : (lock ?? this.lock),
+      lock: lock ?? this.lock,
       locked: locked ?? this.locked,
       loaded: loaded ?? this.loaded,
     );
