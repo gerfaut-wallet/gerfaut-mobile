@@ -219,10 +219,23 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
       return;
     }
     if (!mounted) return;
+    final settings = ref.read(settingsProvider).valueOrNull;
+    final stored = settings?.backendFor(settings.activeNetwork);
     setState(() {
       _scanError = null;
       _certificateNote = null;
       _scannedOnion = backend.onion;
+      // Another server is not the user's node until they say so: left
+      // on, the switch would have Live hand it up to 20 000 addresses.
+      // The stored server read again keeps it.
+      _ownNode = switch (stored) {
+        CustomEsplora(:final url, :final ownNode) ||
+        CustomElectrum(
+          :final url,
+          :final ownNode,
+        ) => ownNode && url == backend.url,
+        _ => false,
+      };
       if (backend.kind == 'esplora') {
         _backendKind = 'custom_esplora';
         _esploraController.text = backend.url;

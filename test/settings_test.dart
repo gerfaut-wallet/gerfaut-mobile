@@ -2069,6 +2069,56 @@ void main() {
       );
     });
 
+    testWidgets('another server read from a code is not the own node', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      FakeBridge declared() => FakeBridge(
+        settings: const Settings(
+          activeNetwork: Network.mainnet,
+          backends: {
+            Network.mainnet: CustomElectrum(
+              url: 'ssl://node.local:50002',
+              ownNode: true,
+            ),
+          },
+          appPrefs: {},
+        ),
+      );
+      ScannedBackend electrum(String host) => ScannedBackend(
+        kind: 'electrum',
+        url: 'ssl://$host:50002',
+        host: host,
+        port: 50002,
+        tls: true,
+        onion: false,
+      );
+      Finder ownNodeSwitch() => find.descendant(
+        of: find.widgetWithText(SettingSwitch, 'This is my node'),
+        matching: find.byType(Switch),
+      );
+
+      // The stored server read again keeps the switch.
+      var bridge = declared();
+      bridge.onParseBackend = (_) => electrum('node.local');
+      await tester.pumpWidget(settingsWithCamera(bridge, 'node.local:50002:s'));
+      await tester.pumpAndSettle();
+      await scan(tester);
+      expect(tester.widget<Switch>(ownNodeSwitch()).value, isTrue);
+
+      // Another one turns it off.
+      bridge = declared();
+      bridge.onParseBackend = (_) => electrum('electrum.example.org');
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpWidget(
+        settingsWithCamera(bridge, 'electrum.example.org:50002:s'),
+      );
+      await tester.pumpAndSettle();
+      await scan(tester);
+      expect(fieldTexts(tester).first, 'electrum.example.org');
+      expect(tester.widget<Switch>(ownNodeSwitch()).value, isFalse);
+    });
+
     testWidgets('the onion fact names the Tor mode in force', (tester) async {
       useTallSurface(tester);
       final bridge = FakeBridge(
