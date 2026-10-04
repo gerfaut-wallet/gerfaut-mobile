@@ -2236,10 +2236,12 @@ class _ChannelRow extends StatelessWidget {
                     else
                       // Every channel that delivers says so, whatever
                       // its kind, as on the desktop: a row with no
-                      // state read as one nobody had checked.
+                      // state read as one nobody had checked. The
+                      // desktop's check, leading and muted, so the two
+                      // apps show the same pill.
                       const StatusPill.tone(
                         tone: PillTone.neutral,
-                        icon: LucideIcons.link,
+                        icon: LucideIcons.check,
                         label: 'Linked',
                       ),
                   ],

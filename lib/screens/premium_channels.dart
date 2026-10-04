@@ -483,7 +483,7 @@ class _TelegramChannelScreenState extends ConsumerState<TelegramChannelScreen> {
                     ),
                     const StatusPill.tone(
                       tone: PillTone.neutral,
-                      icon: LucideIcons.link,
+                      icon: LucideIcons.check,
                       label: 'Linked',
                     ),
                   ],

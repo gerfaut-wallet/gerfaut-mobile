@@ -329,8 +329,8 @@ The first release: Gerfaut for Android.
 - On the import screen, the first address now belongs to the network you
   pick, and changes when you pick another one. A key added on regtest shows
   its bcrt1 address, not the tb1 address of signet.
-- Every Premium channel that delivers now reads "Linked", as on the desktop.
-  Before, only a linked Telegram channel did.
+- Every Premium channel that delivers now reads "Linked", with the same check
+  mark as on the desktop. Before, only a linked Telegram channel did.
 
 ### Security
 

@@ -22,12 +22,20 @@ import 'package:gerfaut/widgets/alert_banner.dart';
 import 'package:gerfaut/widgets/buttons.dart';
 import 'package:gerfaut/widgets/notice.dart';
 import 'package:gerfaut/widgets/premium_pill.dart';
+import 'package:gerfaut/widgets/status_pill.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
 import 'fakes.dart';
 import 'menu.dart';
 import 'premium_harness.dart';
+
+/// The pills that read [label].
+Iterable<StatusPill> pillsOf(WidgetTester tester, String label) {
+  return tester.widgetList<StatusPill>(
+    find.ancestor(of: find.text(label), matching: find.byType(StatusPill)),
+  );
+}
 
 /// The switch on the row that names [wallet].
 Switch switchOf(WidgetTester tester, String wallet) {
@@ -1674,6 +1682,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Telegram is linked'), findsOneWidget);
       expect(find.text('Linked'), findsOneWidget);
+      expect(pillsOf(tester, 'Linked').single.icon, LucideIcons.check);
 
       await tester.tap(find.text('Done'));
       await tester.pumpAndSettle();
@@ -2392,6 +2401,14 @@ void main() {
       expect(find.text('Linked'), findsNWidgets(4));
       expect(find.text('Not delivering'), findsNothing);
       expect(find.textContaining('Waiting for'), findsNothing);
+      // The desktop's check, leading and muted, where a link glyph was:
+      // the same pill on both apps.
+      final pills = pillsOf(tester, 'Linked');
+      expect(pills, hasLength(4));
+      for (final pill in pills) {
+        expect(pill.icon, LucideIcons.check);
+        expect(pill.tone, PillTone.neutral);
+      }
     });
 
     testWidgets('a failure younger than an hour changes nothing', (
