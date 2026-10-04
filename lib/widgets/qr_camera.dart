@@ -236,11 +236,17 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
       final text = code.text?.trim();
       if (_closed || !mounted || !code.isValid) return;
       if (text != null && text.isNotEmpty) widget.onFrame(text);
-    } catch (error) {
+    } catch (_) {
       // Said once, then the loop carries on: a decoder that refuses
       // every frame must not pass for an empty viewfinder.
       if (_trouble == null && mounted && !_closed) {
-        setState(() => _trouble = 'The decoder failed: $error');
+        // Our words, not the plugin's: what broke is no help to the
+        // person holding the phone, what to do next is.
+        setState(
+          () => _trouble =
+              'The QR reader stopped working. Close the scanner and open it '
+              'again, or paste the code instead.',
+        );
       }
     } finally {
       _decoding = false;
@@ -327,7 +333,8 @@ class _Cover extends StatelessWidget {
   }
 }
 
-/// A decoder that broke down, said on the picture itself.
+/// A decoder that broke down, said on the picture itself, in the
+/// overlay's own ink: nothing is at risk, so no red.
 class _Trouble extends StatelessWidget {
   const _Trouble({required this.message});
 
@@ -347,7 +354,7 @@ class _Trouble extends StatelessWidget {
       ),
       child: Text(
         message,
-        style: dark.bodySmall.copyWith(color: dark.alert),
+        style: dark.bodySmall.copyWith(color: dark.text),
         textAlign: TextAlign.center,
       ),
     );
@@ -366,12 +373,14 @@ class _CameraNotice extends StatelessWidget {
     final dark = GerfautTokens.dark;
     final message = switch (feed) {
       _Feed.starting || _Feed.running => 'Starting the camera…',
+      // The scanner reads wallets, transactions and backups alike:
+      // "the code" is whichever one this screen asked for.
       _Feed.denied =>
         'Gerfaut has no access to the camera. Grant it in the system '
-            'settings, or paste the descriptor in by hand.',
+            'settings, or paste the code in by hand.',
       _Feed.unavailable =>
-        'No camera answered on this device. Paste the descriptor in by '
-            'hand instead.',
+        'No camera answered on this device. Paste the code in by hand '
+            'instead.',
     };
     return ColoredBox(
       color: dark.background,
