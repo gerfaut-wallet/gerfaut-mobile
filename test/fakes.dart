@@ -201,6 +201,9 @@ class FakeWidgetBoard implements WidgetBoard {
   }
 
   @override
+  Future<String?> readWidgetData(String key) async => data[key];
+
+  @override
   Future<void> updateWidget(String name) async => updates.add(name);
 
   @override

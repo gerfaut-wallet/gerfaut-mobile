@@ -21,6 +21,21 @@ final DateTime _now = DateTime.fromMillisecondsSinceEpoch(
   (_syncedAt + 7200) * 1000,
 );
 
+/// [t] in unix seconds. Tests build their moments in local time, so a
+/// day stays the same day in whatever zone they run.
+int _secs(DateTime t) => t.millisecondsSinceEpoch ~/ 1000;
+
+/// Empty balance and network payloads, for a write about the price.
+final BalancePayload _noBalance = BalancePayload.of(
+  const [],
+  unit: AmountUnit.btc,
+  masked: true,
+);
+final NetworkPayload _noNetwork = NetworkPayload.of(
+  const [],
+  network: Network.mainnet,
+);
+
 SyncStamp _stamp(int at, {int tipHeight = 912345}) =>
     SyncStamp(at: at, tipHeight: tipHeight, backend: 'mempool.space');
 
@@ -85,12 +100,56 @@ Future<({ProviderContainer container, WidgetFeed feed})> _running(
 void main() {
   group('the price widget', () {
     test('states one bitcoin in the currency and the clock time', () {
-      final payload = PricePayload.of(_quote);
+      final payload = PricePayload.of(
+        _quote,
+        now: DateTime.fromMillisecondsSinceEpoch(_syncedAt * 1000),
+      );
       expect(payload.figure, '€50 000');
       expect(payload.asOf, 'as of ${formatClock(_syncedAt)}');
+      expect(payload.asOfNarrow, isNull);
       // The core carries no daily change yet: the line stays hidden.
       expect(payload.toData()[WidgetKeys.priceChange], isNull);
+      expect(payload.toData()[WidgetKeys.priceAt], '$_syncedAt');
       expect(payload.toData().keys, PricePayload.keys);
+    });
+
+    test('a quote from today says its time alone', () {
+      final at = _secs(DateTime(2026, 10, 3, 9, 41));
+      for (final now in [
+        DateTime(2026, 10, 3, 9, 41),
+        DateTime(2026, 10, 3, 23, 59),
+      ]) {
+        expect(priceAsOf(at, now: now), (full: 'as of 09:41', narrow: null));
+      }
+    });
+
+    test('a quote from another day says its day, and its time where it '
+        'fits', () {
+      final at = _secs(DateTime(2026, 10, 3, 9, 41));
+      final yesterday = (full: 'as of Oct 03, 09:41', narrow: 'as of Oct 03');
+      expect(priceAsOf(at, now: DateTime(2026, 10, 4, 0, 1)), yesterday);
+      expect(priceAsOf(at, now: DateTime(2026, 12, 31, 23, 59)), yesterday);
+      final data = PricePayload.of(
+        PriceQuote(
+          rate: 50000,
+          currency: FiatCurrency.eur,
+          source: PriceSource.coingecko,
+          at: at,
+        ),
+        now: DateTime(2026, 10, 4, 8),
+      ).toData();
+      expect(data[WidgetKeys.priceAsOf], 'as of Oct 03, 09:41');
+      expect(data[WidgetKeys.priceAsOfNarrow], 'as of Oct 03');
+    });
+
+    test('a quote from another year says its year in place of the time', () {
+      // The year is never the part a narrow widget drops: "as of Dec 31"
+      // would read as this year's.
+      final at = _secs(DateTime(2025, 12, 31, 23, 50));
+      expect(priceAsOf(at, now: DateTime(2026, 1, 1, 0, 5)), (
+        full: 'as of Dec 31, 2025',
+        narrow: null,
+      ));
     });
 
     test('a euro quote drops its cents, as the app does', () {
@@ -385,6 +444,46 @@ void main() {
       },
     );
 
+    test('with no new quote, the line is said again for the day it is '
+        'read', () async {
+      final board = FakeWidgetBoard(installed: {HomeWidgets.price});
+      Future<void> write(PricePayload? price, DateTime now) => WidgetFeed.write(
+        board,
+        installed: board.installed,
+        price: price,
+        balance: _noBalance,
+        network: _noNetwork,
+        now: now,
+      );
+
+      final evening = DateTime(2026, 10, 3, 23, 55);
+      final quote = PriceQuote(
+        rate: 50000,
+        currency: FiatCurrency.eur,
+        source: PriceSource.coingecko,
+        at: _secs(DateTime(2026, 10, 3, 23, 50)),
+      );
+      await write(PricePayload.of(quote, now: evening), evening);
+      final figure = board.data[WidgetKeys.priceFigure];
+      expect(board.data[WidgetKeys.priceAsOf], 'as of 23:50');
+      expect(board.data.containsKey(WidgetKeys.priceAsOfNarrow), isFalse);
+
+      // Past midnight, and nothing new came: the same quote, dated.
+      board.updates.clear();
+      await write(null, DateTime(2026, 10, 4, 0, 10));
+      expect(board.data[WidgetKeys.priceFigure], figure);
+      expect(board.data[WidgetKeys.priceAsOf], 'as of Oct 03, 23:50');
+      expect(board.data[WidgetKeys.priceAsOfNarrow], 'as of Oct 03');
+      expect(board.updates, [HomeWidgets.price]);
+
+      // Taken off the home screen, the time goes with the rest.
+      board.installed.clear();
+      await write(null, DateTime(2026, 10, 4, 0, 25));
+      for (final key in PricePayload.keys) {
+        expect(board.data.containsKey(key), isFalse, reason: key);
+      }
+    });
+
     test('a return to the foreground reads the placed widgets again', () async {
       final board = FakeWidgetBoard(installed: {HomeWidgets.price});
       final (:container, :feed) = await _running(_bridge(), board);
@@ -579,6 +678,28 @@ void main() {
       expect(board.data[WidgetKeys.balanceSynced], 'Synced 2 h ago');
     });
 
+    test('a quote kept from another day is dated, at the time of the '
+        'run', () async {
+      final bridge = _bridge();
+      bridge.onFetchPrice = (_, _) =>
+          throw const BridgeException('sync', 'no answer');
+      final board = FakeWidgetBoard(installed: {HomeWidgets.price});
+      final at = _secs(DateTime(2026, 10, 3, 9, 41));
+      board.data
+        ..[WidgetKeys.priceFigure] = 'kept'
+        ..[WidgetKeys.priceAsOf] = 'as of 09:41'
+        ..[WidgetKeys.priceAt] = '$at';
+      await refreshWidgets(
+        bridge: bridge,
+        board: board,
+        bootstrap: () async {},
+        now: DateTime(2026, 10, 4, 7, 30),
+      );
+      expect(board.data[WidgetKeys.priceFigure], 'kept');
+      expect(board.data[WidgetKeys.priceAsOf], 'as of Oct 03, 09:41');
+      expect(board.data[WidgetKeys.priceAsOfNarrow], 'as of Oct 03');
+    });
+
     test('with a .onion node, the price follows a Tor that already runs '
         'and never has one started for it', () async {
       // Asked from here, the core's route would bring the built-in Tor
@@ -628,7 +749,7 @@ void main() {
         );
       }
 
-      final fresh = PricePayload.of(_quote);
+      final fresh = PricePayload.of(_quote, now: _now);
 
       // Built-in Tor, not running in this process: nothing is asked,
       // and the last price stays up with its time.

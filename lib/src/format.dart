@@ -208,6 +208,16 @@ String formatDate(int unixSeconds) {
   return '${_months[local.month - 1]} $day, ${local.year}';
 }
 
+/// A day without its year, in the order of [formatDate]: `Oct 03`. For
+/// a day close enough to the reader's that the year goes without
+/// saying.
+String formatDayMonth(int unixSeconds) {
+  final local = DateTime.fromMillisecondsSinceEpoch(unixSeconds * 1000)
+      .toLocal();
+  final day = local.day.toString().padLeft(2, '0');
+  return '${_months[local.month - 1]} $day';
+}
+
 /// A day written day first, `24 Sep 2026`: the form the Premium device
 /// texts use on both apps, beside the alerts the server sends about the
 /// same devices.

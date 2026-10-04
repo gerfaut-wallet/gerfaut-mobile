@@ -35,6 +35,14 @@ abstract final class WidgetKeys {
   static const String priceFigure = 'price.figure';
   static const String priceChange = 'price.change';
   static const String priceAsOf = 'price.asOf';
+
+  /// The as-of line for an instance too narrow for [priceAsOf]; absent
+  /// when that line is already as short as it can be and stay true.
+  static const String priceAsOfNarrow = 'price.asOfNarrow';
+
+  /// When the quote was fetched, in unix seconds. No widget shows it:
+  /// the as-of lines are written again from it while no new quote comes.
+  static const String priceAt = 'price.at';
   static const String balanceTotal = 'balance.total';
   static const String balanceSynced = 'balance.synced';
   static const String networkHeight = 'network.height';
@@ -51,15 +59,24 @@ abstract final class WidgetKeys {
 
 /// What the price widget shows.
 class PricePayload {
-  const PricePayload({required this.figure, this.change, required this.asOf});
+  const PricePayload({
+    required this.figure,
+    this.change,
+    required this.at,
+    required this.asOf,
+    this.asOfNarrow,
+  });
 
   /// The quote as the widget states it: the price of one bitcoin in the
   /// quote's currency, in the same figures the app's own price line
-  /// uses, and the clock time it was fetched at.
-  factory PricePayload.of(PriceQuote quote) {
+  /// uses, and when it was fetched, as [priceAsOf] says it [now].
+  factory PricePayload.of(PriceQuote quote, {DateTime? now}) {
+    final asOf = priceAsOf(quote.at, now: now);
     return PricePayload(
       figure: formatFiatPrice(quote.rate, quote.currency),
-      asOf: 'as of ${formatClock(quote.at)}',
+      at: quote.at,
+      asOf: asOf.full,
+      asOfNarrow: asOf.narrow,
     );
   }
 
@@ -67,6 +84,8 @@ class PricePayload {
     WidgetKeys.priceFigure,
     WidgetKeys.priceChange,
     WidgetKeys.priceAsOf,
+    WidgetKeys.priceAsOfNarrow,
+    WidgetKeys.priceAt,
   ];
 
   final String figure;
@@ -75,13 +94,42 @@ class PricePayload {
   /// quotes the core serves carry none yet, so the line stays hidden.
   final String? change;
 
+  /// When the quote was fetched, in unix seconds.
+  final int at;
+
   final String asOf;
+  final String? asOfNarrow;
 
   Map<String, String?> toData() => {
     WidgetKeys.priceFigure: figure,
     WidgetKeys.priceChange: change,
     WidgetKeys.priceAsOf: asOf,
+    WidgetKeys.priceAsOfNarrow: asOfNarrow,
+    WidgetKeys.priceAt: '$at',
   };
+}
+
+/// The line under a price fetched at [at], as the widget says it [now]:
+/// the clock time alone on the day of the quote, `as of 09:41`; the day
+/// and the time on any later day, `as of Oct 03, 09:41`; the day and the
+/// year once the year has turned, `as of Dec 31, 2025`. A price kept up
+/// for days must not pass for this morning's.
+///
+/// [narrow] is the line for an instance too narrow for the time,
+/// `as of Oct 03`; null when [full] is already as short as it can be
+/// and stay true. The year is never the part dropped: a day without it
+/// would read as this year's.
+({String full, String? narrow}) priceAsOf(int at, {DateTime? now}) {
+  final then = DateTime.fromMillisecondsSinceEpoch(at * 1000);
+  final today = (now ?? DateTime.now()).toLocal();
+  if (then.year != today.year) {
+    return (full: 'as of ${formatDate(at)}', narrow: null);
+  }
+  if (then.month == today.month && then.day == today.day) {
+    return (full: 'as of ${formatClock(at)}', narrow: null);
+  }
+  final day = formatDayMonth(at);
+  return (full: 'as of $day, ${formatClock(at)}', narrow: 'as of $day');
 }
 
 /// One wallet on the balance widget.
@@ -240,6 +288,9 @@ abstract class WidgetBoard {
   /// Stores one string under [key]; null removes it.
   Future<void> saveWidgetData(String key, String? value);
 
+  /// The string stored under [key], null when there is none.
+  Future<String?> readWidgetData(String key);
+
   /// Asks every instance of the provider [name] to redraw.
   Future<void> updateWidget(String name);
 
@@ -256,6 +307,10 @@ class HomeWidgetBoard implements WidgetBoard {
   @override
   Future<void> saveWidgetData(String key, String? value) =>
       _quietly(() => HomeWidget.saveWidgetData<String>(key, value));
+
+  @override
+  Future<String?> readWidgetData(String key) =>
+      _quietly(() => HomeWidget.getWidgetData<String>(key));
 
   @override
   Future<void> updateWidget(String name) => _quietly(
@@ -478,6 +533,7 @@ class WidgetFeed {
     PricePayload? price,
     required BalancePayload balance,
     required NetworkPayload network,
+    DateTime? now,
   }) async {
     Future<void> put(String name, Map<String, String?> data) async {
       for (final entry in data.entries) {
@@ -496,6 +552,20 @@ class WidgetFeed {
       await clear(PricePayload.keys);
     } else if (price != null) {
       await put(HomeWidgets.price, price.toData());
+    } else {
+      // The last quote stands, but its time is said again from when it
+      // was fetched: written once, "as of 23:50" would still say so the
+      // next day. A store from before the key holds no time to say.
+      final at = int.tryParse(
+        await board.readWidgetData(WidgetKeys.priceAt) ?? '',
+      );
+      if (at != null) {
+        final asOf = priceAsOf(at, now: now);
+        await put(HomeWidgets.price, {
+          WidgetKeys.priceAsOf: asOf.full,
+          WidgetKeys.priceAsOfNarrow: asOf.narrow,
+        });
+      }
     }
     if (installed.contains(HomeWidgets.balance)) {
       await put(HomeWidgets.balance, balance.toData());
@@ -570,7 +640,7 @@ Future<bool> refreshWidgets({
     await WidgetFeed.write(
       board,
       installed: installed,
-      price: quote == null ? null : PricePayload.of(quote),
+      price: quote == null ? null : PricePayload.of(quote, now: now),
       balance: BalancePayload.of(
         wallets,
         unit: AmountUnit.fromId(prefs[Pref.unit]) ?? AmountUnit.btc,
@@ -579,6 +649,7 @@ Future<bool> refreshWidgets({
         now: now,
       ),
       network: NetworkPayload.of(wallets, network: network, now: now),
+      now: now,
     );
     return true;
   } on VaultInUseException {

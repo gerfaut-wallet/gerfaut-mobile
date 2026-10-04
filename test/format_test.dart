@@ -234,4 +234,12 @@ void main() {
       expect(formatDate(1899979200), 'Mar 17, 2030');
     });
   });
+
+  group('formatDayMonth', () {
+    test('reads like the date without its year', () {
+      final at = DateTime(2026, 10, 3, 9, 41).millisecondsSinceEpoch ~/ 1000;
+      expect(formatDayMonth(at), 'Oct 03');
+      expect(formatDate(at), 'Oct 03, 2026');
+    });
+  });
 }
