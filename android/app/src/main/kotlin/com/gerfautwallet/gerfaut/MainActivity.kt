@@ -125,13 +125,6 @@ class MainActivity : FlutterFragmentActivity() {
     // The call waiting for the battery question to be answered.
     private var pendingExemption: MethodChannel.Result? = null
 
-    // The mark of the secret last copied, while it may still be on the
-    // clipboard, and when it went there: it is taken off a minute later.
-    // The mark, never the text: the secret is not kept here, and the
-    // clip is recognised by its description alone (see below).
-    private var sensitiveMark: String? = null
-    private var sensitiveStamp = 0L
-    private var sensitiveCopiedAt = 0L
     private val main = Handler(Looper.getMainLooper())
     private val clearSensitive = Runnable { clearSensitiveIfOurs() }
 
@@ -392,7 +385,14 @@ class MainActivity : FlutterFragmentActivity() {
     // put on its own copy, and the time the system stamped it with.
     private fun clearSensitiveIfOurs() {
         val mark = sensitiveMark ?: return
-        if (SystemClock.elapsedRealtime() - sensitiveCopiedAt < SENSITIVE_CLEAR_MS) return
+        val waited = SystemClock.elapsedRealtime() - sensitiveCopiedAt
+        if (waited < SENSITIVE_CLEAR_MS) {
+            // Not yet: due later in this activity, which may not be the
+            // one that copied it.
+            main.removeCallbacks(clearSensitive)
+            main.postDelayed(clearSensitive, SENSITIVE_CLEAR_MS - waited)
+            return
+        }
         if (!hasWindowFocus()) return
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val description = try {
@@ -762,6 +762,18 @@ class MainActivity : FlutterFragmentActivity() {
 
         // As on the desktop app: a minute on the clipboard, then gone.
         const val SENSITIVE_CLEAR_MS = 60_000L
+
+        // The mark of the secret last copied, while it may still be on
+        // the clipboard, and when it went there: it is taken off a minute
+        // later. The mark, never the text: the secret is not kept here,
+        // and the clip is recognised by its description alone (see
+        // clearSensitiveIfOurs). Kept by the process, not the activity:
+        // an activity that Back finishes or a rotation rebuilds within
+        // the minute must not forget a copy it still has to clear, and
+        // the next one to gain the focus clears it.
+        private var sensitiveMark: String? = null
+        private var sensitiveStamp = 0L
+        private var sensitiveCopiedAt = 0L
 
         // The key of the mark on a sensitive copy. Plain on purpose: a
         // clipboard manager that lists extras must find no app's name.
