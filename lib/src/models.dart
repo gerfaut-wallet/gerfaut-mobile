@@ -99,8 +99,8 @@ enum InputWarning {
   ),
   assumedBranches(
     'assumed_branches',
-    'This QR code carries no derivation path, so Gerfaut assumes receive '
-        'and change addresses. Compare the first address with your signer.',
+    'This QR code carries no receive or change path, so Gerfaut assumes '
+        'the usual 0/* and 1/*. Compare the first address with your signer.',
   );
 
   const InputWarning(this.id, this.label);

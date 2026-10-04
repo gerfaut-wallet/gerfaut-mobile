@@ -309,8 +309,8 @@ The first release: Gerfaut for Android.
   all of them a day later, or an hour later when it refused every one.
   Before, it waited until you changed the server or restarted Gerfaut, so a
   server that refused every address could leave Live off for days.
-- In Add a wallet, a QR code that gives no derivation path now says that
-  Gerfaut assumes receive and change addresses, and asks you to compare the
+- In Add a wallet, a QR code that gives no receive or change path now says
+  that Gerfaut assumes the usual 0/* and 1/*, and asks you to compare the
   first address with your signer.
 - The price widget now gives the date of a price that is not from today, as
   in "as of Oct 03, 09:41". It used to give the time alone, so a price kept

@@ -572,8 +572,8 @@ void main() {
     await tester.pumpAndSettle();
 
     final notice = find.text(
-      'This QR code carries no derivation path, so Gerfaut assumes receive '
-      'and change addresses. Compare the first address with your signer.',
+      'This QR code carries no receive or change path, so Gerfaut assumes '
+      'the usual 0/* and 1/*. Compare the first address with your signer.',
     );
     expect(find.text('NAME'), findsOneWidget);
     expect(notice, findsOneWidget);
