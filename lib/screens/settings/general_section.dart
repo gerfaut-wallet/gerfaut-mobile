@@ -200,19 +200,18 @@ class _RatePreview extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final price = ref.watch(priceProvider);
     ref.watch(relativeClockProvider);
-    final error = price.error;
-    if (error is BridgeException && error.kind == priceNeedsTor) {
-      return Text(
-        'No price while Gerfaut goes through Tor: the price sources are '
-        "reached without it, and would see this phone's IP address. "
-        'Amounts show without fiat.',
-        style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-      );
-    }
     if (price.hasError) {
+      // With a .onion node the core sends the price through Tor, and
+      // nothing at all while Tor is out of reach: that is not the
+      // source failing to answer.
+      final error = price.error;
+      final torDown = error is BridgeException && error.kind == 'tor';
       return Text(
-        'The price source did not answer. Amounts show without fiat until '
-        'it does.',
+        torDown
+            ? 'Tor is not available, so no price was asked. Amounts show '
+                  'without fiat until it is.'
+            : 'The price source did not answer. Amounts show without fiat '
+                  'until it does.',
         style: tokens.bodySmall.copyWith(color: tokens.pending),
       );
     }

@@ -41,10 +41,6 @@ class BridgeException implements Exception {
   String toString() => message;
 }
 
-/// The price is refused while the app goes through Tor: the price
-/// sources would be reached in the clear.
-const String priceNeedsTor = 'price_needs_tor';
-
 /// What a screen says when the core failed in a way it has no words
 /// for: a panic, caught at the bridge.
 const String internalFailure =

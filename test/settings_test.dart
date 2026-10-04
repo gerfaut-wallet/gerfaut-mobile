@@ -112,14 +112,15 @@ void main() {
     expect(bridge.appPrefs['mobile.theme'], 'system');
   });
 
-  testWidgets('through Tor, no price is fetched and the line says why', (
-    tester,
-  ) async {
+  testWidgets('with Tor out of reach, the price line says so', (tester) async {
+    // With a .onion node the core sends the price through Tor, and
+    // nothing at all while Tor cannot be had: not a source that failed
+    // to answer.
     useTallSurface(tester);
     final bridge = FakeBridge()
       ..onFetchPrice = (_, _) => throw const BridgeException(
-        priceNeedsTor,
-        'the price is not fetched while Gerfaut goes through Tor',
+        'tor',
+        'tor: no Tor proxy answers at 127.0.0.1:9050',
       );
     await tester.pumpWidget(
       settingsApp(bridge, section: SettingsSection.general),
@@ -132,9 +133,8 @@ void main() {
 
     expect(
       find.text(
-        'No price while Gerfaut goes through Tor: the price sources are '
-        "reached without it, and would see this phone's IP address. "
-        'Amounts show without fiat.',
+        'Tor is not available, so no price was asked. Amounts show '
+        'without fiat until it is.',
       ),
       findsOneWidget,
     );
@@ -1936,12 +1936,15 @@ void main() {
       await tester.pumpAndSettle();
 
       // Starting Orbot is not enough on its own: Automatic would still
-      // not use it, so the card names the mode to pick.
+      // not use it, so the card names the mode to pick. And the price
+      // follows the node through Tor, as the update check does.
       expect(
         find.text(
           'An address ending in .onion goes through Tor. This build has no '
           'Tor of its own: choose System below, with a Tor app such as '
-          'Orbot running on this device.',
+          'Orbot running on this device. When one of your nodes is a '
+          '.onion address, the price goes through Tor too, or is not '
+          'fetched while Tor is out of reach.',
         ),
         findsOneWidget,
       );
