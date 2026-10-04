@@ -904,10 +904,7 @@ class _InputRow extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               truncateMiddle(input.outpoint, head: 10, tail: 8),
-              style: tokens.data.copyWith(
-                fontSize: 11,
-                color: tokens.textMuted,
-              ),
+              style: tokens.data.copyWith(color: tokens.textMuted),
               maxLines: 1,
               softWrap: false,
             ),
@@ -980,10 +977,7 @@ class _OutputRow extends StatelessWidget {
             triggerMode: TooltipTriggerMode.longPress,
             child: Text(
               opReturnPreview(opReturn),
-              style: tokens.data.copyWith(
-                fontSize: 11,
-                color: tokens.textMuted,
-              ),
+              style: tokens.data.copyWith(color: tokens.textMuted),
               maxLines: 1,
               softWrap: false,
               overflow: TextOverflow.ellipsis,

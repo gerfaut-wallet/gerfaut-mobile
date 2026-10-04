@@ -500,7 +500,7 @@ class _SettingsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final label = tokens.label.copyWith(color: tokens.textMuted);
-    final value = tokens.data.copyWith(fontSize: 12);
+    final value = tokens.data;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(GerfautSpacing.sm + GerfautSpacing.xs),

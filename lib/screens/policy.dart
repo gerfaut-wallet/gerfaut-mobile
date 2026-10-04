@@ -370,10 +370,9 @@ class _KeyPill extends StatelessWidget {
               const SizedBox(width: GerfautSpacing.sm),
               Text(
                 fingerprint,
-                style: tokens.data.copyWith(
-                  fontSize: 11,
-                  color: tokens.textMuted,
-                ),
+                // Compared character by character with a device: the
+                // data size, never smaller.
+                style: tokens.data.copyWith(color: tokens.textMuted),
               ),
             ],
           ],
@@ -454,7 +453,7 @@ class _KeysSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final mono = tokens.data.copyWith(fontSize: 12, color: tokens.textMuted);
+    final mono = tokens.data.copyWith(color: tokens.textMuted);
     final name = tokens.bodySmall.copyWith(
       fontWeight: FontWeight.w500,
       fontVariations: const [FontVariation('wght', 500)],
@@ -505,7 +504,7 @@ class _KeysSection extends StatelessWidget {
                         key.originPath == null
                             ? key.keyShort
                             : '${key.originPath}  ·  ${key.keyShort}',
-                        style: tokens.data.copyWith(fontSize: 12),
+                        style: tokens.data,
                       ),
                     ],
                   ),

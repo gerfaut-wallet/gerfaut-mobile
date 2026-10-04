@@ -665,10 +665,7 @@ class _TxList extends ConsumerWidget {
                         : truncateMiddle(tx.txid, head: 8, tail: 8),
                     style: dated
                         ? tokens.figureOf(size: 13)
-                        : tokens.data.copyWith(
-                            fontSize: 12,
-                            color: tokens.textMuted,
-                          ),
+                        : tokens.data.copyWith(color: tokens.textMuted),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),

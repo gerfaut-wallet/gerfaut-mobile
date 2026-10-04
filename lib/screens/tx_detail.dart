@@ -769,10 +769,7 @@ class _RawTransactionState extends State<_RawTransaction> {
                   ),
                   child: Text(
                     widget.hex,
-                    style: tokens.data.copyWith(
-                      fontSize: 11,
-                      color: tokens.textMuted,
-                    ),
+                    style: tokens.data.copyWith(color: tokens.textMuted),
                   ),
                 ),
               ),
@@ -980,7 +977,7 @@ class _IoIdentity extends StatelessWidget {
           triggerMode: TooltipTriggerMode.longPress,
           child: _subline(
             opReturnPreview(opReturn),
-            style: tokens.data.copyWith(fontSize: 11, color: tokens.textMuted),
+            style: tokens.data.copyWith(color: tokens.textMuted),
           ),
         ),
       ];
