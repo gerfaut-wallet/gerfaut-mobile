@@ -308,7 +308,11 @@ The first release: Gerfaut for Android.
 - When a server refuses some of your addresses, Live now asks it again for
   all of them a day later, or an hour later when it refused every one.
   Before, it waited until you changed the server or restarted Gerfaut, so a
-  server that refused every address could leave Live off for days.
+  server that refused every address could leave Live off for days. The
+  exception is an ElectrumX server that cut Live off for using too much of
+  its resources: there, Live keeps asking for fewer addresses until you
+  change the server settings or Live stops, because asking for all of them
+  would only get it cut off again.
 - In Add a wallet, a QR code that gives no receive or change path now says
   that Gerfaut assumes the usual 0/* and 1/*, and asks you to compare the
   first address with your signer.
@@ -354,8 +358,8 @@ The first release: Gerfaut for Android.
   already running, such as the one a sync started or Orbot, and otherwise
   keeps the last price with the time it was fetched.
 - While an app lock is set, the balance widget shows no wallet name and no
-  amount, and "Show balances on widgets" in Settings › Widgets is greyed out
-  until the lock is removed.
+  amount. On the Widgets card in Settings › Notifications,
+  "Show balances on widgets" is greyed out until the lock is removed.
 - Under the calculator disguise, a vault that fails to open shows the
   calculator, not Gerfaut's error page.
 - A transaction history shared as CSV no longer stays in the app's cache:
