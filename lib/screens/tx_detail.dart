@@ -312,9 +312,7 @@ String _directionOf(TxDetail detail) {
 /// technical and waits below the lists.
 ///
 /// The price is not one of them. What this page can quote is today's
-/// rate, never the one that ruled the day of the transaction; the rate
-/// as it stood belongs to the paid export, which knows the date it is
-/// pricing.
+/// rate, never the one that ruled the day of the transaction.
 class _QuickFacts extends StatelessWidget {
   const _QuickFacts({required this.summary, required this.tokens});
 

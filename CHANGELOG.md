@@ -46,11 +46,10 @@ The first release: Gerfaut for Android.
   page first.
 - A PIN or password lock with biometrics, attempts slowed after three tries
   and still slowed after a restart, and a calculator disguise for the icon.
-- A secret copied from the app, an extended key, an ntfy topic or the
-  account key, is marked sensitive on the clipboard: the system shows no
-  preview of it and keeps it out of its history. It also leaves the
-  clipboard a minute later, unless you copied something else since, and the
-  confirmation says "for 1 minute".
+- Gerfaut marks a descriptor or a policy you copy from the app as sensitive
+  on the clipboard: the system shows no preview of it and keeps it out of its
+  history. It also leaves the clipboard a minute later, unless you copied
+  something else since, and the confirmation says "for 1 minute".
 - Home screen widgets for the price, the balance (hidden by default) and the
   block height.
 - Local notifications when a sync finds something new. Nothing leaves the
@@ -98,8 +97,7 @@ The first release: Gerfaut for Android.
   once they get through.
 - While the app is disguised, the notification settings are greyed out, with
   a line that says why: a notification would show the name Gerfaut. The
-  sheet that turns the disguise on says so before you confirm and, with
-  Premium on, adds that its alerts still reach your channels.
+  sheet that turns the disguise on says so before you confirm.
 - A transaction is announced once when it appears and once when it confirms,
   whichever part of the app saw it first. A fee bump brings no second
   notice, and its confirmation takes the place of the pending one. An
@@ -110,99 +108,6 @@ The first release: Gerfaut for Android.
   "New transaction · pending". Without a lock it is titled with the wallet's
   name, and hiding the balances keeps the amount out of it.
 - Signet, testnet4 and regtest alongside mainnet.
-- Gerfaut Premium, as an eighth section of the settings. Enter the account
-  key bought on gerfaut-wallet.com, switch a wallet on, and the server
-  watches it from there; before the first one leaves the phone, a page says
-  in plain words what the server will learn, and the row says "First scan
-  pending" until the server has been through the wallet once. A wallet
-  removed from the phone is taken off the server with it, and one the server
-  still watches that this phone no longer has is listed with a way off.
-  Taking a wallet off the server also deletes its alert history there, so
-  Gerfaut says so and asks before doing it, whether from the switch or when
-  the wallet is removed from the phone. A wallet made of a single address
-  can be watched too: only that address is sent. When the server refuses a
-  wallet, its row says why in the words of the server.
-- Alerts reach the ntfy app, Telegram, an e-mail address or a webhook of
-  yours, and the last 20 are listed in the app. An e-mail address receives a
-  6-digit code first, typed back under its row, and nothing is sent to it
-  before; a Telegram channel names the chat it reaches; a webhook the server
-  turned off, because it points at a private address, says so with what to
-  do about it.
-- A Premium channel that has delivered nothing for an hour or more reads
-  "Not delivering", with the last error the server got and what to do for
-  that kind of channel. A test that goes through clears the warning at once.
-- Forgetting the key can take the account with it: the server then deletes
-  the wallets it watches, the channels and the log, and whatever paid time
-  the key had left goes with them. Premium calls go through Tor whenever the
-  node connection does, never around it. When the server misses 2 heartbeats
-  in a row, a red banner on the home screen says so until you acknowledge it.
-- Premium devices. The account key connects this phone to the account. In
-  return, the server hands the phone a token of its own, which the encrypted
-  vault keeps and never shows, and every request after that carries this token
-  instead of the key. The first device an account ever has gets full access at
-  once. Any later device waits 10 days, or until a device with full access
-  approves it, and in the meantime it sees nothing and changes nothing.
-- A Devices card in Settings › Premium lists every device that entered the
-  key, with its platform, the day it connected, and either full access or the
-  number of days it still has to wait. From there, you approve or refuse a
-  waiting device, or disconnect another one.
-- While a device waits for approval, a red banner at the top of the home
-  screen says so, and its Review button opens the Devices card. The banner
-  goes away on its own once nothing waits. When notifications are on, a
-  notification also announces each new device, once. While an app lock is set,
-  it names neither the device nor the account, and nothing is posted while the
-  app is disguised. Gerfaut checks the list when it opens, when it comes back
-  to the front, and every 5 minutes while it stays on screen. In the
-  background, it asks nothing.
-- A phone waiting for approval sees a single card in place of the account: the
-  day it connected, the day it gets full access without approval, and a Check
-  again button. It also checks its own standing every 5 minutes while the app
-  is on screen, keeps checking when an attempt fails, and opens up on its own
-  as soon as another device approves it.
-- Change key replaces the account key. The old key stops working at once, on
-  the website too, and the server disconnects every other device. The new key
-  is shown once, with a Copy button, and the sheet stays open until you tick
-  "I saved my new key".
-- A phone the server disconnected says so under the Licence card, in the
-  server's own words when it gave some, with a Connect again button. If the
-  key was changed on another device, the key field comes back so you can enter
-  the new one. Forget this key sits beside it, for when you do not have the
-  new key.
-- After the first connection, a Protect your Premium account card suggests 3
-  things: connect a second device, turn on the app lock, and save the key in a
-  password manager. Each step ticks itself as soon as Gerfaut can tell it is
-  done, and you can hide the card.
-- Before approving, refusing or disconnecting a device, changing the key,
-  deleting the account, taking a wallet off the server, removing a wallet the
-  server watches or removing a channel, Gerfaut asks you to confirm it's you.
-  Concretely, it asks for the app lock's PIN, password or fingerprint, and
-  checks it the way the lock screen does. Without an app lock, the phone's own
-  screen lock answers instead, and it is also asked before a first app lock is
-  set on a phone that holds a Premium key, or is still connecting one:
-  otherwise, whoever holds the phone unlocked could choose a PIN and answer
-  with it. Gerfaut also asks before you forget the key on a phone with full
-  access or enter another key on it. While the app lock is on, it asks too
-  before you add a channel, or open again the subscribe link or the link code
-  of an existing one. A phone with no lock at all is sent to Settings ›
-  Security to set one.
-- Forget this key also disconnects this phone from the account on the server.
-  Connecting it again takes a new approval, or 10 days.
-- A lost answer from the Gerfaut server costs neither the key nor a device.
-  When a connection never gets its answer back, Gerfaut sends the exact same
-  request again on its own: when the app opens, when it comes back to the
-  front, and at each heartbeat. When a key change never gets its answer back,
-  the Licence card says "The key change did not finish. Try again to complete
-  it." with a Try again button, which sends the same new key. Until then,
-  Gerfaut offers no key to copy, and a connected phone can neither change nor
-  forget its key, since only this phone holds the new one. If you forget the
-  key while the server is out of reach, Gerfaut tells the server as soon as it
-  can, at the same moments.
-- The Licence card offers Copy key until you mark the key as saved. When the
-  clipboard refuses a copy, an amber note under the button says so and stays
-  there. Hide and Mark as done on the Protect card do the same when the vault
-  cannot save them.
-- When the server asks to wait, the note says how long, in seconds, minutes or
-  hours.
 - One APK per processor architecture instead of one carrying all three:
   50 MB to download on a 64-bit ARM phone rather than 127.
 - Reproducible builds. The APKs are built in a container where every tool
@@ -229,23 +134,11 @@ The first release: Gerfaut for Android.
   send that money elsewhere, so the page tells you not to send it as it is.
   When the outputs pay more than the inputs bring, the last check before
   sending says the network will refuse it.
-- When the Premium server's code cannot go into the Telegram link, the page
-  asks you to type it to the bot, instead of promising that Start sends it
-  for you.
-- Premium requests go through Tor as soon as any network has a .onion
-  backend, not only the network on screen, and the Tor notice says so.
-- A Telegram link now opens in Telegram itself, or in a browser tab when
-  Telegram is not installed. On older Android versions any app that claimed
-  t.me links could receive the code that connects a chat to your alerts.
 - Coming back from a file picker, a save dialog or a share sheet more than
   ten minutes after it opened asks for the app lock again. Before, that trip
   never locked the app, however long it lasted.
 - A release build no longer writes the text of an unexpected error to the
   system log, where it could quote an address.
-- Premium controls and the Premium settings row now use the Premium colour,
-  so what belongs to the paid service reads as such at a glance: the card
-  icons, the switch that hands a wallet to the server, and the buttons that
-  activate a key, confirm the watch or add a channel.
 
 ### Fixed
 
@@ -266,9 +159,6 @@ The first release: Gerfaut for Android.
 - A private key in a pasted wallet, a file or a backup is refused with a
   sentence that says what to bring instead. A descriptor the wallet engine
   refuses says so, with the engine's reason.
-- The "watch is offline" banner now goes away when you forget the Premium
-  key or stop watching the last wallet during an outage. Tapping
-  Acknowledge twice writes it once, and a failed write leaves the banner up.
 - The UTXOs tab keeps its rows on screen while a sync reads them again,
   instead of flashing "Loading UTXOs…". A coin with no address says "n/a",
   and TalkBack says which chip holds the outpoint and which the address.
@@ -280,11 +170,6 @@ The first release: Gerfaut for Android.
   too.
 - Turning Live off and on again within a few seconds now starts it again.
   It used to stay off until the app came back to the screen.
-- Leaving Settings › Premium before the server answers no longer leaves the
-  app out of date. Forget the key and go back right away: the Premium row in
-  Settings now reads "Not activated" as soon as the server answers, instead
-  of showing the old key until the app restarts. Every other Premium action
-  behaves the same.
 - With the screen off, Live now keeps the phone awake while it checks the
   server, and until it has announced a new transaction, so the notification
   arrives within seconds rather than at the next check. A status that
@@ -336,15 +221,11 @@ The first release: Gerfaut for Android.
   and counts its length the way the app does when it saves it.
 - Saving a file to a slow cloud provider no longer freezes the screen.
 - Gerfaut no longer requires a camera to install. Scanning stays optional.
-- A double tap on the switch that hands a wallet to Premium opens one
-  consent page, not two.
 - A wallet added on another network opens even when switching to that
   network fails.
 - On the import screen, the first address now belongs to the network you
   pick, and changes when you pick another one. A key added on regtest shows
   its bcrt1 address, not the tb1 address of signet.
-- Every Premium channel that delivers now reads "Linked", with the same check
-  mark as on the desktop. Before, only a linked Telegram channel did.
 
 ### Security
 
