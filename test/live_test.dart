@@ -1712,12 +1712,12 @@ void main() {
           disguise: FakeDisguise(disguised: true),
         ),
       );
-      // Each keeps the value that applies again once the disguise is
-      // off, and neither can be moved meanwhile.
+      // The switch reads off, as the notifications are, and neither
+      // setting can be moved meanwhile.
       final notify = tester.widget<SettingSwitch>(
         find.widgetWithText(SettingSwitch, 'New transactions'),
       );
-      expect(notify.value, isTrue);
+      expect(notify.value, isFalse);
       expect(notify.onChanged, isNull);
       expect(
         notify.hint,
@@ -1737,6 +1737,41 @@ void main() {
       expect(platform.calls, isEmpty);
       // Nothing written over the choice the user made.
       expect(bridge.appPrefs.containsKey('notify.background'), isFalse);
+    });
+
+    testWidgets('the switch reads off, and the choice is back after', (
+      tester,
+    ) async {
+      final bridge = _bridge(
+        prefs: {'notify.new_tx': '1', 'notify.background': '900'},
+      );
+      await _open(
+        tester,
+        _settings(
+          bridge,
+          platform: FakeLivePlatform(),
+          disguise: FakeDisguise(disguised: true),
+        ),
+      );
+      Switch drawn() => tester.widget<Switch>(
+        find.descendant(
+          of: find.widgetWithText(SettingSwitch, 'New transactions'),
+          matching: find.byType(Switch),
+        ),
+      );
+      expect(drawn().value, isFalse);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(SettingsScreen)),
+      );
+      // Only drawn off: the choice the user made is still the one held.
+      expect(container.read(notifyNewTxProvider), isTrue);
+      expect(bridge.appPrefs.containsKey('notify.new_tx'), isFalse);
+
+      await container.read(disguiseProvider.notifier).set(false);
+      await tester.pumpAndSettle();
+      expect(drawn().value, isTrue);
+      expect(drawn().onChanged, isNotNull);
+      expect(find.textContaining('while the app is disguised'), findsNothing);
     });
 
     testWidgets('without the disguise, nothing says it', (tester) async {

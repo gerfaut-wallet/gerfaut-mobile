@@ -60,9 +60,10 @@ class NotificationsSection extends ConsumerWidget {
       title: 'Notifications',
       children: [
         // Disguised, nothing of the app's own is posted: a notification
-        // is headed with its name. Both settings keep their value for
-        // when the disguise comes off, greyed meanwhile, and the line
-        // under the first says why.
+        // is headed with its name. The switch reads off, as the
+        // notifications are, and both settings are greyed, the line
+        // under the first saying why. The choice itself is not touched:
+        // it is back as it was once the disguise comes off.
         SettingSwitch(
           title: 'New transactions',
           hint: disguised
@@ -70,7 +71,7 @@ class NotificationsSection extends ConsumerWidget {
               : 'A notification when a sync finds a transaction you have '
                     'not seen. Amounts follow the display unit and stay '
                     'hidden while balances are masked.',
-          value: on,
+          value: on && !disguised,
           onChanged: disguised
               ? null
               : (next) => ref.read(notifyNewTxProvider.notifier).set(next),

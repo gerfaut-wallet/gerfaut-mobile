@@ -2313,6 +2313,15 @@ void main() {
       expect(find.text('sats · EUR · Dark theme'), findsOneWidget);
       expect(find.text('On · every 15 min'), findsOneWidget);
 
+      // Disguised, nothing is posted, whatever the choice held.
+      await container.read(disguiseProvider.notifier).set(true);
+      await tester.pumpAndSettle();
+      expect(find.text('Off · disguised'), findsOneWidget);
+      expect(find.text('PIN lock · biometrics · disguised'), findsOneWidget);
+      await container.read(disguiseProvider.notifier).set(false);
+      await tester.pumpAndSettle();
+      expect(find.text('On · every 15 min'), findsOneWidget);
+
       // Live is a name: it keeps its capital.
       container.read(backgroundCheckProvider.notifier).hydrate('live');
       await tester.pumpAndSettle();

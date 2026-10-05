@@ -162,6 +162,9 @@ class SettingsScreen extends ConsumerWidget {
           if (disguised) 'disguised',
         ].join(' · ');
       case SettingsSection.notifications:
+        // Disguised, nothing is posted whatever was chosen: the row
+        // says so, as the switch on the page does.
+        if (ref.watch(disguiseProvider).disguised) return 'Off · disguised';
         if (!ref.watch(notifyNewTxProvider)) return 'Off';
         final cadence = ref.watch(backgroundCheckProvider);
         // Live is a name, and keeps its capital; a cadence reads on.

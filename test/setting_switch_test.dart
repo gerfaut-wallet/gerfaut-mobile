@@ -62,7 +62,7 @@ void main() {
         const SettingSwitch(
           title: 'New transactions',
           hint: 'Off while the app is disguised.',
-          value: true,
+          value: false,
           onChanged: null,
         ),
       ),
