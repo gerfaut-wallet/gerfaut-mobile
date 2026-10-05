@@ -7,7 +7,6 @@ import '../../src/live.dart';
 import '../../src/lock.dart';
 import '../../src/models.dart';
 import '../../src/notifications.dart';
-import '../../src/premium.dart';
 import '../../src/state.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/buttons.dart';
@@ -55,10 +54,6 @@ class NotificationsSection extends ConsumerWidget {
     final refused = ref.watch(notificationsRefusedProvider);
     final cadence = ref.watch(backgroundCheckProvider);
     final disguised = ref.watch(disguiseProvider).disguised;
-    // Premium alerts come from the server, not from this phone: they
-    // are what still arrives while the app is disguised.
-    final premium =
-        ref.watch(premiumStateProvider).valueOrNull?.connected ?? false;
 
     return SectionCard(
       icon: LucideIcons.bell,
@@ -71,7 +66,7 @@ class NotificationsSection extends ConsumerWidget {
         SettingSwitch(
           title: 'New transactions',
           hint: disguised
-              ? disguisedNotificationsHint(premium: premium)
+              ? disguisedNotificationsHint
               : 'A notification when a sync finds a transaction you have '
                     'not seen. Amounts follow the display unit and stay '
                     'hidden while balances are masked.',
@@ -148,15 +143,10 @@ class NotificationsSection extends ConsumerWidget {
   }
 }
 
-/// Why the notification settings are greyed while the app is disguised,
-/// and what still arrives: Premium alerts, which the server sends to
-/// the user's channels without this phone posting anything.
-String disguisedNotificationsHint({required bool premium}) {
-  const silent =
-      'Off while the app is disguised: a notification would show the name '
-      'Gerfaut. Live stops, and background checks post nothing.';
-  return premium ? '$silent Premium alerts still reach your channels.' : silent;
-}
+/// Why the notification settings are greyed while the app is disguised.
+const String disguisedNotificationsHint =
+    'Off while the app is disguised: a notification would show the name '
+    'Gerfaut. Live stops, and background checks post nothing.';
 
 /// Where Live stands, always on screen while Live is chosen: how the
 /// connection fares, a way to restart a service Android stopped, and

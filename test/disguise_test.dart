@@ -211,27 +211,6 @@ void main() {
         ),
         findsOneWidget,
       );
-      // Without a Premium account, nothing else arrives either: the
-      // sheet does not promise alerts nobody would get.
-      expect(find.textContaining('Premium alerts'), findsNothing);
-    });
-
-    testWidgets('a premium account hears its alerts go on', (tester) async {
-      final bridge = _locked()
-        ..premiumKey = 'abcdefghijkmnpqr'
-        ..premiumThisDeviceId = 'dev1';
-      bridge.premiumAddDevice(waiting: false);
-      await tester.pumpWidget(_securityApp(bridge, FakeDisguise()));
-      await tester.pumpAndSettle();
-      await tester.tap(_disguiseSwitch());
-      await tester.pumpAndSettle();
-      expect(
-        find.text(
-          'Premium alerts still reach your channels: the Gerfaut server '
-          'sends them, not this phone.',
-        ),
-        findsOneWidget,
-      );
     });
 
     testWidgets('without Live, the sheet does not mention it', (tester) async {

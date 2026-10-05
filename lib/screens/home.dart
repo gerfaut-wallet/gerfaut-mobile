@@ -2,13 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../src/format.dart';
 import '../src/live.dart';
 import '../src/models.dart';
-import '../src/premium.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
-import '../widgets/alert_banner.dart';
 import '../widgets/amounts.dart';
 import '../widgets/app_bar.dart';
 import '../widgets/brand.dart';
@@ -140,8 +137,6 @@ class HomeScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const NewDeviceBanner(),
-            const WatchOfflineBanner(),
             const UpdateNotice(),
             Expanded(
               child: switch ((settings, wallets)) {
@@ -230,81 +225,6 @@ class HomeScreen extends ConsumerWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// The red banner at the head of the home screen while a device waits
-/// for approval on the Premium account: someone entered the key, and if
-/// it was not the owner, the owner has to refuse it and change the key.
-/// It goes by itself once nothing waits; "Review" opens the devices.
-class NewDeviceBanner extends ConsumerWidget {
-  const NewDeviceBanner({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final waiting = ref.watch(waitingDevicesProvider);
-    if (waiting.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        GerfautSpacing.md,
-        GerfautSpacing.sm,
-        GerfautSpacing.md,
-        0,
-      ),
-      child: AlertBanner(
-        message:
-            'A new device asks for access to your Premium account. If it is '
-            'not yours, refuse it and change your key.',
-        actionLabel: 'Review',
-        onAction: () =>
-            SettingsScreen.open(context, section: SettingsSection.premium),
-      ),
-    );
-  }
-}
-
-/// The red banner at the head of the home screen when the server has
-/// missed two heartbeats in a row: the wallets handed to it are
-/// not being watched, and the app says so until acknowledged or until a
-/// beat verifies again. The app's own sync goes on underneath as before.
-/// Nothing at all while the server answers, or while no wallet is
-/// watched.
-class WatchOfflineBanner extends ConsumerWidget {
-  const WatchOfflineBanner({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final status = ref.watch(watchMonitorProvider);
-    final premium = ref.watch(premiumStateProvider).valueOrNull;
-    if (!watchBannerShows(status, premium)) return const SizedBox.shrink();
-    ref.watch(relativeClockProvider);
-    final since = status.offlineSince!;
-    final sinceLocal = DateTime.fromMillisecondsSinceEpoch(since * 1000);
-    final today = DateTime.now();
-    final sameDay =
-        sinceLocal.year == today.year &&
-        sinceLocal.month == today.month &&
-        sinceLocal.day == today.day;
-    final when = sameDay ? formatClock(since) : formatTimestamp(since);
-    final last = status.lastVerified;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        GerfautSpacing.md,
-        GerfautSpacing.sm,
-        GerfautSpacing.md,
-        0,
-      ),
-      child: AlertBanner(
-        message:
-            "Gerfaut's watch is offline since $when. Your wallets are not "
-            'being monitored.',
-        stamp: last == null
-            ? 'No heartbeat verified since the app opened'
-            : 'Last heartbeat ${relativeTime(last)}',
-        actionLabel: 'Acknowledge',
-        onAction: () => ref.read(watchMonitorProvider.notifier).acknowledge(),
       ),
     );
   }

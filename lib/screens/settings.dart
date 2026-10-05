@@ -3,10 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/disguise.dart';
-import '../src/format.dart';
 import '../src/models.dart';
 import '../src/notifications.dart';
-import '../src/premium.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_bar.dart';
@@ -16,12 +14,11 @@ import 'settings/backup_section.dart';
 import 'settings/general_section.dart';
 import 'settings/network_section.dart';
 import 'settings/notifications_section.dart';
-import 'settings/premium_section.dart';
 import 'settings/security_section.dart';
 import 'settings/wallets_section.dart';
 import 'settings/widgets_section.dart';
 
-/// The eight sections of the settings, in the order the root lists
+/// The seven sections of the settings, in the order the root lists
 /// them. The same names as the desktop app, so a setting found on one
 /// platform is found on the other by the same word.
 enum SettingsSection {
@@ -31,8 +28,7 @@ enum SettingsSection {
   security('Security', LucideIcons.lock),
   notifications('Notifications', LucideIcons.bell),
   backup('Backup & sync', LucideIcons.archive),
-  about('About', LucideIcons.info),
-  premium('Premium', LucideIcons.gem);
+  about('About', LucideIcons.info);
 
   const SettingsSection(this.title, this.icon);
 
@@ -40,7 +36,7 @@ enum SettingsSection {
   final IconData icon;
 }
 
-/// Settings: a root list of eight sections, each a screen of its own.
+/// Settings: a root list of seven sections, each a screen of its own.
 ///
 /// One long page held every card; finding the gap limit meant scrolling
 /// past the backend form and the Tor card every time. The root now
@@ -178,39 +174,6 @@ class SettingsScreen extends ConsumerWidget {
         return 'Export or restore the wallet list';
       case SettingsSection.about:
         return 'Gerfaut $appVersion';
-      case SettingsSection.premium:
-        final premium = ref.watch(premiumStateProvider).valueOrNull;
-        if (premium == null) return null;
-        switch (licenceStatus(premium)) {
-          case LicenceStatus.none:
-            return 'Not activated';
-          case LicenceStatus.expired:
-            return 'Expired ${relativeTimeWords(premium.claims!.expiresAt)}';
-          case LicenceStatus.active:
-            final until =
-                'Active until ${formatDate(premium.claims!.expiresAt)}';
-            // A device the server let go, or one still waiting, sees
-            // nothing of the account: the line says where it stands
-            // rather than a count it cannot have.
-            if (premium.disconnected) return '$until · disconnected';
-            final me = currentDevice(
-              premium,
-              ref.watch(premiumMeProvider).valueOrNull,
-            );
-            if (me != null && !me.fullAccess) {
-              return '$until · waiting for approval';
-            }
-            // The count is the server's, read once a key is set; until
-            // it answers, the date stands alone rather than a guess.
-            final watched = ref.watch(premiumWalletsProvider).valueOrNull;
-            if (watched == null) return until;
-            final count = switch (watched.length) {
-              0 => 'no wallets watched',
-              1 => '1 wallet watched',
-              final n => '$n wallets watched',
-            };
-            return '$until · $count';
-        }
     }
   }
 }
@@ -254,7 +217,6 @@ class SettingsSectionScreen extends StatelessWidget {
           ]),
           SettingsSection.backup => _cards(const [BackupSection()]),
           SettingsSection.about => _cards(const [AboutSection()]),
-          SettingsSection.premium => _cards(const [PremiumSection()]),
         },
       ),
     );
@@ -300,15 +262,7 @@ class _SectionRow extends StatelessWidget {
           ),
           child: Row(
             children: [
-              // Bruyère on the gem: the premium colour marks the premium
-              // row, and nothing else on this list.
-              Icon(
-                section.icon,
-                size: 20,
-                color: section == SettingsSection.premium
-                    ? tokens.premium
-                    : tokens.textMuted,
-              ),
+              Icon(section.icon, size: 20, color: tokens.textMuted),
               const SizedBox(width: GerfautSpacing.sm + GerfautSpacing.xs),
               Expanded(
                 child: Column(

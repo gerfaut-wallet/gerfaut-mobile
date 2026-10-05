@@ -648,57 +648,6 @@ void main() {
     });
   });
 
-  testWidgets('removing a wallet the server watches says what goes with it', (
-    tester,
-  ) async {
-    useTallSurface(tester);
-    final bridge = FakeBridge(wallets: [makeMeta(name: 'Cold storage')]);
-    bridge.premiumKey = 'abcdefghijkmnpqr';
-    bridge.premiumClaims = LicenceClaims(
-      subject: 'ab' * 32,
-      expiresAt: bridge.premiumPaidUntil,
-      issuedAt: bridge.premiumPaidUntil - 60 * 86400,
-    );
-    // Consented here and listed by the server: the removal will reach it.
-    bridge.premiumConsents.add(
-      const WatchConsent(walletId: 'w1', consentedAt: 1),
-    );
-    bridge.premiumWatched.add(
-      const WalletWatch(
-        id: 'w1',
-        name: 'Cold storage',
-        scriptKind: 'segwit',
-        watchedSince: 1755000000,
-        baselineAt: 1755000030,
-        baselineHeight: 900000,
-        coins: 2,
-        valueSats: 200000,
-      ),
-    );
-    await tester.pumpWidget(
-      settingsApp(bridge, section: SettingsSection.wallets),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Remove'));
-    await tester.pumpAndSettle();
-
-    // Still amber — a log is not funds or privacy — and the sentence
-    // says the one thing the plain removal does not: the server forgets
-    // the wallet too, alert history included.
-    final notice = tester.widget<GerfautNotice>(find.byType(GerfautNotice));
-    expect(notice.tone, NoticeTone.info);
-    expect(
-      find.text(
-        'You are removing "Cold storage" from Gerfaut. The server stops '
-        'watching it too, and deletes its alert history. Nothing moves on '
-        'chain.',
-      ),
-      findsOneWidget,
-    );
-    expect(find.widgetWithText(DangerButton, 'Remove wallet'), findsOneWidget);
-  });
-
   testWidgets(
     'removing a wallet asks in a panel, the buttons under the words',
     (tester) async {
@@ -2297,7 +2246,7 @@ void main() {
       ),
     );
 
-    testWidgets('names eight sections and says where each stands', (
+    testWidgets('names seven sections and says where each stands', (
       tester,
     ) async {
       await tester.pumpWidget(settingsApp(bridge()));
@@ -2312,13 +2261,12 @@ void main() {
         'Notifications',
         'Backup & sync',
         'About',
-        'Premium',
       ]);
       for (final section in SettingsSection.values) {
         expect(find.text(section.title), findsOneWidget);
         expect(find.byIcon(section.icon), findsOneWidget);
       }
-      expect(find.byIcon(LucideIcons.chevronRight), findsNWidgets(8));
+      expect(find.byIcon(LucideIcons.chevronRight), findsNWidgets(7));
       // One line each, from state the root already holds.
       expect(find.text('BTC · no fiat · Light theme'), findsOneWidget);
       expect(find.text('Mainnet · Public API'), findsOneWidget);
@@ -2327,7 +2275,6 @@ void main() {
       expect(find.text('Off'), findsOneWidget);
       expect(find.text('Export or restore the wallet list'), findsOneWidget);
       expect(find.text('Gerfaut $appVersion'), findsOneWidget);
-      expect(find.text('Not activated'), findsOneWidget);
       // Nothing of the sections themselves is on the root.
       expect(find.text('Gap limit'), findsNothing);
       expect(find.text('Save backend'), findsNothing);

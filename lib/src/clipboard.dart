@@ -8,12 +8,11 @@
 // it leaves the clipboard too, unless something else was copied over it
 // meanwhile, as on the desktop app.
 //
-// What goes through here is what identifies a wallet or opens its
-// alerts: a descriptor, the policy read off it, the ntfy topic, the
-// account key. An address and a transaction are on the chain for anyone
-// to read, so they keep the plain clipboard: marking them would spend
-// the distinction on things that are not secret, and a flag that means
-// everything means nothing.
+// What goes through here is what identifies a wallet: a descriptor and
+// the policy read off it. An address and a transaction are on the chain
+// for anyone to read, so they keep the plain clipboard: marking them
+// would spend the distinction on things that are not secret, and a flag
+// that means everything means nothing.
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -31,9 +30,9 @@ abstract class SensitiveClipboard {
 /// activity counts it.
 const String sensitiveCopyStays = '1 minute';
 
-/// The confirmation after a copy: "Key copied", or "Key copied for 1
-/// minute" when the clipboard lets go of it by itself, in the desktop
-/// app's words.
+/// The confirmation after a copy: "Copied", or "Copied for 1 minute"
+/// when the clipboard lets go of it by itself, in the desktop app's
+/// words.
 String copiedWords(String words, {required bool timed}) =>
     timed ? '$words for $sensitiveCopyStays' : words;
 

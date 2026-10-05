@@ -16,7 +16,6 @@ import 'src/lock.dart';
 import 'src/models.dart';
 import 'src/notifications.dart';
 import 'src/onboarding.dart';
-import 'src/premium.dart';
 import 'src/state.dart';
 import 'src/updates.dart';
 import 'src/vault_key.dart';
@@ -179,14 +178,6 @@ class _Hydrated extends ConsumerWidget {
         // The widgets follow from here: everything they show is
         // hydrated now, so the first thing they get is the right thing.
         ref.read(widgetFeedProvider);
-        // The heartbeat too: it reads the premium state and asks the
-        // server at once when a wallet is watched, then every quarter
-        // hour, from wherever the app is.
-        ref.read(watchMonitorProvider);
-        // And the account's devices, on a device with full access: a
-        // new one waiting for approval is looked for now, then every
-        // five minutes.
-        ref.read(deviceWatchProvider);
         // Live watch: listen to the core, and see that the service runs
         // if the setting asks for it. The app is on screen, which is
         // when Android lets it start. Not before the notices are known
@@ -307,11 +298,6 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
       case AppLifecycleState.detached:
         lock.noteHidden();
         ref.read(appInFrontProvider.notifier).state = false;
-        // Devices are looked at in front only: Dart timers go on firing
-        // behind the launcher, for as long as Live keeps the process.
-        if (ref.read(prefsHydratedProvider)) {
-          ref.read(deviceWatchProvider.notifier).pause();
-        }
       case AppLifecycleState.resumed:
         lock.noteResumed();
         ref.read(appInFrontProvider.notifier).state = true;
@@ -320,11 +306,6 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
         // publish the defaults first.
         if (ref.read(prefsHydratedProvider)) {
           ref.read(widgetFeedProvider).resume();
-          // A beat older than the period is asked for again on the way
-          // back, and the devices, whose rhythm stopped out of sight,
-          // are looked at at once.
-          ref.read(watchMonitorProvider.notifier).resume();
-          ref.read(deviceWatchProvider.notifier).resume();
           unawaited(_checkNoticesThenLive(ref));
           _startUpdateSession(ref);
         }

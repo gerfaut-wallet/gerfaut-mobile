@@ -5,11 +5,9 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../src/bridge.dart';
 import '../../src/disguise.dart';
-import '../../src/identity.dart';
 import '../../src/lock.dart';
 import '../../src/models.dart';
 import '../../src/notifications.dart';
-import '../../src/premium.dart';
 import '../../src/state.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/buttons.dart';
@@ -18,7 +16,6 @@ import '../../widgets/notice.dart';
 import '../../widgets/password_field.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/setting_switch.dart';
-import '../confirm_identity.dart';
 
 /// The settings card that turns the lock on and changes its secret.
 class SecuritySection extends ConsumerStatefulWidget {
@@ -36,8 +33,6 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
   void _afterChange() => ref.invalidate(settingsProvider);
 
   Future<void> _setLock({LockKind? kind}) async {
-    if (kind == null && !await _mayChooseFirstLock()) return;
-    if (!mounted) return;
     final chosen = await showModalBottomSheet<_NewSecret>(
       context: context,
       isScrollControlled: true,
@@ -55,37 +50,6 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
     } on BridgeException catch (error) {
       if (mounted) setState(() => _error = error.message);
     }
-  }
-
-  /// Whether whoever holds the phone may choose its first app lock.
-  ///
-  /// With a Premium key here, the app lock is what proves the owner
-  /// before a device is approved, the key changed or the account
-  /// deleted; until one is set, the phone's own screen lock does. A
-  /// first lock chosen by whoever holds the phone unlocked would hand
-  /// them that proof, so the phone's screen lock is asked first. A phone
-  /// without one has no owner's secret to ask for, and without a key
-  /// there is nothing the lock would stand in front of: the lock is set
-  /// as it always was.
-  ///
-  /// A first connection whose answer was lost counts as a key: the
-  /// vault holds it only once the server answers, but the core sends it
-  /// again on its own, and the account may already be this phone's.
-  Future<bool> _mayChooseFirstLock() async {
-    final PremiumView premium;
-    try {
-      premium = await ref.read(bridgeProvider).premiumState();
-    } on BridgeException catch (error) {
-      if (mounted) setState(() => _error = error.message);
-      return false;
-    }
-    if (!premium.hasKey && !premium.connectPending) return true;
-    final outcome = await ref
-        .read(screenLockGateProvider)
-        .confirm(confirmItsYouTitle);
-    // Refused: a change of mind, or not the owner. The phone said why,
-    // if anything needed saying.
-    return outcome != ScreenLockOutcome.refused;
   }
 
   Future<void> _turnOff(LockKind kind) async {
@@ -128,21 +92,11 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
       await _swapFace(false);
       return;
     }
-    // Read from the vault, not from whatever screen loaded it last: the
-    // sheet promises Premium alerts only to an account that gets them.
-    var premium = false;
-    try {
-      premium = (await ref.read(premiumStateProvider.future)).connected;
-    } catch (_) {
-      // Unread, the sheet promises nothing it cannot keep.
-    }
-    if (!mounted) return;
     final confirmed = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       builder: (_) => DisguiseSheet(
         liveOn: ref.read(backgroundCheckProvider) == BackgroundCheck.live,
-        premium: premium,
       ),
     );
     if (confirmed != true) return;
@@ -528,14 +482,11 @@ class _ConfirmSecretSheetState extends State<_ConfirmSecretSheet> {
 /// in a note of its own. Five amber panels in a row read as a wall of
 /// warnings, and a wall is skipped; one panel is read.
 class DisguiseSheet extends StatelessWidget {
-  const DisguiseSheet({super.key, this.liveOn = false, this.premium = false});
+  const DisguiseSheet({super.key, this.liveOn = false});
 
   /// Live watch is what looks for transactions right now: the sheet
   /// says it is about to stop.
   final bool liveOn;
-
-  /// A Premium account is connected: its alerts are what still arrives.
-  final bool premium;
 
   /// What stops with the disguise when Live is on. Its permanent
   /// notification is headed with the app's name, so it cannot stay, and
@@ -549,11 +500,6 @@ class DisguiseSheet extends StatelessWidget {
       'Gerfaut posts no notification while disguised: one would show its '
       'name. Background checks stay silent, and home-screen widgets are '
       'turned off.';
-
-  /// The server sends these, not the phone: the disguise has no say.
-  static const String premiumFact =
-      'Premium alerts still reach your channels: the Gerfaut server sends '
-      'them, not this phone.';
 
   static const List<String> facts = [
     'The launcher will show a calculator named "Calculator".',
@@ -587,11 +533,7 @@ class DisguiseSheet extends StatelessWidget {
               style: tokens.body,
             ),
             const SizedBox(height: GerfautSpacing.sm),
-            for (final fact in [
-              ...facts,
-              if (premium) premiumFact,
-              if (liveOn) liveFact,
-            ])
+            for (final fact in [...facts, if (liveOn) liveFact])
               Padding(
                 padding: const EdgeInsets.only(bottom: GerfautSpacing.xs),
                 child: Row(

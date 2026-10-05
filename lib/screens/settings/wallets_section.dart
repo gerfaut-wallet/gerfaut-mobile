@@ -5,7 +5,6 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../src/bridge.dart';
 import '../../src/live.dart';
 import '../../src/models.dart';
-import '../../src/premium.dart';
 import '../../src/state.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/buttons.dart';
@@ -15,7 +14,6 @@ import '../../widgets/section_card.dart';
 import '../../widgets/setting_switch.dart';
 import '../../widgets/status_pill.dart';
 import '../../widgets/wallet_icon.dart';
-import '../confirm_identity.dart';
 import 'fields.dart';
 import '../../widgets/toast.dart';
 
@@ -135,24 +133,13 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
 
   Future<void> _remove(String id) async {
     if (_removingId != null) return;
-    // A wallet the server watches leaves its watch with it, and its
-    // alerts stop: whoever holds the phone proves they own it first,
-    // as for stopping the watch from the Premium section.
-    final premium = ref.read(premiumStateProvider).valueOrNull;
-    final watched = premium != null && premium.hasKey && premium.consented(id);
-    // Held before the first await: the lists are read again even if
-    // the page was left meanwhile. `ref` dies with it.
+    // Held before the first await: the list is read again even if the
+    // page was left meanwhile. `ref` dies with it.
     final container = ProviderScope.containerOf(context, listen: false);
     setState(() => _removingId = id);
     try {
-      if (watched && !await confirmIdentity(context, ref)) return;
-      if (!mounted) return;
       await ref.read(bridgeProvider).removeWallet(id);
       container.invalidate(walletsProvider);
-      // The server is told after the answer, and the Premium card reads
-      // its list again rather than keep a row for a wallet that is gone.
-      container.invalidate(premiumStateProvider);
-      container.invalidate(premiumWalletsProvider);
       if (!mounted) return;
       setState(() => _confirmRemoveId = null);
       _toast('Wallet removed');
@@ -266,21 +253,6 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
     }
     _seedGapLimit(settings);
     final shown = _inOrder(wallets);
-    // Whether removing a wallet here also takes it off the server, for
-    // the removal note. The vault tells the server about a wallet it
-    // holds a consent for, under a key: that is what the core acts on.
-    // The server's own list, once it has answered, says whether there
-    // is still anything there to take off; until then the consent is
-    // the best word there is.
-    final premium = ref.watch(premiumStateProvider).valueOrNull;
-    final serverWatched = ref.watch(premiumWalletsProvider).valueOrNull;
-    bool watchedByServer(String id) {
-      if (premium == null || !premium.hasKey || !premium.consented(id)) {
-        return false;
-      }
-      return serverWatched?.any((w) => w.id == id) ?? true;
-    }
-
     return CustomScrollView(
       slivers: [
         SliverPadding(
@@ -310,12 +282,7 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
                   proxyDecorator: liftedProxy,
                   itemCount: shown.length,
                   onReorderItem: (from, to) => _reorder(shown, from, to),
-                  itemBuilder: (context, index) => _row(
-                    shown,
-                    index,
-                    sync,
-                    watchedByServer: watchedByServer(shown[index].id),
-                  ),
+                  itemBuilder: (context, index) => _row(shown, index, sync),
                 ),
               if (_walletError != null)
                 SliverToBoxAdapter(
@@ -393,12 +360,7 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
   }
 
   /// The row of the wallet at [index] among those [shown].
-  Widget _row(
-    List<WalletMeta> shown,
-    int index,
-    SyncController sync, {
-    required bool watchedByServer,
-  }) {
+  Widget _row(List<WalletMeta> shown, int index, SyncController sync) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final wallet = shown[index];
     return _WalletRow(
@@ -411,7 +373,6 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
       renaming: _renamingId == wallet.id,
       confirmingRemove: _confirmRemoveId == wallet.id,
       removing: _removingId == wallet.id,
-      watchedByServer: watchedByServer,
       coverage: ref.watch(walletCoverageProvider(wallet.id)),
       renameController: _renameController,
       onRenameStart: () {
@@ -566,7 +527,6 @@ class _WalletRow extends StatelessWidget {
     required this.renaming,
     required this.confirmingRemove,
     required this.removing,
-    required this.watchedByServer,
     required this.coverage,
     required this.renameController,
     required this.onRenameStart,
@@ -592,10 +552,6 @@ class _WalletRow extends StatelessWidget {
 
   /// The removal is under way: its answers are held.
   final bool removing;
-
-  /// The server watches this wallet: removing it here takes it off the
-  /// server as well, alert history included, and the note says so.
-  final bool watchedByServer;
 
   /// How much of the wallet Live follows, while Live cannot follow
   /// every wallet whole; null otherwise.
@@ -757,18 +713,12 @@ class _WalletRow extends StatelessWidget {
             // Amber, and its own copy says why: this only stops
             // watching, nothing moves on chain. Nothing is at stake but
             // a row in a list, and the coins are exactly where they
-            // were — red belongs to what costs funds or privacy. A
-            // wallet the server watches is taken off it as well, alert
-            // history included, and that is said here, where the
-            // decision is, in the desktop's words.
+            // were — red belongs to what costs funds or privacy.
             GerfautNotice(
               tone: NoticeTone.info,
-              message: watchedByServer
-                  ? 'You are removing "${wallet.name}" from Gerfaut. The '
-                        'server stops watching it too, and deletes its '
-                        'alert history. Nothing moves on chain.'
-                  : 'You are removing "${wallet.name}" from Gerfaut. '
-                        'This only stops watching. Nothing moves on chain.',
+              message:
+                  'You are removing "${wallet.name}" from Gerfaut. '
+                  'This only stops watching. Nothing moves on chain.',
               // The sentence gets the whole width, the buttons a row of
               // their own under it: beside the text they left it a
               // column eight characters across on a phone.

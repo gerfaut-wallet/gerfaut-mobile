@@ -16,26 +16,13 @@ import 'rust/api.dart' as rust;
 /// Kinds match the desktop app: unrecognized_input, private_material,
 /// invalid_input, network_mismatch, wallet_not_found, duplicate_wallet,
 /// vault, vault_in_use, sync, backend_unavailable, broadcast, descriptor,
-/// tor, internal — plus the bridge-level not_initialized, bad_key, bad_json,
-/// and the premium server's, which are [premiumErrorKinds].
+/// tor, internal — plus the bridge-level not_initialized, bad_key and
+/// bad_json.
 class BridgeException implements Exception {
-  const BridgeException(
-    this.kind,
-    this.message, {
-    this.retryAfter,
-    this.pendingUntil,
-  });
+  const BridgeException(this.kind, this.message);
 
   final String kind;
   final String message;
-
-  /// Seconds the premium server asked to wait, with
-  /// `premium_rate_limited` when it named a wait.
-  final int? retryAfter;
-
-  /// Unix seconds when this device gets full access without approval,
-  /// with `premium_device_pending`.
-  final int? pendingUntil;
 
   @override
   String toString() => message;
@@ -83,37 +70,6 @@ String materialRefusal(BridgeException error, {bool backup = false}) {
     _ => error.message,
   };
 }
-
-/// Every kind a premium call can fail with, and the whole of it.
-///
-/// Twelve, where the core has more: the bridge folds what a screen
-/// cannot act on differently, the way the desktop app does. An answer
-/// that does not decode goes under `premium_unreachable` — on a phone
-/// that is a hotel's login page, not something to read out — and a
-/// certificate or a heartbeat that does not check out is
-/// `premium_invalid`, whichever of the two it was. A device the server
-/// wants connected first and a device with no token here are one case,
-/// `premium_no_device`: either way the key has to connect it. A key
-/// change sent and not answered is `premium_key_change_pending`: what
-/// was asked would lose the new key, and trying the change again is
-/// what finishes it.
-///
-/// This list is what holds the screens to a sentence for each: a kind
-/// added here and left unanswered fails the test that walks it.
-const List<String> premiumErrorKinds = [
-  'premium_no_key',
-  'premium_unknown_key',
-  'premium_no_paid_time',
-  'premium_rejected',
-  'premium_rate_limited',
-  'premium_unreachable',
-  'premium_invalid',
-  'premium_device_pending',
-  'premium_device_disconnected',
-  'premium_too_many_devices',
-  'premium_no_device',
-  'premium_key_change_pending',
-];
 
 /// Every operation the app can ask of the core.
 abstract class GerfautBridge {
@@ -293,130 +249,6 @@ abstract class GerfautBridge {
 
   /// Whether anything this app sends has to go through Tor.
   Future<bool> usesTor();
-
-  // --- premium -----------------------------------------------------------
-
-  /// The premium account as the vault keeps it, the certificate's
-  /// claims verified offline by the core. Never touches the network.
-  Future<PremiumView> premiumState();
-
-  /// Connects this phone to the account with a key: the core checks
-  /// its shape, has the server make a device of it, keeps the key and
-  /// the device's token together in the vault, then fetches the
-  /// licence. The account's first device has full access at once; any
-  /// later one waits. Kinds: premium_unreachable, premium_unknown_key,
-  /// premium_too_many_devices, premium_rate_limited, and
-  /// premium_key_change_pending for another key while a key change has
-  /// not finished. An answer lost on the way leaves the connection under
-  /// way, and the next try sends the same one.
-  Future<PremiumDevice> premiumConnect(String key);
-
-  /// A connection whose answer was lost, sent again as it was, or a key
-  /// kept by a version that had no devices yet, connected now as any
-  /// key typed in. Null when there is nothing to do. Never the key on
-  /// its own after the server said it has every device it takes, and
-  /// nothing sent while a rate limit's wait runs: premium_rate_limited.
-  Future<PremiumDevice?> premiumEnsureDevice();
-
-  /// This device as the server sees it: its access, and until when it
-  /// waits. Any device may ask.
-  Future<PremiumDevice> premiumDevice();
-
-  /// Every device of the account, oldest first. Full access only.
-  Future<List<PremiumDevice>> premiumDevices();
-
-  /// Gives a waiting device full access now. Full access only.
-  Future<PremiumDevice> premiumApproveDevice(String id);
-
-  /// Refuses a waiting device or disconnects one that had access. Full
-  /// access only.
-  Future<void> premiumRemoveDevice(String id);
-
-  /// Draws a new key: the old one stops working everywhere and every
-  /// other device is disconnected. Answers the new key as it is shown.
-  /// Full access only. An answer lost on the way leaves the change under
-  /// way ([PremiumView.keyChangePending]), and the next call sends the
-  /// same key.
-  Future<String> premiumChangeKey();
-
-  /// Records whether the user put the key in a password manager.
-  Future<void> premiumSetKeySaved(bool saved);
-
-  /// Puts the "Protect your Premium account" card away for good.
-  Future<void> premiumHideChecklist();
-
-  /// Hands the ids of every device that waits, as the latest list shows
-  /// them, and takes back those no notification announced yet: each is
-  /// handed out once, whoever asks, so none is announced twice.
-  Future<List<String>> premiumMarkAnnounced(List<String> pending);
-
-  /// Fetches the certificate again with the stored key, for the time a
-  /// renewal added, and stores it.
-  Future<PremiumLicence> premiumRefreshLicence();
-
-  /// Tells the server this device is leaving, when it can, then drops
-  /// the key, the token and the certificate from this device. The
-  /// server goes on watching; the consents stay. A server out of reach
-  /// is told later, by [premiumFlushLogouts]. Refused with
-  /// premium_key_change_pending while a key change has not finished.
-  Future<void> premiumLogOut();
-
-  /// Tells the server about the connections this device left while it
-  /// could not be reached. Nothing queued costs no request. Answers how
-  /// many are still to tell.
-  Future<int> premiumFlushLogouts();
-
-  /// Keeps the "watch is offline" banner quiet until [untilUnix], or
-  /// lets it show again with null.
-  Future<void> premiumAcknowledgeOffline(int? untilUnix);
-
-  /// Paid time, counts and the network the server watches.
-  Future<PremiumAccount> premiumAccount();
-
-  /// The wallets the server watches for this key.
-  Future<List<WalletWatch>> premiumWallets();
-
-  /// Records the user's yes for [id] and hands the wallet to the server:
-  /// its descriptors as the vault holds them, or its address when the
-  /// wallet is a single address.
-  Future<void> premiumWatchWallet(String id);
-
-  /// Tells the server to stop watching [id]. The consent stays.
-  Future<void> premiumUnwatchWallet(String id);
-  Future<List<PremiumChannel>> premiumChannels();
-
-  /// Adds a channel. [target] is the e-mail address or the webhook URL;
-  /// nothing for Telegram, and nothing for ntfy, whose topic the core
-  /// draws and returns once with the URL to subscribe to.
-  Future<CreatedChannel> premiumCreateChannel(
-    ChannelKind kind, {
-    String? target,
-    String? secret,
-  });
-
-  /// Confirms a channel with the code the server sent to it. Answers
-  /// the channel, linked. A code that is wrong, expired or tried too
-  /// often comes back as premium_rejected, in the server's words.
-  Future<PremiumChannel> premiumConfirmChannel(String id, String code);
-  Future<void> premiumDeleteChannel(String id);
-
-  /// Sends a test message through a channel. A provider's refusal comes
-  /// back as premium_rejected, in the server's words.
-  Future<void> premiumTestChannel(String id);
-
-  /// The last events of the account, newest first, at most twenty.
-  Future<List<PremiumEvent>> premiumRecentEvents();
-
-  /// The server's signed heartbeat, verified by the core against the
-  /// embedded key and this device's clock. Any failure counts as a
-  /// missed beat.
-  Future<HeartbeatReport> premiumHeartbeat();
-
-  /// Deletes the account on the server — the key, the wallets it
-  /// watched, the channels, the log — and then forgets it here.
-  /// Nothing local is dropped unless the server confirmed. There is no
-  /// way back.
-  Future<void> premiumDeleteAccount();
 }
 
 /// The real bridge, backed by the generated Rust bindings.
@@ -432,8 +264,6 @@ class RustBridge implements GerfautBridge {
       throw BridgeException(
         error['kind'] as String? ?? 'internal',
         error['message'] as String? ?? 'unknown error',
-        retryAfter: error['retry_after'] as int?,
-        pendingUntil: error['pending_until'] as int?,
       );
     }
     return decoded;
@@ -861,171 +691,5 @@ class RustBridge implements GerfautBridge {
   @override
   Future<bool> usesTor() async {
     return _decode(await _guard(rust.usesTor())) as bool;
-  }
-
-  @override
-  Future<PremiumView> premiumState() async {
-    return PremiumView.fromJson(_object(await _guard(rust.premiumState())));
-  }
-
-  @override
-  Future<PremiumDevice> premiumConnect(String key) async {
-    return PremiumDevice.fromJson(
-      _object(await _guard(rust.premiumConnect(key: key))),
-    );
-  }
-
-  @override
-  Future<PremiumDevice?> premiumEnsureDevice() async {
-    final decoded = _decode(await _guard(rust.premiumEnsureDevice()));
-    if (decoded == null) return null;
-    return PremiumDevice.fromJson(decoded as Map<String, dynamic>);
-  }
-
-  @override
-  Future<PremiumDevice> premiumDevice() async {
-    return PremiumDevice.fromJson(_object(await _guard(rust.premiumDevice())));
-  }
-
-  @override
-  Future<List<PremiumDevice>> premiumDevices() async {
-    return _list(await _guard(rust.premiumDevices()))
-        .map(PremiumDevice.fromJson)
-        .toList();
-  }
-
-  @override
-  Future<PremiumDevice> premiumApproveDevice(String id) async {
-    return PremiumDevice.fromJson(
-      _object(await _guard(rust.premiumApproveDevice(id: id))),
-    );
-  }
-
-  @override
-  Future<void> premiumRemoveDevice(String id) async {
-    _ok(await _guard(rust.premiumRemoveDevice(id: id)));
-  }
-
-  @override
-  Future<int> premiumFlushLogouts() async {
-    return _object(await _guard(rust.premiumFlushLogouts()))['left'] as int;
-  }
-
-  @override
-  Future<String> premiumChangeKey() async {
-    return _object(await _guard(rust.premiumChangeKey()))['key'] as String;
-  }
-
-  @override
-  Future<void> premiumSetKeySaved(bool saved) async {
-    _ok(await _guard(rust.premiumSetKeySaved(saved: saved)));
-  }
-
-  @override
-  Future<void> premiumHideChecklist() async {
-    _ok(await _guard(rust.premiumHideChecklist()));
-  }
-
-  @override
-  Future<List<String>> premiumMarkAnnounced(List<String> pending) async {
-    return (_decode(
-      await _guard(rust.premiumMarkAnnounced(pending: pending)),
-    ) as List).cast<String>();
-  }
-
-  @override
-  Future<PremiumLicence> premiumRefreshLicence() async {
-    return PremiumLicence.fromJson(
-      _object(await _guard(rust.premiumRefreshLicence())),
-    );
-  }
-
-  @override
-  Future<void> premiumLogOut() async {
-    _ok(await _guard(rust.premiumLogOut()));
-  }
-
-  @override
-  Future<void> premiumAcknowledgeOffline(int? untilUnix) async {
-    _ok(await _guard(rust.premiumAcknowledgeOffline(until: untilUnix)));
-  }
-
-  @override
-  Future<PremiumAccount> premiumAccount() async {
-    return PremiumAccount.fromJson(
-      _object(await _guard(rust.premiumAccount())),
-    );
-  }
-
-  @override
-  Future<List<WalletWatch>> premiumWallets() async {
-    return _list(await _guard(rust.premiumWallets()))
-        .map(WalletWatch.fromJson)
-        .toList();
-  }
-
-  @override
-  Future<void> premiumWatchWallet(String id) async {
-    _ok(await _guard(rust.premiumWatchWallet(id: id)));
-  }
-
-  @override
-  Future<void> premiumUnwatchWallet(String id) async {
-    _ok(await _guard(rust.premiumUnwatchWallet(id: id)));
-  }
-
-  @override
-  Future<List<PremiumChannel>> premiumChannels() async {
-    return _list(await _guard(rust.premiumChannels()))
-        .map(PremiumChannel.fromJson)
-        .toList();
-  }
-
-  @override
-  Future<CreatedChannel> premiumCreateChannel(
-    ChannelKind kind, {
-    String? target,
-    String? secret,
-  }) async {
-    final raw = await _guard(
-      rust.premiumCreateChannel(kind: kind.id, target: target, secret: secret),
-    );
-    return CreatedChannel.fromJson(_object(raw));
-  }
-
-  @override
-  Future<PremiumChannel> premiumConfirmChannel(String id, String code) async {
-    return PremiumChannel.fromJson(
-      _object(await _guard(rust.premiumConfirmChannel(id: id, code: code))),
-    );
-  }
-
-  @override
-  Future<void> premiumDeleteChannel(String id) async {
-    _ok(await _guard(rust.premiumDeleteChannel(id: id)));
-  }
-
-  @override
-  Future<void> premiumTestChannel(String id) async {
-    _ok(await _guard(rust.premiumTestChannel(id: id)));
-  }
-
-  @override
-  Future<List<PremiumEvent>> premiumRecentEvents() async {
-    return _list(await _guard(rust.premiumRecentEvents()))
-        .map(PremiumEvent.fromJson)
-        .toList();
-  }
-
-  @override
-  Future<HeartbeatReport> premiumHeartbeat() async {
-    return HeartbeatReport.fromJson(
-      _object(await _guard(rust.premiumHeartbeat())),
-    );
-  }
-
-  @override
-  Future<void> premiumDeleteAccount() async {
-    _ok(await _guard(rust.premiumDeleteAccount()));
   }
 }

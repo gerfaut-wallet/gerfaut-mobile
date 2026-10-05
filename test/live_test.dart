@@ -45,17 +45,6 @@ FakeBridge _bridge({
   )..lock = lock;
 }
 
-/// A Premium key this phone is connected with, the way the vault
-/// holds one.
-void _connectPremium(FakeBridge bridge) {
-  bridge
-    ..premiumKey = 'abcdefghijkmnpqr'
-    ..premiumThisDeviceId = bridge.premiumAddDevice(
-      platform: DevicePlatform.android,
-      waiting: false,
-    );
-}
-
 LiveTx _live(
   String txid,
   int sats, {
@@ -1750,35 +1739,12 @@ void main() {
       expect(bridge.appPrefs.containsKey('notify.background'), isFalse);
     });
 
-    testWidgets('disguised, a premium account hears it still gets alerts', (
-      tester,
-    ) async {
-      final bridge = _bridge(
-        prefs: {'notify.new_tx': '1', 'notify.background': '900'},
-      );
-      _connectPremium(bridge);
-      await _open(
-        tester,
-        _settings(
-          bridge,
-          platform: FakeLivePlatform(),
-          disguise: FakeDisguise(disguised: true),
-        ),
-      );
-      expect(
-        find.textContaining('Premium alerts still reach your channels.'),
-        findsOneWidget,
-      );
-    });
-
     testWidgets('without the disguise, nothing says it', (tester) async {
       final bridge = _bridge(
         prefs: {'notify.new_tx': '1', 'notify.background': '900'},
       );
-      _connectPremium(bridge);
       await _open(tester, _settings(bridge, platform: FakeLivePlatform()));
       expect(find.textContaining('while the app is disguised'), findsNothing);
-      expect(find.textContaining('Premium alerts'), findsNothing);
       final notify = tester.widget<SettingSwitch>(
         find.widgetWithText(SettingSwitch, 'New transactions'),
       );
