@@ -1370,7 +1370,11 @@ void main() {
 
       expect(find.text('Live watch'), findsOneWidget);
       expect(find.textContaining('small permanent notification'), findsOne);
-      expect(find.textContaining('has not been measured yet'), findsOne);
+      expect(
+        find.textContaining('Your phone’s battery settings show how much.'),
+        findsOne,
+      );
+      expect(find.textContaining('measured'), findsNothing);
       expect(find.textContaining('What a sync already tells it'), findsOne);
       expect(find.textContaining('Force-stopping Gerfaut ends Live'), findsOne);
       // Signet, no Tor: neither of the two conditional lines.

@@ -157,7 +157,8 @@ class _LiveSheetState extends ConsumerState<LiveSheet> {
         body:
             'A small permanent notification: Android requires one to let '
             'an app keep running. It also uses some battery, more on mobile '
-            'data than on Wi-Fi. How much has not been measured yet.',
+            'data than on Wi-Fi. Your phone’s battery settings show how '
+            'much.',
       ),
       const _Fact(
         title: 'What your server learns',
