@@ -69,13 +69,12 @@ The first release: Gerfaut for Android.
   stays scheduled for whenever Android stops Live. Force-stopping the app
   ends Live until you open Gerfaut again, and what arrived in the meantime
   is announced then. Turning the calculator disguise on turns Live off and
-  clears Gerfaut's notifications from the shade. Battery use has not been
-  measured on a phone yet.
-- On a phone whose maker adds a battery manager of its own (Xiaomi, Huawei,
-  Samsung, OnePlus, Oppo, realme), the Live sheet lists the switches to turn
-  on there and opens Gerfaut's app info page, where most of them live. No
-  app can flip those switches for you. A step that only repeats Android's
-  battery exemption is left out once you have granted it.
+  clears Gerfaut's notifications from the shade.
+- On a phone whose maker adds a battery manager of its own (Xiaomi, Redmi,
+  POCO, Huawei, Honor, Samsung, OnePlus, Oppo, realme), the Live sheet lists
+  the switches to turn on there and opens Gerfaut's app info page, where most
+  of them live. No app can flip those switches for you. A step that only
+  repeats Android's battery exemption is left out once you have granted it.
 - A "This is my node" switch under the address of your own Electrum or
   Esplora server, in Settings › Network. When it is on, Live follows up to
   20 000 addresses instead of 2 000. Leave it off for a server you do not
@@ -190,14 +189,15 @@ The first release: Gerfaut for Android.
   would watch the wallet without its change.
 - When the server itself refuses addresses, Settings › Notifications says
   so, instead of blaming Live's own limits.
-- When a server refuses some of your addresses, Live now asks it again for
-  all of them a day later, or an hour later when it refused every one.
-  Before, it waited until you changed the server or restarted Gerfaut, so a
-  server that refused every address could leave Live off for days. The
-  exception is an ElectrumX server that cut Live off for using too much of
-  its resources: there, Live keeps asking for fewer addresses until you
-  change the server settings or Live stops, because asking for all of them
-  would only get it cut off again.
+- When a server takes only a certain number of your addresses, Live now
+  asks it again for all of them a day later, or an hour later when it took
+  none. Before, it waited until you changed the server settings or Live
+  started again, so a server that took no address could leave Live off for
+  days. Two refusals still hold until you change the server settings or Live
+  starts again: a single address the server turns down, such as one with a
+  history too long for it, and a cut from an ElectrumX server when Live uses
+  too much of its resources. After such a cut, Live asks for fewer
+  addresses, since asking for all of them would only get it cut off again.
 - In Add a wallet, a QR code that gives no receive or change path now says
   that Gerfaut assumes the usual 0/* and 1/*, and asks you to compare the
   first address with your signer.
