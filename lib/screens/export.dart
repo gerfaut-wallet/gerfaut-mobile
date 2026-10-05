@@ -17,7 +17,6 @@ import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/choice_group.dart';
 import '../widgets/notice.dart';
-import '../widgets/premium_pill.dart';
 import '../widgets/setting_switch.dart';
 import '../widgets/toast.dart';
 
@@ -252,18 +251,6 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                     value: _includePending,
                     onChanged: (value) =>
                         setState(() => _includePending = value),
-                  ),
-                  const SizedBox(height: GerfautSpacing.md),
-                  Divider(height: 1, thickness: 1, color: tokens.border),
-                  const SizedBox(height: GerfautSpacing.md),
-                  // The premium teaser states what the server will add,
-                  // nothing more: no nagging, no dead-end tap target.
-                  const SettingSwitch(
-                    title: 'Fiat value at transaction time',
-                    badge: PremiumPill(),
-                    hint: "Adds the price at each transaction's date to the file.",
-                    value: false,
-                    onChanged: null,
                   ),
                 ],
               ),

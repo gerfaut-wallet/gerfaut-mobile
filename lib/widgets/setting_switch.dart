@@ -20,7 +20,6 @@ class SettingSwitch extends StatelessWidget {
     required this.title,
     this.semanticLabel,
     this.hint,
-    this.badge,
     required this.value,
     required this.onChanged,
   });
@@ -34,9 +33,6 @@ class SettingSwitch extends StatelessWidget {
   /// What the setting does, or why it cannot be changed, in a muted
   /// line under the name. Null for a name that says it all.
   final String? hint;
-
-  /// A small mark after the name, such as the premium pill.
-  final Widget? badge;
   final bool value;
 
   /// Null greys the switch out.
@@ -53,7 +49,6 @@ class SettingSwitch extends StatelessWidget {
         fontVariations: const [FontVariation('wght', 500)],
       ),
     );
-    final badge = this.badge;
     final hint = this.hint;
     return MergeSemantics(
       child: Row(
@@ -63,14 +58,7 @@ class SettingSwitch extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (badge == null)
-                  name
-                else
-                  Wrap(
-                    spacing: GerfautSpacing.sm,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [name, badge],
-                  ),
+                name,
                 if (hint != null)
                   Text(
                     hint,

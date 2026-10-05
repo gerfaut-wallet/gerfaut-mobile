@@ -179,33 +179,6 @@ void main() {
     expect(find.text('3 of 3 transactions selected'), findsOneWidget);
   });
 
-  testWidgets('the premium teaser is present, sober and disabled', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(800, 1600);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    final sharer = FakeCsvSharer();
-    await tester.pumpWidget(exportApp(makeBridge(), sharer));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Fiat value at transaction time'), findsOneWidget);
-    expect(find.text('PREMIUM'), findsOneWidget);
-    expect(
-      find.text("Adds the price at each transaction's date to the file."),
-      findsOneWidget,
-    );
-    expect(find.textContaining('Coming with'), findsNothing);
-    expect(find.textContaining('Everything stays'), findsNothing);
-
-    // The premium switch is off and inert; the pending one still works.
-    final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
-    expect(switches, hasLength(2));
-    expect(switches.last.onChanged, isNull);
-    expect(switches.last.value, isFalse);
-    expect(switches.first.onChanged, isNotNull);
-  });
-
   testWidgets('saving writes the file where the user points', (tester) async {
     final sharer = FakeCsvSharer();
     final saver = FakeDocumentSaver();

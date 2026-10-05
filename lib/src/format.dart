@@ -155,24 +155,6 @@ String relativeTime(int unixSeconds, {DateTime? now}) {
   return '$days d ago';
 }
 
-/// The same distance in whole words, for a sentence rather than a
-/// stamp: "3 days ago", "an hour ago". A stamp abbreviates because it
-/// sits in a corner; a sentence has the room to say it.
-String relativeTimeWords(int unixSeconds, {DateTime? now}) {
-  final nowMs = (now ?? DateTime.now()).millisecondsSinceEpoch;
-  var seconds = nowMs ~/ 1000 - unixSeconds;
-  if (seconds < 0) seconds = 0;
-  if (seconds < 45) return 'just now';
-  final minutes = seconds ~/ 60;
-  if (minutes < 60) {
-    return minutes <= 1 ? 'a minute ago' : '$minutes minutes ago';
-  }
-  final hours = minutes ~/ 60;
-  if (hours < 24) return hours == 1 ? 'an hour ago' : '$hours hours ago';
-  final days = hours ~/ 24;
-  return days == 1 ? 'yesterday' : '$days days ago';
-}
-
 const List<String> _months = [
   'Jan',
   'Feb',
@@ -216,15 +198,6 @@ String formatDayMonth(int unixSeconds) {
       .toLocal();
   final day = local.day.toString().padLeft(2, '0');
   return '${_months[local.month - 1]} $day';
-}
-
-/// A day written day first, `24 Sep 2026`: the form the Premium device
-/// texts use on both apps, beside the alerts the server sends about the
-/// same devices.
-String formatDayMonthYear(int unixSeconds) {
-  final local = DateTime.fromMillisecondsSinceEpoch(unixSeconds * 1000)
-      .toLocal();
-  return '${local.day} ${_months[local.month - 1]} ${local.year}';
 }
 
 /// A clock time in the reader's zone, 24-hour, no date: `12:40`. For a
