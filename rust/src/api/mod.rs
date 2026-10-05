@@ -81,8 +81,6 @@ fn core_error_kind(error: &CoreError) -> &'static str {
         CoreError::Broadcast { .. } => "broadcast",
         CoreError::Descriptor(_) => "descriptor",
         CoreError::Tor(_) => "tor",
-        // Nothing this bridge calls fails this way.
-        CoreError::Premium(_) => "internal",
         CoreError::Internal(_) => "internal",
     }
 }
