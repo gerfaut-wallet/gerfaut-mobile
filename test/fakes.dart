@@ -16,9 +16,7 @@ import 'package:gerfaut/src/electrum.dart';
 import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/home_widgets.dart';
 import 'package:gerfaut/src/live.dart';
-import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
-import 'package:gerfaut/src/notifications.dart';
 import 'package:gerfaut/src/screen.dart';
 import 'package:gerfaut/src/window.dart';
 import 'package:url_launcher_platform_interface/link.dart';
@@ -231,50 +229,6 @@ class FakeWidgetBoard implements WidgetBoard {
   Future<Set<String>> installedWidgets() async {
     installedAsks++;
     return {...installed};
-  }
-}
-
-/// Records what would have been written instead of opening the
-/// system's save dialog.
-/// Records what would have been posted instead of reaching the system.
-class RecordingNotifications implements NotificationService {
-  final List<({int id, String title, String body})> posted = [];
-
-  @override
-  Future<bool> deliverable() async => true;
-
-  @override
-  Future<void> init() async {}
-
-  @override
-  Future<bool> requestPermission() async => true;
-
-  @override
-  Future<void> show(int id, String title, String body) async {
-    posted.add((id: id, title: title, body: body));
-  }
-
-  @override
-  Future<void> cancelAll() async => posted.clear();
-}
-
-/// The phone's biometric prompt, answering what the test says.
-class FakeFingerprint implements BiometricGate {
-  FakeFingerprint({this.available = true, this.passes = true});
-
-  bool available;
-  bool passes;
-
-  /// Every reason the prompt was put with, in order.
-  final List<String> asked = [];
-
-  @override
-  Future<bool> canCheck() async => available;
-
-  @override
-  Future<bool> authenticate(String reason) async {
-    asked.add(reason);
-    return passes;
   }
 }
 

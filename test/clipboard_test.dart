@@ -4,6 +4,9 @@ import 'package:gerfaut/src/clipboard.dart';
 
 const _channel = MethodChannel('gerfaut/window');
 
+/// A descriptor, what the sensitive route is for.
+const _descriptor = 'wpkh([d34db33f/84h/0h/0h]xpub661MyMwAqRbcFexample/0/*)';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -64,28 +67,23 @@ void main() {
       () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
     );
 
-    final timed = await const SystemSensitiveClipboard().copy(
-      'topic-abcdefghijklmnopqrst',
-    );
+    final timed = await const SystemSensitiveClipboard().copy(_descriptor);
     expect(sensitive, isEmpty);
     // Nothing takes a plain copy off: the confirmation says no minute.
     expect(timed, isFalse);
-    expect(
-      (plain.single.arguments as Map)['text'],
-      'topic-abcdefghijklmnopqrst',
-    );
+    expect((plain.single.arguments as Map)['text'], _descriptor);
   });
 
   test('an activity that refuses still copies', () async {
     install((_) async => throw PlatformException(code: 'failed'));
-    await const SystemSensitiveClipboard().copy('gerf-aut1-2345-6789');
+    await const SystemSensitiveClipboard().copy(_descriptor);
 
     expect(sensitive.single.method, 'copySensitive');
-    expect((plain.single.arguments as Map)['text'], 'gerf-aut1-2345-6789');
+    expect((plain.single.arguments as Map)['text'], _descriptor);
   });
 
   test('the confirmation says the minute only when there is one', () {
-    expect(copiedWords('Key copied', timed: true), 'Key copied for 1 minute');
+    expect(copiedWords('Copied', timed: true), 'Copied for 1 minute');
     expect(copiedWords('Copied', timed: false), 'Copied');
   });
 }
