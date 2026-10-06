@@ -138,11 +138,20 @@ The first release: Gerfaut for Android.
   never locked the app, however long it lasted.
 - A release build no longer writes the text of an unexpected error to the
   system log, where it could quote an address.
+- When every wallet is on the selected network, the backup export says
+  "All wallets (N)" instead of offering a choice of one.
 - In Add a wallet, an input that fits a single network, such as a mainnet
   address, names that network instead of offering a choice of one.
+- The Policy page now reads like the desktop one. The primary paths come
+  first, then the recovery and emergency ones, each sorted from the nearest
+  lock to the farthest. A single coin is counted like several, as in
+  "1 of 1 coin unlocked", and a Next coin line gives the wait of the first
+  coin to unlock, in blocks and in days.
 - On the Policy page, a coin that cannot be counted down before the first
   sync says "next known after the first sync" instead of "next in an unknown
   time".
+- TalkBack now calls the pin icon "Pin", like the desktop app, instead of
+  "Map pin".
 
 ### Fixed
 
@@ -235,6 +244,18 @@ The first release: Gerfaut for Android.
 - On the import screen, the first address now belongs to the network you
   pick, and changes when you pick another one. A key added on regtest shows
   its bcrt1 address, not the tb1 address of signet.
+- While Test the connection starts the built-in Tor, the Tor card now counts
+  up in steps of ten, as in "Starting the built-in Tor… 40%". Before, the
+  card stayed still until the test ended.
+- Forgetting a certificate now says that syncs with that server fail until
+  you press Save backend again and accept it. When the server does not
+  answer at Save backend, the note says the same of a server that signs its
+  own certificate. Both texts used to say that Gerfaut would ask again at
+  the next connection, which it does not.
+- On an Esplora server, Live now polls every address in turn. It used to
+  start over at the top of the list each time it reconnected, every half
+  hour, so it never reached the addresses further down, and a payment to one
+  of them waited for the next sync.
 
 ### Security
 
