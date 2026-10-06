@@ -933,7 +933,7 @@ class LiveRunner {
 
   /// Says what one sync found for one wallet, under the rules every
   /// other announcement follows, read fresh each time: the notice may
-  /// have been turned off, the unit changed, a lock set.
+  /// have been turned off, the unit changed, the details hidden.
   Future<void> _flush(String walletId) async {
     _timers.remove(walletId)?.cancel();
     final txs = _pending.remove(walletId);

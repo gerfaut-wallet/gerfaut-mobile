@@ -17,6 +17,7 @@ abstract final class Pref {
   static const explorerAck = 'privacy.explorer_ack';
   static const recentBroadcasts = 'broadcast.recent';
   static const notifyNewTx = 'notify.new_tx';
+  static const notifyDetails = 'notify.details';
   static const background = 'notify.background';
   static const onboardingSeen = 'onboarding.seen';
   static const widgetBalances = 'widgets.balances';
@@ -27,10 +28,16 @@ abstract final class Pref {
 }
 
 /// The preferences a background isolate acts on, read the way the
-/// screens write them: a switch is on only for an explicit `"1"`.
+/// screens write them: a switch that is off by default is on only for
+/// an explicit `"1"`, one that is on by default off only for a `"0"`.
 extension type const AppPrefs(Map<String, String> raw) {
   /// A notice when a sync finds a transaction. Off unless asked for.
   bool get notifyNewTx => raw[Pref.notifyNewTx] == '1';
+
+  /// The wallet's name and the amount in what is posted, app lock or
+  /// not. On unless turned off: an install from before the switch has
+  /// none stored, and gets it on.
+  bool get notifyDetails => raw[Pref.notifyDetails] != '0';
 
   /// Balances hidden on screen, and so in what is posted.
   bool get masked => raw[Pref.masked] == '1';

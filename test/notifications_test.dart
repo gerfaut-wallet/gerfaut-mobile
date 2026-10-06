@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/settings.dart';
-import 'package:gerfaut/screens/settings/notifications_section.dart';
 import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/live.dart';
 import 'package:gerfaut/src/models.dart';
@@ -12,6 +11,7 @@ import 'package:gerfaut/src/prefs.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/select_field.dart';
+import 'package:gerfaut/widgets/setting_switch.dart';
 
 import 'fakes.dart';
 
@@ -79,7 +79,7 @@ List<String> bodies(
   List<SyncReport> reports, {
   AmountUnit unit = AmountUnit.btc,
   bool masked = false,
-  bool locked = false,
+  bool details = true,
   Map<String, String> names = const {'w1': 'Cold storage'},
 }) {
   return NewTxAnnouncer.compose(
@@ -87,9 +87,22 @@ List<String> bodies(
     walletNames: names,
     unit: unit,
     masked: masked,
-    locked: locked,
+    details: details,
   ).map((notice) => notice.body).toList();
 }
+
+/// The switch of the new-transaction notice, the card's first.
+final Finder newTransactionsSwitch = find.descendant(
+  of: find.widgetWithText(SettingSwitch, 'New transactions'),
+  matching: find.byType(Switch),
+);
+
+/// The switch that says whether a notification names the wallet and
+/// the amount.
+final Finder detailsSwitch = find.widgetWithText(
+  SettingSwitch,
+  'Show wallet and amount',
+);
 
 Widget settingsApp(FakeBridge bridge, FakeNotifications service) {
   return ProviderScope(
@@ -159,13 +172,13 @@ void main() {
       );
     });
 
-    test('under an app lock, no wallet and no amount: the desktop words', () {
+    test('details off, no wallet and no amount: the desktop words', () {
       List<TxNotice> said(List<LiveTx> txs) => NewTxAnnouncer.compose(
         txs,
         walletNames: const {'w1': 'Cold storage', 'w2': 'Spending'},
         unit: AmountUnit.btc,
         masked: false,
-        locked: true,
+        details: false,
       );
       final notices = said(const [
         LiveTx(
@@ -202,14 +215,14 @@ void main() {
         'Outgoing transaction confirmed',
         'A pending payment is no longer coming',
       ]);
-      // Masked or not, the lock says the same.
+      // Masked or not, the details off say the same.
       expect(
         bodies(
           [
             report([tx(-1000000)]),
           ],
           masked: true,
-          locked: true,
+          details: false,
         ),
         ['Outgoing transaction confirmed'],
       );
@@ -221,7 +234,7 @@ void main() {
       }
     });
 
-    test('without a lock, the name stays and a mask hides the amount', () {
+    test('details on, the name stays and a mask hides the amount', () {
       final notices = NewTxAnnouncer.compose(
         claimed([
           report([tx(1000000, confirmed: false)]),
@@ -229,7 +242,7 @@ void main() {
         walletNames: const {'w1': 'Cold storage'},
         unit: AmountUnit.btc,
         masked: true,
-        locked: false,
+        details: true,
       );
       expect(notices.single.title, 'Cold storage');
       expect(notices.single.body, 'New transaction · pending');
@@ -253,7 +266,7 @@ void main() {
         walletNames: const {'w1': 'Cold storage'},
         unit: AmountUnit.btc,
         masked: false,
-        locked: false,
+        details: true,
       );
       expect(notices.map((n) => n.title), ['Cold storage', 'w2']);
     });
@@ -270,7 +283,7 @@ void main() {
         },
         unit: AmountUnit.btc,
         masked: false,
-        locked: false,
+        details: true,
       );
       expect(notices.single.title, 'gnivas Cold storage');
     });
@@ -296,7 +309,7 @@ void main() {
         walletNames: const {'w1': 'Cold storage'},
         unit: AmountUnit.btc,
         masked: false,
-        locked: false,
+        details: true,
       );
       final pending = say(
         const LiveTx(
@@ -348,7 +361,7 @@ void main() {
         walletNames: const {'w1': 'Spending', 'w2': 'Cold storage'},
         unit: AmountUnit.btc,
         masked: false,
-        locked: false,
+        details: true,
       );
       expect(notices.map((n) => n.title), ['Spending', 'Cold storage']);
       expect(notices.map((n) => n.id).toSet(), hasLength(2));
@@ -411,6 +424,50 @@ void main() {
       expect(notices.posted.single.body, contains('sats'));
     });
 
+    test('names the wallet and the amount, app lock or not', () async {
+      final notices = FakeNotifications();
+      await announceFromVault(
+        vault({Pref.notifyNewTx: '1'})
+          ..lock = const AppLock(kind: LockKind.pin, biometric: false),
+        notices,
+        claimed,
+        isDisguised: () async => false,
+      );
+      expect(notices.posted.single.title, 'Savings');
+      expect(
+        notices.posted.single.body,
+        'Received ${formatAmount(150000, AmountUnit.btc)} · pending',
+      );
+    });
+
+    test('with the details off, says only what happened', () async {
+      final notices = FakeNotifications();
+      await announceFromVault(
+        vault({Pref.notifyNewTx: '1', Pref.notifyDetails: '0'}),
+        notices,
+        claimed,
+        isDisguised: () async => false,
+      );
+      expect(notices.posted.single.title, 'Gerfaut');
+      expect(notices.posted.single.body, 'New transaction · pending');
+    });
+
+    test('with the details on and amounts hidden, the name alone', () async {
+      final notices = FakeNotifications();
+      await announceFromVault(
+        vault({
+          Pref.notifyNewTx: '1',
+          Pref.notifyDetails: '1',
+          Pref.masked: '1',
+        }),
+        notices,
+        claimed,
+        isDisguised: () async => false,
+      );
+      expect(notices.posted.single.title, 'Savings');
+      expect(notices.posted.single.body, 'New transaction · pending');
+    });
+
     test('is not said while the notice is off or the app disguised', () async {
       final notices = FakeNotifications();
       await announceFromVault(
@@ -425,7 +482,50 @@ void main() {
         claimed,
         isDisguised: () async => true,
       );
+      // Disguised, the details off change nothing: still not a word.
+      await announceFromVault(
+        vault({Pref.notifyNewTx: '1', Pref.notifyDetails: '0'}),
+        notices,
+        claimed,
+        isDisguised: () async => true,
+      );
       expect(notices.posted, isEmpty);
+    });
+  });
+
+  group('the choice of details', () {
+    test('is on unless turned off, an older install included', () {
+      expect(const AppPrefs({}).notifyDetails, isTrue);
+      expect(const AppPrefs({Pref.notifyDetails: '1'}).notifyDetails, isTrue);
+      expect(const AppPrefs({Pref.notifyDetails: '0'}).notifyDetails, isFalse);
+
+      final made = ProviderContainer(
+        overrides: [bridgeProvider.overrideWithValue(FakeBridge())],
+      );
+      addTearDown(made.dispose);
+      expect(made.read(notifyDetailsProvider), isTrue);
+      final notifier = made.read(notifyDetailsProvider.notifier);
+      notifier.hydrate(null);
+      expect(made.read(notifyDetailsProvider), isTrue);
+      notifier.hydrate('0');
+      expect(made.read(notifyDetailsProvider), isFalse);
+      notifier.hydrate('1');
+      expect(made.read(notifyDetailsProvider), isTrue);
+    });
+
+    test('is kept in the vault, where every isolate reads it', () async {
+      final bridge = FakeBridge();
+      final made = ProviderContainer(
+        overrides: [bridgeProvider.overrideWithValue(bridge)],
+      );
+      addTearDown(made.dispose);
+      made.read(notifyDetailsProvider.notifier).set(false);
+      await Future<void>.delayed(Duration.zero);
+      expect(made.read(notifyDetailsProvider), isFalse);
+      expect(bridge.appPrefs[Pref.notifyDetails], '0');
+      made.read(notifyDetailsProvider.notifier).set(true);
+      await Future<void>.delayed(Duration.zero);
+      expect(bridge.appPrefs[Pref.notifyDetails], '1');
     });
   });
 
@@ -489,7 +589,7 @@ void main() {
       );
     });
 
-    test('under an app lock, the open app names no wallet either', () async {
+    test('under an app lock, the open app still names the wallet', () async {
       final service = FakeNotifications();
       final bridge = FakeBridge(wallets: [makeMeta()])
         ..lock = const AppLock(kind: LockKind.pin, biometric: false);
@@ -499,6 +599,25 @@ void main() {
       final made = container(bridge, service);
       await made.read(settingsProvider.future);
       await made.read(notifyNewTxProvider.notifier).set(true);
+
+      await made.read(syncProvider.notifier).syncWallet('w1');
+      await made.read(syncProvider.notifier).syncWallet('w1');
+      expect(service.posted.single.title, 'Cold storage');
+      expect(
+        service.posted.single.body,
+        'Received ${formatAmount(1000, AmountUnit.btc)} · confirmed',
+      );
+    });
+
+    test('with the details off, the open app names no wallet', () async {
+      final service = FakeNotifications();
+      final bridge = FakeBridge(wallets: [makeMeta()]);
+      var round = 0;
+      bridge.onSyncWallet = (id) =>
+          report([tx(1000, txid: 'tx${round++}')], id: id);
+      final made = container(bridge, service);
+      await made.read(notifyNewTxProvider.notifier).set(true);
+      made.read(notifyDetailsProvider.notifier).set(false);
 
       await made.read(syncProvider.notifier).syncWallet('w1');
       await made.read(syncProvider.notifier).syncWallet('w1');
@@ -555,12 +674,7 @@ void main() {
       await tester.tapAt(const Offset(5, 5));
       await tester.pumpAndSettle();
 
-      await tester.tap(
-        find.descendant(
-          of: find.byType(NotificationsSection),
-          matching: find.byType(Switch),
-        ),
-      );
+      await tester.tap(newTransactionsSwitch);
       await tester.pumpAndSettle();
 
       expect(service.permissionAsks, 1);
@@ -582,18 +696,51 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(
-        find.descendant(
-          of: find.byType(NotificationsSection),
-          matching: find.byType(Switch),
-        ),
-      );
+      await tester.tap(newTransactionsSwitch);
       await tester.pumpAndSettle();
 
       expect(
         find.text('Notifications are off for Gerfaut in the system settings.'),
         findsOneWidget,
       );
+    });
+
+    testWidgets('the details switch is on, and waits for the notice', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 3600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final handle = tester.ensureSemantics();
+      final bridge = FakeBridge(wallets: [makeMeta()]);
+      await tester.pumpWidget(settingsApp(bridge, FakeNotifications()));
+      await tester.pumpAndSettle();
+
+      // Notices off: drawn as chosen, on, and out of reach.
+      SettingSwitch details() => tester.widget<SettingSwitch>(detailsSwitch);
+      expect(details().value, isTrue);
+      expect(details().onChanged, isNull);
+      expect(
+        tester
+            .getSemantics(
+              find.descendant(of: detailsSwitch, matching: find.byType(Switch)),
+            )
+            .label,
+        'Show wallet and amount\nEven while Gerfaut is locked. Off, a '
+        'notification only says that a transaction came in or went out.',
+      );
+
+      await tester.tap(newTransactionsSwitch);
+      await tester.pumpAndSettle();
+      expect(details().onChanged, isNotNull);
+
+      await tester.tap(
+        find.descendant(of: detailsSwitch, matching: find.byType(Switch)),
+      );
+      await tester.pumpAndSettle();
+      expect(details().value, isFalse);
+      expect(bridge.appPrefs[Pref.notifyDetails], '0');
+      handle.dispose();
     });
   });
 }
