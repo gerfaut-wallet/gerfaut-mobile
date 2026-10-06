@@ -257,7 +257,10 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                         style: tokens.label.copyWith(color: tokens.textMuted),
                       ),
                       const SizedBox(height: GerfautSpacing.sm),
-                      BalanceAmount(sats: snapshot.balance.total),
+                      BalanceAmount(
+                        sats: snapshot.balance.total,
+                        network: snapshot.meta.network,
+                      ),
                       if (note != null) ...[
                         const SizedBox(height: GerfautSpacing.sm),
                         Text(
@@ -304,7 +307,10 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                   txs: snapshot.txs,
                   truncated: snapshot.truncated,
                 ),
-                _UtxoList(walletId: widget.walletId),
+                _UtxoList(
+                  walletId: widget.walletId,
+                  network: snapshot.meta.network,
+                ),
               ],
             ),
           ),
@@ -673,7 +679,11 @@ class _TxList extends ConsumerWidget {
                 const SizedBox(width: GerfautSpacing.sm),
                 StatusGlyph(status: tx.status),
                 const SizedBox(width: GerfautSpacing.sm),
-                ListAmount(sats: tx.netSats, pending: pending),
+                ListAmount(
+                  sats: tx.netSats,
+                  network: network,
+                  pending: pending,
+                ),
                 const SizedBox(width: 2),
                 Icon(
                   LucideIcons.chevronRight,
@@ -691,9 +701,10 @@ class _TxList extends ConsumerWidget {
 
 /// UTXOs as dense rows: outpoint, address, status, value in sats.
 class _UtxoList extends ConsumerWidget {
-  const _UtxoList({required this.walletId});
+  const _UtxoList({required this.walletId, required this.network});
 
   final String walletId;
+  final Network network;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -781,7 +792,7 @@ class _UtxoList extends ConsumerWidget {
                 children: [
                   StatusPill(status: utxo.status),
                   const SizedBox(height: GerfautSpacing.xs),
-                  StackedAmount(sats: utxo.valueSats),
+                  StackedAmount(sats: utxo.valueSats, network: network),
                 ],
               ),
             ],

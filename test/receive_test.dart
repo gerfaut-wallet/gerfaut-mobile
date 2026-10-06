@@ -462,6 +462,32 @@ void main() {
   });
 
   group('the revealed addresses', () {
+    testWidgets('a test coin on an address is worth zero in the currency', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = bridgeWith(
+        AddressList(
+          external: [row(0, used: true, balance: 150000)],
+          internal: const [],
+        ),
+        meta: makeMeta(network: Network.signet),
+      );
+      await tester.pumpWidget(receiveApp(bridge));
+      await tester.pumpAndSettle();
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ReceiveScreen)),
+        listen: false,
+      );
+      container.read(fiatEnabledProvider.notifier).set(true);
+      await tester.pumpAndSettle();
+
+      // 150 000 sats at 50 000 a coin would be €75.00 on mainnet.
+      expect(find.textContaining('0.00150000'), findsOneWidget);
+      expect(find.text('€0.00'), findsOneWidget);
+      expect(find.text('€75.00'), findsNothing);
+    });
+
     testWidgets('external and change keychains sit in their own cards', (
       tester,
     ) async {

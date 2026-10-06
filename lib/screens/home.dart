@@ -477,7 +477,10 @@ class _WalletCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: GerfautSpacing.sm),
-                  BalanceAmount(sats: wallet.cachedBalance.total),
+                  BalanceAmount(
+                    sats: wallet.cachedBalance.total,
+                    network: wallet.network,
+                  ),
                   if (coverage != null) ...[
                     const SizedBox(height: GerfautSpacing.sm),
                     LiveCoveragePill(coverage: coverage!),

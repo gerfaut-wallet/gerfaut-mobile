@@ -336,10 +336,12 @@ String _grouped(NumberFormat formatter, double value) => formatter
 /// Fiat value of an amount at a given BTC rate, with the currency's
 /// symbol and its own number of decimals — never two forced on a
 /// currency that has none. Small values keep four decimals so they
-/// never round to zero.
+/// never round to zero; zero itself has nothing to keep, and takes the
+/// currency's own decimals: `€0.00`, `¥0`.
 String formatFiat(int sats, double rate, FiatCurrency currency) {
   final value = sats / satsPerBtc * rate;
-  return _grouped(_fiatFormatter(currency, precise: value.abs() < 1), value);
+  final small = value != 0 && value.abs() < 1;
+  return _grouped(_fiatFormatter(currency, precise: small), value);
 }
 
 final Map<FiatCurrency, NumberFormat> _wholeFiatFormatters = {};

@@ -62,7 +62,11 @@ TxDetail _detail({List<TxIo>? inputs}) {
   );
 }
 
-Widget _app(FakeBridge bridge, {TextScaler textScaler = TextScaler.noScaling}) {
+Widget _app(
+  FakeBridge bridge, {
+  TextScaler textScaler = TextScaler.noScaling,
+  Network network = Network.mainnet,
+}) {
   return ProviderScope(
     overrides: [bridgeProvider.overrideWithValue(bridge)],
     child: MaterialApp(
@@ -70,11 +74,7 @@ Widget _app(FakeBridge bridge, {TextScaler textScaler = TextScaler.noScaling}) {
       home: Builder(
         builder: (context) => MediaQuery(
           data: MediaQuery.of(context).copyWith(textScaler: textScaler),
-          child: TxDetailScreen(
-            walletId: 'w1',
-            txid: _txid,
-            network: Network.mainnet,
-          ),
+          child: TxDetailScreen(walletId: 'w1', txid: _txid, network: network),
         ),
       ),
     ),
@@ -156,6 +156,36 @@ void main() {
     // and the rate fact used to say it four more times.
     expect(find.textContaining('€'), findsOneWidget);
     expect(find.text(formatAmount(10000, AmountUnit.btc)), findsWidgets);
+  });
+
+  testWidgets('a test transaction is worth zero in the currency', (
+    tester,
+  ) async {
+    _usePhone(tester);
+    final bridge = FakeBridge(txDetails: {'w1:$_txid': _detail()});
+    await tester.pumpWidget(_app(bridge, network: Network.signet));
+    await tester.pumpAndSettle();
+
+    _containerOf(tester).read(fiatEnabledProvider.notifier).set(true);
+    await tester.pumpAndSettle();
+
+    // 5 000 sats at 50 000 a coin would be €2.50 on mainnet.
+    expect(find.text('€0.00'), findsOneWidget);
+    expect(find.text('€2.50'), findsNothing);
+  });
+
+  testWidgets('a mainnet transaction is worth its amount at the price', (
+    tester,
+  ) async {
+    _usePhone(tester);
+    final bridge = FakeBridge(txDetails: {'w1:$_txid': _detail()});
+    await tester.pumpWidget(_app(bridge));
+    await tester.pumpAndSettle();
+
+    _containerOf(tester).read(fiatEnabledProvider.notifier).set(true);
+    await tester.pumpAndSettle();
+
+    expect(find.text('€2.50'), findsOneWidget);
   });
 
   testWidgets('an amount nobody could price reads n/a', (tester) async {

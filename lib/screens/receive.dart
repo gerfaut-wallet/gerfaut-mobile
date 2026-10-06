@@ -150,7 +150,7 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
                     onFirst: () => setState(() => _offset = 0),
                   ),
                   const SizedBox(height: GerfautSpacing.lg),
-                  ..._auditCards(tokens, audit, single),
+                  ..._auditCards(tokens, audit, single, meta?.network),
                 ],
               ),
       ),
@@ -162,6 +162,7 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
     GerfautTokens tokens,
     AsyncValue<AddressList> audit,
     bool single,
+    Network? network,
   ) {
     final list = audit.valueOrNull;
     if (list == null && audit.hasError) {
@@ -174,7 +175,9 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
         ),
       ];
     }
-    if (list == null) {
+    // The network comes with the wallet, which is in hand whenever this
+    // page is: an address's fiat value depends on it.
+    if (list == null || network == null) {
       return [
         Text(
           'Loading addresses…',
@@ -188,18 +191,21 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
           title: 'Watched address',
           hint: 'The one address this wallet watches.',
           rows: list.external,
+          network: network,
         )
       else ...[
         _AddressCard(
           title: 'External',
           hint: 'Receive addresses, in derivation order.',
           rows: list.external,
+          network: network,
         ),
         const SizedBox(height: GerfautSpacing.gutter),
         _AddressCard(
           title: 'Change',
           hint: 'Internal addresses used by outgoing transactions.',
           rows: list.internal,
+          network: network,
           emptyText: 'No change addresses revealed yet.',
         ),
       ],
@@ -498,12 +504,14 @@ class _AddressCard extends StatefulWidget {
     required this.title,
     required this.hint,
     required this.rows,
+    required this.network,
     this.emptyText,
   });
 
   final String title;
   final String hint;
   final List<AddressRow> rows;
+  final Network network;
 
   /// Shown in place of the rows when the keychain has none.
   final String? emptyText;
@@ -569,7 +577,7 @@ class _AddressCardState extends State<_AddressCard> {
           else
             for (final row in shown) ...[
               Divider(height: 1, thickness: 1, color: tokens.border),
-              _AddressRowTile(row: row),
+              _AddressRowTile(row: row, network: widget.network),
             ],
           if (rows.length > _collapsedRows) ...[
             Divider(height: 1, thickness: 1, color: tokens.border),
@@ -599,9 +607,10 @@ class _AddressCardState extends State<_AddressCard> {
 
 /// One revealed address: index, chip, usage, balance. 44px minimum.
 class _AddressRowTile extends StatelessWidget {
-  const _AddressRowTile({required this.row});
+  const _AddressRowTile({required this.row, required this.network});
 
   final AddressRow row;
+  final Network network;
 
   @override
   Widget build(BuildContext context) {
@@ -628,7 +637,7 @@ class _AddressRowTile extends StatelessWidget {
           AddressStatePill(used: row.used),
           const SizedBox(width: GerfautSpacing.sm),
           if (row.balanceSats > 0)
-            StackedAmount(sats: row.balanceSats)
+            StackedAmount(sats: row.balanceSats, network: network)
           else
             Text('—', style: tokens.figureOf(color: tokens.textMuted)),
         ],

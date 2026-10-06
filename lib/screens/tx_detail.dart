@@ -230,7 +230,7 @@ class _Hero extends ConsumerWidget {
     final summary = detail.summary;
     final sats = summary.netSats;
     // The subline carries only the fiat value, when that display is on.
-    final fiat = fiatValueOf(ref, sats);
+    final fiat = fiatValueOf(ref, sats, network: network);
     final explorer = explorerTxUrl(network, summary.txid);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

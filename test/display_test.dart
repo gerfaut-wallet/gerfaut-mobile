@@ -268,6 +268,112 @@ void main() {
     expect(find.textContaining(r'$'), findsWidgets);
   });
 
+  group('fiat off mainnet', () {
+    /// A wallet of 123 456 sats on [network] with one transaction each
+    /// way and one coin, fiat on, the fake's price at 50 000 a coin.
+    FakeBridge testCoins(Network network) {
+      final meta = makeMeta(network: network, totalSats: 123456);
+      return FakeBridge(
+        wallets: [meta],
+        settings: Settings(
+          activeNetwork: network,
+          backends: const {},
+          appPrefs: const {'display.fiat': '1', 'onboarding.seen': '1'},
+        ),
+        snapshots: {
+          'w1': makeSnapshot(
+            meta: meta,
+            totalSats: 123456,
+            txs: [
+              TxSummary(
+                txid: 'a' * 64,
+                netSats: 125456,
+                feeSats: 141,
+                status: TxStatus.confirmed(height: 100, timestamp: 1755000000),
+                confirmations: 10,
+              ),
+              TxSummary(
+                txid: 'b' * 64,
+                netSats: -2000,
+                feeSats: 141,
+                status: TxStatus.pending(),
+                confirmations: 0,
+              ),
+            ],
+          ),
+        },
+        utxos: {
+          'w1': const [
+            UtxoInfo(
+              txid: 'c1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90',
+              vout: 1,
+              address: 'tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl',
+              valueSats: 123456,
+              status: TxStatus.confirmed(height: 100),
+              keychain: 'external',
+              derivationIndex: 0,
+            ),
+          ],
+        },
+      );
+    }
+
+    test('zero takes the currency\'s own decimals', () {
+      expect(formatFiat(0, 50000, FiatCurrency.eur), '€0.00');
+      expect(formatFiat(0, 50000, FiatCurrency.usd), r'$0.00');
+      expect(formatFiat(0, 7654321, FiatCurrency.jpy), '¥0');
+    });
+
+    for (final network in [Network.signet, Network.testnet4]) {
+      testWidgets('a ${network.label} coin is worth zero in the currency', (
+        tester,
+      ) async {
+        await tester.pumpWidget(app(testCoins(network)));
+        await tester.pumpAndSettle();
+
+        // The list: the card says zero, in euros, as a real value would.
+        expect(find.text('€0.00'), findsOneWidget);
+        expect(find.text('€61.73'), findsNothing);
+
+        // The wallet: its balance and both rows.
+        await tester.tap(find.text('Cold storage'));
+        await tester.pumpAndSettle();
+        expect(find.text('€0.00'), findsNWidgets(3));
+        expect(find.textContaining('€'), findsNWidgets(3));
+
+        // The coin.
+        await tester.tap(find.text('UTXOs'));
+        await tester.pumpAndSettle();
+        expect(find.text('€0.00'), findsWidgets);
+        expect(find.text('€61.73'), findsNothing);
+      });
+    }
+
+    testWidgets('a mainnet coin keeps its value at the price', (tester) async {
+      await tester.pumpWidget(app(testCoins(Network.mainnet)));
+      await tester.pumpAndSettle();
+
+      expect(find.text('€61.73'), findsOneWidget);
+      expect(find.text('€0.00'), findsNothing);
+
+      await tester.tap(find.text('Cold storage'));
+      await tester.pumpAndSettle();
+      expect(find.text('€61.73'), findsOneWidget);
+      expect(find.text('€62.73'), findsOneWidget);
+      expect(find.text('-€1.00'), findsOneWidget);
+    });
+
+    testWidgets('hidden amounts stay hidden off mainnet', (tester) async {
+      final bridge = testCoins(Network.signet);
+      bridge.appPrefs['mobile.masked'] = '1';
+      await tester.pumpWidget(app(bridge));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('€'), findsNothing);
+      expect(findMasked(), findsWidgets);
+    });
+  });
+
   testWidgets('the "ago" clock ticks on screen, and rests behind it', (
     tester,
   ) async {
