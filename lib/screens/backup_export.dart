@@ -261,26 +261,43 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
         const SizedBox(height: GerfautSpacing.md),
         FieldLabel('Wallets', tokens: tokens),
         const SizedBox(height: GerfautSpacing.sm),
-        ChoiceGroup<_Scope>(
-          label: 'Wallets',
-          value: _scope,
-          options: [
-            ChoiceOption(
-              value: _Scope.all,
-              label: all == null
-                  ? 'All wallets'
-                  : 'All wallets (${all.length})',
-            ),
-            // Both counts equal means the second option would seal the
-            // same thing under another name: it is left out.
-            if (onNetwork != null && onNetwork != all!.length)
+        // Both counts equal means a network scope would seal the same
+        // thing under another name: there is no choice to make, and a
+        // group of one option would read as a control that does
+        // nothing. The scope is said plainly, as on the desktop.
+        if (all != null && onNetwork != null && onNetwork != all.length)
+          ChoiceGroup<_Scope>(
+            label: 'Wallets',
+            value: _scope,
+            options: [
+              ChoiceOption(
+                value: _Scope.all,
+                label: 'All wallets (${all.length})',
+              ),
               ChoiceOption(
                 value: _Scope.network,
                 label: '${active!.label} only ($onNetwork)',
               ),
-          ],
-          onChanged: (scope) => setState(() => _scope = scope),
-        ),
+            ],
+            onChanged: (scope) => setState(() => _scope = scope),
+          )
+        else
+          Text.rich(
+            TextSpan(
+              text: 'All wallets',
+              children: [
+                if (all != null)
+                  TextSpan(
+                    text: ' (${all.length})',
+                    style: TextStyle(
+                      color: tokens.textMuted,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+              ],
+            ),
+            style: tokens.body.copyWith(color: tokens.text),
+          ),
         const SizedBox(height: GerfautSpacing.md),
         SettingSwitch(
           title: 'Include node settings',
