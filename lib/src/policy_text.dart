@@ -4,6 +4,8 @@
 // functions over the core's snapshot, so every wording is tested
 // without a widget.
 
+import 'dart:math';
+
 import 'format.dart';
 import 'models.dart';
 
@@ -11,8 +13,9 @@ import 'models.dart';
 /// the same as the core's.
 const int blockSeconds = 600;
 
-/// A lock with at most this long to go is close enough to colour: the
-/// design system's threshold for the amber state.
+/// A lock with less than this to go is close enough to colour: the
+/// design system's threshold for the amber state, as the desktop app
+/// draws it. Thirty days exactly are not yet under it.
 const int soonThresholdSeconds = 30 * 86400;
 
 /// Seconds left before a countdown ends, or its block count converted
@@ -22,6 +25,56 @@ int? secondsLeft(Remaining remaining) {
   if (seconds != null) return seconds;
   final blocks = remaining.remainingBlocks;
   return blocks == null ? null : blocks * blockSeconds;
+}
+
+// --- order ----------------------------------------------------------------
+
+/// The branches in reading order, as the desktop app reads them: the
+/// primary paths first, then recovery, emergency and the rest, each
+/// from the nearest lock to the farthest. The core lists them as the
+/// policy wrote them.
+List<PolicyBranch> orderBranches(PolicySnapshot snapshot) {
+  int rank(BranchRole role) => switch (role) {
+    BranchRole.primary => 0,
+    BranchRole.recovery => 1,
+    BranchRole.emergency => 2,
+    BranchRole.other => 3,
+  };
+  final ranked = [
+    for (final (index, branch) in snapshot.branches.indexed)
+      (branch: branch, index: index, far: _farthest(branch, snapshot)),
+  ];
+  ranked.sort((a, b) {
+    final byRole = rank(a.branch.role).compareTo(rank(b.branch.role));
+    if (byRole != 0) return byRole;
+    final byLock = a.far.compareTo(b.far);
+    return byLock != 0 ? byLock : a.index.compareTo(b.index);
+  });
+  return [for (final entry in ranked) entry.branch];
+}
+
+/// The farthest required lock of a branch, in seconds: the full wait of
+/// a relative one, the distance of an absolute one from the tip and the
+/// clock. Zero without one.
+int _farthest(PolicyBranch branch, PolicySnapshot snapshot) {
+  var worst = 0;
+  for (final timelock in branch.timelocks) {
+    if (!timelock.required) continue;
+    final seconds = switch (timelock.lock) {
+      RelativeTimelock(lock: BlocksLock(:final blocks)) =>
+        blocks * blockSeconds,
+      RelativeTimelock(lock: SecondsLock(:final seconds)) => seconds,
+      // Never synced, no tip: the lock is as far as its height.
+      AbsoluteTimelock(lock: HeightLock(:final height)) =>
+        max(0, height - (snapshot.tipHeight ?? 0)) * blockSeconds,
+      AbsoluteTimelock(lock: TimeLock(:final unix)) => max(
+        0,
+        unix - snapshot.computedAt,
+      ),
+    };
+    worst = max(worst, seconds);
+  }
+  return worst;
 }
 
 // --- the policy in a sentence -------------------------------------------
@@ -44,10 +97,11 @@ String describePolicy(PolicySnapshot snapshot) {
       }
       return 'One key signs. Any coin is spendable now.';
     case PolicyKind.miniscript:
-      final primaries = snapshot.branches
+      final ordered = orderBranches(snapshot);
+      final primaries = ordered
           .where((b) => b.role == BranchRole.primary)
           .toList();
-      final others = snapshot.branches
+      final others = ordered
           .where((b) => b.role != BranchRole.primary)
           .toList();
       final sentences = <String>[
@@ -430,13 +484,13 @@ String _absolute(String lock, LockState state) {
 // --- branch state -------------------------------------------------------
 
 /// How a branch's state is coloured. The colour arrives only at the
-/// thresholds: open, or closing within thirty days; everything else is
+/// thresholds: open, or closing in under thirty days; everything else is
 /// neutral.
 enum StateTone {
   /// Spendable now.
   open,
 
-  /// Locked, with thirty days or less to go.
+  /// Locked, with less than thirty days to go.
   soon,
 
   /// Locked, further off than that.
@@ -452,13 +506,23 @@ enum StateTone {
 
 /// Where a branch stands, worded for its pill.
 class BranchStatus {
-  const BranchStatus(this.tone, this.label, {this.date, this.progress});
+  const BranchStatus(
+    this.tone,
+    this.label, {
+    this.date,
+    this.progress,
+    this.nextCoin,
+  });
 
   final StateTone tone;
 
   /// "Spendable now", "In 1 432 blocks ≈ 10 days", "3 of 5 coins
-  /// unlocked · next in about 12 days", "No coins yet".
+  /// unlocked · next in 12 days", "No coins yet".
   final String label;
+
+  /// What the coin that opens first has left, under a relative lock:
+  /// "1 432 blocks ≈ 10 days".
+  final String? nextCoin;
 
   /// The estimated day the countdown ends, when there is one.
   final String? date;
@@ -478,9 +542,12 @@ BranchStatus describeBranchState(PolicyBranch branch) {
     case NeedsPreimage():
       return const BranchStatus(StateTone.secret, 'Needs a secret');
     case LockedBranch(:final until):
+      // A wallet that never synced has no tip to count from: the lock
+      // stands, for a time nobody knows yet.
+      if (!_known(until)) return const BranchStatus(StateTone.far, 'Locked');
       return BranchStatus(
         _toneOf(until),
-        _countdown(until) ?? _untilLabel(branch),
+        'In ${remainingWords(until)}',
         date: _dateOf(until),
       );
     case PerCoinBranch(
@@ -490,29 +557,15 @@ BranchStatus describeBranchState(PolicyBranch branch) {
       :final next,
       :final total,
     ):
-      if (total == 1) {
-        // One coin: its own countdown reads better than "0 of 1 coins".
-        if (unlocked == 1) {
-          return const BranchStatus(StateTone.open, 'Spendable now');
-        }
-        if (next == null) {
-          return const BranchStatus(StateTone.idle, 'Waiting for a block');
-        }
-        return BranchStatus(
-          _toneOf(next),
-          _countdown(next) ?? 'Locked',
-          date: _dateOf(next),
-          progress: _progress(branch, next),
-        );
-      }
+      // Counted the same way whatever the number of coins, one
+      // included, as the desktop app counts them.
       final parts = <String>[
-        '$unlocked of $total coins unlocked',
-        if (next != null)
-          if (secondsLeft(next) case final int seconds)
-            'next in ${formatDuration(seconds)}',
-        if (waiting > 0) '$waiting waiting for a block',
+        '${groupThousands('$unlocked')} of ${groupThousands('$total')} '
+            '${total == 1 ? 'coin' : 'coins'} unlocked',
+        if (next != null) 'next in ${_remainingTime(next)}',
+        if (waiting > 0) '${groupThousands('$waiting')} waiting for a block',
       ];
-      final tone = locked == 0 && waiting == 0
+      final tone = locked == 0 && waiting == 0 && unlocked > 0
           ? StateTone.open
           : next != null
           ? _toneOf(next)
@@ -522,35 +575,47 @@ BranchStatus describeBranchState(PolicyBranch branch) {
         parts.join(' · '),
         date: next == null ? null : _dateOf(next),
         progress: next == null ? null : _progress(branch, next),
+        nextCoin: next == null ? null : remainingWords(next),
       );
   }
 }
 
+/// Whether any figure of a countdown is known.
+bool _known(Remaining remaining) =>
+    remaining.remainingBlocks != null ||
+    remaining.remainingSeconds != null ||
+    remaining.unlocksAtUnix != null;
+
+/// Amber under thirty days, from the time the core gives: a countdown
+/// without one is not coloured.
 StateTone _toneOf(Remaining remaining) {
-  final seconds = secondsLeft(remaining);
+  final seconds = remaining.remainingSeconds;
   if (seconds == null) return StateTone.far;
-  return seconds <= soonThresholdSeconds ? StateTone.soon : StateTone.far;
+  return seconds < soonThresholdSeconds ? StateTone.soon : StateTone.far;
 }
 
-/// "In 1 432 blocks ≈ 10 days", or "In about 10 days" for a lock the
-/// chain judges by time: the estimate is hedged once, by the "≈" where
-/// there is one and by the word where there is not.
-String? _countdown(Remaining remaining) {
+/// "1 432 blocks ≈ 10 days" when the figure is in blocks, "10 days"
+/// when it is in time alone. The "≈" is the hedge, and an estimate
+/// without one goes bare too, as on the desktop.
+String remainingWords(Remaining remaining) {
+  final seconds = remaining.remainingSeconds;
+  final time = seconds == null ? null : formatDuration(seconds, hedge: false);
   final blocks = remaining.remainingBlocks;
-  final seconds = secondsLeft(remaining);
-  if (seconds == null) return null;
-  if (blocks == null) return 'In ${formatDuration(seconds)}';
-  return 'In ${formatBlocks(blocks)} '
-      '≈ ${formatDuration(seconds, hedge: false)}';
+  if (blocks != null) {
+    return time == null
+        ? formatBlocks(blocks)
+        : '${formatBlocks(blocks)} ≈ $time';
+  }
+  return time ?? 'an unknown time';
 }
 
-/// "Until block 900 000", "Until Mar 17, 2030": where a locked branch
-/// stands when nothing counts down to its lock — a wallet that has
-/// never synced has no tip to count from. "Locked" when the branch
-/// names no absolute lock to point at.
-String _untilLabel(PolicyBranch branch) {
-  final lock = _absoluteLockText(branch);
-  return lock == null ? 'Locked' : 'Until $lock';
+/// The time alone, for a clause: "10 days".
+String _remainingTime(Remaining remaining) {
+  final seconds = remaining.remainingSeconds;
+  if (seconds != null) return formatDuration(seconds, hedge: false);
+  final blocks = remaining.remainingBlocks;
+  if (blocks != null) return formatBlocks(blocks);
+  return 'an unknown time';
 }
 
 String? _dateOf(Remaining remaining) {

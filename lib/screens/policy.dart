@@ -146,11 +146,12 @@ class _Loaded extends StatelessWidget {
     }
 
     // A single key has one path and it is open: a card would say the
-    // sentence a second time. The page keeps to its three lines.
+    // sentence a second time. The page keeps to its three lines. The
+    // others come in reading order, the primary path first.
     final cards = snapshot.kind == PolicyKind.singleKey
         ? const <Widget>[]
         : [
-            for (final branch in snapshot.branches)
+            for (final branch in orderBranches(snapshot))
               Padding(
                 padding: const EdgeInsets.only(bottom: GerfautSpacing.gutter),
                 child: _BranchCard(branch: branch, snapshot: snapshot),
@@ -218,6 +219,7 @@ class _BranchCard extends StatelessWidget {
     final status = describeBranchState(branch);
     final date = status.date;
     final progress = status.progress;
+    final nextCoin = status.nextCoin;
 
     return Container(
       width: double.infinity,
@@ -276,6 +278,22 @@ class _BranchCard extends StatelessWidget {
           ],
           const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
           _StatePill(status: status),
+          if (nextCoin != null) ...[
+            const SizedBox(height: GerfautSpacing.xs + 2),
+            // What the pill says in time, in blocks too: the coin that
+            // opens first.
+            Wrap(
+              spacing: GerfautSpacing.sm,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                FieldLabel('Next coin', tokens: tokens),
+                Text(
+                  nextCoin,
+                  style: tokens.bodySmall.copyWith(color: tokens.text),
+                ),
+              ],
+            ),
+          ],
           if (date != null) ...[
             const SizedBox(height: GerfautSpacing.xs + 2),
             Text(
@@ -385,7 +403,7 @@ class _KeyPill extends StatelessWidget {
 
 /// The state pill of a branch, its tone mapped to the system's three:
 /// the confirmed green with a check when open, the pending amber with a
-/// clock within thirty days, neutral otherwise.
+/// clock under thirty days, neutral otherwise.
 class _StatePill extends StatelessWidget {
   const _StatePill({required this.status});
 
