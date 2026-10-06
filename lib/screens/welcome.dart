@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/onboarding.dart';
+import '../src/updates.dart';
 import '../theme/tokens.dart';
 import '../widgets/brand.dart';
 import '../widgets/buttons.dart';
@@ -165,7 +166,8 @@ class _Page extends StatelessWidget {
   final WelcomePage page;
 
   /// The first page is where the app introduces itself by name; the
-  /// others carry their icon alone.
+  /// others carry their icon alone. On a 0.x version it also says, in
+  /// one line under its paragraph, that the app is a public beta.
   final bool first;
 
   @override
@@ -207,6 +209,29 @@ class _Page extends StatelessWidget {
                 style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                 textAlign: TextAlign.center,
               ),
+              if (first && isBetaVersion(appVersion)) ...[
+                const SizedBox(height: GerfautSpacing.sm),
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: 'Public beta.',
+                        style: TextStyle(
+                          color: tokens.pending,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const TextSpan(
+                        text:
+                            ' Check addresses and amounts on your signing '
+                            'device.',
+                      ),
+                    ],
+                  ),
+                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                  textAlign: TextAlign.center,
+                ),
+              ],
               const SizedBox(height: GerfautSpacing.xl),
             ],
           ),

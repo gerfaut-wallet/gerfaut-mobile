@@ -120,6 +120,9 @@ The first release: Gerfaut for Android.
   through Tor, or not at all if Tor cannot be reached. Nothing is asked
   while the app is disguised. The About settings turn it off, and keep the
   check on demand.
+- Settings › About marks a 0.x version as a beta, with a Report a problem
+  button that opens the issues of this repository. The first page of the
+  welcome tour says that Gerfaut is in public beta.
 
 ### Changed
 

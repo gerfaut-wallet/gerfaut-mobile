@@ -17,6 +17,7 @@ import 'package:gerfaut/src/updates.dart';
 import 'package:gerfaut/src/window.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/tap_target.dart';
+import 'package:gerfaut/widgets/status_pill.dart';
 import 'package:gerfaut/widgets/update_notice.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
@@ -108,6 +109,33 @@ void main() {
       multiLine: true,
     ).firstMatch(pubspec)!.group(1);
     expect(appVersion, stamped);
+  });
+
+  group('the beta', () {
+    test('every 0.x version is a beta, pre-releases included', () {
+      for (final version in [
+        '0.1.0',
+        '0.1.1',
+        '0.2.0',
+        '0.99.12',
+        'v0.3.0',
+        '0.2.0-rc.1',
+      ]) {
+        expect(isBetaVersion(version), isTrue, reason: version);
+      }
+    });
+
+    test('it stops at 1.0.0', () {
+      for (final version in ['1.0.0', '1.0.0-rc.1', '1.2.3', '2.0.0']) {
+        expect(isBetaVersion(version), isFalse, reason: version);
+      }
+    });
+
+    test('nothing that does not parse is called a beta', () {
+      for (final garbage in ['', 'beta', '0.1', '00.1.0']) {
+        expect(isBetaVersion(garbage), isFalse, reason: garbage);
+      }
+    });
   });
 
   group('versions', () {
@@ -580,6 +608,43 @@ void main() {
       expect(launcher.launched, [_releases]);
       // What an asked-for check finds is kept for the notice too.
       expect(bridge.appPrefs['updates.latest'], '0.2.0');
+    });
+
+    testWidgets('a 0.x version is marked Beta, with a way to report a '
+        'problem', (tester) async {
+      final launcher = FakeUrlLauncher();
+      UrlLauncherPlatform.instance = launcher;
+      await open(tester, _bridge());
+
+      final beta = isBetaVersion(appVersion);
+      final pill = find.widgetWithText(StatusPill, 'Beta');
+      expect(pill, beta ? findsOneWidget : findsNothing);
+      expect(
+        find.text(
+          'This is a public beta. Check addresses and amounts on your '
+          'signing device, and report anything that looks wrong.',
+        ),
+        beta ? findsOneWidget : findsNothing,
+      );
+      if (!beta) {
+        expect(find.text('Report a problem'), findsNothing);
+        return;
+      }
+      expect(tester.widget<StatusPill>(pill).tone, PillTone.pending);
+      // On the line of the version, after it.
+      expect(
+        tester.getCenter(pill).dy,
+        moreOrLessEquals(
+          tester.getCenter(find.text('Gerfaut $appVersion')).dy,
+          epsilon: 2,
+        ),
+      );
+
+      await tester.tap(find.text('Report a problem'));
+      await tester.pumpAndSettle();
+      expect(launcher.launched, [
+        'https://github.com/gerfaut-wallet/gerfaut-mobile/issues',
+      ]);
     });
 
     testWidgets('a Tor that is down is said as such, not as an outage', (

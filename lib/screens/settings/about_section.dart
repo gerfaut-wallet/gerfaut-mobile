@@ -12,12 +12,17 @@ import '../../theme/tokens.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/setting_switch.dart';
+import '../../widgets/status_pill.dart';
 import '../welcome.dart';
 
 export '../../src/updates.dart' show appVersion;
 
 /// The About card: the version, a release check on demand and the
 /// switch of the automatic one, and the way back to the welcome tour.
+///
+/// Every 0.x version is a public beta: the card says so next to the
+/// version, with one line on what that asks of you and a button to
+/// report a problem. Both go away by themselves at 1.0.0.
 class AboutSection extends ConsumerStatefulWidget {
   const AboutSection({super.key});
 
@@ -65,22 +70,48 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
     // named, and the page it opens is ours to choose, not the answer's.
     final newer = announcedVersion(result?.latest);
     final automatic = ref.watch(updateProvider).automatic;
+    final beta = isBetaVersion(appVersion);
     return SectionCard(
       icon: LucideIcons.info,
       title: 'About',
       children: [
-        Text.rich(
-          TextSpan(
-            text: 'Gerfaut $appVersion',
-            style: tokens.bodySmall,
-            children: [
-              TextSpan(
-                text: '  for Android',
-                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+        Wrap(
+          spacing: GerfautSpacing.sm,
+          runSpacing: GerfautSpacing.xs,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text('Gerfaut $appVersion', style: tokens.bodySmall),
+            if (beta)
+              const StatusPill.tone(
+                tone: PillTone.pending,
+                icon: LucideIcons.flaskConical,
+                label: 'Beta',
               ),
-            ],
-          ),
+            Text(
+              'for Android',
+              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+            ),
+          ],
         ),
+        if (beta) ...[
+          const SizedBox(height: GerfautSpacing.sm),
+          Text(
+            'This is a public beta. Check addresses and amounts on your '
+            'signing device, and report anything that looks wrong.',
+            style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: GhostButton(
+              label: 'Report a problem',
+              icon: LucideIcons.messageSquareWarning,
+              onPressed: () => launchUrl(
+                Uri.parse(issuesPageUrl),
+                mode: LaunchMode.externalApplication,
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: GerfautSpacing.md),
         if (_updateFailed)
           Padding(
