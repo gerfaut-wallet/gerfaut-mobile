@@ -32,8 +32,8 @@ class WidgetsSection extends ConsumerWidget {
         SettingSwitch(
           title: 'Show balances on widgets',
           hint: locked
-              ? 'Off while an app lock is set: the balance widget shows no '
-                    'wallet name and no amount, as a notification does.'
+              ? 'Off while an app lock is set: the balance widget then '
+                    'shows no wallet name and no amount.'
               : 'A widget is read over the shoulder: balances stay masked '
                     'until this is on, and whenever amounts are hidden in '
                     'the app.',

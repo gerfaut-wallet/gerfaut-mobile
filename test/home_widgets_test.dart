@@ -638,6 +638,25 @@ void main() {
       expect(board.data[WidgetKeys.balanceTotal], maskedValue);
     });
 
+    test('under an app lock, no name and no figure, whatever the '
+        'notifications show', () async {
+      final bridge = prefBridge(const {
+        'widgets.balances': '1',
+        'notify.new_tx': '1',
+        'notify.details': '1',
+      })..lock = const AppLock(kind: LockKind.pin, biometric: false);
+      final board = FakeWidgetBoard(installed: {HomeWidgets.balance});
+      await refreshWidgets(
+        bridge: bridge,
+        board: board,
+        bootstrap: () async {},
+        now: _now,
+      );
+      expect(board.data[WidgetKeys.balanceTotal], maskedValue);
+      expect(board.data[WidgetKeys.balanceRowName(1)], isNull);
+      expect(board.data[WidgetKeys.balanceRowFigure(1)], isNull);
+    });
+
     test('fetches only what the placed widgets need', () async {
       final bridge = _bridge();
       var priceAsks = 0;
