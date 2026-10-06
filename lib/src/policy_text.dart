@@ -558,11 +558,16 @@ BranchStatus describeBranchState(PolicyBranch branch) {
       :final total,
     ):
       // Counted the same way whatever the number of coins, one
-      // included, as the desktop app counts them.
+      // included, as the desktop app counts them. Before the first sync
+      // there is no tip to count the next coin from: that it waits is
+      // known, for how long is not yet, and the pill says when it will
+      // be, with no figure under it.
+      final counted = next != null && _known(next);
       final parts = <String>[
         '${groupThousands('$unlocked')} of ${groupThousands('$total')} '
             '${total == 1 ? 'coin' : 'coins'} unlocked',
-        if (next != null) 'next in ${_remainingTime(next)}',
+        if (next != null)
+          counted ? 'next in ${_remainingTime(next)}' : nextUnknownWords,
         if (waiting > 0) '${groupThousands('$waiting')} waiting for a block',
       ];
       final tone = locked == 0 && waiting == 0 && unlocked > 0
@@ -575,10 +580,13 @@ BranchStatus describeBranchState(PolicyBranch branch) {
         parts.join(' · '),
         date: next == null ? null : _dateOf(next),
         progress: next == null ? null : _progress(branch, next),
-        nextCoin: next == null ? null : remainingWords(next),
+        nextCoin: counted ? remainingWords(next) : null,
       );
   }
 }
+
+/// The tail of a per-coin pill whose next coin has no count yet.
+const String nextUnknownWords = 'next known after the first sync';
 
 /// Whether any figure of a countdown is known.
 bool _known(Remaining remaining) =>

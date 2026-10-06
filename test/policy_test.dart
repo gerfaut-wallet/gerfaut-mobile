@@ -580,7 +580,7 @@ void main() {
       expect(toneAt(4319), StateTone.soon);
     });
 
-    test('a coin whose count is unknown is locked, for no known time', () {
+    test('a coin whose count is unknown is known after the first sync', () {
       // The core knows the coin waits and not how long: before the first
       // sync there is no tip to count from. No figure, no colour, no bar.
       final json = lianaPolicyJson();
@@ -592,8 +592,12 @@ void main() {
       };
       final snapshot = _snapshot(json);
       final status = describeBranchState(snapshot.branches[1]);
-      expect(status.label, '0 of 1 coin unlocked · next in an unknown time');
-      expect(status.nextCoin, 'an unknown time');
+      expect(
+        status.label,
+        '0 of 1 coin unlocked · next known after the first sync',
+      );
+      // The pill says it: a "Next coin" line would only say it again.
+      expect(status.nextCoin, isNull);
       expect(status.tone, StateTone.far);
       expect(status.date, isNull);
       expect(status.progress, isNull);
