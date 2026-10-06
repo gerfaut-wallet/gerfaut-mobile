@@ -127,7 +127,6 @@ class TxDiagram extends ConsumerStatefulWidget {
     required this.outputs,
     this.feeSats,
     this.feeNote,
-    this.maxRows = _rowsPerSide,
   });
 
   final List<TxBranch> inputs;
@@ -141,9 +140,6 @@ class TxDiagram extends ConsumerStatefulWidget {
   /// word — the broadcast preview marks a fee the PSBT states and no
   /// backend confirmed. Amber, the tone of a caution. Nothing when null.
   final String? feeNote;
-
-  /// Boxes kept per side before the rest folds into "+N more".
-  final int maxRows;
 
   @override
   ConsumerState<TxDiagram> createState() => _TxDiagramState();
@@ -163,8 +159,8 @@ class _TxDiagramState extends ConsumerState<TxDiagram> {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final masked = ref.watch(maskedProvider);
     final unit = ref.watch(unitProvider);
-    final inputs = _fold(widget.inputs, widget.maxRows, side: 'inputs');
-    final outputs = _fold(widget.outputs, widget.maxRows, side: 'outputs');
+    final inputs = _fold(widget.inputs, _rowsPerSide, side: 'inputs');
+    final outputs = _fold(widget.outputs, _rowsPerSide, side: 'outputs');
     final feeSats = (widget.feeSats ?? 0) > 0 ? widget.feeSats : null;
 
     List<Color> inkOf(List<TxBranch> branches) => [
@@ -369,7 +365,8 @@ class _BranchBox extends StatelessWidget {
       // The role is carried by an icon, and an icon is nothing to a
       // screen reader: it goes into the box's own name, or the reading
       // is an address and a number with no say in what they are.
-      label: '${role.name}, ${branch.label}, $amount',
+      label:
+          '${role.name}, ${branch.label}, ${spokenIfMasked(amount) ?? amount}',
       excludeSemantics: true,
       child: _Box(
         tokens: tokens,
@@ -512,6 +509,7 @@ class _Figure extends StatelessWidget {
       alignment: Alignment.centerLeft,
       child: Text(
         text,
+        semanticsLabel: spokenIfMasked(text),
         style: tokens
             .figureOf(
               size: _boxText,

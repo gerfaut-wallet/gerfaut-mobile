@@ -16,6 +16,7 @@ import 'format.dart';
 import 'models.dart';
 import 'state.dart';
 import 'vault_key.dart';
+import 'prefs.dart';
 
 /// The three providers, by the class name Android knows them under.
 abstract final class HomeWidgets {
@@ -34,6 +35,14 @@ abstract final class WidgetKeys {
   static const String priceFigure = 'price.figure';
   static const String priceChange = 'price.change';
   static const String priceAsOf = 'price.asOf';
+
+  /// The as-of line for an instance too narrow for [priceAsOf]; absent
+  /// when that line is already as short as it can be and stay true.
+  static const String priceAsOfNarrow = 'price.asOfNarrow';
+
+  /// When the quote was fetched, in unix seconds. No widget shows it:
+  /// the as-of lines are written again from it while no new quote comes.
+  static const String priceAt = 'price.at';
   static const String balanceTotal = 'balance.total';
   static const String balanceSynced = 'balance.synced';
   static const String networkHeight = 'network.height';
@@ -50,15 +59,24 @@ abstract final class WidgetKeys {
 
 /// What the price widget shows.
 class PricePayload {
-  const PricePayload({required this.figure, this.change, required this.asOf});
+  const PricePayload({
+    required this.figure,
+    this.change,
+    required this.at,
+    required this.asOf,
+    this.asOfNarrow,
+  });
 
   /// The quote as the widget states it: the price of one bitcoin in the
   /// quote's currency, in the same figures the app's own price line
-  /// uses, and the clock time it was fetched at.
-  factory PricePayload.of(PriceQuote quote) {
+  /// uses, and when it was fetched, as [priceAsOf] says it [now].
+  factory PricePayload.of(PriceQuote quote, {DateTime? now}) {
+    final asOf = priceAsOf(quote.at, now: now);
     return PricePayload(
       figure: formatFiatPrice(quote.rate, quote.currency),
-      asOf: 'as of ${formatClock(quote.at)}',
+      at: quote.at,
+      asOf: asOf.full,
+      asOfNarrow: asOf.narrow,
     );
   }
 
@@ -66,6 +84,8 @@ class PricePayload {
     WidgetKeys.priceFigure,
     WidgetKeys.priceChange,
     WidgetKeys.priceAsOf,
+    WidgetKeys.priceAsOfNarrow,
+    WidgetKeys.priceAt,
   ];
 
   final String figure;
@@ -74,13 +94,42 @@ class PricePayload {
   /// quotes the core serves carry none yet, so the line stays hidden.
   final String? change;
 
+  /// When the quote was fetched, in unix seconds.
+  final int at;
+
   final String asOf;
+  final String? asOfNarrow;
 
   Map<String, String?> toData() => {
     WidgetKeys.priceFigure: figure,
     WidgetKeys.priceChange: change,
     WidgetKeys.priceAsOf: asOf,
+    WidgetKeys.priceAsOfNarrow: asOfNarrow,
+    WidgetKeys.priceAt: '$at',
   };
+}
+
+/// The line under a price fetched at [at], as the widget says it [now]:
+/// the clock time alone on the day of the quote, `as of 09:41`; the day
+/// and the time on any later day, `as of Oct 03, 09:41`; the day and the
+/// year once the year has turned, `as of Dec 31, 2025`. A price kept up
+/// for days must not pass for this morning's.
+///
+/// [narrow] is the line for an instance too narrow for the time,
+/// `as of Oct 03`; null when [full] is already as short as it can be
+/// and stay true. The year is never the part dropped: a day without it
+/// would read as this year's.
+({String full, String? narrow}) priceAsOf(int at, {DateTime? now}) {
+  final then = DateTime.fromMillisecondsSinceEpoch(at * 1000);
+  final today = (now ?? DateTime.now()).toLocal();
+  if (then.year != today.year) {
+    return (full: 'as of ${formatDate(at)}', narrow: null);
+  }
+  if (then.month == today.month && then.day == today.day) {
+    return (full: 'as of ${formatClock(at)}', narrow: null);
+  }
+  final day = formatDayMonth(at);
+  return (full: 'as of $day, ${formatClock(at)}', narrow: 'as of $day');
 }
 
 /// One wallet on the balance widget.
@@ -98,13 +147,21 @@ class BalancePayload {
   /// The wallets as the widget states them, in the order the home
   /// screen lists them. Masked, the figures go and the names stay: a
   /// name is allowed off the vault, an amount only when asked for.
+  ///
+  /// [locked], an app lock is set, and neither goes: the widget sits on
+  /// the home screen of a phone whose app is locked, for whoever holds
+  /// it, as a notification does, and says what a notification says
+  /// then, which is nothing of the wallets. The total stays, masked, so
+  /// the widget still shows when it was last brought up to date.
   factory BalancePayload.of(
     List<WalletMeta> wallets, {
     required AmountUnit unit,
     required bool masked,
+    bool locked = false,
     DateTime? now,
   }) {
-    String figure(int sats) => masked ? maskedValue : formatAmount(sats, unit);
+    String figure(int sats) =>
+        masked || locked ? maskedValue : formatAmount(sats, unit);
     var sum = 0;
     for (final wallet in wallets) {
       sum += wallet.cachedBalance.total;
@@ -112,8 +169,9 @@ class BalancePayload {
     return BalancePayload(
       total: figure(sum),
       rows: [
-        for (final wallet in wallets.take(maxRows))
-          (name: wallet.name, figure: figure(wallet.cachedBalance.total)),
+        if (!locked)
+          for (final wallet in wallets.take(maxRows))
+            (name: wallet.name, figure: figure(wallet.cachedBalance.total)),
       ],
       synced: syncedLine(wallets, now: now),
     );
@@ -213,8 +271,8 @@ String syncedLine(List<WalletMeta> wallets, {DateTime? now}) {
   Map<String, String> prefs,
 ) {
   final currency =
-      FiatCurrency.fromId(prefs['display.fiat_currency']) ?? FiatCurrency.eur;
-  final stored = PriceSource.fromId(prefs['display.fiat_source']);
+      FiatCurrency.fromId(prefs[Pref.fiatCurrency]) ?? FiatCurrency.eur;
+  final stored = PriceSource.fromId(prefs[Pref.fiatSource]);
   final source = stored != null && stored.supportsCurrency(currency)
       ? stored
       : PriceSource.coingecko;
@@ -229,6 +287,9 @@ String syncedLine(List<WalletMeta> wallets, {DateTime? now}) {
 abstract class WidgetBoard {
   /// Stores one string under [key]; null removes it.
   Future<void> saveWidgetData(String key, String? value);
+
+  /// The string stored under [key], null when there is none.
+  Future<String?> readWidgetData(String key);
 
   /// Asks every instance of the provider [name] to redraw.
   Future<void> updateWidget(String name);
@@ -246,6 +307,10 @@ class HomeWidgetBoard implements WidgetBoard {
   @override
   Future<void> saveWidgetData(String key, String? value) =>
       _quietly(() => HomeWidget.saveWidgetData<String>(key, value));
+
+  @override
+  Future<String?> readWidgetData(String key) =>
+      _quietly(() => HomeWidget.getWidgetData<String>(key));
 
   @override
   Future<void> updateWidget(String name) => _quietly(
@@ -304,7 +369,7 @@ class WidgetBalancesNotifier extends Notifier<bool> {
     state = on;
     ref
         .read(bridgeProvider)
-        .setAppPref('widgets.balances', on ? '1' : '0')
+        .setAppPref(Pref.widgetBalances, on ? '1' : '0')
         .catchError((_) {});
   }
 }
@@ -339,9 +404,13 @@ class WidgetPriceNotifier extends AsyncNotifier<PriceQuote?> {
     final appQuote = ref.watch(priceProvider);
     final currency = ref.watch(fiatCurrencyProvider);
     final source = ref.watch(fiatSourceProvider);
+    final inFront = ref.watch(appInFrontProvider);
     final installed = await ref.watch(installedWidgetsProvider.future);
     if (!installed.contains(HomeWidgets.price)) return null;
     if (fiatOn) return appQuote.valueOrNull;
+    // Out of sight the widget is the periodic task's to refresh: no
+    // minute clock runs behind the launcher.
+    if (!inFront) return state.valueOrNull;
     ref.onDispose(() => _timer?.cancel());
     // Scheduled before the fetch so failures retry on the same cadence
     // as the app's own quote.
@@ -376,6 +445,12 @@ class WidgetFeed {
     _ref.listen(unitProvider, republish);
     _ref.listen(maskedProvider, republish);
     _ref.listen(widgetBalancesProvider, republish);
+    // A lock set or taken off changes what the balance widget may say.
+    _ref.listen(settingsProvider, (previous, next) {
+      final before = previous?.valueOrNull?.appLock != null;
+      final now = next.valueOrNull?.appLock != null;
+      if (next.hasValue && before != now) publish();
+    });
     _ref.listen(installedWidgetsProvider, (_, next) {
       if (next.isLoading) return;
       final installed = next.valueOrNull;
@@ -442,6 +517,7 @@ class WidgetFeed {
         wallets,
         unit: _ref.read(unitProvider),
         masked: _ref.read(maskedProvider) || !_ref.read(widgetBalancesProvider),
+        locked: settings.appLock != null,
       ),
       network: NetworkPayload.of(wallets, network: settings.activeNetwork),
     );
@@ -457,6 +533,7 @@ class WidgetFeed {
     PricePayload? price,
     required BalancePayload balance,
     required NetworkPayload network,
+    DateTime? now,
   }) async {
     Future<void> put(String name, Map<String, String?> data) async {
       for (final entry in data.entries) {
@@ -475,6 +552,20 @@ class WidgetFeed {
       await clear(PricePayload.keys);
     } else if (price != null) {
       await put(HomeWidgets.price, price.toData());
+    } else {
+      // The last quote stands, but its time is said again from when it
+      // was fetched: written once, "as of 23:50" would still say so the
+      // next day. A store from before the key holds no time to say.
+      final at = int.tryParse(
+        await board.readWidgetData(WidgetKeys.priceAt) ?? '',
+      );
+      if (at != null) {
+        final asOf = priceAsOf(at, now: now);
+        await put(HomeWidgets.price, {
+          WidgetKeys.priceAsOf: asOf.full,
+          WidgetKeys.priceAsOfNarrow: asOf.narrow,
+        });
+      }
     }
     if (installed.contains(HomeWidgets.balance)) {
       await put(HomeWidgets.balance, balance.toData());
@@ -494,6 +585,26 @@ class WidgetFeed {
 final widgetFeedProvider = Provider<WidgetFeed>((ref) => WidgetFeed(ref));
 
 // --- the background refresh --------------------------------------------
+
+/// Whether the background refresh may ask for the price without Tor
+/// being started for it.
+///
+/// With a .onion node the core sends the price through Tor, and nothing
+/// at all while Tor cannot be had. Asked from here, that route would
+/// start the built-in client every quarter hour for one figure: a
+/// bootstrap of up to a minute and a half, on battery, behind the
+/// launcher. So the price follows only a Tor that already runs: the
+/// built-in client once something else in this process brought it up
+/// (a sync, the live watch, the open app), or the Tor app chosen as
+/// System, which the core only knocks on and never starts. Otherwise
+/// nothing is asked, and the widget keeps the last price with the time
+/// it carries. Nothing goes out in the clear either way: the core sees
+/// to that whatever this says.
+Future<bool> priceWithoutStartingTor(GerfautBridge bridge) async {
+  if (!await bridge.usesTor()) return true;
+  final tor = await bridge.torStatus();
+  return tor.mode == TorMode.system || tor.bootstrapped;
+}
 
 /// What Android runs every quarter hour while widgets are placed and
 /// Gerfaut is closed: open the vault, read what the placed widgets
@@ -519,7 +630,9 @@ Future<bool> refreshWidgets({
     if (installed.contains(HomeWidgets.price)) {
       final choice = priceChoice(prefs);
       try {
-        quote = await bridge.fetchPrice(choice.source, choice.currency);
+        if (await priceWithoutStartingTor(bridge)) {
+          quote = await bridge.fetchPrice(choice.source, choice.currency);
+        }
       } catch (_) {
         // The last quote stays up, with the time it carries.
       }
@@ -527,15 +640,16 @@ Future<bool> refreshWidgets({
     await WidgetFeed.write(
       board,
       installed: installed,
-      price: quote == null ? null : PricePayload.of(quote),
+      price: quote == null ? null : PricePayload.of(quote, now: now),
       balance: BalancePayload.of(
         wallets,
-        unit: AmountUnit.fromId(prefs['display.unit']) ?? AmountUnit.btc,
-        masked:
-            prefs['mobile.masked'] == '1' || prefs['widgets.balances'] != '1',
+        unit: AmountUnit.fromId(prefs[Pref.unit]) ?? AmountUnit.btc,
+        masked: prefs[Pref.masked] == '1' || prefs[Pref.widgetBalances] != '1',
+        locked: settings.appLock != null,
         now: now,
       ),
       network: NetworkPayload.of(wallets, network: network, now: now),
+      now: now,
     );
     return true;
   } on VaultInUseException {

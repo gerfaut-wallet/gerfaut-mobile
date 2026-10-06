@@ -34,6 +34,9 @@ class _RecordingNotifications implements NotificationService {
   /// Answers a clear the way a platform without the plugin does.
   bool refuseClear = false;
   @override
+  Future<bool> deliverable() async => true;
+
+  @override
   Future<void> init() async {}
   @override
   Future<bool> requestPermission() async => true;
@@ -191,6 +194,23 @@ void main() {
       expect(platform.calls, ['stop']);
       expect(bridge.appPrefs['notify.background'], '900');
       expect(disguise.disguised, isTrue);
+    });
+
+    testWidgets('the sheet says nothing will notify, before confirming', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_securityApp(_locked(), FakeDisguise()));
+      await tester.pumpAndSettle();
+      await tester.tap(_disguiseSwitch());
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Gerfaut posts no notification while disguised: one would show '
+          'its name. Background checks stay silent, and home-screen widgets '
+          'are turned off.',
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('without Live, the sheet does not mention it', (tester) async {

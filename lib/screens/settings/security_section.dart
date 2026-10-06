@@ -5,7 +5,6 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../src/bridge.dart';
 import '../../src/disguise.dart';
-import '../../src/identity.dart';
 import '../../src/lock.dart';
 import '../../src/models.dart';
 import '../../src/notifications.dart';
@@ -16,7 +15,7 @@ import '../../widgets/choice_group.dart';
 import '../../widgets/notice.dart';
 import '../../widgets/password_field.dart';
 import '../../widgets/section_card.dart';
-import '../confirm_identity.dart';
+import '../../widgets/setting_switch.dart';
 
 /// The settings card that turns the lock on and changes its secret.
 class SecuritySection extends ConsumerStatefulWidget {
@@ -34,8 +33,6 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
   void _afterChange() => ref.invalidate(settingsProvider);
 
   Future<void> _setLock({LockKind? kind}) async {
-    if (kind == null && !await _mayChooseFirstLock()) return;
-    if (!mounted) return;
     final chosen = await showModalBottomSheet<_NewSecret>(
       context: context,
       isScrollControlled: true,
@@ -53,37 +50,6 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
     } on BridgeException catch (error) {
       if (mounted) setState(() => _error = error.message);
     }
-  }
-
-  /// Whether whoever holds the phone may choose its first app lock.
-  ///
-  /// With a Premium key here, the app lock is what proves the owner
-  /// before a device is approved, the key changed or the account
-  /// deleted; until one is set, the phone's own screen lock does. A
-  /// first lock chosen by whoever holds the phone unlocked would hand
-  /// them that proof, so the phone's screen lock is asked first. A phone
-  /// without one has no owner's secret to ask for, and without a key
-  /// there is nothing the lock would stand in front of: the lock is set
-  /// as it always was.
-  ///
-  /// A first connection whose answer was lost counts as a key: the
-  /// vault holds it only once the server answers, but the core sends it
-  /// again on its own, and the account may already be this phone's.
-  Future<bool> _mayChooseFirstLock() async {
-    final PremiumView premium;
-    try {
-      premium = await ref.read(bridgeProvider).premiumState();
-    } on BridgeException catch (error) {
-      if (mounted) setState(() => _error = error.message);
-      return false;
-    }
-    if (!premium.hasKey && !premium.connectPending) return true;
-    final outcome = await ref
-        .read(screenLockGateProvider)
-        .confirm(confirmItsYouTitle);
-    // Refused: a change of mind, or not the owner. The phone said why,
-    // if anything needed saying.
-    return outcome != ScreenLockOutcome.refused;
   }
 
   Future<void> _turnOff(LockKind kind) async {
@@ -129,7 +95,7 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
     final confirmed = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => _DisguiseSheet(
+      builder: (_) => DisguiseSheet(
         liveOn: ref.read(backgroundCheckProvider) == BackgroundCheck.live,
       ),
     );
@@ -207,36 +173,14 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
       icon: LucideIcons.lock,
       title: 'Security',
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'App lock',
-                    style: tokens.bodySmall.copyWith(
-                      fontWeight: FontWeight.w500,
-                      fontVariations: const [FontVariation('wght', 500)],
-                    ),
-                  ),
-                  Text(
-                    'Asked when Gerfaut opens and every time it comes back '
-                    'from the background. The vault is encrypted either way; '
-                    'the lock is what stops someone holding your unlocked '
-                    'phone.',
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: GerfautSpacing.sm),
-            Switch(
-              value: lock != null,
-              onChanged: (on) => on ? _setLock() : _turnOff(lock!.kind),
-            ),
-          ],
+        SettingSwitch(
+          title: 'App lock',
+          hint:
+              'Asked when Gerfaut opens and every time it comes back from '
+              'the background. The vault is encrypted either way; the lock '
+              'is what stops someone holding your unlocked phone.',
+          value: lock != null,
+          onChanged: (on) => on ? _setLock() : _turnOff(lock!.kind),
         ),
         if (lock != null) ...[
           const SizedBox(height: GerfautSpacing.sm),
@@ -258,55 +202,22 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
           ),
           if (canBiometrics) ...[
             const SizedBox(height: GerfautSpacing.md),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Unlock with biometrics',
-                    style: tokens.bodySmall.copyWith(
-                      fontWeight: FontWeight.w500,
-                      fontVariations: const [FontVariation('wght', 500)],
-                    ),
-                  ),
-                ),
-                Switch(
-                  value: lock.biometric,
-                  onChanged: (on) => _setBiometric(on, lock.kind),
-                ),
-              ],
+            SettingSwitch(
+              title: 'Unlock with biometrics',
+              value: lock.biometric,
+              onChanged: (on) => _setBiometric(on, lock.kind),
             ),
           ],
           const SizedBox(height: GerfautSpacing.md),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Disguise the app',
-                      style: tokens.bodySmall.copyWith(
-                        fontWeight: FontWeight.w500,
-                        fontVariations: const [FontVariation('wght', 500)],
-                      ),
-                    ),
-                    Text(
-                      'Shows a calculator in the launcher. Open the wallet by '
-                      'typing your PIN, then =.',
-                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: GerfautSpacing.sm),
-              Switch(
-                value: disguised,
-                // A password is not something you type into a calculator:
-                // the disguise needs a PIN lock.
-                onChanged: pinLock ? _setDisguise : null,
-              ),
-            ],
+          SettingSwitch(
+            title: 'Disguise the app',
+            hint:
+                'Shows a calculator in the launcher. Open the wallet by '
+                'typing your PIN, then =.',
+            value: disguised,
+            // A password is not something you type into a calculator: the
+            // disguise needs a PIN lock.
+            onChanged: pinLock ? _setDisguise : null,
           ),
           if (!pinLock) ...[
             const SizedBox(height: GerfautSpacing.xs),
@@ -319,9 +230,13 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
         ],
         if (_error != null) ...[
           const SizedBox(height: GerfautSpacing.sm),
-          Text(
-            _error!,
-            style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+          // Said aloud as it appears.
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              _error!,
+              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+            ),
           ),
         ],
       ],
@@ -362,13 +277,17 @@ class _SetLockSheetState extends State<_SetLockSheet> {
 
   /// What is wrong with the pair, in the core's own terms so the screen
   /// never promises something the core would refuse.
+  /// The core's own rules, checked before the sheet closes: a refusal
+  /// after it would take the typing with it. Lengths are counted in
+  /// characters, as the core counts them, not in UTF-16 units.
   String? _check() {
     final secret = _secretController.text;
+    final length = secret.characters.length;
     if (_kind == LockKind.pin) {
-      if (secret.length < 4 || secret.length > 12) {
+      if (length < 4 || length > 12 || !RegExp(r'^\d+$').hasMatch(secret)) {
         return 'A PIN is 4 to 12 digits.';
       }
-    } else if (secret.length < 8) {
+    } else if (length < 8) {
       return 'A password is at least 8 characters.';
     }
     if (_confirmController.text != secret) return 'The two entries differ.';
@@ -438,6 +357,7 @@ class _SetLockSheetState extends State<_SetLockSheet> {
                 label: _kind == LockKind.pin
                     ? 'Current PIN'
                     : 'Current password',
+                pin: _kind == LockKind.pin,
                 controller: _currentController,
                 onChanged: () => setState(() => _problem = null),
               ),
@@ -446,6 +366,7 @@ class _SetLockSheetState extends State<_SetLockSheet> {
             PasswordField(
               key: const Key('lock.secret'),
               label: _kind == LockKind.pin ? 'New PIN' : 'New password',
+              pin: _kind == LockKind.pin,
               controller: _secretController,
               onChanged: () => setState(() => _problem = null),
             ),
@@ -453,15 +374,20 @@ class _SetLockSheetState extends State<_SetLockSheet> {
             PasswordField(
               key: const Key('lock.confirm'),
               label: 'Confirm',
+              pin: _kind == LockKind.pin,
               controller: _confirmController,
               onChanged: () => setState(() => _problem = null),
               onSubmitted: _submit,
             ),
             if (_problem != null) ...[
               const SizedBox(height: GerfautSpacing.sm),
-              Text(
-                _problem!,
-                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+              // Said aloud as it appears.
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  _problem!,
+                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                ),
               ),
             ],
             const SizedBox(height: GerfautSpacing.md),
@@ -534,6 +460,7 @@ class _ConfirmSecretSheetState extends State<_ConfirmSecretSheet> {
           PasswordField(
             key: const Key('lock.current'),
             label: widget.kind == LockKind.pin ? 'PIN' : 'Password',
+            pin: widget.kind == LockKind.pin,
             controller: _controller,
             autofocus: true,
             onSubmitted: () => Navigator.of(context).pop(_controller.text),
@@ -554,24 +481,31 @@ class _ConfirmSecretSheetState extends State<_ConfirmSecretSheet> {
 /// stays, said once as plain facts, and the one consequence that bites
 /// in a note of its own. Five amber panels in a row read as a wall of
 /// warnings, and a wall is skipped; one panel is read.
-class _DisguiseSheet extends StatelessWidget {
-  const _DisguiseSheet({this.liveOn = false});
+class DisguiseSheet extends StatelessWidget {
+  const DisguiseSheet({super.key, this.liveOn = false});
 
   /// Live watch is what looks for transactions right now: the sheet
   /// says it is about to stop.
   final bool liveOn;
 
   /// What stops with the disguise when Live is on. Its permanent
-  /// notification is headed with the app's name, so it cannot stay.
+  /// notification is headed with the app's name, so it cannot stay, and
+  /// taking the disguise off later does not bring it back by itself.
   static const String liveFact =
-      'Live watch is turned off, and the check for transactions goes back '
-      'to every 15 minutes.';
+      'Live watch is turned off. Turn it back on in Notifications once the '
+      'disguise is off.';
+
+  /// Every notification of the app's own is headed with its name.
+  static const String silenceFact =
+      'Gerfaut posts no notification while disguised: one would show its '
+      'name. Background checks stay silent, and home-screen widgets are '
+      'turned off.';
 
   static const List<String> facts = [
     'The launcher will show a calculator named "Calculator".',
     'Open the wallet by typing your PIN into it, then =.',
     'Settings → Apps and the app store still list "Gerfaut".',
-    'Notifications and home-screen widgets are turned off while disguised.',
+    silenceFact,
     'Clear your recent apps once: Android may still show an older Gerfaut '
         'thumbnail.',
   ];

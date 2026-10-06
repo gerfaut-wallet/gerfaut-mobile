@@ -2,17 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../src/bridge.dart';
+import '../../src/live.dart';
 import '../../src/models.dart';
-import '../../src/premium.dart';
 import '../../src/state.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/notice.dart';
 import '../../widgets/reorder.dart';
 import '../../widgets/section_card.dart';
+import '../../widgets/setting_switch.dart';
+import '../../widgets/status_pill.dart';
+import '../../widgets/tap_target.dart';
 import '../../widgets/wallet_icon.dart';
-import '../confirm_identity.dart';
 import 'fields.dart';
+import '../../widgets/toast.dart';
 
 /// The Wallets section: the gap limit every wallet shares, then the
 /// wallets of the active network in the order the home screen lists
@@ -91,58 +95,52 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
       _gapLimitController.text = '$current';
       return;
     }
+    // Committed on blur, which leaving the page is too: the views are
+    // read again through the container, which outlives the page.
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
       await ref.read(bridgeProvider).setGapLimit(parsed);
+      container.invalidate(settingsProvider);
+      container.invalidate(walletsProvider);
+      container.invalidate(snapshotProvider);
+      if (!mounted) return;
       _seededGapLimit = parsed;
       _gapLimitController.text = '$parsed';
-      ref.invalidate(settingsProvider);
-      ref.invalidate(walletsProvider);
-      ref.invalidate(snapshotProvider);
-      if (mounted) _toast('Setting saved');
+      _toast('Setting saved');
     } catch (_) {
-      _gapLimitController.text = '$current';
+      if (mounted) _gapLimitController.text = '$current';
     }
   }
 
   void _toast(String message) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(Toast(message));
   }
 
   Future<void> _rename(String id) async {
     final name = _renameController.text.trim();
     if (name.isEmpty) return;
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
       await ref.read(bridgeProvider).renameWallet(id, name);
-      ref.invalidate(walletsProvider);
-      ref.invalidate(snapshotProvider(id));
+      container.invalidate(walletsProvider);
+      container.invalidate(snapshotProvider(id));
+      if (!mounted) return;
       setState(() => _renamingId = null);
       _toast('Setting saved');
     } catch (error) {
-      setState(() => _walletError = '$error');
+      if (mounted) setState(() => _walletError = '$error');
     }
   }
 
   Future<void> _remove(String id) async {
     if (_removingId != null) return;
-    // A wallet the server watches leaves its watch with it, and its
-    // alerts stop: whoever holds the phone proves they own it first,
-    // as for stopping the watch from the Premium section.
-    final premium = ref.read(premiumStateProvider).valueOrNull;
-    final watched = premium != null && premium.hasKey && premium.consented(id);
-    // Held before the first await: the lists are read again even if
-    // the page was left meanwhile. `ref` dies with it.
+    // Held before the first await: the list is read again even if the
+    // page was left meanwhile. `ref` dies with it.
     final container = ProviderScope.containerOf(context, listen: false);
     setState(() => _removingId = id);
     try {
-      if (watched && !await confirmIdentity(context, ref)) return;
-      if (!mounted) return;
       await ref.read(bridgeProvider).removeWallet(id);
       container.invalidate(walletsProvider);
-      // The server is told after the answer, and the Premium card reads
-      // its list again rather than keep a row for a wallet that is gone.
-      container.invalidate(premiumStateProvider);
-      container.invalidate(premiumWalletsProvider);
       if (!mounted) return;
       setState(() => _confirmRemoveId = null);
       _toast('Wallet removed');
@@ -183,10 +181,11 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
     final chosen = await WalletIconPicker.show(context, current: wallet.icon);
     if (chosen == null || chosen == wallet.icon || !mounted) return;
     setState(() => _walletError = null);
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
       await ref.read(bridgeProvider).setWalletIcon(wallet.id, chosen);
-      ref.invalidate(walletsProvider);
-      ref.invalidate(snapshotProvider(wallet.id));
+      container.invalidate(walletsProvider);
+      container.invalidate(snapshotProvider(wallet.id));
       if (mounted) _toast('Setting saved');
     } catch (error) {
       if (mounted) setState(() => _walletError = '$error');
@@ -217,14 +216,15 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
       _order = ids;
       _walletError = null;
     });
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
       await ref.read(bridgeProvider).reorderWallets(ids);
       // Read the vault back, then let the local order go: nothing snaps
       // back on the way, and an order set on the home screen afterwards
       // is followed here rather than overruled by a drop long since
       // landed. A newer drop keeps its own until then.
-      ref.invalidate(walletsProvider);
-      await ref.read(walletsProvider.future);
+      container.invalidate(walletsProvider);
+      await container.read(walletsProvider.future);
       if (!mounted || !identical(_order, ids)) return;
       setState(() => _order = null);
     } catch (error) {
@@ -254,21 +254,6 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
     }
     _seedGapLimit(settings);
     final shown = _inOrder(wallets);
-    // Whether removing a wallet here also takes it off the server, for
-    // the removal note. The vault tells the server about a wallet it
-    // holds a consent for, under a key: that is what the core acts on.
-    // The server's own list, once it has answered, says whether there
-    // is still anything there to take off; until then the consent is
-    // the best word there is.
-    final premium = ref.watch(premiumStateProvider).valueOrNull;
-    final serverWatched = ref.watch(premiumWalletsProvider).valueOrNull;
-    bool watchedByServer(String id) {
-      if (premium == null || !premium.hasKey || !premium.consented(id)) {
-        return false;
-      }
-      return serverWatched?.any((w) => w.id == id) ?? true;
-    }
-
     return CustomScrollView(
       slivers: [
         SliverPadding(
@@ -298,23 +283,26 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
                   proxyDecorator: liftedProxy,
                   itemCount: shown.length,
                   onReorderItem: (from, to) => _reorder(shown, from, to),
-                  itemBuilder: (context, index) => _row(
-                    shown,
-                    index,
-                    sync,
-                    watchedByServer: watchedByServer(shown[index].id),
-                  ),
+                  itemBuilder: (context, index) => _row(shown, index, sync),
                 ),
               if (_walletError != null)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.only(top: GerfautSpacing.sm),
-                    child: Text(
-                      _walletError!,
-                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                    // Said aloud as it appears.
+                    child: Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        _walletError!,
+                        style: tokens.bodySmall.copyWith(
+                          color: tokens.textMuted,
+                        ),
+                      ),
                     ),
                   ),
                 ),
+              if (shown.isNotEmpty)
+                SliverToBoxAdapter(child: _LivePins(wallets: shown)),
             ],
           ),
         ),
@@ -357,6 +345,7 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
           SizedBox(
             width: 72,
             child: MonoField(
+              label: 'Gap limit',
               controller: _gapLimitController,
               hint: '1-500',
               numeric: true,
@@ -372,12 +361,7 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
   }
 
   /// The row of the wallet at [index] among those [shown].
-  Widget _row(
-    List<WalletMeta> shown,
-    int index,
-    SyncController sync, {
-    required bool watchedByServer,
-  }) {
+  Widget _row(List<WalletMeta> shown, int index, SyncController sync) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final wallet = shown[index];
     return _WalletRow(
@@ -390,7 +374,7 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
       renaming: _renamingId == wallet.id,
       confirmingRemove: _confirmRemoveId == wallet.id,
       removing: _removingId == wallet.id,
-      watchedByServer: watchedByServer,
+      coverage: ref.watch(walletCoverageProvider(wallet.id)),
       renameController: _renameController,
       onRenameStart: () {
         setState(() {
@@ -421,6 +405,119 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
   }
 }
 
+/// "Always watch live first", an advanced setting folded away under
+/// the list. When Live cannot follow every address, it follows the
+/// pinned wallets before the others, then the ones holding coins.
+/// Pinning many large wallets can leave the rest to the syncs: the
+/// user's call to make, and why the switches are out of the way.
+class _LivePins extends ConsumerStatefulWidget {
+  const _LivePins({required this.wallets});
+
+  /// The wallets of the active network, in the order of the list.
+  final List<WalletMeta> wallets;
+
+  @override
+  ConsumerState<_LivePins> createState() => _LivePinsState();
+}
+
+class _LivePinsState extends ConsumerState<_LivePins> {
+  bool _open = false;
+
+  /// The wallet a pin is on its way to the vault for: the other
+  /// switches wait for it.
+  String? _savingId;
+
+  /// What the vault refused, under the wallet it was for.
+  ({String id, String message})? _failure;
+
+  Future<void> _pin(WalletMeta wallet, bool pinned) async {
+    if (_savingId != null) return;
+    // Held before the await: the list is read again even if the page
+    // was left meanwhile.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() {
+      _savingId = wallet.id;
+      _failure = null;
+    });
+    try {
+      await ref.read(bridgeProvider).setWalletLivePinned(wallet.id, pinned);
+      container.invalidate(walletsProvider);
+      messenger.showSnackBar(Toast('Setting saved'));
+    } on BridgeException catch (error) {
+      if (mounted) {
+        setState(() => _failure = (id: wallet.id, message: error.message));
+      }
+    } finally {
+      if (mounted) setState(() => _savingId = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final pinned = widget.wallets.where((w) => w.livePinned).length;
+    // Folded, the button still says when something is pinned: a choice
+    // that changes what Live follows is never out of sight entirely.
+    final label = !_open && pinned > 0
+        ? 'Advanced · ${pinned == 1 ? '1 wallet' : '$pinned wallets'} '
+              'watched live first'
+        : 'Advanced';
+    return Container(
+      margin: const EdgeInsets.only(top: GerfautSpacing.sm),
+      padding: const EdgeInsets.only(top: GerfautSpacing.xs),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: tokens.border)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GhostButton(
+            label: label,
+            icon: _open ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+            expanded: _open,
+            onPressed: () => setState(() => _open = !_open),
+          ),
+          if (_open) ...[
+            const SizedBox(height: GerfautSpacing.xs),
+            Text(
+              'Always watch live first',
+              style: tokens.bodySmall.copyWith(
+                fontWeight: FontWeight.w500,
+                fontVariations: const [FontVariation('wght', 500)],
+              ),
+            ),
+            Text(
+              'When Live cannot follow every address, the wallets turned '
+              'on here are followed first.',
+              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+            ),
+            for (final wallet in widget.wallets) ...[
+              const SizedBox(height: GerfautSpacing.sm),
+              SettingSwitch(
+                title: wallet.name,
+                semanticLabel: 'Always watch ${wallet.name} live first',
+                value: wallet.livePinned,
+                onChanged: _savingId != null
+                    ? null
+                    : (pinned) => _pin(wallet, pinned),
+              ),
+              if (_failure?.id == wallet.id)
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    _failure!.message,
+                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                  ),
+                ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _WalletRow extends StatelessWidget {
   const _WalletRow({
     super.key,
@@ -431,7 +528,7 @@ class _WalletRow extends StatelessWidget {
     required this.renaming,
     required this.confirmingRemove,
     required this.removing,
-    required this.watchedByServer,
+    required this.coverage,
     required this.renameController,
     required this.onRenameStart,
     required this.onRenameSubmit,
@@ -457,9 +554,9 @@ class _WalletRow extends StatelessWidget {
   /// The removal is under way: its answers are held.
   final bool removing;
 
-  /// The server watches this wallet: removing it here takes it off the
-  /// server as well, alert history included, and the note says so.
-  final bool watchedByServer;
+  /// How much of the wallet Live follows, while Live cannot follow
+  /// every wallet whole; null otherwise.
+  final WalletCoverage? coverage;
   final TextEditingController renameController;
   final VoidCallback onRenameStart;
   final VoidCallback onRenameSubmit;
@@ -513,23 +610,31 @@ class _WalletRow extends StatelessWidget {
                     ? Row(
                         children: [
                           Expanded(
-                            child: TextField(
-                              controller: renameController,
-                              autofocus: true,
-                              style: tokens.body,
-                              onSubmitted: (_) => onRenameSubmit(),
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor: tokens.surfaceSunken,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: GerfautSpacing.sm,
-                                  vertical: GerfautSpacing.xs,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(
-                                    GerfautRadius.sm,
+                            child: Semantics(
+                              label: 'Wallet name',
+                              child: TextField(
+                                controller: renameController,
+                                autofocus: true,
+                                style: tokens.body,
+                                onSubmitted: (_) => onRenameSubmit(),
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor: tokens.surfaceSunken,
+                                  // The height of every other field: a
+                                  // box the thumb lands in.
+                                  constraints: const BoxConstraints(
+                                    minHeight: GerfautTouch.target,
                                   ),
-                                  borderSide: BorderSide.none,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: GerfautSpacing.sm,
+                                    vertical: GerfautSpacing.sm + 2,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(
+                                      GerfautRadius.sm,
+                                    ),
+                                    borderSide: BorderSide.none,
+                                  ),
                                 ),
                               ),
                             ),
@@ -572,6 +677,10 @@ class _WalletRow extends StatelessWidget {
                               color: tokens.textMuted,
                             ),
                           ),
+                          if (coverage != null) ...[
+                            const SizedBox(height: GerfautSpacing.xs),
+                            LiveCoveragePill(coverage: coverage!),
+                          ],
                         ],
                       ),
               ),
@@ -584,9 +693,8 @@ class _WalletRow extends StatelessWidget {
                 ReorderableDragStartListener(
                   index: index,
                   child: ExcludeSemantics(
-                    child: SizedBox(
-                      width: 44,
-                      height: 44,
+                    child: SizedBox.square(
+                      dimension: GerfautTouch.target,
                       child: Center(
                         child: Icon(
                           LucideIcons.gripVertical,
@@ -605,18 +713,12 @@ class _WalletRow extends StatelessWidget {
             // Amber, and its own copy says why: this only stops
             // watching, nothing moves on chain. Nothing is at stake but
             // a row in a list, and the coins are exactly where they
-            // were — red belongs to what costs funds or privacy. A
-            // wallet the server watches is taken off it as well, alert
-            // history included, and that is said here, where the
-            // decision is, in the desktop's words.
+            // were — red belongs to what costs funds or privacy.
             GerfautNotice(
               tone: NoticeTone.info,
-              message: watchedByServer
-                  ? 'You are removing "${wallet.name}" from Gerfaut. The '
-                        'server stops watching it too, and deletes its '
-                        'alert history. Nothing moves on chain.'
-                  : 'You are removing "${wallet.name}" from Gerfaut. '
-                        'This only stops watching. Nothing moves on chain.',
+              message:
+                  'You are removing "${wallet.name}" from Gerfaut. '
+                  'This only stops watching. Nothing moves on chain.',
               // The sentence gets the whole width, the buttons a row of
               // their own under it: beside the text they left it a
               // column eight characters across on a phone.
@@ -691,28 +793,30 @@ class _AlertGhostButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    return SizedBox(
-      height: 44,
-      child: TextButton(
-        style: TextButton.styleFrom(
-          foregroundColor: tokens.alert,
-          padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(GerfautRadius.md),
+    return TapTarget(
+      child: SizedBox(
+        height: GerfautTouch.control,
+        child: TextButton(
+          style: TextButton.styleFrom(
+            foregroundColor: tokens.alert,
+            padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(GerfautRadius.md),
+            ),
+            textStyle: tokens.bodySmall.copyWith(
+              fontWeight: FontWeight.w500,
+              fontVariations: const [FontVariation('wght', 500)],
+            ),
           ),
-          textStyle: tokens.bodySmall.copyWith(
-            fontWeight: FontWeight.w500,
-            fontVariations: const [FontVariation('wght', 500)],
+          onPressed: onPressed,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14),
+              const SizedBox(width: GerfautSpacing.xs),
+              Text(label),
+            ],
           ),
-        ),
-        onPressed: onPressed,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14),
-            const SizedBox(width: GerfautSpacing.xs),
-            Text(label),
-          ],
         ),
       ),
     );

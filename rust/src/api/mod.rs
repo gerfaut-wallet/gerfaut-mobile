@@ -12,30 +12,27 @@ use crate::frb_generated::StreamSink;
 use gerfaut_core::backup::{BackupOptions, ImportChoices};
 use gerfaut_core::chain::BackendConfig;
 use gerfaut_core::chain::tor::TorSettings;
-use gerfaut_core::error::{PremiumError, VaultError};
+use gerfaut_core::error::VaultError;
 use gerfaut_core::export::ExportOptions;
 use gerfaut_core::input::{ImportOptions, ParsedInput, ScriptKind};
 use gerfaut_core::live::LiveEvent;
 use gerfaut_core::lock::LockKind;
-use gerfaut_core::premium::client::{
-    NTFY_BASE_URL, TELEGRAM_BOT, new_ntfy_topic, ntfy_subscribe_url, telegram_link_url,
-};
-use gerfaut_core::premium::licence;
-use gerfaut_core::premium::{
-    Channel, ChannelKind, DevicePlatform, Event, PremiumClient, PremiumState, endpoint,
-};
 use gerfaut_core::price::{FiatCurrency, PriceSource};
 use gerfaut_core::store::VaultKey;
-use gerfaut_core::wallet::meta::{WalletIcon, WalletKind};
+use gerfaut_core::wallet::meta::WalletIcon;
 use gerfaut_core::wallet::snapshot::SyncReport;
 use gerfaut_core::{CoreError, Network, WalletManager};
+use rand::TryRngCore;
 use serde_json::json;
 use std::sync::LazyLock;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::{Mutex, OnceCell, broadcast};
 
 /// The process-wide manager, set once by [`init_manager`].
 static MANAGER: OnceCell<WalletManager> = OnceCell::const_new();
+
+/// The key a first launch seals the vault under, drawn once for the
+/// whole process by [`fresh_vault_key`], as the manager is opened once.
+static FRESH_KEY: OnceCell<String> = OnceCell::const_new();
 
 #[flutter_rust_bridge::frb(init)]
 pub fn init_app() {
@@ -84,50 +81,7 @@ fn core_error_kind(error: &CoreError) -> &'static str {
         CoreError::Broadcast { .. } => "broadcast",
         CoreError::Descriptor(_) => "descriptor",
         CoreError::Tor(_) => "tor",
-        CoreError::Premium(error) => premium_error_kind(error),
         CoreError::Internal(_) => "internal",
-    }
-}
-
-/// One kind per thing the screen does about it: an unknown key sends
-/// the user back to the field, a key with no paid time to the renewal
-/// page, an unreachable server to the "watch is offline" banner.
-///
-/// The same the desktop app answers with. A kind the screens
-/// act on the same way is a kind they can only print, and what they
-/// would print is a parser's complaint: an answer that does not decode
-/// is a captive portal's login page where JSON was promised, which is
-/// the server out of reach and nothing else. A certificate and a
-/// heartbeat that do not check out are one case too — whichever of the
-/// two it was, this device cannot trust what it was handed. An id the
-/// server has nothing under is a refusal like any other: the screens
-/// show it in the server's words, and read what it holds again.
-///
-/// The match is exhaustive on purpose: a variant added to the core
-/// stops the build here until somebody says which of them it is.
-///
-/// A device the server wants connected first and a device that holds no
-/// token are one case too: either way the key has to connect it, which
-/// is what the screen offers.
-///
-/// A key change sent and not answered has a kind of its own: the screen
-/// offers to try it again, and nothing else finishes it.
-fn premium_error_kind(error: &PremiumError) -> &'static str {
-    match error {
-        PremiumError::NoKey => "premium_no_key",
-        PremiumError::UnknownKey => "premium_unknown_key",
-        PremiumError::NoPaidTime => "premium_no_paid_time",
-        PremiumError::Rejected(_) | PremiumError::NotFound => "premium_rejected",
-        PremiumError::RateLimited { .. } => "premium_rate_limited",
-        PremiumError::Unreachable(_) | PremiumError::UnexpectedResponse(_) => "premium_unreachable",
-        PremiumError::InvalidCertificate(_)
-        | PremiumError::InvalidHeartbeat(_)
-        | PremiumError::StaleHeartbeat { .. } => "premium_invalid",
-        PremiumError::DevicePending { .. } => "premium_device_pending",
-        PremiumError::DeviceDisconnected => "premium_device_disconnected",
-        PremiumError::TooManyDevices(_) => "premium_too_many_devices",
-        PremiumError::NoDevice | PremiumError::DeviceRequired => "premium_no_device",
-        PremiumError::KeyChangePending => "premium_key_change_pending",
     }
 }
 
@@ -138,40 +92,6 @@ fn from_json<T: serde::de::DeserializeOwned>(raw: &str, what: &str) -> Result<T,
 }
 
 fn core_error_json(error: &CoreError) -> String {
-    // A refusal reaches the screen in the server's own sentence: the
-    // prefix the error type wraps it in names the layer, not the thing
-    // that went wrong, and a card that prints it reads as plumbing.
-    // Everything else keeps its wrapper, the unreachable one included:
-    // the status it carries is what tells an outage from a server that
-    // answered to say it could not do the thing.
-    if let CoreError::Premium(PremiumError::Rejected(words)) = error {
-        return error_json("premium_rejected", words);
-    }
-    // The same for the server's sentence about a key with every device
-    // it may have: the screen shows it as the server wrote it.
-    if let CoreError::Premium(PremiumError::TooManyDevices(words)) = error {
-        return error_json("premium_too_many_devices", words);
-    }
-    // A device that waits carries the moment its wait ends, for the
-    // screen to say it.
-    if let CoreError::Premium(PremiumError::DevicePending { until }) = error {
-        return json!({ "error": {
-            "kind": "premium_device_pending",
-            "message": error.to_string(),
-            "pending_until": until,
-        } })
-        .to_string();
-    }
-    // A request to slow down carries the wait, in seconds, for the
-    // screen to count from; `null` when the server named none.
-    if let CoreError::Premium(PremiumError::RateLimited { retry_after }) = error {
-        return json!({ "error": {
-            "kind": "premium_rate_limited",
-            "message": error.to_string(),
-            "retry_after": retry_after,
-        } })
-        .to_string();
-    }
     error_json(core_error_kind(error), error)
 }
 
@@ -304,6 +224,32 @@ pub async fn init_manager(data_dir: String, key_hex: String) -> String {
     }
 }
 
+/// The key to store and open a new vault with, as 64 hex characters,
+/// for a first launch: no vault yet, and no key kept for one.
+///
+/// The screens, the periodic task and the live watch each start in an
+/// isolate of their own, and on a first launch each of them finds no
+/// vault and no key. Were each to draw its own, the vault would be
+/// sealed under the first key to reach [`init_manager`] while the
+/// storage kept whichever was written last, and the next launch could
+/// not open it. Drawn here, in one cell for the process, every caller
+/// gets the same key: they all store that one and open with it.
+pub async fn fresh_vault_key() -> String {
+    let drawn = FRESH_KEY
+        .get_or_try_init(|| async {
+            let mut bytes = [0u8; 32];
+            rand::rngs::OsRng
+                .try_fill_bytes(&mut bytes)
+                .map_err(|e| error_json("random", format!("no randomness to draw a key: {e}")))?;
+            Ok::<String, String>(bytes.iter().map(|b| format!("{b:02x}")).collect())
+        })
+        .await;
+    match drawn {
+        Ok(key) => json!({ "key": key }).to_string(),
+        Err(e) => e,
+    }
+}
+
 // --- input classification ---------------------------------------------
 
 /// Classifies pasted or scanned wallet material. Returns the serialized
@@ -325,10 +271,11 @@ pub async fn parse_input(input: String, script: Option<String>) -> String {
     }
 }
 
-/// Classifies wallet material with the advanced choices of the import
-/// screen: `options_json` is a serialized `ImportOptions` (script type
-/// and derivation paths), both parts optional. Everything the input
-/// fixes by itself ignores them.
+/// Classifies wallet material with the choices of the import screen:
+/// `options_json` is a serialized `ImportOptions` (script type,
+/// derivation paths, and the network the wallet goes to), all
+/// optional. Everything the input fixes by itself ignores the first
+/// two; the network decides the first address shown.
 pub async fn parse_input_with_options(input: String, options_json: String) -> String {
     try_json!(refuse_oversized_ur(&input));
     let options: ImportOptions = try_json!(from_json(&options_json, "ImportOptions"));
@@ -392,22 +339,11 @@ pub async fn list_wallets(network: Option<String>) -> String {
     to_json(&manager.list_wallets(network).await)
 }
 
-/// Removes a wallet from this device. One the server watched is taken
-/// off it too, after the answer: the core queues the message in the
-/// same write as the removal, and a server out of reach hears it at
-/// the next heartbeat instead.
+/// Removes a wallet from this device.
 pub async fn remove_wallet(id: String) -> String {
     let manager = try_json!(manager());
     match manager.remove_wallet(&id).await {
-        Ok(()) => {
-            // Not awaited, and its result not read: the wallet is gone
-            // here whatever the server says, and what could not be told
-            // stays queued in the vault until it can be.
-            flutter_rust_bridge::spawn(async move {
-                let _ = manager.premium_flush_unwatch(&premium_base_url()).await;
-            });
-            ok_json()
-        }
+        Ok(()) => ok_json(),
         Err(e) => core_error_json(&e),
     }
 }
@@ -427,6 +363,18 @@ pub async fn set_wallet_icon(id: String, icon: String) -> String {
     let manager = try_json!(manager());
     let icon: WalletIcon = try_json!(parse_variant(&icon, "wallet icon"));
     match manager.set_wallet_icon(&id, icon).await {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Puts a wallet ahead of the others in the live watch, or back among
+/// them. When the watch cannot follow every address, the pinned wallets
+/// are followed first. Kept in the vault; the watch takes the new order
+/// by itself.
+pub async fn set_wallet_live_pinned(id: String, pinned: bool) -> String {
+    let manager = try_json!(manager());
+    match manager.set_wallet_live_pinned(&id, pinned).await {
         Ok(()) => ok_json(),
         Err(e) => core_error_json(&e),
     }
@@ -798,546 +746,6 @@ pub async fn import_backup(source: String, password: String, choices_json: Strin
     }
 }
 
-// --- premium -----------------------------------------------------------
-
-/// The server every premium call goes to, as the core names it: the
-/// production one, unless a debug build was pointed at another.
-///
-/// Clearnet, which does not settle how the call travels: the manager
-/// sends it through Tor when the base URL is an onion and also when the
-/// backend of any network is one, since a person who reaches their own
-/// node through Tor did not choose to show their address to this server
-/// instead, whichever network is on screen. A Tor that cannot be reached then is a call
-/// that does not happen, reported as `tor`; nothing falls back to the
-/// clear.
-fn premium_base_url() -> String {
-    endpoint().0
-}
-
-/// The key the server's certificates are signed with, from the same
-/// place as its address: a certificate verifies against the server it
-/// came from.
-fn premium_public_key() -> String {
-    endpoint().1
-}
-
-/// What this build tells the server it runs on.
-const PLATFORM: DevicePlatform = DevicePlatform::Android;
-
-/// Points a debug build at another premium server, a local one for an
-/// end-to-end run: the core reads its address and the key its
-/// certificates are signed with from the environment, and this sets
-/// them before any premium call is made. A release build has no such
-/// door: the call does nothing there, and the core would not read the
-/// variables anyway. Blank values leave the production server.
-#[flutter_rust_bridge::frb(sync)]
-pub fn premium_debug_endpoint(base_url: String, public_key: String) -> String {
-    #[cfg(debug_assertions)]
-    {
-        if !base_url.trim().is_empty() {
-            // SAFETY: called once, from the app's start, before the
-            // manager is opened and before any premium call reads the
-            // environment; nothing else in the process writes it.
-            unsafe { std::env::set_var("GERFAUT_PREMIUM_URL", base_url.trim()) };
-        }
-        if !public_key.trim().is_empty() {
-            // SAFETY: as above.
-            unsafe { std::env::set_var("GERFAUT_PREMIUM_PUBLIC_KEY", public_key.trim()) };
-        }
-    }
-    #[cfg(not(debug_assertions))]
-    let _ = (base_url, public_key);
-    ok_json()
-}
-
-/// Most events the alerts card shows.
-const RECENT_EVENTS: usize = 20;
-
-/// The server caps a page of events at this many.
-const EVENTS_PAGE: u32 = 500;
-
-/// This device's clock, in unix seconds.
-fn now_unix() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or_default()
-}
-
-/// The stored account with what the screen reads off it: the claims of
-/// the certificate, verified offline against the key of the server it
-/// came from, so the licence state shows without a network. A
-/// certificate that no longer verifies reads as no certificate.
-///
-/// This device's connection goes as its id and date alone: the token
-/// never leaves the core, and the screens have no use for it. What was
-/// sent and not answered goes the same way, as whether it was: a key
-/// change under way hides the key the vault holds, which may already be
-/// dead, and the connection under way is sent again by
-/// [`premium_ensure_device`]; neither secret is the screens' to read.
-fn premium_view(state: &PremiumState) -> serde_json::Value {
-    let public_key = premium_public_key();
-    let claims = state
-        .certificate
-        .as_deref()
-        .and_then(|certificate| licence::verify_certificate(certificate, &public_key).ok());
-    json!({
-        "key": state.key,
-        "key_display": state.key.as_deref().map(licence::format_key),
-        "claims": claims,
-        "watched": state.watched,
-        "acknowledged_offline_until": state.acknowledged_offline_until,
-        "device": state.device.as_ref().map(|device| json!({
-            "id": device.id,
-            "connected_at": device.connected_at,
-        })),
-        "disconnected": state.disconnected,
-        "disconnected_reason": state.disconnected_reason,
-        "key_change_pending": state.key_change_pending(),
-        "connect_pending": state.connect_pending(),
-        "key_saved": state.key_saved,
-        "checklist_hidden": state.checklist_hidden,
-        "ntfy_base_url": NTFY_BASE_URL,
-        "telegram_bot": TELEGRAM_BOT,
-    })
-}
-
-/// The premium account as the vault keeps it, with its certificate
-/// read. Returns a serialized `PremiumView`.
-pub async fn premium_state() -> String {
-    let manager = try_json!(manager());
-    to_json(&premium_view(&manager.premium_state().await))
-}
-
-/// A client for the premium server carrying the stored key and this
-/// device's token.
-async fn premium_client(manager: &WalletManager) -> Result<PremiumClient, String> {
-    manager
-        .premium_client(&premium_base_url())
-        .await
-        .map_err(|e| core_error_json(&e))
-}
-
-/// Rewrites the stored account state.
-async fn store_premium(
-    manager: &WalletManager,
-    change: impl FnOnce(&mut PremiumState),
-) -> Result<PremiumState, String> {
-    let mut state = manager.premium_state().await;
-    change(&mut state);
-    manager
-        .set_premium_state(state.clone())
-        .await
-        .map_err(|e| core_error_json(&e))?;
-    Ok(state)
-}
-
-/// Connects this phone to the account with a key: the core checks its
-/// shape, has the server make a device of it, keeps the key and the
-/// device's token together, then fetches the certificate. Returns the
-/// serialized `Device`: full access for the account's first, waiting
-/// for any later one. A key the server does not know, or one with every
-/// device it may have, comes back as the error the field shows; nothing
-/// is stored then. An answer lost on the way keeps the connection under
-/// way, and trying again sends the same one. Another key is refused,
-/// `premium_key_change_pending`, while a key change has not finished and
-/// this device still holds the token that could finish it; without the
-/// token the change was never applied, and connecting ends it.
-pub async fn premium_connect(key: String) -> String {
-    let manager = try_json!(manager());
-    match manager
-        .premium_connect(&premium_base_url(), &key, PLATFORM)
-        .await
-    {
-        Ok(device) => to_json(&device),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// Sends again, as it was, a connection whose answer was lost, and
-/// connects a key kept by a version that had no devices yet. Returns the
-/// serialized `Device` it connected, or `null` when there was nothing to
-/// do: no key, a device already, or one the server disconnected, which
-/// connects again only when the user asks. After a rate limit it sends
-/// nothing until the wait the server named is over, and answers
-/// `premium_rate_limited` with what is left of it.
-pub async fn premium_ensure_device() -> String {
-    let manager = try_json!(manager());
-    match manager
-        .premium_ensure_device(&premium_base_url(), PLATFORM)
-        .await
-    {
-        Ok(device) => to_json(&device),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// This device as the server sees it. Returns the serialized `Device`.
-pub async fn premium_device() -> String {
-    let manager = try_json!(manager());
-    match manager.premium_device(&premium_base_url()).await {
-        Ok(device) => to_json(&device),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// Every device of the account, oldest first; full access only. Returns
-/// a serialized `Vec<Device>`.
-pub async fn premium_devices() -> String {
-    let manager = try_json!(manager());
-    match manager.premium_devices(&premium_base_url()).await {
-        Ok(devices) => to_json(&devices),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// Gives a waiting device full access now. Returns the serialized
-/// `Device`, approved.
-pub async fn premium_approve_device(id: String) -> String {
-    let manager = try_json!(manager());
-    match manager
-        .premium_approve_device(&premium_base_url(), &id)
-        .await
-    {
-        Ok(device) => to_json(&device),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// Refuses a waiting device, or disconnects one with full access. This
-/// device's own id is refused, `premium_key_change_pending`, while its
-/// key change has not finished.
-pub async fn premium_remove_device(id: String) -> String {
-    let manager = try_json!(manager());
-    match manager
-        .premium_remove_device(&premium_base_url(), &id)
-        .await
-    {
-        Ok(()) => ok_json(),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// Logs this device out: the server is told as far as it can be reached,
-/// then the key, the token and the certificate leave the vault. The
-/// server goes on watching what it was told to; the consents stay, so
-/// the same key entered again asks nothing twice. A server out of reach
-/// is told later, by [`premium_flush_logouts`]. A key change that did
-/// not finish is refused, `premium_key_change_pending`: this vault may
-/// hold the only copy of the new key.
-pub async fn premium_log_out() -> String {
-    let manager = try_json!(manager());
-    match manager.premium_log_out(&premium_base_url()).await {
-        Ok(()) => ok_json(),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// Tells the server about the connections this device dropped while it
-/// could not be reached. Nothing queued costs no request. Returns
-/// `{"left": n}`, how many are still to tell; a server out of reach is
-/// the error, and they wait for the next start or heartbeat.
-pub async fn premium_flush_logouts() -> String {
-    let manager = try_json!(manager());
-    match manager.premium_flush_logouts(&premium_base_url()).await {
-        Ok(left) => json!({ "left": left }).to_string(),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// Draws a new key for the account; full access only. The old key stops
-/// working everywhere and every other device is disconnected. Returns
-/// `{"key": "xxxx-xxxx-xxxx-xxxx"}`, the one time the new key is shown.
-///
-/// The core draws the key and keeps it before the request leaves: an
-/// answer lost on the way leaves the change under way, which the view
-/// says, and the next call sends that same key rather than a new one. A
-/// device without its token sends nothing, `premium_no_device`, and a
-/// change under way ends there.
-pub async fn premium_change_key() -> String {
-    let manager = try_json!(manager());
-    match manager.premium_change_key(&premium_base_url()).await {
-        Ok(key) => json!({ "key": key }).to_string(),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// Records whether the user put the key somewhere safe.
-pub async fn premium_set_key_saved(saved: bool) -> String {
-    let manager = try_json!(manager());
-    match manager.premium_set_key_saved(saved).await {
-        Ok(()) => ok_json(),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// Hides the "Protect your Premium account" card.
-pub async fn premium_hide_checklist() -> String {
-    let manager = try_json!(manager());
-    match manager.premium_hide_checklist().await {
-        Ok(()) => ok_json(),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// Hands the ids of every device that waits, as the latest list shows
-/// them, and takes back the ones no notification announced yet: each is
-/// handed out once, whoever asks. Returns a JSON array of ids.
-pub async fn premium_mark_announced(pending: Vec<String>) -> String {
-    let manager = try_json!(manager());
-    match manager.premium_mark_announced(&pending).await {
-        Ok(fresh) => to_json(&fresh),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// Fetches the certificate again, for the paid time a renewal added,
-/// and keeps it. Returns the serialized `Licence`.
-pub async fn premium_refresh_licence() -> String {
-    let manager = try_json!(manager());
-    match manager.premium_refresh_licence(&premium_base_url()).await {
-        Ok(licence) => to_json(&licence),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// Keeps the "watch is offline" banner quiet until `until` (unix
-/// seconds), or lets it show again with `None`.
-pub async fn premium_acknowledge_offline(until: Option<i64>) -> String {
-    let manager = try_json!(manager());
-    try_json!(
-        store_premium(manager, |state| {
-            state.acknowledged_offline_until = until;
-        })
-        .await
-    );
-    ok_json()
-}
-
-/// `GET /v1/account`: paid time, counts, and the network the server
-/// watches. Returns a serialized `Account`.
-pub async fn premium_account() -> String {
-    let manager = try_json!(manager());
-    let client = try_json!(premium_client(manager).await);
-    match client.account().await {
-        Ok(account) => to_json(&account),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// The wallets the server watches for this key. Returns a serialized
-/// `Vec<WalletWatch>`.
-pub async fn premium_wallets() -> String {
-    let manager = try_json!(manager());
-    let client = try_json!(premium_client(manager).await);
-    match client.wallets().await {
-        Ok(wallets) => to_json(&wallets),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// Hands one wallet to the server, under the app's own id and name,
-/// with its descriptors as the vault holds them: both chains on two
-/// lines when the wallet has a change descriptor, the external one
-/// alone otherwise, and the address itself for a wallet that is one
-/// address. The user's yes is recorded first, dated now; a second yes
-/// keeps the first date.
-pub async fn premium_watch_wallet(id: String) -> String {
-    let manager = try_json!(manager());
-    let Some(meta) = manager
-        .list_wallets(None)
-        .await
-        .into_iter()
-        .find(|wallet| wallet.id == id)
-    else {
-        return core_error_json(&CoreError::WalletNotFound(id));
-    };
-    let input = match &meta.kind {
-        WalletKind::Descriptors {
-            external,
-            internal: Some(internal),
-            ..
-        } => format!("{external}\n{internal}"),
-        WalletKind::Descriptors { external, .. } => external.clone(),
-        WalletKind::SingleAddress { address } => address.clone(),
-    };
-    let now = now_unix();
-    try_json!(store_premium(manager, |state| state.consent(&id, now)).await);
-    let client = try_json!(premium_client(manager).await);
-    match client.put_wallet(&id, &meta.name, &input).await {
-        Ok(()) => ok_json(),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// Tells the server to stop watching a wallet and withdraws the consent
-/// given for it: the switch going back on asks the question again, and
-/// removing the wallet later queues nothing for a server that forgot it.
-pub async fn premium_unwatch_wallet(id: String) -> String {
-    let manager = try_json!(manager());
-    match manager
-        .premium_unwatch_wallet(&premium_base_url(), &id)
-        .await
-    {
-        Ok(()) => ok_json(),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// A channel as the screen reads it: the server's fields, plus the link
-/// that opens the bot with the code filled in while a Telegram channel
-/// waits for it.
-fn channel_view(channel: &Channel) -> serde_json::Value {
-    let mut value = json!(channel);
-    if let Some(code) = &channel.link_code {
-        value["start_url"] = json!(telegram_link_url(TELEGRAM_BOT, code));
-    }
-    value
-}
-
-/// The account's channels. Returns a serialized `Vec<ChannelView>`.
-pub async fn premium_channels() -> String {
-    let manager = try_json!(manager());
-    let client = try_json!(premium_client(manager).await);
-    match client.channels().await {
-        Ok(channels) => to_json(&channels.iter().map(channel_view).collect::<Vec<_>>()),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// Adds a channel. `kind` is `ntfy`, `telegram`, `email` or `webhook`;
-/// `target` is the e-mail address or the webhook URL, nothing for
-/// Telegram, and nothing for ntfy either: the topic is drawn here, 24
-/// symbols nobody guesses, and returned once with the URL to subscribe
-/// to. `secret` is the webhook's HMAC key. Returns
-/// `{channel, topic, subscribe_url}`.
-pub async fn premium_create_channel(
-    kind: String,
-    target: Option<String>,
-    secret: Option<String>,
-) -> String {
-    let manager = try_json!(manager());
-    let kind: ChannelKind = try_json!(parse_variant(&kind, "channel kind"));
-    let (target, topic) = match (kind, target) {
-        (ChannelKind::Ntfy, None) => {
-            let topic = new_ntfy_topic();
-            (Some(topic.clone()), Some(topic))
-        }
-        (_, target) => (target, None),
-    };
-    let client = try_json!(premium_client(manager).await);
-    match client
-        .create_channel(kind, target.as_deref(), secret.as_deref())
-        .await
-    {
-        Ok(channel) => json!({
-            "channel": channel_view(&channel),
-            "topic": topic,
-            "subscribe_url": topic
-                .as_deref()
-                .map(|topic| ntfy_subscribe_url(NTFY_BASE_URL, topic)),
-        })
-        .to_string(),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// Confirms a channel with the code the server sent to it: the six
-/// digits of a confirmation e-mail. Returns the serialized channel,
-/// linked. A code that is wrong or past its hour comes back as
-/// `premium_rejected` in the server's words, and so does one tried too
-/// many times.
-pub async fn premium_confirm_channel(id: String, code: String) -> String {
-    let manager = try_json!(manager());
-    match manager
-        .premium_confirm_channel(&premium_base_url(), &id, &code)
-        .await
-    {
-        Ok(channel) => channel_view(&channel).to_string(),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// Deletes the account on the server — the key, the wallets it watched,
-/// the channels, the log — and then forgets it here. Nothing local is
-/// dropped unless the server confirmed. There is no way back.
-pub async fn premium_delete_account() -> String {
-    let manager = try_json!(manager());
-    match manager.premium_delete_account(&premium_base_url()).await {
-        Ok(()) => ok_json(),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-pub async fn premium_delete_channel(id: String) -> String {
-    let manager = try_json!(manager());
-    let client = try_json!(premium_client(manager).await);
-    match client.delete_channel(&id).await {
-        Ok(()) => ok_json(),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// Sends a test message through one channel right away. The provider's
-/// refusal comes back as `premium_rejected`, in the server's words.
-pub async fn premium_test_channel(id: String) -> String {
-    let manager = try_json!(manager());
-    let client = try_json!(premium_client(manager).await);
-    match client.test_channel(&id).await {
-        Ok(()) => ok_json(),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// The last events of the account, newest first, at most `RECENT_EVENTS`
-/// of them. The server serves its log oldest first behind a cursor, so
-/// the pages are walked to the end here. Returns a serialized
-/// `Vec<Event>`.
-pub async fn premium_recent_events() -> String {
-    let manager = try_json!(manager());
-    let client = try_json!(premium_client(manager).await);
-    let mut recent: Vec<Event> = Vec::new();
-    let mut after = 0;
-    loop {
-        let page = match client.events(after, EVENTS_PAGE).await {
-            Ok(page) => page,
-            Err(e) => return core_error_json(&e),
-        };
-        let Some(last) = page.last() else { break };
-        after = last.id;
-        let full = page.len() >= EVENTS_PAGE as usize;
-        recent.extend(page);
-        if recent.len() > RECENT_EVENTS {
-            recent.drain(..recent.len() - RECENT_EVENTS);
-        }
-        if !full {
-            break;
-        }
-    }
-    recent.reverse();
-    to_json(&recent)
-}
-
-/// `GET /v1/heartbeat`, verified against the embedded key and this
-/// device's clock. Returns a serialized `HeartbeatReport`; a server
-/// that cannot be reached, or whose answer does not verify, is the
-/// error the "watch is offline" banner counts.
-pub async fn premium_heartbeat() -> String {
-    let manager = try_json!(manager());
-    // A wallet removed while the server was out of reach leaves at the
-    // next pulse, and so does a connection logged out meanwhile: the
-    // queues are tried before the beat, and what still cannot be told
-    // waits for the one after. Only the beat says whether the watch is
-    // alive; a queue that will not flush does not.
-    let _ = manager.premium_flush_unwatch(&premium_base_url()).await;
-    let _ = manager.premium_flush_logouts(&premium_base_url()).await;
-    let client = try_json!(premium_client(manager).await);
-    match client.heartbeat(now_unix()).await {
-        Ok(report) => to_json(&report),
-        Err(e) => core_error_json(&e),
-    }
-}
-
 // --- live watch --------------------------------------------------------
 
 /// What the running watch says, as JSON, for the screens: its status,
@@ -1497,10 +905,15 @@ fn parse_variant<T: serde::de::DeserializeOwned>(
 /// `kraken`, `mempool_space`; `currency` is one of the `FiatCurrency`
 /// identifiers. The source must quote the currency: only CoinGecko
 /// serves the ones past the first seven. Returns a `PriceQuote`.
+///
+/// Through the manager, so the request takes the route the syncs take:
+/// with a .onion node on any network it goes through Tor, and with Tor
+/// out of reach it does not go at all and comes back as `tor`.
 pub async fn fetch_price(source: String, currency: String) -> String {
     let source: PriceSource = try_json!(parse_variant(&source, "price source"));
     let currency: FiatCurrency = try_json!(parse_variant(&currency, "currency"));
-    match gerfaut_core::price::fetch_price(source, currency).await {
+    let manager = try_json!(manager());
+    match manager.fetch_price(source, currency).await {
         Ok(quote) => to_json(&quote),
         Err(e) => core_error_json(&e),
     }
@@ -1527,6 +940,7 @@ pub async fn check_update(current_version: String) -> String {
 mod tests {
     use super::*;
     use serde_json::Value;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn payload(error: &CoreError) -> Value {
         serde_json::from_str(&core_error_json(error)).expect("the payload is JSON")
@@ -1665,151 +1079,36 @@ mod tests {
             .err()
             .expect("the vault is held");
         assert_eq!(payload(&second)["error"]["kind"], "vault_in_use");
+        // The manager stays open for the process, so a system that keeps
+        // open files in place may refuse: the folder is left then.
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// The words of a refusal are the server's own, and nothing else:
-    /// they are what the card prints under "The Gerfaut server refused".
+    /// Isolates that find no vault together on a first launch are all
+    /// handed the one key, and it is a key: 64 hex characters.
     #[test]
-    fn a_refusal_carries_the_servers_words_alone() {
-        let refused =
-            CoreError::Premium(PremiumError::Rejected("wrong or expired code".to_owned()));
-        let value = payload(&refused);
-        assert_eq!(value["error"]["kind"], "premium_rejected");
-        assert_eq!(value["error"]["message"], "wrong or expired code");
-    }
-
-    /// An answer that does not decode is the server out of reach: on a
-    /// phone it is a hotel's login page, and a parser's complaint is
-    /// not something to put in front of anybody.
-    #[test]
-    fn an_answer_that_does_not_decode_is_the_server_out_of_reach() {
-        let portal = CoreError::Premium(PremiumError::UnexpectedResponse(
-            "expected value at line 1 column 1".to_owned(),
-        ));
-        assert_eq!(payload(&portal)["error"]["kind"], "premium_unreachable");
-    }
-
-    /// A certificate and a heartbeat that do not check out are one case:
-    /// this device cannot trust what it was handed.
-    #[test]
-    fn what_does_not_verify_is_one_kind() {
-        let certificate = CoreError::Premium(PremiumError::InvalidCertificate("bad".to_owned()));
-        let heartbeat = CoreError::Premium(PremiumError::InvalidHeartbeat("bad".to_owned()));
-        let stale = CoreError::Premium(PremiumError::StaleHeartbeat { skew: 900 });
-        for error in [certificate, heartbeat, stale] {
-            assert_eq!(payload(&error)["error"]["kind"], "premium_invalid");
-        }
-    }
-
-    /// A device that waits says until when, for the screen to count from.
-    #[test]
-    fn a_waiting_device_carries_the_end_of_its_wait() {
-        let pending = CoreError::Premium(PremiumError::DevicePending {
-            until: 1_790_864_000,
-        });
-        let value = payload(&pending);
-        assert_eq!(value["error"]["kind"], "premium_device_pending");
-        assert_eq!(value["error"]["pending_until"], 1_790_864_000);
-    }
-
-    /// The server's sentence about a key with every device it may have
-    /// reaches the screen as it was written, and nothing else.
-    #[test]
-    fn a_full_key_says_so_in_the_servers_words() {
-        let words =
-            "this key already has 10 devices; disconnect one from a device with full access";
-        let full = CoreError::Premium(PremiumError::TooManyDevices(words.to_owned()));
-        let value = payload(&full);
-        assert_eq!(value["error"]["kind"], "premium_too_many_devices");
-        assert_eq!(value["error"]["message"], words);
-    }
-
-    /// A device with no token here and a device the server wants
-    /// connected first are one case: the key has to connect it.
-    #[test]
-    fn a_device_to_connect_is_one_kind() {
-        for error in [PremiumError::NoDevice, PremiumError::DeviceRequired] {
-            let value = payload(&CoreError::Premium(error));
-            assert_eq!(value["error"]["kind"], "premium_no_device");
-        }
-        let gone = payload(&CoreError::Premium(PremiumError::DeviceDisconnected));
-        assert_eq!(gone["error"]["kind"], "premium_device_disconnected");
-    }
-
-    /// A key change that did not finish is its own case: the screen
-    /// offers to try it again, and a logout or another key waits for it.
-    #[test]
-    fn an_unfinished_key_change_is_its_own_kind() {
-        let value = payload(&CoreError::Premium(PremiumError::KeyChangePending));
-        assert_eq!(value["error"]["kind"], "premium_key_change_pending");
-    }
-
-    /// What was sent and not answered reaches the screens as whether it
-    /// was, and why the server would not connect this device in its own
-    /// words; the key drawn for the change and the token of the
-    /// connection stay in the core.
-    #[test]
-    fn the_view_says_what_is_under_way_and_hides_its_secrets() {
-        let state: PremiumState = serde_json::from_value(json!({
-            "key": "abcdefghijkmnpqr",
-            "disconnected": true,
-            "disconnected_reason": "this key already has 10 devices; disconnect one from a device with full access",
-            "pending_connect": { "key": "wxyz23456789abcd", "token": "gdt1_pending", "platform": "android" },
-            "pending_key": "mnpq23456789abcd",
-            "pending_logouts": ["gdt1_gone"],
-        }))
-        .expect("a stored state reads");
-        let view = premium_view(&state);
-        assert_eq!(view["key_change_pending"], true);
-        assert_eq!(view["connect_pending"], true);
-        assert_eq!(view["disconnected"], true);
-        assert_eq!(
-            view["disconnected_reason"],
-            "this key already has 10 devices; disconnect one from a device with full access"
-        );
-        let text = view.to_string();
-        for secret in ["mnpq23456789abcd", "wxyz23456789abcd", "gdt1_"] {
-            assert!(!text.contains(secret), "{secret} reached the view");
-        }
-
-        let settled = premium_view(&PremiumState::default());
-        assert_eq!(settled["key_change_pending"], false);
-        assert_eq!(settled["connect_pending"], false);
-        assert_eq!(settled["disconnected_reason"], Value::Null);
-    }
-
-    /// What the screens are handed of this device's connection: its id
-    /// and its date, never the token.
-    #[test]
-    fn the_view_leaves_the_token_behind() {
-        let state: PremiumState = serde_json::from_value(json!({
-            "key": "abcdefghijkmnpqr",
-            "device": { "id": "dev-1", "token": "gdt1_secret", "connected_at": 1_790_000_000 },
-            "key_saved": true,
-        }))
-        .expect("a stored state reads");
-        let view = premium_view(&state);
-        assert_eq!(
-            view["device"],
-            json!({ "id": "dev-1", "connected_at": 1_790_000_000 })
-        );
-        assert_eq!(view["key_saved"], true);
-        assert_eq!(view["disconnected"], false);
-        assert!(!view.to_string().contains("gdt1_"));
-    }
-
-    /// A 5xx keeps its wrapper: the status is the only sign that the
-    /// server answered, and the screen reads the sentence after it.
-    #[test]
-    fn an_unreachable_server_keeps_the_status_it_answered_with() {
-        let down = CoreError::Premium(PremiumError::Unreachable(
-            "HTTP 502: the confirmation e-mail could not be sent".to_owned(),
-        ));
-        let value = payload(&down);
-        assert_eq!(value["error"]["kind"], "premium_unreachable");
-        assert_eq!(
-            value["error"]["message"],
-            "the premium server is unreachable: HTTP 502: the confirmation e-mail could not be sent"
-        );
+    fn isolates_drawing_a_key_together_get_the_same_one() {
+        let start = std::sync::Arc::new(std::sync::Barrier::new(8));
+        let callers: Vec<_> = (0..8)
+            .map(|_| {
+                let start = start.clone();
+                std::thread::spawn(move || {
+                    let runtime = tokio::runtime::Builder::new_current_thread()
+                        .build()
+                        .unwrap();
+                    start.wait();
+                    runtime.block_on(fresh_vault_key())
+                })
+            })
+            .collect();
+        let keys: Vec<String> = callers
+            .into_iter()
+            .map(|caller| {
+                let answer: Value = serde_json::from_str(&caller.join().unwrap()).unwrap();
+                answer["key"].as_str().expect("a key").to_owned()
+            })
+            .collect();
+        assert!(decode_key(&keys[0]).is_ok(), "{}", keys[0]);
+        assert!(keys.iter().all(|key| key == &keys[0]), "{keys:?}");
     }
 }

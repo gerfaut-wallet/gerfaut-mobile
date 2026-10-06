@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../src/bridge.dart';
 import '../../src/format.dart';
 import '../../src/models.dart';
 import '../../src/state.dart';
@@ -10,6 +11,7 @@ import '../../widgets/choice_group.dart';
 import '../../widgets/facts.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/select_field.dart';
+import '../../widgets/setting_switch.dart';
 
 /// The General section: how amounts are shown, and which theme the app
 /// wears. Two cards, Display and Appearance.
@@ -53,39 +55,12 @@ class GeneralSection extends ConsumerWidget {
               onChanged: (unit) => ref.read(unitProvider.notifier).set(unit),
             ),
             const SizedBox(height: GerfautSpacing.md),
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Fiat value',
-                        style: tokens.bodySmall.copyWith(
-                          fontWeight: FontWeight.w500,
-                          fontVariations: const [FontVariation('wght', 500)],
-                        ),
-                      ),
-                      Text(
-                        'Shows the fiat value next to every amount.',
-                        style: tokens.bodySmall.copyWith(
-                          color: tokens.textMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: GerfautSpacing.sm),
-                Switch(
-                  value: ref.watch(fiatEnabledProvider),
-                  activeThumbColor: tokens.onPrimary,
-                  activeTrackColor: tokens.primary,
-                  inactiveThumbColor: tokens.textMuted,
-                  inactiveTrackColor: tokens.surfaceSunken,
-                  onChanged: (value) =>
-                      ref.read(fiatEnabledProvider.notifier).set(value),
-                ),
-              ],
+            SettingSwitch(
+              title: 'Fiat value',
+              hint: 'Shows the fiat value next to every amount.',
+              value: ref.watch(fiatEnabledProvider),
+              onChanged: (value) =>
+                  ref.read(fiatEnabledProvider.notifier).set(value),
             ),
             if (ref.watch(fiatEnabledProvider)) ...[
               const SizedBox(height: GerfautSpacing.md),
@@ -224,10 +199,19 @@ class _RatePreview extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final price = ref.watch(priceProvider);
+    ref.watch(relativeClockProvider);
     if (price.hasError) {
+      // With a .onion node the core sends the price through Tor, and
+      // nothing at all while Tor is out of reach: that is not the
+      // source failing to answer.
+      final error = price.error;
+      final torDown = error is BridgeException && error.kind == 'tor';
       return Text(
-        'The price source did not answer. Amounts show without fiat until '
-        'it does.',
+        torDown
+            ? 'Tor is not available, so no price was asked. Amounts show '
+                  'without fiat until it is.'
+            : 'The price source did not answer. Amounts show without fiat '
+                  'until it does.',
         style: tokens.bodySmall.copyWith(color: tokens.pending),
       );
     }

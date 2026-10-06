@@ -38,6 +38,21 @@ enum ScriptKind {
 
   static ScriptKind fromId(String id) =>
       ScriptKind.values.firstWhere((k) => k.id == id);
+
+  /// How the addresses of this script type start on [network], for the
+  /// single-key types: what a person compares with their own wallet.
+  /// Null for a script, whose addresses say nothing of its type.
+  String? addressStart(Network network) {
+    final test = network != Network.mainnet;
+    final regtest = network == Network.regtest;
+    return switch (this) {
+      legacy => test ? 'm or n' : '1',
+      nestedSegwit => test ? '2' : '3',
+      segwit => regtest ? 'bcrt1q' : (test ? 'tb1q' : 'bc1q'),
+      taproot => regtest ? 'bcrt1p' : (test ? 'tb1p' : 'bc1p'),
+      witnessScript || legacyScript || bare => null,
+    };
+  }
 }
 
 /// What the input classifier recognized.
@@ -81,6 +96,11 @@ enum InputWarning {
     'non_standard_derivation',
     'The paths chosen are not the usual 0/* and 1/*: compare the first '
         'address with your wallet.',
+  ),
+  assumedBranches(
+    'assumed_branches',
+    'This QR code carries no receive or change path, so Gerfaut assumes '
+        'the usual 0/* and 1/*. Compare the first address with your signer.',
   );
 
   const InputWarning(this.id, this.label);
@@ -231,18 +251,6 @@ class DerivationChoice {
     'origin': origin,
   };
 
-  DerivationChoice copyWith({
-    String? receive,
-    String? Function()? change,
-    String? Function()? origin,
-  }) {
-    return DerivationChoice(
-      receive: receive ?? this.receive,
-      change: change == null ? this.change : change(),
-      origin: origin == null ? this.origin : origin(),
-    );
-  }
-
   @override
   bool operator ==(Object other) =>
       other is DerivationChoice &&
@@ -254,17 +262,22 @@ class DerivationChoice {
   int get hashCode => Object.hash(receive, change, origin);
 }
 
-/// The advanced choices of the import screen, both optional. Inputs
-/// that fix their own script type and paths ignore them.
+/// The choices of the import screen, all optional. Inputs that fix
+/// their own script type and paths ignore those two.
 class ImportOptions {
-  const ImportOptions({this.script, this.derivation});
+  const ImportOptions({this.script, this.derivation, this.network});
 
   final ScriptKind? script;
   final DerivationChoice? derivation;
 
+  /// The network the wallet is about to be added on: the first address
+  /// comes back derived for it when the input allows it.
+  final Network? network;
+
   Map<String, dynamic> toJson() => {
     'script': script?.id,
     'derivation': derivation?.toJson(),
+    'network': network?.id,
   };
 }
 
@@ -330,7 +343,7 @@ enum WalletIcon {
   wallet('wallet', 'Wallet'),
   key('key', 'Key'),
   shield('shield', 'Shield'),
-  mapPin('map_pin', 'Map pin'),
+  mapPin('map_pin', 'Pin'),
   snowflake('snowflake', 'Snowflake'),
   landmark('landmark', 'Landmark'),
   piggyBank('piggy_bank', 'Piggy bank');
@@ -368,6 +381,7 @@ class WalletMeta {
     required this.cachedBalance,
     required this.cachedTxCount,
     this.scanGap = 20,
+    this.livePinned = false,
   });
 
   factory WalletMeta.fromJson(Map<String, dynamic> json) {
@@ -391,6 +405,8 @@ class WalletMeta {
         cached['balance'] as Map<String, dynamic>,
       ),
       cachedTxCount: cached['tx_count'] as int,
+      // Left out by the core when false, and by every core before pins.
+      livePinned: json['live_pinned'] as bool? ?? false,
     );
   }
 
@@ -413,15 +429,20 @@ class WalletMeta {
   final BalanceSnapshot cachedBalance;
   final int cachedTxCount;
 
+  /// Live follows this wallet before the others when it cannot follow
+  /// every address. Off unless the user pinned it.
+  final bool livePinned;
+
   bool get isSingleAddress => kind is SingleAddressKind;
 
-  /// The same wallet with the name or the icon changed: what a rename
-  /// or an icon pick leaves behind.
-  WalletMeta copyWith({String? name, WalletIcon? icon}) {
+  /// The same wallet with the name, the icon or the pin changed: what a
+  /// rename, an icon pick or a pin leaves behind.
+  WalletMeta copyWith({String? name, WalletIcon? icon, bool? livePinned}) {
     return WalletMeta(
       id: id,
       name: name ?? this.name,
       icon: icon ?? this.icon,
+      livePinned: livePinned ?? this.livePinned,
       network: network,
       kind: kind,
       recognizedAs: recognizedAs,
@@ -1039,7 +1060,7 @@ enum WatchTransport {
 }
 
 /// What a screen, or the permanent notification, shows about the live
-/// watch. Not the premium server's watch: that one is in premium.dart.
+/// watch.
 class LiveWatchStatus {
   const LiveWatchStatus({
     this.state = WatchState.off,
@@ -1048,8 +1069,15 @@ class LiveWatchStatus {
     this.detail,
     this.watchedScripts = 0,
     this.pushedScripts = 0,
+    this.leftOutScripts = 0,
+    this.leftOutWallets = 0,
+    this.wallets = const [],
+    this.serverSoftware,
   });
 
+  /// A core from before the coverage was reported leaves its three
+  /// fields out: every wallet then reads as followed whole, which is
+  /// what such a core said by saying nothing.
   factory LiveWatchStatus.fromJson(Map<String, dynamic> json) {
     return LiveWatchStatus(
       state: WatchState.fromId(json['state'] as String?),
@@ -1058,6 +1086,13 @@ class LiveWatchStatus {
       detail: json['detail'] as String?,
       watchedScripts: json['watched_scripts'] as int? ?? 0,
       pushedScripts: json['pushed_scripts'] as int? ?? 0,
+      leftOutScripts: json['left_out_scripts'] as int? ?? 0,
+      leftOutWallets: json['left_out_wallets'] as int? ?? 0,
+      wallets: [
+        for (final wallet in json['wallets'] as List? ?? const [])
+          WalletCoverage.fromJson(wallet as Map<String, dynamic>),
+      ],
+      serverSoftware: json['server_software'] as String?,
     );
   }
 
@@ -1071,6 +1106,90 @@ class LiveWatchStatus {
   final String? detail;
   final int watchedScripts;
   final int pushedScripts;
+
+  /// Scripts worth watching that the watch leaves to the regular syncs,
+  /// all wallets together: a payment to one of them shows at the next
+  /// sync, not at once.
+  final int leftOutScripts;
+
+  /// How many wallets those scripts belong to.
+  final int leftOutWallets;
+
+  /// How much of each wallet the watch hears, in the order of the list.
+  /// Empty while the watch is off.
+  final List<WalletCoverage> wallets;
+
+  /// What an Electrum server says it runs, `Fulcrum 1.12.0` and the
+  /// like; null over the other transports and from an older core.
+  final String? serverSoftware;
+
+  /// The watch runs and cannot follow every address: the one case where
+  /// coverage is worth a word on screen.
+  bool get leavesSomeOut => state != WatchState.off && leftOutScripts > 0;
+
+  /// The coverage of one wallet, or null when the watch does not list
+  /// it.
+  WalletCoverage? coverageOf(String walletId) {
+    for (final wallet in wallets) {
+      if (wallet.walletId == walletId) return wallet;
+    }
+    return null;
+  }
+}
+
+/// How much of one wallet the live watch hears.
+enum Coverage {
+  /// Every address worth watching is followed: a payment shows at once.
+  live('live'),
+
+  /// The head of the wallet is followed, its unused addresses first: a
+  /// payment to the rest shows at the next sync.
+  partial('partial'),
+
+  /// None is: every payment shows at the next sync.
+  syncOnly('sync_only');
+
+  const Coverage(this.id);
+
+  final String id;
+
+  /// A value a newer core may add reads as the least promised: nothing
+  /// is said live that might not be.
+  static Coverage fromId(String? id) {
+    for (final coverage in Coverage.values) {
+      if (coverage.id == id) return coverage;
+    }
+    return Coverage.syncOnly;
+  }
+}
+
+/// One wallet as the live watch hears it.
+class WalletCoverage {
+  const WalletCoverage({
+    required this.walletId,
+    required this.coverage,
+    this.watchedScripts = 0,
+    this.leftOutScripts = 0,
+  });
+
+  factory WalletCoverage.fromJson(Map<String, dynamic> json) {
+    return WalletCoverage(
+      walletId: json['wallet_id'] as String,
+      coverage: Coverage.fromId(json['coverage'] as String?),
+      watchedScripts: json['watched_scripts'] as int? ?? 0,
+      leftOutScripts: json['left_out_scripts'] as int? ?? 0,
+    );
+  }
+
+  final String walletId;
+  final Coverage coverage;
+
+  /// Scripts of the wallet the watch hears, one it shares with another
+  /// wallet included.
+  final int watchedScripts;
+
+  /// Scripts of the wallet it leaves to the regular syncs.
+  final int leftOutScripts;
 }
 
 /// What a running live watch says.
@@ -1276,8 +1395,14 @@ sealed class BackendConfig {
   factory BackendConfig.fromJson(Map<String, dynamic> json) {
     return switch (json['type'] as String) {
       'public_esplora' => PublicEsplora(server: json['server'] as String?),
-      'custom_esplora' => CustomEsplora(url: json['url'] as String),
-      'custom_electrum' => CustomElectrum(url: json['url'] as String),
+      'custom_esplora' => CustomEsplora(
+        url: json['url'] as String,
+        ownNode: json['own_node'] as bool? ?? false,
+      ),
+      'custom_electrum' => CustomElectrum(
+        url: json['url'] as String,
+        ownNode: json['own_node'] as bool? ?? false,
+      ),
       final other => throw FormatException('unknown backend type: $other'),
     };
   }
@@ -1304,21 +1429,43 @@ class PublicEsplora extends BackendConfig {
 }
 
 class CustomEsplora extends BackendConfig {
-  const CustomEsplora({required this.url});
+  const CustomEsplora({required this.url, this.ownNode = false});
 
   final String url;
 
+  /// The user says they run this server: Live follows many more of
+  /// their addresses on it. See [CustomElectrum.ownNode].
+  final bool ownNode;
+
   @override
-  Map<String, dynamic> toJson() => {'type': 'custom_esplora', 'url': url};
+  Map<String, dynamic> toJson() => {
+    'type': 'custom_esplora',
+    'url': url,
+    if (ownNode) 'own_node': true,
+  };
 }
 
 class CustomElectrum extends BackendConfig {
-  const CustomElectrum({required this.url});
+  const CustomElectrum({required this.url, this.ownNode = false});
 
   final String url;
 
+  /// The user says they run this server, so Live may follow up to
+  /// 20 000 of their addresses on it instead of 2 000. The app cannot
+  /// check it: a public server typed in by hand looks the same.
+  ///
+  /// Sent back with every save of the address: the core takes a config
+  /// without it for one where it is off. Omitted when off, so a backend
+  /// saved before the switch existed serializes exactly as the vault
+  /// already carries it.
+  final bool ownNode;
+
   @override
-  Map<String, dynamic> toJson() => {'type': 'custom_electrum', 'url': url};
+  Map<String, dynamic> toJson() => {
+    'type': 'custom_electrum',
+    'url': url,
+    if (ownNode) 'own_node': true,
+  };
 }
 
 /// Global settings stored in the vault.
@@ -1723,6 +1870,7 @@ class QrProgress {
     required this.total,
     required this.complete,
     this.text,
+    this.warnings = const [],
   });
 
   factory QrProgress.fromJson(Map<String, dynamic> json) {
@@ -1732,6 +1880,9 @@ class QrProgress {
       total: json['total'] as int,
       complete: json['complete'] as bool,
       text: json['text'] as String?,
+      warnings: ((json['warnings'] as List?) ?? const [])
+          .map((w) => InputWarning.fromId(w as String))
+          .toList(),
     );
   }
 
@@ -1746,6 +1897,10 @@ class QrProgress {
 
   /// The assembled text, once [complete].
   final String? text;
+
+  /// What the core assumed reading the code, which [text] no longer
+  /// shows: said with the warnings of that text.
+  final List<InputWarning> warnings;
 
   /// True while an animated code is still being collected.
   bool get inProgress => total > 1 && !complete;
@@ -2953,617 +3108,4 @@ class PolicySnapshot {
   bool get hasTimeBasedLocks => branches.any(
     (branch) => branch.timelocks.any((lock) => lock.lock.isTimeBased),
   );
-}
-
-// --- premium -------------------------------------------------------------
-
-/// The signed part of a licence certificate, read after the core checked
-/// the signature against the key it embeds. Dart never verifies one: it
-/// only compares these dates with the clock.
-class LicenceClaims {
-  const LicenceClaims({
-    required this.subject,
-    required this.expiresAt,
-    required this.issuedAt,
-  });
-
-  factory LicenceClaims.fromJson(Map<String, dynamic> json) {
-    return LicenceClaims(
-      subject: json['sub'] as String,
-      expiresAt: json['exp'] as int,
-      issuedAt: json['iat'] as int,
-    );
-  }
-
-  /// Hex of the key hash: a stable name for the account, nothing more.
-  final String subject;
-
-  /// Unix seconds: when the paid time ends.
-  final int expiresAt;
-
-  /// Unix seconds: when the certificate was issued.
-  final int issuedAt;
-
-  /// Whether the paid time covers [nowUnix], the way the server judges
-  /// it: active up to the second it ends.
-  bool isActive(int nowUnix) => nowUnix < expiresAt;
-}
-
-/// A wallet the user agreed to have watched by the server, and when.
-class WatchConsent {
-  const WatchConsent({required this.walletId, required this.consentedAt});
-
-  factory WatchConsent.fromJson(Map<String, dynamic> json) {
-    return WatchConsent(
-      walletId: json['wallet_id'] as String,
-      consentedAt: json['consented_at'] as int,
-    );
-  }
-
-  final String walletId;
-
-  /// Unix seconds.
-  final int consentedAt;
-}
-
-/// What this device keeps of its own connection to the account: which
-/// device it is and since when. The token that goes with it never
-/// leaves the core.
-class DeviceLink {
-  const DeviceLink({required this.id, required this.connectedAt});
-
-  factory DeviceLink.fromJson(Map<String, dynamic> json) {
-    return DeviceLink(
-      id: json['id'] as String,
-      connectedAt: json['connected_at'] as int,
-    );
-  }
-
-  /// The server's id for this device.
-  final String id;
-
-  /// Unix seconds.
-  final int connectedAt;
-}
-
-/// The premium account as the vault keeps it, with the claims of its
-/// certificate already verified offline. Empty until a key is entered.
-class PremiumView {
-  const PremiumView({
-    this.key,
-    this.keyDisplay,
-    this.claims,
-    this.watched = const [],
-    this.acknowledgedOfflineUntil,
-    this.device,
-    this.disconnected = false,
-    this.disconnectedReason,
-    this.keyChangePending = false,
-    this.connectPending = false,
-    this.keySaved = false,
-    this.checklistHidden = false,
-    this.ntfyBaseUrl = 'https://ntfy.gerfaut-wallet.com',
-    this.telegramBot = 'GerfautAlertsBot',
-  });
-
-  factory PremiumView.fromJson(Map<String, dynamic> json) {
-    return PremiumView(
-      key: json['key'] as String?,
-      keyDisplay: json['key_display'] as String?,
-      claims: json['claims'] == null
-          ? null
-          : LicenceClaims.fromJson(json['claims'] as Map<String, dynamic>),
-      watched: (json['watched'] as List? ?? const [])
-          .map((w) => WatchConsent.fromJson(w as Map<String, dynamic>))
-          .toList(),
-      acknowledgedOfflineUntil: json['acknowledged_offline_until'] as int?,
-      device: switch (json['device']) {
-        final Map<String, dynamic> device => DeviceLink.fromJson(device),
-        _ => null,
-      },
-      disconnected: json['disconnected'] as bool? ?? false,
-      disconnectedReason: json['disconnected_reason'] as String?,
-      keyChangePending: json['key_change_pending'] as bool? ?? false,
-      connectPending: json['connect_pending'] as bool? ?? false,
-      keySaved: json['key_saved'] as bool? ?? false,
-      checklistHidden: json['checklist_hidden'] as bool? ?? false,
-      ntfyBaseUrl:
-          json['ntfy_base_url'] as String? ?? 'https://ntfy.gerfaut-wallet.com',
-      telegramBot: json['telegram_bot'] as String? ?? 'GerfautAlertsBot',
-    );
-  }
-
-  /// The account key, normalized; null until one is entered.
-  final String? key;
-
-  /// The key as it is shown, `abcd-efgh-ijkm-npqr`.
-  final String? keyDisplay;
-
-  /// The stored certificate's claims; null without a key, or when the
-  /// certificate no longer verifies.
-  final LicenceClaims? claims;
-
-  /// The wallets the user agreed to send to the server.
-  final List<WatchConsent> watched;
-
-  /// Unix seconds until which the "watch is offline" banner stays
-  /// hidden because the user dismissed it.
-  final int? acknowledgedOfflineUntil;
-
-  /// This device's connection to the account; null before the key was
-  /// entered, and once the server has disconnected it.
-  final DeviceLink? device;
-
-  /// The server refused this device's token: another device
-  /// disconnected it, or the key was changed elsewhere. The key stays,
-  /// for connecting again.
-  final bool disconnected;
-
-  /// Why the server would not connect this device, in its own words,
-  /// when it said: the key already has every device it takes. Null for
-  /// a device disowned or a key changed elsewhere, which the screens
-  /// word themselves.
-  final String? disconnectedReason;
-
-  /// A key change was sent and not answered. The server may already
-  /// hold the new key, which the vault keeps: the key above may be dead.
-  /// The screens say the change did not finish, offer to try it again,
-  /// which sends that same key, and do not hand out the key meanwhile.
-  final bool keyChangePending;
-
-  /// A connection of this device was sent and not answered: the core
-  /// sends it again as it was, and the server answers it with the
-  /// device it already made.
-  final bool connectPending;
-
-  /// The user said the key is in a password manager.
-  final bool keySaved;
-
-  /// The "Protect your Premium account" card was hidden.
-  final bool checklistHidden;
-
-  /// The ntfy instance the server publishes to.
-  final String ntfyBaseUrl;
-
-  /// The Telegram bot that links channels, without the `@`.
-  final String telegramBot;
-
-  bool get hasKey => key != null;
-
-  /// A key, and a device the server knows it by: what every call past
-  /// the licence needs.
-  bool get connected => key != null && device != null && !disconnected;
-
-  /// Whether the user already said yes for this wallet.
-  bool consented(String walletId) => watched.any((w) => w.walletId == walletId);
-}
-
-/// `GET /v1/licence`, its certificate verified by the core.
-class PremiumLicence {
-  const PremiumLicence({
-    required this.certificate,
-    required this.paidUntil,
-    required this.claims,
-  });
-
-  factory PremiumLicence.fromJson(Map<String, dynamic> json) {
-    return PremiumLicence(
-      certificate: json['certificate'] as String,
-      paidUntil: json['paid_until'] as int,
-      claims: LicenceClaims.fromJson(json['claims'] as Map<String, dynamic>),
-    );
-  }
-
-  final String certificate;
-
-  /// Unix seconds.
-  final int paidUntil;
-  final LicenceClaims claims;
-}
-
-/// What kind of machine a device is. The server knows these five and no
-/// free name: whatever it tells the account's channels about a device
-/// comes from this list, never from text the device chose.
-enum DevicePlatform {
-  android('android', 'Android phone'),
-  ios('ios', 'iPhone'),
-  windows('windows', 'Windows computer'),
-  macos('macos', 'Mac'),
-  linux('linux', 'Linux computer');
-
-  const DevicePlatform(this.id, this.label);
-
-  /// Stable machine identifier, as serialized by the core.
-  final String id;
-
-  /// What the device is called on screen and in a notification.
-  final String label;
-
-  /// A platform this build does not know reads as a computer of no
-  /// particular make rather than breaking the list.
-  static DevicePlatform? fromId(String? id) {
-    for (final platform in DevicePlatform.values) {
-      if (platform.id == id) return platform;
-    }
-    return null;
-  }
-}
-
-/// Whether a device sees the account yet.
-enum DeviceAccess {
-  /// Sees and changes everything the key allows.
-  full('full'),
-
-  /// Connected, waiting: it sees nothing and changes nothing until
-  /// another device approves it, or the wait ends.
-  pending('pending');
-
-  const DeviceAccess(this.id);
-
-  final String id;
-
-  static DeviceAccess fromId(String? id) =>
-      id == 'full' ? DeviceAccess.full : DeviceAccess.pending;
-}
-
-/// One device connected to the account, as the server describes it.
-class PremiumDevice {
-  const PremiumDevice({
-    required this.id,
-    required this.platform,
-    required this.connectedAt,
-    required this.access,
-    this.pendingUntil,
-    this.approvedAt,
-    this.thisDevice = false,
-  });
-
-  factory PremiumDevice.fromJson(Map<String, dynamic> json) {
-    return PremiumDevice(
-      id: json['id'] as String,
-      platform: DevicePlatform.fromId(json['platform'] as String?),
-      connectedAt: json['connected_at'] as int,
-      // Anything but a plain "full" waits: an access this build cannot
-      // read is not one to treat as granted.
-      access: DeviceAccess.fromId(json['access'] as String?),
-      pendingUntil: json['pending_until'] as int?,
-      approvedAt: json['approved_at'] as int?,
-      thisDevice: json['this_device'] as bool? ?? false,
-    );
-  }
-
-  final String id;
-
-  /// Null for a platform this build does not know.
-  final DevicePlatform? platform;
-
-  /// Unix seconds.
-  final int connectedAt;
-  final DeviceAccess access;
-
-  /// Unix seconds when a waiting device gets full access without
-  /// approval; null once it has it.
-  final int? pendingUntil;
-
-  /// Unix seconds when another device approved it, or when it got full
-  /// access as the account's first; null while it waits.
-  final int? approvedAt;
-
-  /// The device this app runs on.
-  final bool thisDevice;
-
-  bool get fullAccess => access == DeviceAccess.full;
-
-  /// What the device is called on screen.
-  String get label => platform?.label ?? 'Device';
-}
-
-/// `GET /v1/account`.
-class PremiumAccount {
-  const PremiumAccount({
-    required this.active,
-    required this.paidUntil,
-    required this.wallets,
-    required this.channels,
-    required this.network,
-  });
-
-  factory PremiumAccount.fromJson(Map<String, dynamic> json) {
-    return PremiumAccount(
-      active: json['active'] as bool,
-      paidUntil: json['paid_until'] as int?,
-      wallets: json['wallets'] as int,
-      channels: json['channels'] as int,
-      network: json['network'] as String,
-    );
-  }
-
-  final bool active;
-
-  /// Unix seconds; null for a key never paid for.
-  final int? paidUntil;
-  final int wallets;
-  final int channels;
-
-  /// The network the server watches, as it names it (`bitcoin`).
-  final String network;
-
-  /// The server's network in the app's own terms; null for a name this
-  /// build does not know.
-  Network? get chain => switch (network) {
-    'bitcoin' || 'main' || 'mainnet' => Network.mainnet,
-    'signet' => Network.signet,
-    'testnet4' || 'testnet' || 'test' => Network.testnet4,
-    'regtest' => Network.regtest,
-    _ => null,
-  };
-}
-
-/// One wallet the server watches for the account.
-class WalletWatch {
-  const WalletWatch({
-    required this.id,
-    required this.name,
-    required this.scriptKind,
-    required this.watchedSince,
-    required this.baselineAt,
-    required this.baselineHeight,
-    required this.coins,
-    required this.valueSats,
-    this.baselinePending,
-    this.watching = true,
-    this.refusal,
-  });
-
-  factory WalletWatch.fromJson(Map<String, dynamic> json) {
-    return WalletWatch(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      scriptKind: json['script_kind'] as String,
-      watchedSince: json['watched_since'] as int,
-      baselineAt: json['baseline_at'] as int?,
-      baselineHeight: json['baseline_height'] as int?,
-      baselinePending: json['baseline_pending'] as bool?,
-      coins: json['coins'] as int,
-      valueSats: json['value_sats'] as int,
-      // A server that predates the flag refuses no wallet.
-      watching: json['watching'] as bool? ?? true,
-      refusal: switch (json['refusal']) {
-        final Map<String, dynamic> refusal => WalletRefusal.fromJson(refusal),
-        _ => null,
-      },
-    );
-  }
-
-  /// The app's own wallet id.
-  final String id;
-  final String name;
-  final String scriptKind;
-
-  /// False once the server has refused the wallet: it keeps the row to
-  /// say why, and watches nothing under it.
-  final bool watching;
-
-  /// Why the server does not watch this wallet, when it does not.
-  final WalletRefusal? refusal;
-
-  /// The server holds the wallet and does not watch it.
-  bool get refused => !watching;
-
-  /// Unix seconds.
-  final int watchedSince;
-
-  /// Unix seconds when the first scan of the UTXO set finished; null
-  /// while it runs.
-  final int? baselineAt;
-  final int? baselineHeight;
-  final int coins;
-  final int valueSats;
-
-  /// What the server says about the first scan, when it says anything:
-  /// null from a server that does not report it.
-  final bool? baselinePending;
-
-  /// The first scan of the UTXO set has not finished: the balances and
-  /// the counts here are not the wallet's yet.
-  ///
-  /// The server states it; a server that does not is read by the date
-  /// it stamps when the scan ends, which says the same thing.
-  bool get scanning => baselinePending ?? (baselineAt == null);
-}
-
-/// Why the server stopped watching a wallet, or never started.
-class WalletRefusal {
-  const WalletRefusal({required this.code, required this.message});
-
-  factory WalletRefusal.fromJson(Map<String, dynamic> json) {
-    return WalletRefusal(
-      code: json['code'] as String? ?? '',
-      message: json['message'] as String? ?? '',
-    );
-  }
-
-  /// For the app; `too_many_coins` is the only one today.
-  final String code;
-
-  /// For the person who owns the wallet, to show as it is.
-  final String message;
-}
-
-/// Where an account wants to be told.
-enum ChannelKind {
-  ntfy('ntfy', 'ntfy'),
-  telegram('telegram', 'Telegram'),
-  email('email', 'E-mail'),
-  webhook('webhook', 'Webhook');
-
-  const ChannelKind(this.id, this.label);
-
-  /// Stable machine identifier, as serialized by the core.
-  final String id;
-  final String label;
-
-  static ChannelKind fromId(String id) =>
-      ChannelKind.values.firstWhere((k) => k.id == id);
-}
-
-/// One channel, as the server describes it.
-class PremiumChannel {
-  const PremiumChannel({
-    required this.id,
-    required this.kind,
-    required this.target,
-    required this.linked,
-    this.linkCode,
-    this.startUrl,
-    this.linkedName,
-    this.enabled = true,
-    required this.createdAt,
-  });
-
-  factory PremiumChannel.fromJson(Map<String, dynamic> json) {
-    return PremiumChannel(
-      id: json['id'] as String,
-      kind: ChannelKind.fromId(json['kind'] as String),
-      target: json['target'] as String? ?? '',
-      linked: json['linked'] as bool? ?? true,
-      linkCode: json['link_code'] as String?,
-      startUrl: json['start_url'] as String?,
-      linkedName: json['linked_name'] as String?,
-      enabled: json['enabled'] as bool? ?? true,
-      createdAt: json['created_at'] as int,
-    );
-  }
-
-  final String id;
-  final ChannelKind kind;
-
-  /// Masked except for webhooks: proof it is the right one, not a copy
-  /// of it.
-  final String target;
-
-  /// False for a Telegram channel whose code was not sent to the bot yet.
-  final bool linked;
-
-  /// The code to send the bot, while a Telegram channel is unlinked.
-  final String? linkCode;
-
-  /// Opens the bot with the code filled in, while it waits for it.
-  final String? startUrl;
-
-  /// Who receives the alerts, when the server knows a name for them:
-  /// the Telegram chat that sent the code. Null for the other kinds,
-  /// and from a server that predates it.
-  final String? linkedName;
-  final bool enabled;
-
-  /// Unix seconds.
-  final int createdAt;
-
-  /// A Telegram channel the bot has not heard from yet.
-  bool get waitingForBot => kind == ChannelKind.telegram && !linked;
-}
-
-/// What creating a channel hands back: the channel, and for ntfy the
-/// topic drawn for it, shown once with the URL to subscribe to.
-class CreatedChannel {
-  const CreatedChannel({required this.channel, this.topic, this.subscribeUrl});
-
-  factory CreatedChannel.fromJson(Map<String, dynamic> json) {
-    return CreatedChannel(
-      channel: PremiumChannel.fromJson(json['channel'] as Map<String, dynamic>),
-      topic: json['topic'] as String?,
-      subscribeUrl: json['subscribe_url'] as String?,
-    );
-  }
-
-  final PremiumChannel channel;
-  final String? topic;
-
-  /// `https://ntfy.gerfaut-wallet.com/<topic>`.
-  final String? subscribeUrl;
-}
-
-/// What happened to a watched wallet. A kind this build does not know
-/// reads as [other], so a newer server never breaks the list.
-enum AlertKind {
-  spendDetected('spend_detected'),
-  spendConfirmed('spend_confirmed'),
-  coinsGone('coins_gone'),
-  receiveDetected('receive_detected'),
-  receiveConfirmed('receive_confirmed'),
-  timelockDue('timelock_due'),
-  walletRegistered('wallet_registered'),
-  walletRefused('wallet_refused'),
-  other('other');
-
-  const AlertKind(this.id);
-
-  final String id;
-
-  static AlertKind fromId(String? id) {
-    for (final kind in AlertKind.values) {
-      if (kind.id == id) return kind;
-    }
-    return AlertKind.other;
-  }
-}
-
-/// One entry of the account's event log.
-class PremiumEvent {
-  const PremiumEvent({
-    required this.id,
-    required this.kind,
-    required this.wallet,
-    required this.walletName,
-    required this.at,
-    this.data = const {},
-  });
-
-  factory PremiumEvent.fromJson(Map<String, dynamic> json) {
-    return PremiumEvent(
-      id: json['id'] as int,
-      kind: AlertKind.fromId(json['kind'] as String?),
-      // An account event, a device or a key, names no wallet. The log
-      // does not serve those, and one that slips through still reads.
-      wallet: json['wallet'] as String? ?? '',
-      walletName: json['wallet_name'] as String? ?? '',
-      at: json['at'] as int,
-      data: json['data'] as Map<String, dynamic>? ?? const {},
-    );
-  }
-
-  /// Increasing; the cursor of the server's log.
-  final int id;
-  final AlertKind kind;
-
-  /// The app's own wallet id.
-  final String wallet;
-  final String walletName;
-
-  /// Unix seconds.
-  final int at;
-
-  /// The kind's own fields, as the API documents them.
-  final Map<String, dynamic> data;
-}
-
-/// `GET /v1/heartbeat`, verified by the core against the embedded key
-/// and this device's clock.
-class HeartbeatReport {
-  const HeartbeatReport({required this.now, required this.tipHeight});
-
-  factory HeartbeatReport.fromJson(Map<String, dynamic> json) {
-    final heartbeat = json['heartbeat'] as Map<String, dynamic>;
-    return HeartbeatReport(
-      now: heartbeat['now'] as int,
-      tipHeight: heartbeat['tip_height'] as int?,
-    );
-  }
-
-  /// Unix seconds on the server.
-  final int now;
-
-  /// The chain tip the server watches from; null before its first block.
-  final int? tipHeight;
 }

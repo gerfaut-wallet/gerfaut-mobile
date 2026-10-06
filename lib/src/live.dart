@@ -26,9 +26,11 @@ import 'background.dart';
 import 'bridge.dart';
 import 'disguise.dart';
 import 'format.dart';
+import 'lock.dart';
 import 'models.dart';
 import 'notifications.dart';
 import 'state.dart';
+import 'prefs.dart';
 import 'vault_key.dart';
 
 // --- the platform side, as the screens see it --------------------------
@@ -40,8 +42,20 @@ abstract class LivePlatform {
   /// False when Android would not start it.
   Future<bool> start();
 
-  /// Records that Live is no longer wanted and stops the service.
+  /// Records that Live is no longer wanted and stops the service. Ends
+  /// a hold too.
   Future<void> stop();
+
+  /// Stops the service while Live has nothing to do, Android letting no
+  /// notification through or the network in use holding no wallet, and
+  /// records it as held: no longer wanted, so nothing restarts it
+  /// meanwhile, and meant to start again once it has. Kept by the
+  /// platform, so the hold outlives the process. [start] and [stop] end
+  /// it.
+  Future<void> hold();
+
+  /// Whether Live was held, and nothing said of it since.
+  Future<bool> isHeld();
 
   Future<bool> isRunning();
 
@@ -54,8 +68,9 @@ abstract class LivePlatform {
   Future<bool> isBatteryExempt();
 
   /// Puts Android's own question to the user and answers whether the
-  /// app is exempt once they are back.
-  Future<bool> requestBatteryExemption();
+  /// app is exempt once they are back. Null when no screen came up: the
+  /// phone has neither the question nor the list it stands for.
+  Future<bool?> requestBatteryExemption();
 
   /// `Build.MANUFACTURER`, as the phone spells it.
   Future<String> manufacturer();
@@ -88,6 +103,12 @@ class SystemLivePlatform implements LivePlatform {
   Future<void> stop() => _ask<Object?>('stop', null);
 
   @override
+  Future<void> hold() => _ask<Object?>('hold', null);
+
+  @override
+  Future<bool> isHeld() => _ask('isHeld', false);
+
+  @override
   Future<bool> isRunning() => _ask('isRunning', false);
 
   @override
@@ -97,8 +118,17 @@ class SystemLivePlatform implements LivePlatform {
   Future<bool> isBatteryExempt() => _ask('isBatteryExempt', false);
 
   @override
-  Future<bool> requestBatteryExemption() =>
-      _ask('requestBatteryExemption', false);
+  Future<bool?> requestBatteryExemption() async {
+    try {
+      return await _channel.invokeMethod<bool>('requestBatteryExemption');
+    } on MissingPluginException {
+      return null;
+    } on PlatformException catch (error) {
+      // Busy: the question asked a moment ago is on its way up, and its
+      // trip with it. Any other failure came before anything opened.
+      return error.code == 'busy' ? false : null;
+    }
+  }
 
   @override
   Future<String> manufacturer() => _ask('manufacturer', '');
@@ -251,10 +281,15 @@ class LiveState {
     this.status = const LiveWatchStatus(),
     this.batteryExempt = true,
     this.checked = false,
+    this.noWallet = false,
   });
 
   /// The Android service is up.
   final bool serviceRunning;
+
+  /// Live is the choice, and the network in use holds no wallet: the
+  /// service waits for one, with no connection and no notification.
+  final bool noWallet;
 
   /// What the core says of its connection.
   final LiveWatchStatus status;
@@ -269,12 +304,14 @@ class LiveState {
     LiveWatchStatus? status,
     bool? batteryExempt,
     bool? checked,
+    bool? noWallet,
   }) {
     return LiveState(
       serviceRunning: serviceRunning ?? this.serviceRunning,
       status: status ?? this.status,
       batteryExempt: batteryExempt ?? this.batteryExempt,
       checked: checked ?? this.checked,
+      noWallet: noWallet ?? this.noWallet,
     );
   }
 }
@@ -282,6 +319,9 @@ class LiveState {
 /// The one line under the setting. Null while there is nothing to say.
 String? liveStatusLine(LiveState live) {
   if (!live.checked) return null;
+  // Nothing to watch, so nothing runs: not Android's doing, and nothing
+  // a tap would change.
+  if (live.noWallet) return liveNoWalletLine;
   if (!live.serviceRunning) return 'Stopped by Android. Tap to restart.';
   final status = live.status;
   switch (status.state) {
@@ -294,22 +334,122 @@ String? liveStatusLine(LiveState live) {
     case WatchState.polling:
       return 'Polling every minute';
     case WatchState.reconnecting:
-      return 'Reconnecting';
+      return 'Reconnecting…';
+    // Off too while the service is up: the watch is on its way, which
+    // is what the switch above says.
     case WatchState.connecting:
     case WatchState.off:
-      return 'Connecting';
+      return 'Connecting…';
   }
 }
 
-/// The same, for the permanent notification: no host, ever.
+/// The status line while the network in use holds no wallet.
+const String liveNoWalletLine = 'Off until you add a wallet.';
+
+/// The same, for the permanent notification: no host, ever, and no
+/// count either. That Live leaves addresses to the syncs is said in a
+/// few words; how many, and what to do about it, is for the settings.
 String liveNotificationText(LiveWatchStatus status) {
-  return switch (status.state) {
+  final state = switch (status.state) {
     WatchState.connected => 'Connected to your server',
     WatchState.polling => 'Checking every minute',
-    WatchState.reconnecting => 'Reconnecting',
-    WatchState.connecting || WatchState.off => 'Connecting',
+    WatchState.reconnecting => 'Reconnecting…',
+    WatchState.connecting || WatchState.off => 'Connecting…',
   };
+  return status.leavesSomeOut
+      ? '$state · some addresses wait for syncs'
+      : state;
 }
+
+/// The most addresses Live follows, as the core caps them: on a public
+/// server, in all and per wallet, then on a node the user says is
+/// theirs. Grouped the way every figure in the app is.
+final String liveLimit = groupThousands('2000');
+final String livePerWalletLimit = groupThousands('200');
+final String ownNodeLiveLimit = groupThousands('20000');
+
+/// What the settings say under the status line when Live cannot follow
+/// every address: how many wait for a sync instead, and what lifts the
+/// limit. Null while every address is followed.
+///
+/// On a node already declared the user's own, two things can leave
+/// addresses out. The list may have reached the 20,000 of an own node,
+/// and nothing in the app lifts that further. Or the node refused some
+/// of a shorter list: its own limit, which its owner can raise, named
+/// by the setting of the software it runs when that is known.
+({String fact, String? remedy})? liveCoverageNote(
+  LiveWatchStatus status, {
+  required bool ownNode,
+}) {
+  if (!status.leavesSomeOut) return null;
+  final addresses = _counted(status.leftOutScripts, 'address', 'addresses');
+  final wallets = _counted(status.leftOutWallets, 'wallet', 'wallets');
+  final verb = status.leftOutScripts == 1 ? 'is' : 'are';
+  final waiting =
+      '$addresses of $wallets $verb checked at the next sync instead.';
+  // On the user's own node, a list below the cap that still leaves
+  // addresses out is the node refusing them, as much as a public server
+  // that takes fewer than the list holds.
+  final refused =
+      serverRefused(status) || (ownNode && status.watchedScripts < _ownNodeCap);
+  final fact = refused
+      ? '${ownNode ? 'Your node' : 'The server'} refuses some of the '
+            'addresses Live asks it to follow. $waiting'
+      : ownNode
+      ? 'Live follows at most $ownNodeLiveLimit addresses, even on your '
+            'own node. $waiting'
+      : 'Live follows at most $livePerWalletLimit addresses per wallet '
+            'and $liveLimit in all. $waiting';
+  final remedy = ownNode
+      ? (refused ? _raiseLimit(status.serverSoftware) : null)
+      : 'Connect your own node and turn on "This is my node" in Network '
+            'to follow up to $ownNodeLiveLimit.';
+  return (fact: fact, remedy: remedy);
+}
+
+/// Whether the server Live last spoke to refused part of the list: the
+/// wallets then hear fewer addresses than the list holds. An address two
+/// wallets share counts for each of them, so this can miss a refusal but
+/// never makes one up. Without the wallets, nothing can be told.
+bool serverRefused(LiveWatchStatus status) {
+  if (status.wallets.isEmpty) return false;
+  final heard = status.wallets.fold(0, (sum, w) => sum + w.watchedScripts);
+  return heard < status.watchedScripts;
+}
+
+/// The most addresses Live lists on an own node, as the core caps it.
+const int _ownNodeCap = 20000;
+
+/// Where a node's owner lets it take more subscriptions, by what the
+/// server says it runs: the settings these servers document, as the
+/// desktop app names them. electrs as its author publishes it has no
+/// such limit, and nothing to raise. Anything else gets the general
+/// advice.
+String? _raiseLimit(String? software) {
+  final name = software?.trim().toLowerCase() ?? '';
+  if (name.startsWith('fulcrum')) {
+    return 'Raise max_subs_per_ip in the Fulcrum configuration to follow '
+        'them all.';
+  }
+  if (name.startsWith('electrumx')) {
+    return 'Raise COST_SOFT_LIMIT and COST_HARD_LIMIT in the ElectrumX '
+        'settings to follow them all.';
+  }
+  // Blockstream's electrs.
+  if (name.startsWith('electrs-esplora')) {
+    return 'Raise --electrum-subscription-limit on this electrs to follow '
+        'them all.';
+  }
+  if (name.startsWith('mempool-electrs')) {
+    return 'Raise --electrum-max-subscriptions on this electrs to follow '
+        'them all.';
+  }
+  if (name.startsWith('electrs/')) return null;
+  return 'Raise the subscription limit of your server to follow them all.';
+}
+
+String _counted(int count, String one, String many) =>
+    '${groupThousands('$count')} ${count == 1 ? one : many}';
 
 class LiveController extends Notifier<LiveState> {
   StreamSubscription<LiveEvent>? _events;
@@ -317,6 +457,16 @@ class LiveController extends Notifier<LiveState> {
   @override
   LiveState build() {
     ref.onDispose(() => _events?.cancel());
+    // The watch follows the wallets of the network in use, as the core
+    // does: removing the last one leaves it nothing to watch, and
+    // adding one gives it something again, the app on screen either
+    // way. A list read again with the same answer changes nothing.
+    ref.listen(walletsProvider, (previous, next) {
+      final had = previous?.valueOrNull?.isNotEmpty;
+      final has = next.valueOrNull?.isNotEmpty;
+      if (had == null || has == null || had == has) return;
+      unawaited(resume().catchError((Object _) {}));
+    });
     return const LiveState();
   }
 
@@ -324,20 +474,57 @@ class LiveController extends Notifier<LiveState> {
       ref.read(notifyNewTxProvider) &&
       ref.read(backgroundCheckProvider) == BackgroundCheck.live;
 
+  /// Whether the network in use holds a wallet. Without one the core's
+  /// watch holds no connection and says nothing, and a service kept up
+  /// for it would show "Connecting…" for good. A list that cannot be
+  /// read counts as one: it never stops Live.
+  Future<bool> _hasWallets() async {
+    try {
+      return (await ref.read(walletsProvider.future)).isNotEmpty;
+    } catch (_) {
+      return true;
+    }
+  }
+
   /// Called once the preferences are in, and each time the app comes
   /// back on screen. Listens to the core, and brings the service in line
   /// with the setting: started when it should run and does not, and the
   /// setting taken back to a periodic check when Live was stopped from
   /// its notification while no Dart code could write that down.
+  ///
+  /// While Android lets no notice through, or the network in use holds
+  /// no wallet, the service is held: stopped, and the setting left as it
+  /// is. A connection kept open to say nothing costs battery for
+  /// nothing, and the choice of Live is the user's, for when there is
+  /// something to say again. The platform keeps the hold, so a process
+  /// that dies meanwhile does not take it for a Stop pressed on the
+  /// notification, which clears the flag alike.
   Future<void> resume() async {
     _events ??= ref
         .read(bridgeProvider)
         .liveEvents()
         .listen(_onEvent, onError: (_) {});
-    if (!_chosen) return;
     final platform = ref.read(livePlatformProvider);
+    if (!_chosen) {
+      // Live is no longer the choice: a hold left from when it was
+      // must not start it again later.
+      if (await platform.isHeld()) await platform.stop();
+      return;
+    }
     if (ref.read(disguiseProvider).disguised) {
       await _fallBack();
+      return;
+    }
+    if (ref.read(notificationsRefusedProvider) || !await _hasWallets()) {
+      if (await platform.isWanted() || await platform.isRunning()) {
+        await platform.hold();
+      }
+      await refresh();
+      return;
+    }
+    if (await platform.isHeld()) {
+      await platform.start();
+      await refresh();
       return;
     }
     if (!await platform.isWanted()) {
@@ -358,22 +545,29 @@ class LiveController extends Notifier<LiveState> {
       try {
         status = await ref.read(bridgeProvider).liveStatus();
       } catch (_) {
-        // The line says "Connecting" until the core answers.
+        // The line says "Connecting…" until the core answers.
       }
     }
+    final noWallet = !running && _chosen && !await _hasWallets();
     state = LiveState(
       serviceRunning: running,
       status: status,
       batteryExempt: exempt,
       checked: true,
+      noWallet: noWallet,
     );
   }
 
-  /// Starts or stops the service to match the setting.
+  /// Starts or stops the service to match the setting. Chosen while the
+  /// network in use holds no wallet, Live waits for the first one.
   Future<void> apply({required bool wanted}) async {
     final platform = ref.read(livePlatformProvider);
     if (wanted && !ref.read(disguiseProvider).disguised) {
-      await platform.start();
+      if (await _hasWallets()) {
+        await platform.start();
+      } else {
+        await platform.hold();
+      }
     } else {
       await platform.stop();
     }
@@ -389,10 +583,28 @@ class LiveController extends Notifier<LiveState> {
     await refresh();
   }
 
+  /// Android's question about battery optimisation. Where a phone has
+  /// no direct dialog for it, the whole list of apps opens instead: a
+  /// screen of the system's that Gerfaut sends the user to, announced
+  /// so the lock does not land on the way back. A dialog over the app
+  /// leaves it in sight, and its return takes the announcement back.
   Future<bool> requestBatteryExemption() async {
-    final exempt = await ref
-        .read(livePlatformProvider)
-        .requestBatteryExemption();
+    final platform = ref.read(livePlatformProvider);
+    // Already exempt, nothing comes up and nothing returns: a trip
+    // announced for it would wait to excuse the next real absence.
+    if (await platform.isBatteryExempt()) {
+      state = state.copyWith(batteryExempt: true);
+      return true;
+    }
+    final answer = await ref
+        .read(lockProvider.notifier)
+        .excursion(
+          platform.requestBatteryExemption,
+          // Neither the question nor the list opened: there was no trip,
+          // and the next absence is a real one.
+          shown: (answer) => answer != null,
+        );
+    final exempt = answer ?? false;
     state = state.copyWith(batteryExempt: exempt);
     return exempt;
   }
@@ -432,7 +644,7 @@ class LiveController extends Notifier<LiveState> {
     try {
       final settings = await ref.read(bridgeProvider).getSettings();
       final stored = BackgroundCheck.fromStored(
-        settings.appPrefs['notify.background'],
+        settings.appPrefs[Pref.background],
       );
       if (stored != null && stored != ref.read(backgroundCheckProvider)) {
         ref.read(backgroundCheckProvider.notifier).hydrate(stored.stored);
@@ -448,6 +660,28 @@ final liveProvider = NotifierProvider<LiveController, LiveState>(
   LiveController.new,
 );
 
+/// How much of one wallet Live follows, or null when there is nothing
+/// to say: Live is not chosen or not running, or it has room for every
+/// address, and then every wallet is live and a badge on each would say
+/// nothing.
+final walletCoverageProvider = Provider.family<WalletCoverage?, String>((
+  ref,
+  walletId,
+) {
+  final chosen =
+      ref.watch(notifyNewTxProvider) &&
+      ref.watch(backgroundCheckProvider) == BackgroundCheck.live;
+  if (!chosen) return null;
+  final live = ref.watch(liveProvider);
+  final status = live.status;
+  if (!live.serviceRunning ||
+      !status.leavesSomeOut ||
+      status.leftOutWallets == 0) {
+    return null;
+  }
+  return status.coverageOf(walletId);
+});
+
 // --- the service side ---------------------------------------------------
 
 /// How long a burst of announcements waits for the sync report that
@@ -459,6 +693,15 @@ const Duration _endWait = Duration(seconds: 3);
 
 /// How long a watch that ended on its own is left before it starts again.
 const Duration _restartAfter = Duration(seconds: 2);
+
+/// How long the phone stays awake after the last word from a watch at
+/// work: a ping answered, a wallet synced, a status said.
+const Duration _quietAfter = Duration(seconds: 5);
+
+/// How long it stays awake for a watch that is still connecting, which
+/// may say nothing until the server answers. The service lets go after
+/// this much whatever happens.
+const Duration _connectingFor = Duration(seconds: 30);
 
 /// What runs inside the engine the Android service hosts: opens the
 /// vault, starts the watch, says what it finds, and answers the
@@ -473,6 +716,8 @@ class LiveRunner {
     this.schedule = registerBackgroundCheck,
     this.flushAfter = _flushAfter,
     this.restartAfter = _restartAfter,
+    this.quietAfter = _quietAfter,
+    this.connectingFor = _connectingFor,
   });
 
   final GerfautBridge bridge;
@@ -483,8 +728,19 @@ class LiveRunner {
   final BackgroundScheduler schedule;
   final Duration flushAfter;
   final Duration restartAfter;
+  final Duration quietAfter;
+  final Duration connectingFor;
 
   StreamSubscription<LiveEvent>? _events;
+
+  /// When the phone may sleep again, if nothing more is said.
+  Timer? _letGo;
+
+  /// Announcements being said: the phone stays awake until they are.
+  int _flushing = 0;
+
+  /// The state the watch last said it was in.
+  WatchState? _lastState;
   bool _started = false;
 
   /// The start under way: the heartbeat and a change of network may ask
@@ -508,6 +764,9 @@ class LiveRunner {
   Future<Object?> _onCall(MethodCall call) async {
     switch (call.method) {
       case 'tick':
+        // The core only hears the ask here: the ping, and whatever its
+        // answer sets off, happen after, and the phone stays up for it.
+        _stayAwake(quietAfter);
         // A start that failed (the keystore not ready, the vault not
         // to be opened yet) is tried again at each heartbeat.
         if (await _ensureStarted()) {
@@ -540,8 +799,8 @@ class LiveRunner {
       final settings = await bridge.getSettings();
       final prefs = settings.appPrefs;
       final wanted =
-          prefs['notify.new_tx'] == '1' &&
-          prefs['notify.background'] == BackgroundCheck.live.stored;
+          prefs[Pref.notifyNewTx] == '1' &&
+          prefs[Pref.background] == BackgroundCheck.live.stored;
       if (!wanted || await isDisguised()) {
         await _tell('standDown');
         return false;
@@ -576,6 +835,7 @@ class LiveRunner {
   /// announced here. Nothing handed out is ever handed out again.
   Future<void> stop({required bool revert}) async {
     _stopping = true;
+    _stayAwake(connectingFor);
     final running = _started;
     final ended = _ended = Completer<void>();
     try {
@@ -591,10 +851,13 @@ class LiveRunner {
     await _events?.cancel();
     _events = null;
     _started = false;
+    _letGo?.cancel();
+    _letGo = null;
+    await _tell('release');
     try {
       if (revert) {
         await bridge.setAppPref(
-          'notify.background',
+          Pref.background,
           BackgroundCheck.quarterHour.stored,
         );
         await schedule(BackgroundCheck.quarterHour.seconds);
@@ -606,6 +869,23 @@ class LiveRunner {
   }
 
   void _onEvent(LiveEvent event) {
+    // A push from the server wakes the phone for an instant; the sync it
+    // sets off and the announcement after it need it awake for longer.
+    // A status that only recounts what is followed sets nothing off: the
+    // watch says one at every round of its own, and holding the phone
+    // up for each would cost more than the watch itself.
+    _stayAwake(switch (event) {
+      LiveStatusChanged(:final status) when status.state == _lastState =>
+        Duration.zero,
+      LiveStatusChanged(
+        status: LiveWatchStatus(
+          state: WatchState.connecting || WatchState.reconnecting,
+        ),
+      ) =>
+        connectingFor,
+      _ => quietAfter,
+    });
+    if (event is LiveStatusChanged) _lastState = event.status.state;
     switch (event) {
       case LiveTransaction(:final tx):
         _pending.putIfAbsent(tx.walletId, () => []).add(tx);
@@ -635,6 +915,9 @@ class LiveRunner {
     if (run != _run) return;
     _started = false;
     _events = null;
+    // The next run starts from nothing: its first word, "connecting",
+    // is news and keeps the phone up, whatever this one said last.
+    _lastState = null;
     final ended = _ended;
     if (ended != null && !ended.isCompleted) ended.complete();
     if (!_stopping) {
@@ -655,22 +938,40 @@ class LiveRunner {
     _timers.remove(walletId)?.cancel();
     final txs = _pending.remove(walletId);
     if (txs == null || txs.isEmpty) return;
+    _flushing++;
     try {
-      final settings = await bridge.getSettings();
-      final prefs = settings.appPrefs;
-      if (prefs['notify.new_tx'] != '1' || await isDisguised()) return;
-      final wallets = await bridge.listWallets();
-      await NewTxAnnouncer(notifications).announce(
+      await announceFromVault(
+        bridge,
+        notifications,
         txs,
-        walletNames: {for (final wallet in wallets) wallet.id: wallet.name},
-        unit: AmountUnit.fromId(prefs['display.unit']) ?? AmountUnit.btc,
-        masked: notifiesMasked(settings),
-        locked: notifiesLocked(settings),
+        isDisguised: isDisguised,
       );
     } catch (_) {
       // A notification that cannot be posted ends nothing: the
       // transaction is in the wallet for the next look at the app.
+    } finally {
+      _flushing--;
     }
+  }
+
+  /// Keeps the phone awake for [window] more, from now. Each call asks
+  /// the service again, which moves its own timeout; the last one to
+  /// run out lets the phone sleep, unless announcements are still on
+  /// their way, which keep it up until they are said.
+  void _stayAwake(Duration window) {
+    if (window <= Duration.zero) return;
+    _letGo?.cancel();
+    _letGo = Timer(window, _rest);
+    unawaited(_tell('hold'));
+  }
+
+  void _rest() {
+    _letGo = null;
+    if (_pending.isNotEmpty || _flushing > 0) {
+      _stayAwake(quietAfter);
+      return;
+    }
+    unawaited(_tell('release'));
   }
 
   Future<void> _tell(String method, [Object? argument]) async {

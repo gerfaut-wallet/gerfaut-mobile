@@ -18,8 +18,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'disguise.dart';
 import 'models.dart';
 import 'state.dart';
+import 'prefs.dart';
 
-/// Application version shown in About. Kept in step with pubspec.yaml.
+/// Application version shown in About, and the one an update is
+/// compared against. The same as `version` in pubspec.yaml, which the
+/// build stamps on the APK: a test fails the moment the two part, so a
+/// release never announces itself to the people already running it.
 const String appVersion = '0.1.0';
 
 /// Where "View release" goes. The one place to change when the app is
@@ -226,10 +230,10 @@ class UpdateController extends Notifier<UpdateState> {
   void hydrate(Map<String, String> prefs) {
     state = UpdateState(
       // Only an explicit "0" turns it off.
-      automatic: prefs['updates.auto'] != '0',
-      latest: _stable(prefs['updates.latest']),
-      dismissed: ReleaseVersion.tryParse(prefs['updates.dismissed']),
-      checkedAt: int.tryParse(prefs['updates.checked_at'] ?? ''),
+      automatic: prefs[Pref.updatesAuto] != '0',
+      latest: _stable(prefs[Pref.updatesLatest]),
+      dismissed: ReleaseVersion.tryParse(prefs[Pref.updatesDismissed]),
+      checkedAt: int.tryParse(prefs[Pref.updatesCheckedAt] ?? ''),
     );
   }
 
@@ -240,7 +244,7 @@ class UpdateController extends Notifier<UpdateState> {
 
   void setAutomatic(bool on) {
     state = state.copyWith(automatic: on);
-    _store('updates.auto', on ? '1' : '0');
+    _store(Pref.updatesAuto, on ? '1' : '0');
   }
 
   /// The wallets just came on screen: at launch, after an unlock, or
@@ -269,7 +273,7 @@ class UpdateController extends Notifier<UpdateState> {
     // A stamp from the future is a clock that was moved: check again.
     if (last != null && last <= now && now - last < updateCheckPeriod) return;
     state = state.copyWith(checkedAt: now);
-    _store('updates.checked_at', '$now');
+    _store(Pref.updatesCheckedAt, '$now');
     // The first day asks nothing: whoever just installed Gerfaut gets to
     // read the About card, and its switch, before the app speaks to
     // GitHub on its own.
@@ -297,7 +301,7 @@ class UpdateController extends Notifier<UpdateState> {
       // A notice already up follows the facts; none comes up mid-session.
       announced: state.announced == null ? null : version,
     );
-    _store('updates.latest', version == null ? '' : '$version');
+    _store(Pref.updatesLatest, version == null ? '' : '$version');
   }
 
   /// Closes the notice for the release it names, for good.
@@ -305,7 +309,7 @@ class UpdateController extends Notifier<UpdateState> {
     final version = state.notice;
     if (version == null) return;
     state = state.copyWith(dismissed: version);
-    _store('updates.dismissed', '$version');
+    _store(Pref.updatesDismissed, '$version');
   }
 
   void _store(String key, String value) {

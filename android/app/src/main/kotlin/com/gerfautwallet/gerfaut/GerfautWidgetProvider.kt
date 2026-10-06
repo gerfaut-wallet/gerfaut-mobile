@@ -60,13 +60,34 @@ abstract class GerfautWidgetProvider : HomeWidgetProvider() {
     }
 
     // Shows a line when the app said something, hides it when not.
-    protected fun RemoteViews.line(viewId: Int, value: String?) {
+    protected fun RemoteViews.line(context: Context, viewId: Int, value: String?) {
         if (value == null) {
             setViewVisibility(viewId, View.GONE)
         } else {
-            setTextViewText(viewId, value)
+            figure(context, viewId, value)
             setViewVisibility(viewId, View.VISIBLE)
         }
+    }
+
+    // Writes a figure, described in words for a screen reader where
+    // what is drawn would be read as symbols: the mask one dot at a
+    // time, the dash of a value not known yet as "dash". Anything else
+    // reads as written. The mask and the dash are read from
+    // strings_widget.xml, as the layouts draw them and as the app
+    // writes them (lib/src/format.dart).
+    protected fun RemoteViews.figure(context: Context, viewId: Int, value: String) {
+        val mask = context.getString(R.string.widget_masked_placeholder)
+        setTextViewText(viewId, value)
+        setContentDescription(
+            viewId,
+            when {
+                value.contains(mask) ->
+                    value.replace(mask, context.getString(R.string.widget_masked_spoken))
+                value == context.getString(R.string.widget_placeholder) ->
+                    context.getString(R.string.widget_placeholder_spoken)
+                else -> null
+            },
+        )
     }
 
     // The smallest height the launcher may draw this instance at, in

@@ -5,11 +5,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/backup_restore.dart';
+import 'package:gerfaut/screens/settings.dart';
+import 'package:gerfaut/screens/calculator.dart';
 import 'package:gerfaut/screens/wallet_home.dart';
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/disguise.dart';
+import 'package:gerfaut/src/live.dart';
+import 'package:gerfaut/src/notifications.dart';
 import 'package:gerfaut/src/vault_key.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:flutter/gestures.dart' show kLongPressTimeout, kPressTimeout;
@@ -25,11 +29,12 @@ Widget app(
   FakeBridge bridge, {
   Future<void> Function()? bootstrap,
   Future<void> Function()? startOver,
+  FakeDisguise? disguise,
 }) {
   return ProviderScope(
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
-      disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+      disguiseServiceProvider.overrideWithValue(disguise ?? FakeDisguise()),
     ],
     child: GerfautApp(bootstrap: bootstrap, startOver: startOver),
   );
@@ -219,7 +224,7 @@ void main() {
       expect(top('Cold storage'), lessThan(top('Spending')));
       expect(
         tester.getSize(find.widgetWithText(GhostButton, 'Try again')).height,
-        44,
+        GerfautTouch.target,
       );
 
       // Try again: the same order goes out once more, and lands.
@@ -394,6 +399,23 @@ void main() {
     expect(find.text('Add a wallet'), findsOneWidget);
   });
 
+  testWidgets('a wallet list that cannot be read is asked for again', (
+    tester,
+  ) async {
+    final bridge = _ListFails();
+    await tester.pumpWidget(app(bridge, bootstrap: () async {}));
+    await tester.pumpAndSettle();
+    expect(find.text('The wallets could not be loaded.'), findsOneWidget);
+    expect(find.text('the list could not be read'), findsOneWidget);
+    // The vault opened: nothing blames it.
+    expect(find.textContaining('vault'), findsNothing);
+
+    bridge.failing = false;
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+    expect(find.text('No wallets yet'), findsOneWidget);
+  });
+
   testWidgets('nothing asks the core before the vault is open', (tester) async {
     final bridge = _ClosedUntilOpen();
     await tester.pumpWidget(
@@ -460,6 +482,209 @@ void main() {
     expect(find.text('Never synced'), findsNothing);
   });
 
+  group('live coverage on the cards', () {
+    Widget liveApp(FakeBridge bridge) {
+      return ProviderScope(
+        overrides: [
+          bridgeProvider.overrideWithValue(bridge),
+          disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+          livePlatformProvider.overrideWithValue(
+            FakeLivePlatform(running: true, wanted: true, batteryExempt: true),
+          ),
+        ],
+        child: const GerfautApp(),
+      );
+    }
+
+    FakeBridge liveBridge(LiveWatchStatus status) {
+      final bridge = FakeBridge(
+        wallets: [
+          makeMeta(id: 'w1', name: 'Savings'),
+          makeMeta(id: 'w2', name: 'Spending'),
+          makeMeta(id: 'w3', name: 'Archive'),
+        ],
+        settings: const Settings(
+          activeNetwork: Network.mainnet,
+          backends: {},
+          appPrefs: {
+            'onboarding.seen': '1',
+            'notify.new_tx': '1',
+            'notify.background': 'live',
+          },
+        ),
+      )..watchStatus = status;
+      for (final meta in bridge.wallets) {
+        bridge.snapshots[meta.id] = makeSnapshot(meta: meta);
+      }
+      return bridge;
+    }
+
+    testWidgets('each card says how much of it Live follows', (tester) async {
+      tester.view.physicalSize = const Size(800, 3600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final handle = tester.ensureSemantics();
+      final bridge = liveBridge(
+        const LiveWatchStatus(
+          state: WatchState.connected,
+          leftOutScripts: 1240,
+          leftOutWallets: 2,
+          wallets: [
+            WalletCoverage(
+              walletId: 'w1',
+              coverage: Coverage.live,
+              watchedScripts: 36,
+            ),
+            WalletCoverage(
+              walletId: 'w2',
+              coverage: Coverage.partial,
+              watchedScripts: 200,
+              leftOutScripts: 1040,
+            ),
+            WalletCoverage(
+              walletId: 'w3',
+              coverage: Coverage.syncOnly,
+              leftOutScripts: 200,
+            ),
+          ],
+        ),
+      );
+      await tester.pumpWidget(liveApp(bridge));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Live'), findsOneWidget);
+      expect(find.text('Partly live'), findsOneWidget);
+      expect(find.text('At next sync'), findsOneWidget);
+      // Read with its card, after the name and the balance.
+      expect(
+        find.bySemanticsLabel(
+          RegExp(
+            '^Spending\n.*\nPartly live\\. 1\u00A0040 addresses wait for the '
+            r'next sync\.$',
+          ),
+        ),
+        findsOneWidget,
+      );
+      handle.dispose();
+    });
+
+    const short = LiveWatchStatus(
+      state: WatchState.connected,
+      leftOutScripts: 1240,
+      leftOutWallets: 2,
+      wallets: [
+        WalletCoverage(walletId: 'w1', coverage: Coverage.live),
+        WalletCoverage(
+          walletId: 'w2',
+          coverage: Coverage.partial,
+          watchedScripts: 200,
+          leftOutScripts: 1040,
+        ),
+        WalletCoverage(
+          walletId: 'w3',
+          coverage: Coverage.syncOnly,
+          leftOutScripts: 200,
+        ),
+      ],
+    );
+
+    testWidgets('the page of a wallet says how many of its addresses wait', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 3600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(liveApp(liveBridge(short)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Spending'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Partly live'), findsOneWidget);
+      expect(
+        find.text('1\u00A0040 addresses wait for the next sync.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a wallet Live hears whole says only so on its page', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 3600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(liveApp(liveBridge(short)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Savings'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Live'), findsOneWidget);
+      expect(find.textContaining('for the next sync'), findsNothing);
+    });
+
+    testWidgets('the wallet list in the settings carries the badges', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 3600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            bridgeProvider.overrideWithValue(liveBridge(short)),
+            livePlatformProvider.overrideWithValue(
+              FakeLivePlatform(
+                running: true,
+                wanted: true,
+                batteryExempt: true,
+              ),
+            ),
+          ],
+          child: MaterialApp(
+            theme: themeFrom(GerfautTokens.light, Brightness.light),
+            home: const SettingsScreen(section: SettingsSection.wallets),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // What the app's gate does at launch: the preferences, then the
+      // watch.
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(SettingsScreen)),
+      );
+      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      container.read(backgroundCheckProvider.notifier).hydrate('live');
+      await container.read(liveProvider.notifier).refresh();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Live'), findsOneWidget);
+      expect(find.text('Partly live'), findsOneWidget);
+      expect(find.text('At next sync'), findsOneWidget);
+    });
+
+    testWidgets('with room for every address, no card says anything', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 3600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final bridge = liveBridge(
+        const LiveWatchStatus(
+          state: WatchState.connected,
+          wallets: [
+            WalletCoverage(walletId: 'w1', coverage: Coverage.live),
+            WalletCoverage(walletId: 'w2', coverage: Coverage.live),
+            WalletCoverage(walletId: 'w3', coverage: Coverage.live),
+          ],
+        ),
+      );
+      await tester.pumpWidget(liveApp(bridge));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Live'), findsNothing);
+      expect(find.text('Partly live'), findsNothing);
+    });
+  });
+
   testWidgets('a failed sync still shows on the card', (tester) async {
     final bridge = FakeBridge(wallets: [makeMeta(totalSats: 123456)]);
     bridge.onSyncAll = (_) => const SyncAllReport(
@@ -510,7 +735,10 @@ void main() {
     double top(String label) => tester.getTopLeft(find.text(label)).dy;
     for (var i = 0; i < order.length; i++) {
       if (i > 0) expect(top(order[i]), greaterThan(top(order[i - 1])));
-      expect(menuRowHeight(tester, order[i]), greaterThanOrEqualTo(44));
+      expect(
+        menuRowHeight(tester, order[i]),
+        greaterThanOrEqualTo(GerfautTouch.target),
+      );
     }
 
     // A tap beside it closes it, and the page underneath is untouched.
@@ -555,7 +783,7 @@ void main() {
     await pickFromMenu(tester, 'Hide balances');
 
     expect(find.textContaining('0.00123456', findRichText: true), findsNothing);
-    expect(find.textContaining('•••••', findRichText: true), findsWidgets);
+    expect(findMasked(), findsWidgets);
     expect(bridge.appPrefs['mobile.masked'], '1');
 
     // The entry now offers the way back, under the other label.
@@ -588,6 +816,104 @@ void main() {
     expect(find.textContaining('vault init failed'), findsOneWidget);
     expect(find.text('Try again'), findsOneWidget);
     expect(find.text('Start over…'), findsNothing);
+  });
+
+  group('a failed start under the disguise', () {
+    Future<void> typePin(WidgetTester tester, String pin) async {
+      for (final d in pin.split('')) {
+        await tester.tap(find.widgetWithText(InkWell, d));
+        await tester.pump();
+      }
+      await tester.tap(find.bySemanticsLabel('Equals'));
+      await tester.pumpAndSettle();
+    }
+
+    FakeBridge lockedBridge() => returning(wallets: [makeMeta()])
+      ..lock = const AppLock(kind: LockKind.pin, biometric: false)
+      ..lockSecret = '1234';
+
+    testWidgets('shows a calculator, never the error', (tester) async {
+      await tester.pumpWidget(
+        app(
+          lockedBridge(),
+          bootstrap: () async => throw const VaultKeyMissingException(
+            'nothing is stored under its name',
+          ),
+          disguise: FakeDisguise(disguised: true),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CalculatorScreen), findsOneWidget);
+      expect(find.text('Gerfaut could not start'), findsNothing);
+      expect(find.textContaining('vault'), findsNothing);
+      expect(find.text('Try again'), findsNothing);
+    });
+
+    testWidgets('a pin tries the vault again, and a vault still closed '
+        'leaves the number on the display', (tester) async {
+      var attempts = 0;
+      await tester.pumpWidget(
+        app(
+          lockedBridge(),
+          bootstrap: () async {
+            attempts++;
+            throw StateError('vault init failed');
+          },
+          disguise: FakeDisguise(disguised: true),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await typePin(tester, '1234');
+      expect(attempts, 2);
+      expect(find.byType(CalculatorScreen), findsOneWidget);
+      expect(find.text('1,234'), findsOneWidget);
+      expect(find.text('Gerfaut could not start'), findsNothing);
+    });
+
+    testWidgets('a vault that opens behind it brings the usual calculator', (
+      tester,
+    ) async {
+      var attempts = 0;
+      final bridge = lockedBridge();
+      await tester.pumpWidget(
+        app(
+          bridge,
+          bootstrap: () async {
+            attempts++;
+            if (attempts == 1) throw StateError('vault init failed');
+          },
+          disguise: FakeDisguise(disguised: true),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await typePin(tester, '1234');
+      expect(attempts, 2);
+      // Still a calculator, now the one the lock answers through.
+      expect(find.byType(CalculatorScreen), findsOneWidget);
+      expect(find.text('Cold storage'), findsNothing);
+
+      await typePin(tester, '1234');
+      expect(find.byType(CalculatorScreen), findsNothing);
+      expect(find.text('Cold storage'), findsOneWidget);
+    });
+
+    testWidgets('settings that fail to load stay behind the calculator', (
+      tester,
+    ) async {
+      final bridge = lockedBridge()
+        ..settingsError = const BridgeException('vault', 'the vault is gone');
+      await tester.pumpWidget(
+        app(bridge, disguise: FakeDisguise(disguised: true)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CalculatorScreen), findsOneWidget);
+      expect(find.text('Gerfaut could not start'), findsNothing);
+      expect(find.textContaining('the vault is gone'), findsNothing);
+    });
   });
 
   testWidgets('a vault held elsewhere says the app is open, no start over', (
@@ -713,6 +1039,27 @@ class _GatedVault extends FakeBridge {
   Future<List<WalletMeta>> listWallets([Network? network]) async {
     listed++;
     await gate?.future;
+    return super.listWallets(network);
+  }
+}
+
+class _ListFails extends FakeBridge {
+  _ListFails()
+    : super(
+        settings: const Settings(
+          activeNetwork: Network.mainnet,
+          backends: {},
+          appPrefs: {'onboarding.seen': '1'},
+        ),
+      );
+
+  bool failing = true;
+
+  @override
+  Future<List<WalletMeta>> listWallets([Network? network]) async {
+    if (failing) {
+      throw const BridgeException('storage', 'the list could not be read');
+    }
     return super.listWallets(network);
   }
 }

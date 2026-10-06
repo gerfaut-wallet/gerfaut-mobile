@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
@@ -159,5 +160,101 @@ void main() {
 
     expect(copied, txid);
     await tester.pump(const Duration(milliseconds: 1600));
+  });
+
+  testWidgets('a chip is read once, by its label alone', (tester) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: themeFrom(GerfautTokens.light, Brightness.light),
+        home: const Scaffold(
+          body: AddressChip(
+            value: 'f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16',
+            kind: 'transaction ID',
+            spoken: 'starting f4184fc5',
+          ),
+        ),
+      ),
+    );
+    final node = tester.getSemantics(find.byType(AddressChip));
+    expect(node.label, 'Copy transaction ID starting f4184fc5');
+    // Nothing of the truncated text drawn inside is read after it.
+    expect(find.bySemanticsLabel(RegExp('…')), findsNothing);
+    handle.dispose();
+  });
+
+  testWidgets('a screen reader double tap copies, as a finger does', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    String? copied;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied = (call.arguments as Map)['text'] as String?;
+          }
+          return null;
+        });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null),
+    );
+
+    await tester.pumpWidget(host(const AddressChip(value: txid)));
+    final node = tester.getSemantics(find.byType(AddressChip));
+    expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    node.owner!.performAction(node.id, SemanticsAction.tap);
+    await tester.pump();
+    expect(copied, txid);
+    await tester.pump(const Duration(milliseconds: 1600));
+    handle.dispose();
+  });
+
+  testWidgets('Copied is said in Ardoise, not in the colour of the chain', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: themeFrom(GerfautTokens.light, Brightness.light),
+        home: const Scaffold(body: AddressChip(value: 'bc1qexampleaddress')),
+      ),
+    );
+    await tester.tap(find.byType(AddressChip));
+    await tester.pump();
+    expect(
+      tester.widget<Text>(find.text('Copied')).style!.color,
+      GerfautTokens.light.textMuted,
+    );
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('the finger gets a full target around a chip drawn smaller', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: themeFrom(GerfautTokens.light, Brightness.light),
+        home: const Scaffold(
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [AddressChip(value: 'bc1qexampleaddress')],
+          ),
+        ),
+      ),
+    );
+    expect(
+      tester.getSize(find.byType(AddressChip)).height,
+      greaterThanOrEqualTo(GerfautTouch.target),
+    );
+    // What is drawn keeps its own height.
+    final drawn = tester.getSize(
+      find
+          .descendant(
+            of: find.byType(AddressChip),
+            matching: find.byType(InkWell),
+          )
+          .first,
+    );
+    expect(drawn.height, lessThan(GerfautTouch.target));
   });
 }

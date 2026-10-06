@@ -8,6 +8,7 @@ import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/policy.dart';
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/clipboard.dart';
+import 'package:gerfaut/src/descriptor.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/policy_text.dart';
 import 'package:gerfaut/src/state.dart';
@@ -307,6 +308,34 @@ void main() {
     });
   });
 
+  group('orderBranches', () {
+    test('reads by role, then from the nearest lock to the farthest', () {
+      final json = lianaPolicyJson();
+      final branches = json['branches'] as List;
+      final primary = branches[0] as Map<String, dynamic>;
+      final yearLong = branches[1] as Map<String, dynamic>;
+      // A second recovery path, sooner than the first, and a path of
+      // another kind, listed ahead of them all.
+      final monthLong = jsonDecode(jsonEncode(yearLong)) as Map<String, dynamic>
+        ..['id'] = 'b2'
+        ..['label'] = 'Recovery 2';
+      ((monthLong['timelocks'] as List).single as Map)['lock'] = {
+        'kind': 'relative',
+        'lock': {'kind': 'blocks', 'blocks': 4320},
+      };
+      final other = jsonDecode(jsonEncode(primary)) as Map<String, dynamic>
+        ..['id'] = 'b3'
+        ..['role'] = 'other'
+        ..['label'] = 'Other';
+      json['branches'] = [other, yearLong, monthLong, primary];
+
+      expect(
+        [for (final b in orderBranches(_snapshot(json))) b.id],
+        ['b0', 'b2', 'b1', 'b3'],
+      );
+    });
+  });
+
   group('policyDigest', () {
     test('fits the balance card', () {
       expect(policyDigest(_snapshot(multisigPolicyJson())), '2 of 3 keys');
@@ -458,10 +487,11 @@ void main() {
     PolicyBranch recovery(Map<String, dynamic> json) =>
         _snapshot(json).branches[1];
 
-    test('a lone coin gets its own countdown and progress', () {
+    test('a lone coin is counted like several, as on the desktop', () {
       final far = describeBranchState(recovery(lianaPolicyJson()));
       expect(far.tone, StateTone.far);
-      expect(far.label, 'In 20 440 blocks ≈ 142 days');
+      expect(far.label, '0 of 1 coin unlocked · next in 142 days');
+      expect(far.nextCoin, '20 440 blocks ≈ 142 days');
       expect(far.date, isNotNull);
       expect(far.progress, closeTo((52560 - 20440) / 52560, 0.001));
 
@@ -469,19 +499,24 @@ void main() {
         recovery(lianaPolicyJson(remainingBlocks: 1432)),
       );
       expect(soon.tone, StateTone.soon);
-      expect(soon.label, 'In 1 432 blocks ≈ 10 days');
+      expect(soon.label, '0 of 1 coin unlocked · next in 10 days');
 
       expect(
         describeBranchState(recovery(lianaPolicyJson(locked: 0, unlocked: 1))),
         isA<BranchStatus>()
             .having((s) => s.tone, 'tone', StateTone.open)
-            .having((s) => s.label, 'label', 'Spendable now'),
+            .having((s) => s.label, 'label', '1 of 1 coin unlocked')
+            .having((s) => s.nextCoin, 'next coin', isNull),
       );
       expect(
         describeBranchState(recovery(lianaPolicyJson(locked: 0, waiting: 1))),
         isA<BranchStatus>()
             .having((s) => s.tone, 'tone', StateTone.idle)
-            .having((s) => s.label, 'label', 'Waiting for a block'),
+            .having(
+              (s) => s.label,
+              'label',
+              '0 of 1 coin unlocked · 1 waiting for a block',
+            ),
       );
     });
 
@@ -499,7 +534,7 @@ void main() {
       expect(status.tone, StateTone.soon);
       expect(
         status.label,
-        '3 of 6 coins unlocked · next in about 12 days · 2 waiting for a block',
+        '3 of 6 coins unlocked · next in 12 days · 2 waiting for a block',
       );
       expect(status.progress, closeTo((52560 - 1728) / 52560, 0.001));
 
@@ -531,12 +566,21 @@ void main() {
         _snapshot(unsyncedHeightLockedPolicyJson()).branches.single,
       );
       expect(unknown.tone, StateTone.far);
-      expect(unknown.label, 'Until block 900\u00A0000');
+      expect(unknown.label, 'Locked');
       expect(unknown.date, isNull);
       expect(unknown.progress, isNull);
     });
 
-    test('a coin whose count is unknown is locked, for no known time', () {
+    test('amber starts under thirty days, as on the desktop', () {
+      StateTone toneAt(int blocks) => describeBranchState(
+        _snapshot(heightLockedPolicyJson(remaining: blocks)).branches.single,
+      ).tone;
+      // 4 320 blocks are thirty days exactly: not yet under them.
+      expect(toneAt(4320), StateTone.far);
+      expect(toneAt(4319), StateTone.soon);
+    });
+
+    test('a coin whose count is unknown is known after the first sync', () {
       // The core knows the coin waits and not how long: before the first
       // sync there is no tip to count from. No figure, no colour, no bar.
       final json = lianaPolicyJson();
@@ -548,7 +592,12 @@ void main() {
       };
       final snapshot = _snapshot(json);
       final status = describeBranchState(snapshot.branches[1]);
-      expect(status.label, 'Locked');
+      expect(
+        status.label,
+        '0 of 1 coin unlocked · next known after the first sync',
+      );
+      // The pill says it: a "Next coin" line would only say it again.
+      expect(status.nextCoin, isNull);
       expect(status.tone, StateTone.far);
       expect(status.date, isNull);
       expect(status.progress, isNull);
@@ -600,7 +649,12 @@ void main() {
       expect(find.text('PRIMARY'), findsOneWidget);
       expect(find.text('RECOVERY'), findsOneWidget);
       expect(find.text('Spendable now'), findsOneWidget);
-      expect(find.text('In 20 440 blocks ≈ 142 days'), findsOneWidget);
+      expect(
+        find.text('0 of 1 coin unlocked · next in 142 days'),
+        findsOneWidget,
+      );
+      expect(find.text('NEXT COIN'), findsOneWidget);
+      expect(find.text('20 440 blocks ≈ 142 days'), findsOneWidget);
       expect(
         find.text('52 560 blocks after the coin arrives ≈ 1 year'),
         findsOneWidget,
@@ -620,13 +674,36 @@ void main() {
       expect(find.textContaining("device's clock"), findsNothing);
     });
 
+    testWidgets('puts the primary path first, whatever the policy order', (
+      tester,
+    ) async {
+      final json = lianaPolicyJson();
+      final branches = json['branches'] as List;
+      json['branches'] = branches.reversed.toList();
+      await _pumpPolicy(tester, _bridgeWith(json));
+      await tester.pumpAndSettle();
+
+      final primary = tester.getTopLeft(find.text('PRIMARY')).dy;
+      final recovery = tester.getTopLeft(find.text('RECOVERY')).dy;
+      expect(primary, lessThan(recovery));
+      expect(
+        find.text(
+          'Key A signs. '
+          'A recovery key can spend once a coin has waited about 1 year.',
+        ),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('colours a lock only within thirty days', (tester) async {
       await _pumpPolicy(
         tester,
         _bridgeWith(lianaPolicyJson(remainingBlocks: 1432)),
       );
       await tester.pumpAndSettle();
-      final soon = tester.widget<Text>(find.text('In 1 432 blocks ≈ 10 days'));
+      final soon = tester.widget<Text>(
+        find.text('0 of 1 coin unlocked · next in 10 days'),
+      );
       expect(soon.style?.color, GerfautTokens.light.pending);
 
       await _pumpPolicy(
@@ -648,7 +725,7 @@ void main() {
         find.text('Key A signs after block 900\u00A0000.'),
         findsOneWidget,
       );
-      expect(find.text('Until block 900\u00A0000'), findsOneWidget);
+      expect(find.text('Locked'), findsOneWidget);
       expect(find.text('block 900\u00A0000'), findsOneWidget);
       // No estimate, no day, no "block 0" anywhere on the page.
       expect(find.textContaining('≈'), findsNothing);
@@ -673,7 +750,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         find.text(
-          '3 of 6 coins unlocked · next in about 12 days '
+          '3 of 6 coins unlocked · next in 12 days '
           '· 2 waiting for a block',
         ),
         findsOneWidget,
@@ -755,11 +832,17 @@ void main() {
       await tester.pump();
       expect(find.byType(PolicyPlaceholder), findsNothing);
       expect(find.text('RECOVERY'), findsOneWidget);
-      expect(find.text('In 20 440 blocks ≈ 142 days'), findsOneWidget);
+      expect(
+        find.text('0 of 1 coin unlocked · next in 142 days'),
+        findsOneWidget,
+      );
 
       completer.complete(_snapshot(lianaPolicyJson(remainingBlocks: 1432)));
       await tester.pumpAndSettle();
-      expect(find.text('In 1 432 blocks ≈ 10 days'), findsOneWidget);
+      expect(
+        find.text('0 of 1 coin unlocked · next in 10 days'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('unfolds the descriptor and copies it as a secret', (
@@ -795,7 +878,7 @@ void main() {
       await tester.tap(find.byTooltip('Copy descriptor'));
       await tester.pump();
       expect(clipboard.copied, [snapshot.descriptor]);
-      expect(find.text('Copied'), findsOneWidget);
+      expect(find.text('Copied for 1 minute'), findsOneWidget);
       // Let the feedback timer run out before the tree goes away.
       await tester.pump(const Duration(seconds: 2));
     });
@@ -821,6 +904,47 @@ void main() {
       await tester.tap(find.byTooltip('Copy policy'));
       await tester.pump();
       expect(clipboard.copied, [snapshot.policy]);
+      await tester.pump(const Duration(seconds: 2));
+    });
+
+    testWidgets('the wallet whole is shown and copied, change included', (
+      tester,
+    ) async {
+      // The receive descriptor the core reads the policy from, and the
+      // change one the vault keeps beside it: the page hands out both.
+      const tpub =
+          'tpubDDnGNapGEY6AZAdQbfRJgMg9fvz8pUBrLwvyvUqEgcUfgzM6zc2eVK4vY9x9L5FJWdX8WumXuLEDV5zDZnTfbn87vLe9XceCFwTu9so9Kks';
+      const receive = "wpkh([9a6a2580/84'/1'/0']$tpub/0/*)#76ngmkux";
+      const change = "wpkh([9a6a2580/84'/1'/0']$tpub/1/*)#0wkfxrv7";
+      final meta = makeMeta(
+        kind: const DescriptorsKind(
+          external: receive,
+          internal: change,
+          script: ScriptKind.segwit,
+        ),
+      );
+      final policyJson = singleKeyPolicyJson()..['descriptor'] = receive;
+      final bridge = FakeBridge(
+        wallets: [meta],
+        snapshots: {'w1': makeSnapshot(meta: meta)},
+      )..policies['w1'] = _snapshot(policyJson);
+      final clipboard = FakeSensitiveClipboard();
+      await _pumpPolicy(tester, bridge, clipboard: clipboard);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('DESCRIPTOR'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('DESCRIPTOR'));
+      await tester.pumpAndSettle();
+
+      final whole = multipathDescriptor(receive, change)!;
+      expect(whole, contains('/<0;1>/*'));
+      expect(find.text(whole), findsOneWidget);
+      expect(find.text(receive), findsNothing);
+      await tester.ensureVisible(find.byTooltip('Copy descriptor'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Copy descriptor'));
+      await tester.pump();
+      expect(clipboard.copied, [whole]);
       await tester.pump(const Duration(seconds: 2));
     });
 
@@ -854,13 +978,16 @@ void main() {
         isFalse,
       );
       // The copy glyph has a column of its own: no character under it,
-      // and the target around it is a full 44px.
+      // and the target around it is a full one.
       final copy = find.byTooltip('Copy descriptor');
       final glyph = tester.getRect(
         find.descendant(of: copy, matching: find.byType(Icon)),
       );
       expect(text.right, lessThan(glyph.left));
-      expect(tester.getSize(copy).height, greaterThanOrEqualTo(44));
+      expect(
+        tester.getSize(copy).height,
+        greaterThanOrEqualTo(GerfautTouch.target),
+      );
 
       // The normalized policy reads the same way, with its own copy.
       final policy = find.text(snapshot.policy);
@@ -902,7 +1029,10 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('RECOVERY'), findsOneWidget);
-      expect(find.text('In 20 440 blocks ≈ 142 days'), findsOneWidget);
+      expect(
+        find.text('0 of 1 coin unlocked · next in 142 days'),
+        findsOneWidget,
+      );
     });
   });
 }

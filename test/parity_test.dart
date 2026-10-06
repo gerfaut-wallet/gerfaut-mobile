@@ -16,6 +16,7 @@ import 'package:gerfaut/widgets/notice.dart';
 import 'package:gerfaut/widgets/tx_diagram.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
+import 'package:gerfaut/widgets/toast.dart';
 
 import 'fakes.dart';
 import 'menu.dart';
@@ -113,6 +114,12 @@ Widget txDetailApp(FakeBridge bridge) {
 }
 
 void main() {
+  test('a toast stays three seconds, as on the desktop app', () {
+    final toast = Toast('Setting saved');
+    expect(toast.duration, const Duration(seconds: 3));
+    expect((toast.content as Text).data, 'Setting saved');
+  });
+
   testWidgets('switching the unit changes every rendered amount', (
     tester,
   ) async {
@@ -811,6 +818,41 @@ void main() {
 
     expect(bridge.loadMoreHistoryCalls, 2);
     expect(find.text('History is complete'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a round that fails says why under the button', (tester) async {
+    useTallSurface(tester);
+    final meta = makeMeta();
+    final detail = makeTxDetail();
+    final bridge = FakeBridge(
+      wallets: [meta],
+      snapshots: {
+        'w1': makeSnapshot(meta: meta, txs: [detail.summary], truncated: true),
+      },
+    );
+    bridge.onLoadMoreHistory = (_) =>
+        throw const BridgeException('backend', 'the server did not answer');
+    await tester.pumpWidget(
+      app(bridge, home: const WalletHomeScreen(walletId: 'w1')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Load older transactions'));
+    await tester.pumpAndSettle();
+    const said =
+        'Older transactions could not be loaded. the server did not answer';
+    expect(find.text(said), findsOneWidget);
+    // Still there once a toast would have gone.
+    await tester.pump(const Duration(seconds: 10));
+    expect(find.text(said), findsOneWidget);
+
+    // The next try starts clean.
+    bridge.onLoadMoreHistory = (_) => 0;
+    await tester.tap(find.text('Load older transactions'));
+    await tester.pumpAndSettle();
+    expect(find.text(said), findsNothing);
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
   });

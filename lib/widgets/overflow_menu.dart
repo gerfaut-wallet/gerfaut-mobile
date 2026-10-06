@@ -51,15 +51,9 @@ class OverflowMenuItem {
 /// with 8px of travel to place it. A device asking for less motion
 /// keeps the fade and loses the travel.
 class OverflowMenu extends StatefulWidget {
-  const OverflowMenu({super.key, required this.items, this.tooltip = 'More'});
+  const OverflowMenu({super.key, required this.items});
 
   final List<OverflowMenuItem> items;
-
-  /// What the button is called, out loud and on a long press. A page
-  /// header has one and "More" says it; a row in a list of several
-  /// names whose more it is, or a screen reader hears the same word
-  /// three times down the list.
-  final String tooltip;
 
   @override
   State<OverflowMenu> createState() => _OverflowMenuState();
@@ -71,7 +65,7 @@ class _OverflowMenuState extends State<OverflowMenu> {
     return IconButton(
       // The tooltip is the spoken label too: a Semantics label on top
       // would only say the same word a second time.
-      tooltip: widget.tooltip,
+      tooltip: 'More',
       onPressed: widget.items.isEmpty ? null : _open,
       icon: const Icon(LucideIcons.ellipsisVertical, size: 20),
     );
@@ -210,8 +204,8 @@ class _OverflowMenuRoute extends PopupRoute<OverflowMenuItem> {
 }
 
 /// One entry: the glyph, the label, and the quiet line under it. Same
-/// row as the select's options — 44px, radius 8 — so the two floating
-/// lists of the app read as one.
+/// row as the select's options — a touch target tall, radius 8 — so the
+/// two floating lists of the app read as one.
 class _MenuRow extends StatelessWidget {
   const _MenuRow({required this.item, required this.onTap});
 
@@ -235,7 +229,7 @@ class _MenuRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(GerfautRadius.md),
         onTap: onTap,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 44),
+          constraints: const BoxConstraints(minHeight: GerfautTouch.target),
           padding: const EdgeInsets.symmetric(
             horizontal: GerfautSpacing.sm + 2,
             vertical: GerfautSpacing.sm - 2,

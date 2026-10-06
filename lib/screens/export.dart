@@ -17,7 +17,8 @@ import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/choice_group.dart';
 import '../widgets/notice.dart';
-import '../widgets/premium_pill.dart';
+import '../widgets/setting_switch.dart';
+import '../widgets/toast.dart';
 
 /// Where an exported file goes: written where the user points, or
 /// handed to the system share sheet.
@@ -135,36 +136,36 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
       // announced against the call that opens it, and nothing earlier.
       switch (destination) {
         case _Destination.file:
-          lock.expectExcursion();
-          final saved = await ref
-              .read(documentSaverProvider)
-              .save(
-                bytes: utf8.encode(result.csv),
-                filename: filename,
-                mimeType: 'text/csv',
-              );
+          final saver = ref.read(documentSaverProvider);
+          final saved = await lock.excursion(
+            () => saver.save(
+              bytes: utf8.encode(result.csv),
+              filename: filename,
+              mimeType: 'text/csv',
+            ),
+            // A save refused before the dialog came up is no trip.
+            cameUp: (error) =>
+                error is DocumentSaveException && error.dialogOpened,
+          );
           // A dialog waved away says nothing: the filters are still here.
           if (saved) {
-            messenger.showSnackBar(SnackBar(content: Text('$rows saved')));
+            messenger.showSnackBar(Toast('$rows saved'));
           }
         case _Destination.share:
-          lock.expectExcursion();
+          final sharer = ref.read(csvSharerProvider);
           try {
-            await ref
-                .read(csvSharerProvider)
-                .shareCsv(csv: result.csv, filename: filename);
-            messenger.showSnackBar(SnackBar(content: Text('$rows exported')));
+            await lock.excursion(
+              () => sharer.shareCsv(csv: result.csv, filename: filename),
+            );
+            messenger.showSnackBar(Toast('$rows exported'));
           } catch (_) {
             // No sheet came up: nothing left the screen.
-            lock.forgetExcursion();
             _fail('The share sheet could not be opened.');
           }
       }
     } on BridgeException catch (error) {
       _fail('The file could not be built.', detail: error.message);
     } on DocumentSaveException catch (error) {
-      // A save refused before the dialog came up is no trip at all.
-      if (!error.dialogOpened) lock.forgetExcursion();
       _fail('The file could not be saved.', detail: error.message);
     } finally {
       if (mounted) setState(() => _exporting = false);
@@ -242,88 +243,14 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                         setState(() => _direction = direction),
                   ),
                   const SizedBox(height: GerfautSpacing.md),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Include pending',
-                              style: tokens.bodySmall.copyWith(
-                                fontWeight: FontWeight.w500,
-                                fontVariations: const [
-                                  FontVariation('wght', 500),
-                                ],
-                              ),
-                            ),
-                            Text(
-                              'Pending transactions have no date yet: they '
-                              'only export without date bounds.',
-                              style: tokens.bodySmall.copyWith(
-                                color: tokens.textMuted,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: GerfautSpacing.sm),
-                      Switch(
-                        value: _includePending,
-                        activeThumbColor: tokens.onPrimary,
-                        activeTrackColor: tokens.primary,
-                        inactiveThumbColor: tokens.textMuted,
-                        inactiveTrackColor: tokens.surfaceSunken,
-                        onChanged: (value) =>
-                            setState(() => _includePending = value),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: GerfautSpacing.md),
-                  Divider(height: 1, thickness: 1, color: tokens.border),
-                  const SizedBox(height: GerfautSpacing.md),
-                  // The premium teaser states what the server will add,
-                  // nothing more: no nagging, no dead-end tap target.
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Wrap(
-                              spacing: GerfautSpacing.sm,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                Text(
-                                  'Fiat value at transaction time',
-                                  style: tokens.bodySmall.copyWith(
-                                    fontWeight: FontWeight.w500,
-                                    fontVariations: const [
-                                      FontVariation('wght', 500),
-                                    ],
-                                  ),
-                                ),
-                                const PremiumPill(),
-                              ],
-                            ),
-                            Text(
-                              "Adds the price at each transaction's date to "
-                              'the file.',
-                              style: tokens.bodySmall.copyWith(
-                                color: tokens.textMuted,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: GerfautSpacing.sm),
-                      Switch(
-                        value: false,
-                        inactiveThumbColor: tokens.textMuted,
-                        inactiveTrackColor: tokens.surfaceSunken,
-                        onChanged: null,
-                      ),
-                    ],
+                  SettingSwitch(
+                    title: 'Include pending',
+                    hint:
+                        'Pending transactions have no date yet: they only '
+                        'export without date bounds.',
+                    value: _includePending,
+                    onChanged: (value) =>
+                        setState(() => _includePending = value),
                   ),
                 ],
               ),
@@ -410,6 +337,10 @@ class _SectionLabel extends StatelessWidget {
 }
 
 /// A tappable date bound: sunken field look, clearable once set.
+///
+/// Drawn a touch target tall, not a field's height: the clear button
+/// sits inside it and needs a whole target of its own, which a field
+/// drawn smaller and padded out could not give it.
 class _DateField extends StatelessWidget {
   const _DateField({
     required this.placeholder,
@@ -431,7 +362,7 @@ class _DateField extends StatelessWidget {
       borderRadius: BorderRadius.circular(GerfautRadius.sm),
       onTap: onTap,
       child: Container(
-        height: 44,
+        height: GerfautTouch.target,
         padding: const EdgeInsets.only(left: GerfautSpacing.md),
         decoration: BoxDecoration(
           color: tokens.surfaceSunken,
@@ -458,9 +389,8 @@ class _DateField extends StatelessWidget {
                 child: Semantics(
                   button: true,
                   label: 'Clear $placeholder date',
-                  child: SizedBox(
-                    width: 44,
-                    height: 44,
+                  child: SizedBox.square(
+                    dimension: GerfautTouch.target,
                     child: Icon(
                       LucideIcons.x,
                       size: 15,

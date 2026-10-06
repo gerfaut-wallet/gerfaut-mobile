@@ -10,6 +10,7 @@ import 'package:gerfaut/src/home_widgets.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/setting_switch.dart';
 
 import 'fakes.dart';
 
@@ -18,6 +19,21 @@ const int _syncedAt = 1755000000;
 /// Two hours after the most recent sync of the fixtures.
 final DateTime _now = DateTime.fromMillisecondsSinceEpoch(
   (_syncedAt + 7200) * 1000,
+);
+
+/// [t] in unix seconds. Tests build their moments in local time, so a
+/// day stays the same day in whatever zone they run.
+int _secs(DateTime t) => t.millisecondsSinceEpoch ~/ 1000;
+
+/// Empty balance and network payloads, for a write about the price.
+final BalancePayload _noBalance = BalancePayload.of(
+  const [],
+  unit: AmountUnit.btc,
+  masked: true,
+);
+final NetworkPayload _noNetwork = NetworkPayload.of(
+  const [],
+  network: Network.mainnet,
 );
 
 SyncStamp _stamp(int at, {int tipHeight = 912345}) =>
@@ -84,12 +100,56 @@ Future<({ProviderContainer container, WidgetFeed feed})> _running(
 void main() {
   group('the price widget', () {
     test('states one bitcoin in the currency and the clock time', () {
-      final payload = PricePayload.of(_quote);
-      expect(payload.figure, '€50,000');
+      final payload = PricePayload.of(
+        _quote,
+        now: DateTime.fromMillisecondsSinceEpoch(_syncedAt * 1000),
+      );
+      expect(payload.figure, '€50 000');
       expect(payload.asOf, 'as of ${formatClock(_syncedAt)}');
+      expect(payload.asOfNarrow, isNull);
       // The core carries no daily change yet: the line stays hidden.
       expect(payload.toData()[WidgetKeys.priceChange], isNull);
+      expect(payload.toData()[WidgetKeys.priceAt], '$_syncedAt');
       expect(payload.toData().keys, PricePayload.keys);
+    });
+
+    test('a quote from today says its time alone', () {
+      final at = _secs(DateTime(2026, 10, 3, 9, 41));
+      for (final now in [
+        DateTime(2026, 10, 3, 9, 41),
+        DateTime(2026, 10, 3, 23, 59),
+      ]) {
+        expect(priceAsOf(at, now: now), (full: 'as of 09:41', narrow: null));
+      }
+    });
+
+    test('a quote from another day says its day, and its time where it '
+        'fits', () {
+      final at = _secs(DateTime(2026, 10, 3, 9, 41));
+      final yesterday = (full: 'as of Oct 03, 09:41', narrow: 'as of Oct 03');
+      expect(priceAsOf(at, now: DateTime(2026, 10, 4, 0, 1)), yesterday);
+      expect(priceAsOf(at, now: DateTime(2026, 12, 31, 23, 59)), yesterday);
+      final data = PricePayload.of(
+        PriceQuote(
+          rate: 50000,
+          currency: FiatCurrency.eur,
+          source: PriceSource.coingecko,
+          at: at,
+        ),
+        now: DateTime(2026, 10, 4, 8),
+      ).toData();
+      expect(data[WidgetKeys.priceAsOf], 'as of Oct 03, 09:41');
+      expect(data[WidgetKeys.priceAsOfNarrow], 'as of Oct 03');
+    });
+
+    test('a quote from another year says its year in place of the time', () {
+      // The year is never the part a narrow widget drops: "as of Dec 31"
+      // would read as this year's.
+      final at = _secs(DateTime(2025, 12, 31, 23, 50));
+      expect(priceAsOf(at, now: DateTime(2026, 1, 1, 0, 5)), (
+        full: 'as of Dec 31, 2025',
+        narrow: null,
+      ));
     });
 
     test('a euro quote drops its cents, as the app does', () {
@@ -101,9 +161,9 @@ void main() {
         source: PriceSource.kraken,
         at: _syncedAt,
       );
-      expect(PricePayload.of(quote).figure, '€66,741');
-      expect(formatFiatPrice(66741.37, FiatCurrency.eur), '€66,741');
-      expect(formatFiatPrice(9876543.2, FiatCurrency.jpy), '¥9,876,543');
+      expect(PricePayload.of(quote).figure, '€66 741');
+      expect(formatFiatPrice(66741.37, FiatCurrency.eur), '€66 741');
+      expect(formatFiatPrice(9876543.2, FiatCurrency.jpy), '¥9 876 543');
       // Under a hundred the currency keeps its own decimals.
       expect(formatFiatPrice(42.5, FiatCurrency.eur), '€42.50');
     });
@@ -174,6 +234,23 @@ void main() {
       );
       expect(sats.total, formatSats(100050000));
       expect(sats.rows.first.figure, formatSats(100000000));
+    });
+
+    test('under an app lock, no name and no figure', () {
+      final payload = BalancePayload.of(
+        wallets,
+        unit: AmountUnit.btc,
+        masked: false,
+        locked: true,
+        now: _now,
+      );
+      expect(payload.total, maskedValue);
+      expect(payload.rows, isEmpty);
+      final data = payload.toData();
+      expect(data[WidgetKeys.balanceRowName(1)], isNull);
+      expect(data[WidgetKeys.balanceRowFigure(1)], isNull);
+      // When it was last brought up to date still shows.
+      expect(payload.synced, isNotEmpty);
     });
 
     test('masked, the names stay and every figure goes', () {
@@ -293,7 +370,7 @@ void main() {
 
       // Fiat display is off in the app: the widget fetched its own quote
       // in the preferred currency all the same.
-      expect(board.data[WidgetKeys.priceFigure], '€50,000');
+      expect(board.data[WidgetKeys.priceFigure], '€50 000');
       expect(board.data[WidgetKeys.priceAsOf], startsWith('as of '));
       expect(board.data.containsKey(WidgetKeys.priceChange), isFalse);
       // Masked until the widget preference says otherwise.
@@ -366,6 +443,46 @@ void main() {
         expect(board.data[WidgetKeys.priceFigure], before);
       },
     );
+
+    test('with no new quote, the line is said again for the day it is '
+        'read', () async {
+      final board = FakeWidgetBoard(installed: {HomeWidgets.price});
+      Future<void> write(PricePayload? price, DateTime now) => WidgetFeed.write(
+        board,
+        installed: board.installed,
+        price: price,
+        balance: _noBalance,
+        network: _noNetwork,
+        now: now,
+      );
+
+      final evening = DateTime(2026, 10, 3, 23, 55);
+      final quote = PriceQuote(
+        rate: 50000,
+        currency: FiatCurrency.eur,
+        source: PriceSource.coingecko,
+        at: _secs(DateTime(2026, 10, 3, 23, 50)),
+      );
+      await write(PricePayload.of(quote, now: evening), evening);
+      final figure = board.data[WidgetKeys.priceFigure];
+      expect(board.data[WidgetKeys.priceAsOf], 'as of 23:50');
+      expect(board.data.containsKey(WidgetKeys.priceAsOfNarrow), isFalse);
+
+      // Past midnight, and nothing new came: the same quote, dated.
+      board.updates.clear();
+      await write(null, DateTime(2026, 10, 4, 0, 10));
+      expect(board.data[WidgetKeys.priceFigure], figure);
+      expect(board.data[WidgetKeys.priceAsOf], 'as of Oct 03, 23:50');
+      expect(board.data[WidgetKeys.priceAsOfNarrow], 'as of Oct 03');
+      expect(board.updates, [HomeWidgets.price]);
+
+      // Taken off the home screen, the time goes with the rest.
+      board.installed.clear();
+      await write(null, DateTime(2026, 10, 4, 0, 25));
+      for (final key in PricePayload.keys) {
+        expect(board.data.containsKey(key), isFalse, reason: key);
+      }
+    });
 
     test('a return to the foreground reads the placed widgets again', () async {
       final board = FakeWidgetBoard(installed: {HomeWidgets.price});
@@ -469,7 +586,7 @@ void main() {
       expect(bridge.syncWalletCalls, 0);
       // Fiat display is off in the app; the quote comes anyway, in the
       // preferred currency, because the placed widget is the opt-in.
-      expect(board.data[WidgetKeys.priceFigure], '€50,000');
+      expect(board.data[WidgetKeys.priceFigure], '€50 000');
       expect(board.data[WidgetKeys.balanceTotal], formatSats(100050000));
       expect(board.data[WidgetKeys.balanceSynced], 'Synced 2 h ago');
       expect(board.data[WidgetKeys.networkHeight], groupThousands('912345'));
@@ -560,6 +677,100 @@ void main() {
       expect(board.data[WidgetKeys.priceFigure], 'kept');
       expect(board.data[WidgetKeys.balanceSynced], 'Synced 2 h ago');
     });
+
+    test('a quote kept from another day is dated, at the time of the '
+        'run', () async {
+      final bridge = _bridge();
+      bridge.onFetchPrice = (_, _) =>
+          throw const BridgeException('sync', 'no answer');
+      final board = FakeWidgetBoard(installed: {HomeWidgets.price});
+      final at = _secs(DateTime(2026, 10, 3, 9, 41));
+      board.data
+        ..[WidgetKeys.priceFigure] = 'kept'
+        ..[WidgetKeys.priceAsOf] = 'as of 09:41'
+        ..[WidgetKeys.priceAt] = '$at';
+      await refreshWidgets(
+        bridge: bridge,
+        board: board,
+        bootstrap: () async {},
+        now: DateTime(2026, 10, 4, 7, 30),
+      );
+      expect(board.data[WidgetKeys.priceFigure], 'kept');
+      expect(board.data[WidgetKeys.priceAsOf], 'as of Oct 03, 09:41');
+      expect(board.data[WidgetKeys.priceAsOfNarrow], 'as of Oct 03');
+    });
+
+    test('with a .onion node, the price follows a Tor that already runs '
+        'and never has one started for it', () async {
+      // Asked from here, the core's route would bring the built-in Tor
+      // up every quarter hour for one figure. It follows a Tor already
+      // running, or the widget keeps what it had.
+      TorStatus tor(TorMode mode, {bool up = false}) => TorStatus(
+        mode: mode,
+        socksProxy: '127.0.0.1:9050',
+        via: up ? TorVia.embedded : null,
+        socks: null,
+        running: up,
+        bootstrapped: up,
+        bootstrapPercent: up ? 100 : 0,
+        error: null,
+        embeddedAvailable: true,
+      );
+      Future<({int asks, String? figure, String? asOf})> run({
+        required bool usesTor,
+        required TorStatus status,
+      }) async {
+        final bridge = _bridge();
+        bridge.usesTorValue = usesTor;
+        bridge.onTorStatus = (_) => status;
+        var asks = 0;
+        bridge.onFetchPrice = (source, currency) {
+          asks++;
+          return _quote;
+        };
+        final board = FakeWidgetBoard(
+          installed: {HomeWidgets.price, HomeWidgets.balance},
+        );
+        board.data[WidgetKeys.priceFigure] = 'kept';
+        board.data[WidgetKeys.priceAsOf] = 'as of 09:41';
+        final ok = await refreshWidgets(
+          bridge: bridge,
+          board: board,
+          bootstrap: () async {},
+          now: _now,
+        );
+        expect(ok, isTrue);
+        // The rest of the run goes on as ever.
+        expect(board.data[WidgetKeys.balanceSynced], 'Synced 2 h ago');
+        return (
+          asks: asks,
+          figure: board.data[WidgetKeys.priceFigure],
+          asOf: board.data[WidgetKeys.priceAsOf],
+        );
+      }
+
+      final fresh = PricePayload.of(_quote, now: _now);
+
+      // Built-in Tor, not running in this process: nothing is asked,
+      // and the last price stays up with its time.
+      for (final mode in [TorMode.auto, TorMode.embedded]) {
+        final idle = await run(usesTor: true, status: tor(mode));
+        expect(idle, (asks: 0, figure: 'kept', asOf: 'as of 09:41'));
+      }
+
+      // Already up for a sync or the live watch: the price goes through it.
+      final up = await run(usesTor: true, status: tor(TorMode.auto, up: true));
+      expect(up, (asks: 1, figure: fresh.figure, asOf: fresh.asOf));
+
+      // A Tor app chosen as System: the core knocks on it and starts
+      // nothing, and refuses if nothing answers.
+      final system = await run(usesTor: true, status: tor(TorMode.system));
+      expect(system, (asks: 1, figure: fresh.figure, asOf: fresh.asOf));
+
+      // No .onion node: the price is asked as before, whatever Tor does.
+      final clear = await run(usesTor: false, status: tor(TorMode.auto));
+      expect(clear, (asks: 1, figure: fresh.figure, asOf: fresh.asOf));
+    });
   });
 
   group('the widgets settings', () {
@@ -603,6 +814,49 @@ void main() {
       await tester.pumpAndSettle();
       expect(bridge.appPrefs['widgets.balances'], '0');
       expect(board.data[WidgetKeys.balanceTotal], maskedValue);
+    });
+
+    testWidgets('under an app lock the switch is greyed and says why', (
+      tester,
+    ) async {
+      final bridge = _bridge()
+        ..lock = const AppLock(kind: LockKind.pin, biometric: false)
+        ..lockSecret = '1234';
+      bridge.appPrefs['widgets.balances'] = '1';
+      final board = FakeWidgetBoard(installed: {HomeWidgets.balance});
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            bridgeProvider.overrideWithValue(bridge),
+            widgetBoardProvider.overrideWithValue(board),
+            widgetSchedulerProvider.overrideWithValue((wanted) async {}),
+          ],
+          child: MaterialApp(
+            theme: themeFrom(GerfautTokens.light, Brightness.light),
+            home: const Scaffold(body: WidgetsSection()),
+          ),
+        ),
+      );
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(WidgetsSection)),
+      );
+      container.read(widgetBalancesProvider.notifier).hydrate('1');
+      container.read(widgetFeedProvider);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Off while an app lock is set'),
+        findsOneWidget,
+      );
+      expect(
+        tester.widget<SettingSwitch>(find.byType(SettingSwitch)).onChanged,
+        isNull,
+      );
+      // Drawn off, as the line under it says, the choice kept for later.
+      expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+      expect(container.read(widgetBalancesProvider), isTrue);
+      expect(board.data[WidgetKeys.balanceTotal], maskedValue);
+      expect(board.data[WidgetKeys.balanceRowName(1)], isNull);
     });
 
     testWidgets('disguised, the card says the widgets are off', (tester) async {

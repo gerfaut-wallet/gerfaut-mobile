@@ -11,9 +11,7 @@
 
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -88,8 +86,21 @@ class VaultInUseException implements Exception {
 File _vaultFile(String dataDir) =>
     File('$dataDir${Platform.pathSeparator}$vaultFileName');
 
-/// Returns the vault key as 64 hex characters, generating and storing a
-/// fresh 32-byte key on first launch and reusing it afterwards.
+/// The key a first launch stores, drawn by the core once for the whole
+/// process: the isolates that start together on a first launch, the
+/// screens, the periodic task and the live watch, all get the same one,
+/// so whichever writes last stores the key the vault is sealed under.
+Future<String> drawFreshVaultKey() async {
+  final decoded = jsonDecode(await rust_api.freshVaultKey());
+  if (decoded is Map<String, dynamic> && decoded['key'] is String) {
+    return decoded['key'] as String;
+  }
+  final error = (decoded as Map<String, dynamic>)['error'];
+  throw StateError('no vault key could be drawn: $error');
+}
+
+/// Returns the vault key as 64 hex characters, storing a fresh 32-byte
+/// key on first launch and reusing it afterwards.
 ///
 /// A first launch is a directory with no vault in it, and nothing else:
 /// with a vault on disk, a key that is not there is never replaced,
@@ -98,6 +109,7 @@ File _vaultFile(String dataDir) =>
 Future<String> obtainVaultKeyHex({
   required String dataDir,
   VaultKeyStore store = const SecureVaultKeyStore(),
+  Future<String> Function() drawKey = drawFreshVaultKey,
 }) async {
   final vaultExists = await _vaultFile(dataDir).exists();
   final String? existing;
@@ -124,11 +136,10 @@ Future<String> obtainVaultKeyHex({
   // No vault to open: a first launch, or a vault set aside. A value
   // that is not a key would open nothing anyway, so a fresh one takes
   // its place.
-  final rng = Random.secure();
-  final hex = List<String>.generate(
-    32,
-    (_) => rng.nextInt(256).toRadixString(16).padLeft(2, '0'),
-  ).join();
+  final hex = await drawKey();
+  if (!_isValidKeyHex(hex)) {
+    throw StateError('the drawn vault key is not 64 hex characters');
+  }
   await store.write(hex);
   return hex;
 }
@@ -151,35 +162,12 @@ Future<void> setVaultAside() async {
   await setVaultAsideIn(dir.path);
 }
 
-/// A debug build can be pointed at another Premium server, a local one
-/// for an end-to-end run, with
-/// `--dart-define=GERFAUT_PREMIUM_URL=http://10.0.2.2:8080` and
-/// `--dart-define=GERFAUT_PREMIUM_PUBLIC_KEY=<hex>`, the key that server
-/// signs its certificates with.
-const String _debugPremiumUrl = String.fromEnvironment('GERFAUT_PREMIUM_URL');
-const String _debugPremiumPublicKey = String.fromEnvironment(
-  'GERFAUT_PREMIUM_PUBLIC_KEY',
-);
-
-/// Hands the core the server a debug build was pointed at, before the
-/// vault opens and before any Premium call. A release build compiles
-/// this out, and its core would not listen either.
-void pointAtDebugPremiumServer() {
-  if (!kDebugMode) return;
-  if (_debugPremiumUrl.isEmpty && _debugPremiumPublicKey.isEmpty) return;
-  rust_api.premiumDebugEndpoint(
-    baseUrl: _debugPremiumUrl,
-    publicKey: _debugPremiumPublicKey,
-  );
-}
-
 /// Loads the Rust bridge and opens the encrypted vault in the app's
 /// documents directory. Runs once before the home screen shows, and
 /// again after a vault was set aside: the bridge is only loaded the
 /// first time.
 Future<void> bootstrapGerfaut() async {
   if (!RustLib.instance.initialized) await RustLib.init();
-  pointAtDebugPremiumServer();
   final dir = await getApplicationDocumentsDirectory();
   final keyHex = await obtainVaultKeyHex(dataDir: dir.path);
   final result = await rust_api.initManager(dataDir: dir.path, keyHex: keyHex);

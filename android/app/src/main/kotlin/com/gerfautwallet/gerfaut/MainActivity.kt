@@ -18,8 +18,11 @@ import android.graphics.Canvas
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.PersistableBundle
 import android.os.PowerManager
+import android.os.SystemClock
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.provider.Settings
@@ -32,6 +35,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.IOException
+import java.util.UUID
 
 // A fragment activity, which is what the biometric prompt attaches to.
 class MainActivity : FlutterFragmentActivity() {
@@ -59,17 +63,31 @@ class MainActivity : FlutterFragmentActivity() {
                 save.result.success(false)
                 return@registerForActivityResult
             }
-            try {
-                val stream = contentResolver.openOutputStream(uri, "wt")
-                    ?: throw IOException("the document could not be opened for writing")
-                stream.use { it.write(save.bytes) }
-                save.result.success(true)
-            } catch (error: Exception) {
-                // An empty or half-written file under the chosen name would
-                // pass for the export: it goes before the failure is told.
-                discardDocument(uri)
-                save.result.error("write_failed", error.message, null)
-            }
+            // A provider may send the file over the network as it is
+            // written, as one may fetch it when it is read: written off
+            // the main thread, answered on it, or a slow cloud freezes
+            // the screen.
+            Thread {
+                val failure = try {
+                    val stream = contentResolver.openOutputStream(uri, "wt")
+                        ?: throw IOException("the document could not be opened for writing")
+                    stream.use { it.write(save.bytes) }
+                    null
+                } catch (error: Exception) {
+                    // An empty or half-written file under the chosen name
+                    // would pass for the export: it goes before the
+                    // failure is told.
+                    discardDocument(uri)
+                    error
+                }
+                runOnUiThread {
+                    if (failure == null) {
+                        save.result.success(true)
+                    } else {
+                        save.result.error("write_failed", failure.message, null)
+                    }
+                }
+            }.start()
         }
 
     // The file being picked: the call waiting for its bytes, and how
@@ -107,6 +125,9 @@ class MainActivity : FlutterFragmentActivity() {
     // The call waiting for the battery question to be answered.
     private var pendingExemption: MethodChannel.Result? = null
 
+    private val main = Handler(Looper.getMainLooper())
+    private val clearSensitive = Runnable { clearSensitiveIfOurs() }
+
     private val exemptionDialog: ActivityResultLauncher<Intent> =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
             // The result code says nothing here; the power manager does.
@@ -143,15 +164,6 @@ class MainActivity : FlutterFragmentActivity() {
                     } else {
                         copySensitive(text)
                         result.success(null)
-                    }
-                }
-                "openInApp" -> {
-                    val target = call.argument<String>("package")
-                    val url = call.argument<String>("url")
-                    if (target == null || url == null) {
-                        result.error("bad_argument", "openInApp takes package and url", null)
-                    } else {
-                        result.success(openInApp(target, url))
                     }
                 }
                 else -> result.notImplemented()
@@ -202,8 +214,13 @@ class MainActivity : FlutterFragmentActivity() {
                         LiveService.stop(this)
                         result.success(null)
                     }
+                    "hold" -> {
+                        LiveService.hold(this)
+                        result.success(null)
+                    }
                     "isRunning" -> result.success(LiveService.isRunning)
                     "isWanted" -> result.success(LiveService.isWanted(this))
+                    "isHeld" -> result.success(LiveService.isHeld(this))
                     "isBatteryExempt" -> result.success(isBatteryExempt())
                     "requestBatteryExemption" -> requestBatteryExemption(result)
                     "manufacturer" -> result.success(Build.MANUFACTURER ?: "")
@@ -254,7 +271,9 @@ class MainActivity : FlutterFragmentActivity() {
     // exemption Android 12 and later will not let a killed service come
     // back by itself, which is the whole reason for asking. Where the
     // direct question is not to be had, the list it stands for opens
-    // instead. Answers whether the app is exempt once the user is back.
+    // instead. Answers whether the app is exempt once the user is back,
+    // and null when neither opened: no screen came up, so the app never
+    // left.
     private fun requestBatteryExemption(result: MethodChannel.Result) {
         if (isBatteryExempt()) {
             result.success(true)
@@ -278,7 +297,7 @@ class MainActivity : FlutterFragmentActivity() {
                 pendingExemption = null
             }
         }
-        result.success(false)
+        result.success(null)
     }
 
     // Opens this app's own page in the system settings. Every maker
@@ -328,34 +347,78 @@ class MainActivity : FlutterFragmentActivity() {
     private fun copySensitive(text: String) {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = ClipData.newPlainText("", text)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            clip.description.extras = PersistableBundle().apply {
+        val mark = UUID.randomUUID().toString()
+        clip.description.extras = PersistableBundle().apply {
+            putString(COPY_MARK, mark)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
             }
         }
         clipboard.setPrimaryClip(clip)
+        sensitiveMark = mark
+        sensitiveStamp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            clipboard.primaryClipDescription?.timestamp ?: 0L
+        } else {
+            0L
+        }
+        sensitiveCopiedAt = SystemClock.elapsedRealtime()
+        main.removeCallbacks(clearSensitive)
+        main.postDelayed(clearSensitive, SENSITIVE_CLEAR_MS)
     }
 
-    // Hands a URL to one named app, and to no other. Answers false when
-    // that app is not installed.
+    // A minute after a secret was copied, it leaves the clipboard: long
+    // enough to paste it, and it does not wait there for whatever reads
+    // the clipboard next. Only if it is still there: something the user
+    // copied since, from any app, is theirs and stays.
     //
-    // An intent without a package is offered to every app that declared
-    // the scheme, and the system asks the user to pick one. The links
-    // that come through here carry an ntfy topic, which is the whole
-    // secret of a channel: a chooser listing whatever app declared
-    // `ntfy://` is a chooser for who reads the alerts of this account.
-    // Naming the package is what keeps the topic between Gerfaut and
-    // ntfy. It needs the <queries> entry in the manifest: without it
-    // the package is invisible to this app and an installed ntfy looks
-    // exactly like an absent one.
-    private fun openInApp(target: String, url: String): Boolean {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).setPackage(target)
-        return try {
-            startActivity(intent)
-            true
-        } catch (_: ActivityNotFoundException) {
-            false
+    // Android lets only the app in front read the clipboard. A minute
+    // that runs out while Gerfaut is behind another app is caught up the
+    // moment Gerfaut has the focus again.
+    //
+    // Only the clip's description is read, never its content. From
+    // Android 12, reading the content of a clip another app copied puts
+    // up a toast with the reader's name, "Gerfaut pasted from your
+    // clipboard", over whatever is on screen: over the calculator, when
+    // the app is disguised. The description carries the mark this app
+    // put on its own copy, and the time the system stamped it with.
+    private fun clearSensitiveIfOurs() {
+        val mark = sensitiveMark ?: return
+        val waited = SystemClock.elapsedRealtime() - sensitiveCopiedAt
+        if (waited < SENSITIVE_CLEAR_MS) {
+            // Not yet: due later in this activity, which may not be the
+            // one that copied it.
+            main.removeCallbacks(clearSensitive)
+            main.postDelayed(clearSensitive, SENSITIVE_CLEAR_MS - waited)
+            return
         }
+        if (!hasWindowFocus()) return
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val description = try {
+            clipboard.primaryClipDescription
+        } catch (_: Exception) {
+            // Unreadable: nothing is cleared on a guess.
+            return
+        }
+        sensitiveMark = null
+        val marked = description?.extras?.getString(COPY_MARK) == mark
+        val stamped = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            sensitiveStamp != 0L && description?.timestamp == sensitiveStamp
+        if (!marked && !stamped) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            clipboard.clearPrimaryClip()
+        } else {
+            clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) clearSensitiveIfOurs()
+    }
+
+    override fun onDestroy() {
+        main.removeCallbacks(clearSensitive)
+        super.onDestroy()
     }
 
     // Opens the system's save dialog on a new document and writes the
@@ -672,6 +735,25 @@ class MainActivity : FlutterFragmentActivity() {
         const val DISGUISE_CHANNEL = "gerfaut/disguise"
         const val LIVE_CHANNEL = "gerfaut/live"
         const val DISGUISE_MARKER = "disguised"
+
+        // As on the desktop app: a minute on the clipboard, then gone.
+        const val SENSITIVE_CLEAR_MS = 60_000L
+
+        // The mark of the secret last copied, while it may still be on
+        // the clipboard, and when it went there: it is taken off a minute
+        // later. The mark, never the text: the secret is not kept here,
+        // and the clip is recognised by its description alone (see
+        // clearSensitiveIfOurs). Kept by the process, not the activity:
+        // an activity that Back finishes or a rotation rebuilds within
+        // the minute must not forget a copy it still has to clear, and
+        // the next one to gain the focus clears it.
+        private var sensitiveMark: String? = null
+        private var sensitiveStamp = 0L
+        private var sensitiveCopiedAt = 0L
+
+        // The key of the mark on a sensitive copy. Plain on purpose: a
+        // clipboard manager that lists extras must find no app's name.
+        const val COPY_MARK = "mark"
         const val CALCULATOR_LIGHT = 0xFFF5F5F5.toInt()
         const val CALCULATOR_DARK = 0xFF121212.toInt()
     }

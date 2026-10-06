@@ -43,10 +43,18 @@ import java.io.File
 // honours in Doze comes by every few minutes, and each change of network
 // comes by at once, and both ask the core to check its connection under
 // a wake lock that is short and released by a timeout whatever happens.
+//
+// Asking is not the end of it: the core answers at once and does the
+// work after, the ping, a reconnection, the sync of a wallet that moved,
+// and the announcement waits a few seconds more for the sync that
+// closes it. The Dart side says when the watch is busy, and a second
+// lock is held for it, renewed by every word from the watch and let go
+// once it has been quiet for a moment, or after WORK_LOCK_MS at most.
 class LiveService : Service() {
     private var engine: FlutterEngine? = null
     private var channel: MethodChannel? = null
     private var tickLock: PowerManager.WakeLock? = null
+    private var workLock: PowerManager.WakeLock? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private val main = Handler(Looper.getMainLooper())
 
@@ -75,6 +83,8 @@ class LiveService : Service() {
             shutdown()
             return START_NOT_STICKY
         }
+        // Started: the waits stretched by refusals go back to normal.
+        clearBackOff(this)
         if (leaving) {
             // Turned back on while the last stop is still saying what
             // its watch held: that stop ends this service in a moment,
@@ -115,6 +125,7 @@ class LiveService : Service() {
         // now: this service is gone.
         main.removeCallbacksAndMessages(null)
         releaseTickLock()
+        releaseWorkLock()
         unwatchNetwork()
         val live = channel
         val hosted = engine
@@ -236,6 +247,17 @@ class LiveService : Service() {
                     }
                     result.success(null)
                 }
+                // The watch is at work: keep the phone awake for it, a
+                // while more from now.
+                "hold" -> {
+                    holdWorkLock()
+                    result.success(null)
+                }
+                // The watch has been quiet for a moment: let it sleep.
+                "release" -> {
+                    releaseWorkLock()
+                    result.success(null)
+                }
                 // The Dart side read the settings and Live is not what
                 // they ask for: turned off elsewhere, or disguised.
                 "standDown" -> {
@@ -298,6 +320,23 @@ class LiveService : Service() {
     private fun releaseTickLock() {
         tickLock?.let { release(it) }
         tickLock = null
+    }
+
+    // Not counted either: each word from the watch moves the one
+    // timeout further, and a single release ends it.
+    private fun holdWorkLock() {
+        if (leaving) return
+        val lock = workLock ?: (getSystemService(Context.POWER_SERVICE) as PowerManager)
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "gerfaut:live-work")
+            .also {
+                it.setReferenceCounted(false)
+                workLock = it
+            }
+        lock.acquire(WORK_LOCK_MS)
+    }
+
+    private fun releaseWorkLock() {
+        workLock?.let { release(it) }
     }
 
     // A change of network closes the sockets of the network that went,
@@ -427,6 +466,7 @@ class LiveService : Service() {
 
     private fun shutdown() {
         leaving = true
+        releaseWorkLock()
         cancelHeartbeat(this)
         main.removeCallbacksAndMessages(null)
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -444,6 +484,8 @@ class LiveService : Service() {
         private const val NOTIFICATION_ID = 0x4C495645
         private const val PREFS = "gerfaut.live"
         private const val PREF_WANTED = "wanted"
+        private const val PREF_HELD = "held"
+        private const val PREF_REFUSALS = "refusals"
         private const val DISGUISE_MARKER = "disguised"
         private const val STATUS_MAX = 80
         private const val TEXT_STARTING = "Starting"
@@ -455,7 +497,10 @@ class LiveService : Service() {
         // it to about nine minutes by itself.
         private const val HEARTBEAT_MS = 270_000L
         private const val RESTART_MS = 2_000L
+        private const val MAX_BACK_OFF_MS = 3_600_000L
+        private const val MAX_DOUBLINGS = 4
         private const val TICK_LOCK_MS = 30_000L
+        private const val WORK_LOCK_MS = 30_000L
         private const val STOP_TIMEOUT_MS = 8_000L
         private const val RETIRE_POLL_MS = 250L
 
@@ -478,10 +523,37 @@ class LiveService : Service() {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .getBoolean(PREF_WANTED, false) && !isDisguised(context)
 
+        // How long the heartbeat waits after a start Android refused:
+        // twice as long at each refusal in a row, an hour at most.
+        fun backOff(context: Context): Long {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val refusals = prefs.getInt(PREF_REFUSALS, 0)
+            prefs.edit().putInt(PREF_REFUSALS, refusals + 1).apply()
+            // The first refusal already doubles the wait: the heartbeat
+            // that met it was the normal one.
+            val doubled = HEARTBEAT_MS shl (refusals + 1).coerceAtMost(MAX_DOUBLINGS)
+            return doubled.coerceAtMost(MAX_BACK_OFF_MS)
+        }
+
+        fun clearBackOff(context: Context) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit().remove(PREF_REFUSALS).apply()
+        }
+
+        // Whatever is said of Live from here on ends a hold: it only
+        // ever paused what the user had chosen.
         fun setWanted(context: Context, wanted: Boolean) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .edit().putBoolean(PREF_WANTED, wanted).apply()
+                .edit().putBoolean(PREF_WANTED, wanted).remove(PREF_HELD).apply()
         }
+
+        // Whether the app stopped Live because it had nothing to do,
+        // Android letting no notification through or no wallet to
+        // watch, to start it again once it has. Kept beside the flag,
+        // so the pause outlives the process.
+        fun isHeld(context: Context): Boolean =
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getBoolean(PREF_HELD, false)
 
         // The marker the activity keeps while the launcher shows the
         // calculator. Disguised, nothing of Gerfaut may run in sight.
@@ -505,6 +577,20 @@ class LiveService : Service() {
         // there is one to tell.
         fun stop(context: Context) {
             setWanted(context, false)
+            leave(context)
+        }
+
+        // Stopped from the app while Live has nothing to do: Android
+        // lets no notification through, or no wallet is left to watch.
+        // Not wanted meanwhile, so neither a boot nor the heartbeat
+        // brings it back; held, so the app starts it again once it has.
+        fun hold(context: Context) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit().putBoolean(PREF_WANTED, false).putBoolean(PREF_HELD, true).apply()
+            leave(context)
+        }
+
+        private fun leave(context: Context) {
             cancelHeartbeat(context)
             val running = instance ?: return
             running.quit(revert = false)

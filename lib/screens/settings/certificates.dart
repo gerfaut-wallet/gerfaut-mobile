@@ -325,16 +325,15 @@ class CertificateRow extends StatelessWidget {
           const SizedBox(height: GerfautSpacing.xs),
           Text(
             groupFingerprint(fingerprint),
-            style: tokens.data.copyWith(
-              fontSize: 12,
-              height: 1.5,
-              color: tokens.textMuted,
-            ),
+            // Read against the node's own, a group at a time: the data
+            // size, never smaller.
+            style: tokens.data.copyWith(height: 1.5, color: tokens.textMuted),
           ),
           if (confirming) ...[
             const SizedBox(height: GerfautSpacing.sm),
             Text(
-              'Gerfaut asks again the next time it connects to $host.',
+              'Syncs with $host will fail until you press Save backend '
+              'again and accept its certificate.',
               style: tokens.bodySmall.copyWith(color: tokens.textMuted),
             ),
             const SizedBox(height: GerfautSpacing.sm),

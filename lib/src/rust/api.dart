@@ -7,13 +7,32 @@ import 'frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `channel_view`, `console_log_level`, `core_error_json`, `core_error_kind`, `decode_key`, `error_json`, `from_json`, `manager`, `now_unix`, `ok_json`, `parse_network_opt`, `parse_network`, `parse_variant`, `premium_base_url`, `premium_client`, `premium_error_kind`, `premium_public_key`, `premium_view`, `store_premium`, `to_json`
+// These functions are ignored because they are not marked as `pub`: `console_log_level`, `core_error_json`, `core_error_kind`, `decode_key`, `error_json`, `from_json`, `manager`, `ok_json`, `parse_network_opt`, `parse_network`, `parse_variant`, `refuse_oversized_nested_ur`, `refuse_oversized_ur`, `to_json`
 
 /// Opens (or creates) the vault under `data_dir` with a 32-byte key given
 /// as 64 hex characters. Idempotent: once initialized, later calls (hot
 /// restarts) succeed without reopening.
+///
+/// The screens, the periodic task and the live watch each run in an
+/// isolate of their own, in this one process, and each calls this when
+/// it starts: two of them can call it at once. The vault takes one
+/// opener at a time, within a process as between two, so a second open
+/// would fail with `vault_in_use` instead of finding the first. One
+/// call opens, and any other waits for it and shares its manager.
 Future<String> initManager({required String dataDir, required String keyHex}) =>
     RustLib.instance.api.crateApiInitManager(dataDir: dataDir, keyHex: keyHex);
+
+/// The key to store and open a new vault with, as 64 hex characters,
+/// for a first launch: no vault yet, and no key kept for one.
+///
+/// The screens, the periodic task and the live watch each start in an
+/// isolate of their own, and on a first launch each of them finds no
+/// vault and no key. Were each to draw its own, the vault would be
+/// sealed under the first key to reach [`init_manager`] while the
+/// storage kept whichever was written last, and the next launch could
+/// not open it. Drawn here, in one cell for the process, every caller
+/// gets the same key: they all store that one and open with it.
+Future<String> freshVaultKey() => RustLib.instance.api.crateApiFreshVaultKey();
 
 /// Classifies pasted or scanned wallet material. Returns the serialized
 /// `ParsedInput` to pass back to [`add_wallet`] after user confirmation.
@@ -22,10 +41,11 @@ Future<String> initManager({required String dataDir, required String keyHex}) =>
 Future<String> parseInput({required String input, String? script}) =>
     RustLib.instance.api.crateApiParseInput(input: input, script: script);
 
-/// Classifies wallet material with the advanced choices of the import
-/// screen: `options_json` is a serialized `ImportOptions` (script type
-/// and derivation paths), both parts optional. Everything the input
-/// fixes by itself ignores them.
+/// Classifies wallet material with the choices of the import screen:
+/// `options_json` is a serialized `ImportOptions` (script type,
+/// derivation paths, and the network the wallet goes to), all
+/// optional. Everything the input fixes by itself ignores the first
+/// two; the network decides the first address shown.
 Future<String> parseInputWithOptions({
   required String input,
   required String optionsJson,
@@ -65,10 +85,7 @@ Future<String> addWallet({
 Future<String> listWallets({String? network}) =>
     RustLib.instance.api.crateApiListWallets(network: network);
 
-/// Removes a wallet from this device. One the server watched is taken
-/// off it too, after the answer: the core queues the message in the
-/// same write as the removal, and a server out of reach hears it at
-/// the next heartbeat instead.
+/// Removes a wallet from this device.
 Future<String> removeWallet({required String id}) =>
     RustLib.instance.api.crateApiRemoveWallet(id: id);
 
@@ -80,6 +97,15 @@ Future<String> renameWallet({required String id, required String name}) =>
 /// `landmark`, `piggy_bank`.
 Future<String> setWalletIcon({required String id, required String icon}) =>
     RustLib.instance.api.crateApiSetWalletIcon(id: id, icon: icon);
+
+/// Puts a wallet ahead of the others in the live watch, or back among
+/// them. When the watch cannot follow every address, the pinned wallets
+/// are followed first. Kept in the vault; the watch takes the new order
+/// by itself.
+Future<String> setWalletLivePinned({
+  required String id,
+  required bool pinned,
+}) => RustLib.instance.api.crateApiSetWalletLivePinned(id: id, pinned: pinned);
 
 /// Puts the listed wallets in that order. Wallets left out keep their
 /// slots, so the list of one network reorders without moving another
@@ -302,196 +328,6 @@ Future<String> importBackup({
   choicesJson: choicesJson,
 );
 
-/// Points a debug build at another premium server, a local one for an
-/// end-to-end run: the core reads its address and the key its
-/// certificates are signed with from the environment, and this sets
-/// them before any premium call is made. A release build has no such
-/// door: the call does nothing there, and the core would not read the
-/// variables anyway. Blank values leave the production server.
-String premiumDebugEndpoint({
-  required String baseUrl,
-  required String publicKey,
-}) => RustLib.instance.api.crateApiPremiumDebugEndpoint(
-  baseUrl: baseUrl,
-  publicKey: publicKey,
-);
-
-/// The premium account as the vault keeps it, with its certificate
-/// read. Returns a serialized `PremiumView`.
-Future<String> premiumState() => RustLib.instance.api.crateApiPremiumState();
-
-/// Connects this phone to the account with a key: the core checks its
-/// shape, has the server make a device of it, keeps the key and the
-/// device's token together, then fetches the certificate. Returns the
-/// serialized `Device`: full access for the account's first, waiting
-/// for any later one. A key the server does not know, or one with every
-/// device it may have, comes back as the error the field shows; nothing
-/// is stored then. An answer lost on the way keeps the connection under
-/// way, and trying again sends the same one. Another key is refused,
-/// `premium_key_change_pending`, while a key change has not finished.
-Future<String> premiumConnect({required String key}) =>
-    RustLib.instance.api.crateApiPremiumConnect(key: key);
-
-/// Sends again, as it was, a connection whose answer was lost, and
-/// connects a key kept by a version that had no devices yet. Returns the
-/// serialized `Device` it connected, or `null` when there was nothing to
-/// do: no key, a device already, or one the server disconnected, which
-/// connects again only when the user asks. After a rate limit it sends
-/// nothing until the wait the server named is over, and answers
-/// `premium_rate_limited` with what is left of it.
-Future<String> premiumEnsureDevice() =>
-    RustLib.instance.api.crateApiPremiumEnsureDevice();
-
-/// This device as the server sees it. Returns the serialized `Device`.
-Future<String> premiumDevice() => RustLib.instance.api.crateApiPremiumDevice();
-
-/// Every device of the account, oldest first; full access only. Returns
-/// a serialized `Vec<Device>`.
-Future<String> premiumDevices() =>
-    RustLib.instance.api.crateApiPremiumDevices();
-
-/// Gives a waiting device full access now. Returns the serialized
-/// `Device`, approved.
-Future<String> premiumApproveDevice({required String id}) =>
-    RustLib.instance.api.crateApiPremiumApproveDevice(id: id);
-
-/// Refuses a waiting device, or disconnects one with full access.
-Future<String> premiumRemoveDevice({required String id}) =>
-    RustLib.instance.api.crateApiPremiumRemoveDevice(id: id);
-
-/// Logs this device out: the server is told as far as it can be reached,
-/// then the key, the token and the certificate leave the vault. The
-/// server goes on watching what it was told to; the consents stay, so
-/// the same key entered again asks nothing twice. A server out of reach
-/// is told later, by [`premium_flush_logouts`]. A key change that did
-/// not finish is refused, `premium_key_change_pending`: this vault may
-/// hold the only copy of the new key.
-Future<String> premiumLogOut() => RustLib.instance.api.crateApiPremiumLogOut();
-
-/// Tells the server about the connections this device dropped while it
-/// could not be reached. Nothing queued costs no request. Returns
-/// `{"left": n}`, how many are still to tell; a server out of reach is
-/// the error, and they wait for the next start or heartbeat.
-Future<String> premiumFlushLogouts() =>
-    RustLib.instance.api.crateApiPremiumFlushLogouts();
-
-/// Draws a new key for the account; full access only. The old key stops
-/// working everywhere and every other device is disconnected. Returns
-/// `{"key": "xxxx-xxxx-xxxx-xxxx"}`, the one time the new key is shown.
-///
-/// The core draws the key and keeps it before the request leaves: an
-/// answer lost on the way leaves the change under way, which the view
-/// says, and the next call sends that same key rather than a new one.
-Future<String> premiumChangeKey() =>
-    RustLib.instance.api.crateApiPremiumChangeKey();
-
-/// Records whether the user put the key somewhere safe.
-Future<String> premiumSetKeySaved({required bool saved}) =>
-    RustLib.instance.api.crateApiPremiumSetKeySaved(saved: saved);
-
-/// Hides the "Protect your Premium account" card.
-Future<String> premiumHideChecklist() =>
-    RustLib.instance.api.crateApiPremiumHideChecklist();
-
-/// Hands the ids of every device that waits, as the latest list shows
-/// them, and takes back the ones no notification announced yet: each is
-/// handed out once, whoever asks. Returns a JSON array of ids.
-Future<String> premiumMarkAnnounced({required List<String> pending}) =>
-    RustLib.instance.api.crateApiPremiumMarkAnnounced(pending: pending);
-
-/// Fetches the certificate again, for the paid time a renewal added,
-/// and keeps it. Returns the serialized `Licence`.
-Future<String> premiumRefreshLicence() =>
-    RustLib.instance.api.crateApiPremiumRefreshLicence();
-
-/// Keeps the "watch is offline" banner quiet until `until` (unix
-/// seconds), or lets it show again with `None`.
-Future<String> premiumAcknowledgeOffline({PlatformInt64? until}) =>
-    RustLib.instance.api.crateApiPremiumAcknowledgeOffline(until: until);
-
-/// `GET /v1/account`: paid time, counts, and the network the server
-/// watches. Returns a serialized `Account`.
-Future<String> premiumAccount() =>
-    RustLib.instance.api.crateApiPremiumAccount();
-
-/// The wallets the server watches for this key. Returns a serialized
-/// `Vec<WalletWatch>`.
-Future<String> premiumWallets() =>
-    RustLib.instance.api.crateApiPremiumWallets();
-
-/// Hands one wallet to the server, under the app's own id and name,
-/// with its descriptors as the vault holds them: both chains on two
-/// lines when the wallet has a change descriptor, the external one
-/// alone otherwise, and the address itself for a wallet that is one
-/// address. The user's yes is recorded first, dated now; a second yes
-/// keeps the first date.
-Future<String> premiumWatchWallet({required String id}) =>
-    RustLib.instance.api.crateApiPremiumWatchWallet(id: id);
-
-/// Tells the server to stop watching a wallet and withdraws the consent
-/// given for it: the switch going back on asks the question again, and
-/// removing the wallet later queues nothing for a server that forgot it.
-Future<String> premiumUnwatchWallet({required String id}) =>
-    RustLib.instance.api.crateApiPremiumUnwatchWallet(id: id);
-
-/// The account's channels. Returns a serialized `Vec<ChannelView>`.
-Future<String> premiumChannels() =>
-    RustLib.instance.api.crateApiPremiumChannels();
-
-/// Adds a channel. `kind` is `ntfy`, `telegram`, `email` or `webhook`;
-/// `target` is the e-mail address or the webhook URL, nothing for
-/// Telegram, and nothing for ntfy either: the topic is drawn here, 24
-/// symbols nobody guesses, and returned once with the URL to subscribe
-/// to. `secret` is the webhook's HMAC key. Returns
-/// `{channel, topic, subscribe_url}`.
-Future<String> premiumCreateChannel({
-  required String kind,
-  String? target,
-  String? secret,
-}) => RustLib.instance.api.crateApiPremiumCreateChannel(
-  kind: kind,
-  target: target,
-  secret: secret,
-);
-
-/// Confirms a channel with the code the server sent to it: the six
-/// digits of a confirmation e-mail. Returns the serialized channel,
-/// linked. A code that is wrong or past its hour comes back as
-/// `premium_rejected` in the server's words, and so does one tried too
-/// many times.
-Future<String> premiumConfirmChannel({
-  required String id,
-  required String code,
-}) => RustLib.instance.api.crateApiPremiumConfirmChannel(id: id, code: code);
-
-/// Deletes the account on the server — the key, the wallets it watched,
-/// the channels, the log — and then forgets it here. Nothing local is
-/// dropped unless the server confirmed. There is no way back.
-Future<String> premiumDeleteAccount() =>
-    RustLib.instance.api.crateApiPremiumDeleteAccount();
-
-Future<String> premiumDeleteChannel({required String id}) =>
-    RustLib.instance.api.crateApiPremiumDeleteChannel(id: id);
-
-/// Sends a test message through one channel right away. The provider's
-/// refusal comes back as `premium_rejected`, in the server's words.
-Future<String> premiumTestChannel({required String id}) =>
-    RustLib.instance.api.crateApiPremiumTestChannel(id: id);
-
-/// The last events of the account, newest first, at most `RECENT_EVENTS`
-/// of them. The server serves its log oldest first behind a cursor, so
-/// the pages are walked to the end here. Returns a serialized
-/// `Vec<Event>`.
-Future<String> premiumRecentEvents() =>
-    RustLib.instance.api.crateApiPremiumRecentEvents();
-
-/// `GET /v1/heartbeat`, verified against the embedded key and this
-/// device's clock. Returns a serialized `HeartbeatReport`; a server
-/// that cannot be reached, or whose answer does not verify, is the
-/// error the "watch is offline" banner counts.
-Future<String> premiumHeartbeat() =>
-    RustLib.instance.api.crateApiPremiumHeartbeat();
-
 /// Starts the live watch of the active network and hands everything it
 /// says to this one caller, each a serialized `LiveEvent`, then
 /// `{"type":"stopped"}` once the watch has ended. The caller announces
@@ -543,6 +379,10 @@ Future<String> usesTor() => RustLib.instance.api.crateApiUsesTor();
 /// `kraken`, `mempool_space`; `currency` is one of the `FiatCurrency`
 /// identifiers. The source must quote the currency: only CoinGecko
 /// serves the ones past the first seven. Returns a `PriceQuote`.
+///
+/// Through the manager, so the request takes the route the syncs take:
+/// with a .onion node on any network it goes through Tor, and with Tor
+/// out of reach it does not go at all and comes back as `tor`.
 Future<String> fetchPrice({required String source, required String currency}) =>
     RustLib.instance.api.crateApiFetchPrice(source: source, currency: currency);
 

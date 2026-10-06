@@ -4,8 +4,10 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../src/disguise.dart';
 import '../../src/home_widgets.dart';
+import '../../src/state.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/section_card.dart';
+import '../../widgets/setting_switch.dart';
 
 /// The settings card for the home-screen widgets: whether they may show
 /// balances, and how to place one. The widgets themselves are added
@@ -18,41 +20,29 @@ class WidgetsSection extends ConsumerWidget {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final on = ref.watch(widgetBalancesProvider);
     final disguised = ref.watch(disguiseProvider).disguised;
+    // Under an app lock the balance widget names no wallet and shows no
+    // amount, whatever this says: greyed meanwhile, and the line says
+    // why. The choice comes back with the lock gone.
+    final locked = ref.watch(settingsProvider).valueOrNull?.appLock != null;
 
     return SectionCard(
       icon: LucideIcons.layoutGrid,
       title: 'Widgets',
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Show balances on widgets',
-                    style: tokens.bodySmall.copyWith(
-                      fontWeight: FontWeight.w500,
-                      fontVariations: const [FontVariation('wght', 500)],
-                    ),
-                  ),
-                  Text(
-                    'A widget is read over the shoulder: balances stay '
-                    'masked until this is on, and whenever amounts are '
-                    'hidden in the app.',
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: GerfautSpacing.sm),
-            Switch(
-              value: on,
-              onChanged: (next) =>
-                  ref.read(widgetBalancesProvider.notifier).set(next),
-            ),
-          ],
+        SettingSwitch(
+          title: 'Show balances on widgets',
+          hint: locked
+              ? 'Off while an app lock is set: the balance widget shows no '
+                    'wallet name and no amount, as a notification does.'
+              : 'A widget is read over the shoulder: balances stay masked '
+                    'until this is on, and whenever amounts are hidden in '
+                    'the app.',
+          // Drawn off while the lock holds it off, as the hint says; the
+          // choice itself is kept.
+          value: on && !locked,
+          onChanged: locked
+              ? null
+              : (next) => ref.read(widgetBalancesProvider.notifier).set(next),
         ),
         const SizedBox(height: GerfautSpacing.md),
         // Disguised, the providers are disabled and the launcher offers

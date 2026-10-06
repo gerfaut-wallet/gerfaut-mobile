@@ -96,14 +96,9 @@ class LockState {
   /// screen rather than guessing.
   final bool loaded;
 
-  LockState copyWith({
-    AppLock? lock,
-    bool clearLock = false,
-    bool? locked,
-    bool? loaded,
-  }) {
+  LockState copyWith({AppLock? lock, bool? locked, bool? loaded}) {
     return LockState(
-      lock: clearLock ? null : (lock ?? this.lock),
+      lock: lock ?? this.lock,
       locked: locked ?? this.locked,
       loaded: loaded ?? this.loaded,
     );
@@ -240,6 +235,34 @@ class LockController extends Notifier<LockState> {
   /// forgetting the excursion there would put the lock in front of
   /// someone who never left.
   void forgetExcursion() => _excursionAt = null;
+
+  /// Opens a system screen of Gerfaut's own with [open] — a picker, a
+  /// save dialog, a share sheet, a page of the system settings — as an
+  /// excursion: announced against the call, and taken back the moment
+  /// it is clear no screen came up. That is every failure of [open]
+  /// unless [cameUp] says the screen had opened before it failed (a
+  /// file picked then not read, a save refused once its dialog was up),
+  /// and a result [shown] says brought nothing up (a settings page that
+  /// would not open). What [open] answers or throws is handed back.
+  ///
+  /// The one place the rule lives: a screen that announced a trip and
+  /// forgot to take it back would leave the next real absence unlocked.
+  Future<T> excursion<T>(
+    Future<T> Function() open, {
+    bool Function(Object error)? cameUp,
+    bool Function(T result)? shown,
+  }) async {
+    expectExcursion();
+    final T result;
+    try {
+      result = await open();
+    } catch (error) {
+      if (!(cameUp?.call(error) ?? false)) forgetExcursion();
+      rethrow;
+    }
+    if (!(shown?.call(result) ?? true)) forgetExcursion();
+    return result;
+  }
 
   /// Gerfaut is back: having been away is the whole rule, unless the
   /// trip was one Gerfaut sent the user on, and a short one. Picking a

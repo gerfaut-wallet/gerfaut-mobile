@@ -106,13 +106,39 @@ Container rowOf(WidgetTester tester, String title) {
 }
 
 void main() {
+  testWidgets('at a large text size the field grows instead of cutting', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+        child: host([]),
+      ),
+    );
+    final field = find.byType(GerfautSelect<String>);
+    expect(tester.getSize(field).height, greaterThan(GerfautTouch.target));
+    final value = tester.getRect(find.text('EUR'));
+    expect(tester.getRect(field).contains(value.topLeft), isTrue);
+    expect(tester.getRect(field).contains(value.bottomLeft), isTrue);
+  });
+
   testWidgets('the field reads as an input and names its value', (
     tester,
   ) async {
     final handle = tester.ensureSemantics();
     await tester.pumpWidget(host([]));
 
-    expect(tester.getSize(find.byType(GerfautSelect<String>)).height, 44);
+    // Drawn a field's height, answering the finger over a full target.
+    final select = find.byType(GerfautSelect<String>);
+    expect(tester.getSize(select).height, GerfautTouch.target);
+    expect(
+      tester
+          .getSize(
+            find.descendant(of: select, matching: find.byType(Material)).first,
+          )
+          .height,
+      GerfautTouch.control,
+    );
     expect(find.byIcon(LucideIcons.chevronDown), findsOneWidget);
     expect(find.text('EUR'), findsOneWidget);
     expect(find.text('Euro'), findsOneWidget);
@@ -207,6 +233,42 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('EVERY SOURCE'), findsNothing);
     expect(picked, isEmpty);
+    handle.dispose();
+  });
+
+  testWidgets('a field without a handler is greyed and opens nothing', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: themeFrom(GerfautTokens.light, Brightness.light),
+        home: Scaffold(
+          body: GerfautSelect<String>.items(
+            label: 'Check for transactions',
+            value: 'eur',
+            items: const [
+              GerfautSelectItem(value: 'eur', title: 'EUR'),
+              GerfautSelectItem(value: 'usd', title: 'USD'),
+            ],
+            onChanged: null,
+          ),
+        ),
+      ),
+    );
+
+    // The value still reads, in the muted ink of what cannot change.
+    expect(
+      tester.widget<Text>(find.text('EUR')).style!.color,
+      GerfautTokens.light.textMuted,
+    );
+    final semantics = tester.getSemantics(find.byType(GerfautSelect<String>));
+    expect(semantics.flagsCollection.isEnabled, Tristate.isFalse);
+    expect(semantics.value, 'EUR');
+
+    await tester.tap(find.byType(GerfautSelect<String>));
+    await tester.pumpAndSettle();
+    expect(find.text('USD'), findsNothing);
     handle.dispose();
   });
 

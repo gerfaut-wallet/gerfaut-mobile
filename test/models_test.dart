@@ -1,6 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gerfaut/src/bridge.dart';
+import 'package:flutter_rust_bridge/flutter_rust_bridge.dart'
+    show PanicException;
 import 'package:gerfaut/src/models.dart';
 
 const _descriptors = {
@@ -101,6 +104,37 @@ void main() {
     });
   });
 
+  group('QrProgress.fromJson', () {
+    test('reads what the core assumed reading the code', () {
+      final progress = QrProgress.fromJson({
+        'format': 'ur',
+        'received': 1,
+        'total': 1,
+        'complete': true,
+        'text': 'wpkh([9a6a2580/84h/1h/0h]tpub.../<0;1>/*)',
+        'warnings': ['assumed_branches'],
+      });
+      expect(progress.warnings, [InputWarning.assumedBranches]);
+      expect(
+        progress.warnings.single.label,
+        'This QR code carries no receive or change path, so Gerfaut '
+        'assumes the usual 0/* and 1/*. Compare the first address with '
+        'your signer.',
+      );
+    });
+
+    test('reads no warning when the answer has none', () {
+      final progress = QrProgress.fromJson({
+        'format': 'plain',
+        'received': 1,
+        'total': 1,
+        'complete': true,
+        'text': 'wpkh(tpub.../0/*)',
+      });
+      expect(progress.warnings, isEmpty);
+    });
+  });
+
   group('WalletMeta.fromJson', () {
     test('reads the scan gap', () {
       final meta = WalletMeta.fromJson(_metaJson());
@@ -118,6 +152,18 @@ void main() {
       expect(WalletMeta.fromJson(json).icon, WalletIcon.piggyBank);
       expect(WalletIcon.fromId('map_pin'), WalletIcon.mapPin);
       expect(WalletIcon.piggyBank.id, 'piggy_bank');
+    });
+
+    test('names each icon the way the desktop app does', () {
+      expect(WalletIcon.values.map((icon) => icon.label), [
+        'Wallet',
+        'Key',
+        'Shield',
+        'Pin',
+        'Snowflake',
+        'Landmark',
+        'Piggy bank',
+      ]);
     });
 
     test('falls back to the wallet glyph when the icon is missing or '
@@ -244,6 +290,40 @@ void main() {
           'url': 'https://mempool.space/api',
         }).protocol,
         ServerProtocol.esplora,
+      );
+    });
+
+    test("a node of the user's own says so, and only when it is", () {
+      // Written by a version without the switch: off, and written back
+      // in the very same shape.
+      final before = BackendConfig.fromJson({
+        'type': 'custom_electrum',
+        'url': 'ssl://node.local:50002',
+      });
+      expect((before as CustomElectrum).ownNode, isFalse);
+      expect(
+        jsonEncode(before.toJson()),
+        '{"type":"custom_electrum","url":"ssl://node.local:50002"}',
+      );
+
+      final electrum = BackendConfig.fromJson({
+        'type': 'custom_electrum',
+        'url': 'ssl://node.local:50002',
+        'own_node': true,
+      });
+      expect((electrum as CustomElectrum).ownNode, isTrue);
+      expect(electrum.toJson()['own_node'], isTrue);
+
+      final esplora = BackendConfig.fromJson({
+        'type': 'custom_esplora',
+        'url': 'https://node.local:3002/api',
+        'own_node': true,
+      });
+      expect((esplora as CustomEsplora).ownNode, isTrue);
+      expect(
+        jsonEncode(esplora.toJson()),
+        '{"type":"custom_esplora","url":"https://node.local:3002/api",'
+        '"own_node":true}',
       );
     });
 
@@ -474,77 +554,20 @@ void main() {
     });
   });
 
-  group('PremiumChannel.fromJson', () {
-    test('reads who the channel is linked to, when the server says', () {
-      final linked = PremiumChannel.fromJson(const {
-        'id': 'ch1',
-        'kind': 'telegram',
-        'target': 'linked',
-        'linked': true,
-        'linked_name': 'Ada',
-        'created_at': 1755000000,
-      });
-      expect(linked.linkedName, 'Ada');
-      expect(linked.waitingForBot, isFalse);
-    });
-
-    test('a server that names nobody leaves the name out', () {
-      final channel = PremiumChannel.fromJson(const {
-        'id': 'ch2',
-        'kind': 'telegram',
-        'target': '',
-        'linked': false,
-        'link_code': 'abc123',
-        'created_at': 1755000000,
-      });
-      expect(channel.linkedName, isNull);
-      expect(channel.waitingForBot, isTrue);
-    });
-  });
-
-  group('WalletWatch.fromJson', () {
-    test('the server states whether the first scan is still running', () {
-      final pending = WalletWatch.fromJson(const {
-        'id': 'w1',
-        'name': 'Cold storage',
-        'script_kind': 'segwit',
-        'watched_since': 1755000000,
-        'baseline_at': null,
-        'baseline_height': null,
-        'baseline_pending': true,
-        'coins': 0,
-        'value_sats': 0,
-      });
-      expect(pending.scanning, isTrue);
-
-      // A finished scan says so even before a date is stamped on it.
-      final done = WalletWatch.fromJson(const {
-        'id': 'w1',
-        'name': 'Cold storage',
-        'script_kind': 'segwit',
-        'watched_since': 1755000000,
-        'baseline_at': null,
-        'baseline_height': null,
-        'baseline_pending': false,
-        'coins': 3,
-        'value_sats': 300000,
-      });
-      expect(done.scanning, isFalse);
-    });
-
-    test('a server that says nothing is read by the date it stamps', () {
-      Map<String, dynamic> watch(int? baselineAt) => {
-        'id': 'w1',
-        'name': 'Cold storage',
-        'script_kind': 'segwit',
-        'watched_since': 1755000000,
-        'baseline_at': baselineAt,
-        'baseline_height': null,
-        'coins': 0,
-        'value_sats': 0,
-      };
-      expect(WalletWatch.fromJson(watch(null)).scanning, isTrue);
-      expect(WalletWatch.fromJson(watch(1755000030)).scanning, isFalse);
-    });
-  });
+  test(
+    'a panic in the core comes back as a failure the screens catch',
+    () async {
+      await expectLater(
+        guardPanics(
+          Future<String>.error(PanicException('index out of bounds')),
+        ),
+        throwsA(
+          isA<BridgeException>()
+              .having((e) => e.kind, 'kind', 'internal')
+              .having((e) => e.message, 'message', internalFailure),
+        ),
+      );
+      expect(await guardPanics(Future.value('{"ok":true}')), '{"ok":true}');
+    },
+  );
 }

@@ -16,6 +16,7 @@ import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/vault_key.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/select_field.dart';
+import 'package:gerfaut/widgets/setting_switch.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
 import 'fakes.dart';
@@ -35,7 +36,8 @@ FakeBridge _bridge({
   Map<Network, BackendConfig> backends = const {},
 }) {
   return FakeBridge(
-    wallets: [makeMeta()],
+    // On the network in use: the one whose wallets Live watches.
+    wallets: [makeMeta(network: network)],
     settings: Settings(
       activeNetwork: network,
       backends: backends,
@@ -75,10 +77,18 @@ class _Service {
     Future<void> Function()? bootstrap,
     Duration flushAfter = const Duration(seconds: 3),
     Duration restartAfter = const Duration(seconds: 2),
+    Duration quietAfter = const Duration(seconds: 5),
+    Duration connectingFor = const Duration(seconds: 30),
   }) {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_serviceChannel, (call) async {
-          told.add((call.method, call.arguments));
+          // The wake lock is kept apart from what the notification is
+          // told, so each can be read on its own.
+          if (call.method == 'hold' || call.method == 'release') {
+            awake.add(call.method);
+          } else {
+            told.add((call.method, call.arguments));
+          }
           return null;
         });
     runner = LiveRunner(
@@ -90,12 +100,20 @@ class _Service {
       schedule: (seconds) async => scheduled.add(seconds),
       flushAfter: flushAfter,
       restartAfter: restartAfter,
+      quietAfter: quietAfter,
+      connectingFor: connectingFor,
     );
   }
 
   final FakeBridge bridge;
   final FakeNotifications notifications = FakeNotifications();
   final List<(String, Object?)> told = [];
+
+  /// Every hold and release of the wake lock, in order.
+  final List<String> awake = [];
+
+  /// Whether the service holds the work lock now.
+  bool get holding => awake.isNotEmpty && awake.last == 'hold';
   final List<int> scheduled = [];
   late final LiveRunner runner;
 
@@ -191,7 +209,7 @@ void main() {
       final service = _Service(_bridge());
       await service.runner.run();
       expect(service.bridge.liveStartCalls, 1);
-      expect(service.told.last, ('status', 'Connecting'));
+      expect(service.told.last, ('status', 'Connecting…'));
       service.bridge.liveController.add(
         const LiveStatusChanged(LiveWatchStatus(state: WatchState.connected)),
       );
@@ -250,7 +268,11 @@ void main() {
       );
       await service.runner.run();
       service.bridge.liveController.add(LiveTransaction(_live('cc', 1)));
-      await Future<void>.delayed(const Duration(milliseconds: 60));
+      // However slowly a busy machine runs the clock: said within two
+      // seconds, and once.
+      for (var i = 0; i < 200 && service.notifications.posted.isEmpty; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
       expect(service.notifications.posted, hasLength(1));
     });
 
@@ -311,6 +333,13 @@ void main() {
   });
 
   group('the service starts, ticks and stops', () {
+    // The wake-lock tests run on the test clock: the windows are seconds
+    // long, as in the app, and no machine's load can stretch one past
+    // the next check. Each ends a minute on, every window run out, so
+    // no timer outlives it.
+    Future<void> settled(WidgetTester tester) =>
+        tester.pump(const Duration(minutes: 1));
+
     test('stands down when Live is not what the settings ask for', () async {
       final service = _Service(
         _bridge(prefs: {'notify.new_tx': '1', 'notify.background': '900'}),
@@ -401,7 +430,7 @@ void main() {
           ),
         );
         await service.settle();
-        expect(service.told.last, ('status', 'Reconnecting'));
+        expect(service.told.last, ('status', 'Reconnecting…'));
         expect(
           service.told.where((t) => '${t.$2}'.contains('secret.example')),
           isEmpty,
@@ -438,8 +467,42 @@ void main() {
       await service.runner.run();
       expect(service.bridge.liveStartCalls, 1);
       service.bridge.liveController.add(const LiveStopped());
-      await Future<void>.delayed(const Duration(milliseconds: 80));
+      // However slowly a busy machine runs the clock: started again
+      // within two seconds.
+      for (var i = 0; i < 200 && service.bridge.liveStartCalls < 2; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
       expect(service.bridge.liveStartCalls, 2);
+    });
+
+    test('a watch started again is held up while it reconnects', () async {
+      final service = _Service(
+        _bridge(),
+        restartAfter: const Duration(milliseconds: 20),
+      );
+      await service.runner.run();
+      const reconnecting = LiveStatusChanged(
+        LiveWatchStatus(state: WatchState.reconnecting),
+      );
+      service.bridge.liveController.add(reconnecting);
+      await service.settle();
+      service.bridge.liveController.add(const LiveStopped());
+      for (var i = 0; i < 200 && service.bridge.liveStartCalls < 2; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(service.bridge.liveStartCalls, 2);
+      final holds = service.awake.where((call) => call == 'hold').length;
+
+      // The new run's first word is the same as the old run's last: it
+      // is still news, and the phone stays up for it.
+      service.bridge.liveController.add(reconnecting);
+      await service.settle();
+      await service.settle();
+      expect(
+        service.awake.where((call) => call == 'hold').length,
+        greaterThan(holds),
+      );
+      await service.runner.stop(revert: false);
     });
 
     test('a run refused, the watch held elsewhere, is tried again', () async {
@@ -453,9 +516,14 @@ void main() {
         restartAfter: const Duration(milliseconds: 20),
       );
       await service.runner.run();
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+      // The first run was refused the moment it was listened to: the
+      // watch is free from now, before the restart is due, however
+      // slowly the clock of a busy machine runs.
+      expect(bridge.liveStartCalls, 1);
       bridge.runRefusal = null;
-      await Future<void>.delayed(const Duration(milliseconds: 80));
+      for (var i = 0; i < 200 && bridge.liveStartCalls < 2; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
       expect(bridge.liveStartCalls, 2);
       service.bridge.liveController.add(LiveTransaction(_live('after', 1)));
       service.bridge.liveController.add(LiveWalletSynced(_report()));
@@ -474,6 +542,99 @@ void main() {
       await service.settle();
       expect(service.bridge.liveStartCalls, 1);
       expect(service.told.where((t) => t.$1 == 'status'), hasLength(1));
+    });
+
+    testWidgets(
+      'a tick keeps the phone up while the core checks, then lets go',
+      (tester) async {
+        final service = _Service(_bridge());
+        await service.runner.run();
+        await service.send('tick');
+        expect(service.holding, isTrue);
+        await tester.pump(const Duration(seconds: 4));
+        expect(service.holding, isTrue);
+        await tester.pump(const Duration(seconds: 2));
+        expect(service.awake.last, 'release');
+        await settled(tester);
+      },
+    );
+
+    testWidgets('an arrival keeps the phone up until it is announced', (
+      tester,
+    ) async {
+      final service = _Service(
+        _bridge(),
+        quietAfter: const Duration(seconds: 1),
+        flushAfter: const Duration(seconds: 3),
+      );
+      await service.runner.run();
+      service.bridge.liveController.add(LiveTransaction(_live('aa', 5000)));
+      await tester.pump();
+      expect(service.holding, isTrue);
+
+      // Quiet for longer than the window, the announcement still to say.
+      await tester.pump(const Duration(seconds: 2));
+      expect(service.notifications.posted, isEmpty);
+      expect(service.holding, isTrue);
+
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump(const Duration(seconds: 2));
+      expect(service.notifications.posted, hasLength(1));
+      expect(service.awake.last, 'release');
+      await settled(tester);
+    });
+
+    testWidgets('a reconnection keeps the phone up for longer', (tester) async {
+      final service = _Service(_bridge());
+      await service.runner.run();
+      service.bridge.liveController.add(
+        const LiveStatusChanged(
+          LiveWatchStatus(state: WatchState.reconnecting),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 20));
+      expect(service.holding, isTrue);
+
+      // Connected: a moment more for the catch-up, then sleep.
+      service.bridge.liveController.add(
+        const LiveStatusChanged(LiveWatchStatus(state: WatchState.connected)),
+      );
+      await tester.pump(const Duration(seconds: 6));
+      expect(service.awake.last, 'release');
+      await settled(tester);
+    });
+
+    testWidgets('a status that changes nothing keeps nobody up', (
+      tester,
+    ) async {
+      final service = _Service(_bridge());
+      await service.runner.run();
+      service.bridge.liveController.add(
+        const LiveStatusChanged(
+          LiveWatchStatus(state: WatchState.connected, pushedScripts: 10),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 6));
+      final holds = service.awake.where((call) => call == 'hold').length;
+      expect(service.awake.last, 'release');
+
+      // The next round recounts, in the same state: nothing to wait for.
+      service.bridge.liveController.add(
+        const LiveStatusChanged(
+          LiveWatchStatus(state: WatchState.connected, pushedScripts: 20),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 6));
+      expect(service.awake.where((call) => call == 'hold'), hasLength(holds));
+      await settled(tester);
+    });
+
+    test('a stop lets the phone sleep once it is over', () async {
+      final service = _Service(_bridge());
+      await service.runner.run();
+      await service.send('tick');
+      await service.send('stop', false);
+      expect(service.awake.last, 'release');
     });
 
     test('a watch stopped on purpose stays stopped', () async {
@@ -878,13 +1039,13 @@ void main() {
         liveStatusLine(
           running(const LiveWatchStatus(state: WatchState.reconnecting)),
         ),
-        'Reconnecting',
+        'Reconnecting…',
       );
       expect(
         liveStatusLine(
           running(const LiveWatchStatus(state: WatchState.connecting)),
         ),
-        'Connecting',
+        'Connecting…',
       );
       expect(
         liveStatusLine(const LiveState(checked: true)),
@@ -939,6 +1100,264 @@ void main() {
     });
   });
 
+  group('what Live leaves to the syncs', () {
+    const short = LiveWatchStatus(
+      state: WatchState.connected,
+      watchedScripts: 2000,
+      pushedScripts: 2000,
+      leftOutScripts: 1240,
+      leftOutWallets: 2,
+    );
+
+    test('a public server: how many wait, and what lifts the limit', () {
+      final note = liveCoverageNote(short, ownNode: false)!;
+      expect(
+        note.fact,
+        'Live follows at most 200 addresses per wallet and 2 000 in all. '
+        '1 240 addresses of 2 wallets are checked at the next sync instead.',
+      );
+      expect(
+        note.remedy,
+        'Connect your own node and turn on "This is my node" in Network to '
+        'follow up to 20 000.',
+      );
+    });
+
+    test('a node already declared, its list full: the limit alone', () {
+      final note = liveCoverageNote(
+        const LiveWatchStatus(
+          state: WatchState.connected,
+          watchedScripts: 20000,
+          pushedScripts: 20000,
+          leftOutScripts: 1240,
+          leftOutWallets: 2,
+        ),
+        ownNode: true,
+      )!;
+      expect(
+        note.fact,
+        'Live follows at most 20 000 addresses, even on your own node. '
+        '1 240 addresses of 2 wallets are checked at the next sync instead.',
+      );
+      expect(note.remedy, isNull);
+    });
+
+    test('a node that refused some: the setting of its software', () {
+      LiveWatchStatus refusedBy(String? software) => LiveWatchStatus(
+        state: WatchState.connected,
+        watchedScripts: 12000,
+        pushedScripts: 10000,
+        leftOutScripts: 2000,
+        leftOutWallets: 1,
+        serverSoftware: software,
+      );
+      final fulcrum = liveCoverageNote(
+        refusedBy('Fulcrum 1.12.0'),
+        ownNode: true,
+      )!;
+      expect(
+        fulcrum.fact,
+        'Your node refuses some of the addresses Live asks it to follow. '
+        '2 000 addresses of 1 wallet are checked at the next sync instead.',
+      );
+      expect(fulcrum.remedy, contains('max_subs_per_ip'));
+      expect(
+        liveCoverageNote(refusedBy('ElectrumX 1.18.0'), ownNode: true)!.remedy,
+        contains('COST_SOFT_LIMIT and COST_HARD_LIMIT'),
+      );
+      expect(
+        liveCoverageNote(
+          refusedBy('electrs-esplora 0.4.1'),
+          ownNode: true,
+        )!.remedy,
+        contains('--electrum-subscription-limit'),
+      );
+      expect(
+        liveCoverageNote(
+          refusedBy('mempool-electrs 3.1.0'),
+          ownNode: true,
+        )!.remedy,
+        contains('--electrum-max-subscriptions'),
+      );
+      // electrs as its author publishes it has no limit to raise.
+      expect(
+        liveCoverageNote(refusedBy('electrs/0.10.9'), ownNode: true)!.remedy,
+        isNull,
+      );
+      expect(
+        liveCoverageNote(refusedBy(null), ownNode: true)!.remedy,
+        'Raise the subscription limit of your server to follow them all.',
+      );
+    });
+
+    test('a public server that refuses is blamed, not the limits', () {
+      // mempool.space's Electrum takes 100 subscriptions a connection: a
+      // list of 150, far under the limits, leaves 50 out.
+      const refusing = LiveWatchStatus(
+        state: WatchState.connected,
+        watchedScripts: 150,
+        pushedScripts: 100,
+        leftOutScripts: 50,
+        leftOutWallets: 1,
+        wallets: [
+          WalletCoverage(
+            walletId: 'w-1',
+            coverage: Coverage.partial,
+            watchedScripts: 100,
+            leftOutScripts: 50,
+          ),
+        ],
+      );
+      expect(serverRefused(refusing), isTrue);
+      final note = liveCoverageNote(refusing, ownNode: false)!;
+      expect(
+        note.fact,
+        'The server refuses some of the addresses Live asks it to follow. '
+        '50 addresses of 1 wallet are checked at the next sync instead.',
+      );
+      expect(note.remedy, contains('"This is my node"'));
+
+      // Every address heard, one of them by two wallets: past the caps,
+      // not refused.
+      const capped = LiveWatchStatus(
+        state: WatchState.connected,
+        watchedScripts: 3,
+        leftOutScripts: 50,
+        leftOutWallets: 1,
+        wallets: [
+          WalletCoverage(
+            walletId: 'w-1',
+            coverage: Coverage.partial,
+            watchedScripts: 2,
+            leftOutScripts: 50,
+          ),
+          WalletCoverage(
+            walletId: 'w-2',
+            coverage: Coverage.live,
+            watchedScripts: 2,
+            leftOutScripts: 0,
+          ),
+        ],
+      );
+      expect(serverRefused(capped), isFalse);
+      expect(
+        liveCoverageNote(capped, ownNode: false)!.fact,
+        startsWith('Live follows at most'),
+      );
+    });
+
+    test('one address of one wallet is said in the singular', () {
+      final note = liveCoverageNote(
+        const LiveWatchStatus(
+          state: WatchState.polling,
+          leftOutScripts: 1,
+          leftOutWallets: 1,
+        ),
+        ownNode: false,
+      )!;
+      expect(
+        note.fact,
+        endsWith('1 address of 1 wallet is checked at the next sync instead.'),
+      );
+    });
+
+    test('nothing to say while every address is followed or Live is off', () {
+      expect(
+        liveCoverageNote(
+          const LiveWatchStatus(state: WatchState.connected),
+          ownNode: false,
+        ),
+        isNull,
+      );
+      // Off, the counts are zero; a stale one is not believed either.
+      expect(
+        liveCoverageNote(
+          const LiveWatchStatus(leftOutScripts: 10, leftOutWallets: 1),
+          ownNode: false,
+        ),
+        isNull,
+      );
+    });
+
+    test('the permanent notification says it in a few words, no count', () {
+      expect(
+        liveNotificationText(short),
+        'Connected to your server · some addresses wait for syncs',
+      );
+      expect(
+        liveNotificationText(
+          const LiveWatchStatus(state: WatchState.connected),
+        ),
+        'Connected to your server',
+      );
+    });
+
+    testWidgets('the settings say it under the status, with the remedy', (
+      tester,
+    ) async {
+      final bridge = _bridge()..watchStatus = short;
+      final platform = FakeLivePlatform(
+        running: true,
+        wanted: true,
+        batteryExempt: true,
+      );
+      await _open(tester, _settings(bridge, platform: platform));
+      expect(
+        find.textContaining('1 240 addresses of 2 wallets'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('"This is my node"'), findsOneWidget);
+    });
+
+    testWidgets('on a declared node with its list full, no remedy', (
+      tester,
+    ) async {
+      final bridge =
+          _bridge(
+              backends: const {
+                Network.signet: CustomElectrum(
+                  url: 'ssl://node.local:50002',
+                  ownNode: true,
+                ),
+              },
+            )
+            ..watchStatus = const LiveWatchStatus(
+              state: WatchState.connected,
+              watchedScripts: 20000,
+              pushedScripts: 20000,
+              leftOutScripts: 1240,
+              leftOutWallets: 2,
+            );
+      final platform = FakeLivePlatform(
+        running: true,
+        wanted: true,
+        batteryExempt: true,
+      );
+      await _open(tester, _settings(bridge, platform: platform));
+      expect(
+        find.textContaining('20 000 addresses, even on your own node'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('"This is my node"'), findsNothing);
+    });
+
+    testWidgets('with room for every address, nothing is said', (tester) async {
+      final bridge = _bridge()
+        ..watchStatus = const LiveWatchStatus(
+          state: WatchState.connected,
+          watchedScripts: 120,
+          pushedScripts: 120,
+        );
+      final platform = FakeLivePlatform(
+        running: true,
+        wanted: true,
+        batteryExempt: true,
+      );
+      await _open(tester, _settings(bridge, platform: platform));
+      expect(find.textContaining('for the next sync'), findsNothing);
+    });
+  });
+
   group('choosing Live', () {
     const onPrefs = {'notify.new_tx': '1', 'notify.background': '900'};
 
@@ -952,7 +1371,11 @@ void main() {
 
       expect(find.text('Live watch'), findsOneWidget);
       expect(find.textContaining('small permanent notification'), findsOne);
-      expect(find.textContaining('has not been measured yet'), findsOne);
+      expect(
+        find.textContaining('Your phone’s battery settings show how much.'),
+        findsOne,
+      );
+      expect(find.textContaining('measured'), findsNothing);
       expect(find.textContaining('What a sync already tells it'), findsOne);
       expect(find.textContaining('Force-stopping Gerfaut ends Live'), findsOne);
       // Signet, no Tor: neither of the two conditional lines.
@@ -1279,7 +1702,7 @@ void main() {
   });
 
   group('the disguise', () {
-    testWidgets('Live cannot be chosen while disguised, and says why', (
+    testWidgets('disguised, both settings are greyed and say why', (
       tester,
     ) async {
       final bridge = _bridge(
@@ -1294,13 +1717,78 @@ void main() {
           disguise: FakeDisguise(disguised: true),
         ),
       );
-      await _pick(tester, 'Live');
-      expect(
-        find.text('Not available while the app is disguised'),
-        findsOneWidget,
+      // The switch reads off, as the notifications are, and neither
+      // setting can be moved meanwhile.
+      final notify = tester.widget<SettingSwitch>(
+        find.widgetWithText(SettingSwitch, 'New transactions'),
       );
+      expect(notify.value, isFalse);
+      expect(notify.onChanged, isNull);
+      expect(
+        notify.hint,
+        'Off while the app is disguised: a notification would show the '
+        'name Gerfaut. Live stops, and background checks post nothing.',
+      );
+      final cadence = tester.widget<GerfautSelect<BackgroundCheck>>(
+        find.byType(GerfautSelect<BackgroundCheck>),
+      );
+      expect(cadence.onChanged, isNull);
+      expect(cadence.value, BackgroundCheck.quarterHour);
+
+      await tester.tap(find.byType(GerfautSelect<BackgroundCheck>));
+      await tester.pumpAndSettle();
+      expect(find.text('Every hour'), findsNothing);
       expect(find.text('Live watch'), findsNothing);
       expect(platform.calls, isEmpty);
+      // Nothing written over the choice the user made.
+      expect(bridge.appPrefs.containsKey('notify.background'), isFalse);
+    });
+
+    testWidgets('the switch reads off, and the choice is back after', (
+      tester,
+    ) async {
+      final bridge = _bridge(
+        prefs: {'notify.new_tx': '1', 'notify.background': '900'},
+      );
+      await _open(
+        tester,
+        _settings(
+          bridge,
+          platform: FakeLivePlatform(),
+          disguise: FakeDisguise(disguised: true),
+        ),
+      );
+      Switch drawn() => tester.widget<Switch>(
+        find.descendant(
+          of: find.widgetWithText(SettingSwitch, 'New transactions'),
+          matching: find.byType(Switch),
+        ),
+      );
+      expect(drawn().value, isFalse);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(SettingsScreen)),
+      );
+      // Only drawn off: the choice the user made is still the one held.
+      expect(container.read(notifyNewTxProvider), isTrue);
+      expect(bridge.appPrefs.containsKey('notify.new_tx'), isFalse);
+
+      await container.read(disguiseProvider.notifier).set(false);
+      await tester.pumpAndSettle();
+      expect(drawn().value, isTrue);
+      expect(drawn().onChanged, isNotNull);
+      expect(find.textContaining('while the app is disguised'), findsNothing);
+    });
+
+    testWidgets('without the disguise, nothing says it', (tester) async {
+      final bridge = _bridge(
+        prefs: {'notify.new_tx': '1', 'notify.background': '900'},
+      );
+      await _open(tester, _settings(bridge, platform: FakeLivePlatform()));
+      expect(find.textContaining('while the app is disguised'), findsNothing);
+      final notify = tester.widget<SettingSwitch>(
+        find.widgetWithText(SettingSwitch, 'New transactions'),
+      );
+      expect(notify.onChanged, isNotNull);
     });
 
     test('putting it on stops Live and goes back to 15 min', () async {
@@ -1333,6 +1821,361 @@ void main() {
       );
       // Live went before the launcher changed face.
       expect(disguise.calls.first, 'widgets:false');
+    });
+  });
+
+  test('the battery question is a trip the lock lets back in', () async {
+    final bridge = _bridge(
+      lock: const AppLock(kind: LockKind.pin, biometric: false),
+    )..lockSecret = '1234';
+    final platform = FakeLivePlatform();
+    final container = ProviderContainer(
+      overrides: [
+        bridgeProvider.overrideWithValue(bridge),
+        livePlatformProvider.overrideWithValue(platform),
+        disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+      ],
+    );
+    addTearDown(container.dispose);
+    final lock = container.read(lockProvider.notifier)
+      ..syncFromSettings(const AppLock(kind: LockKind.pin, biometric: false));
+    await lock.unlock('1234');
+    expect(container.read(lockProvider).locked, isFalse);
+
+    // The phone has no direct dialog: the list of apps opens, Gerfaut
+    // goes out of sight behind it, and comes back unlocked.
+    await container.read(liveProvider.notifier).requestBatteryExemption();
+    lock
+      ..noteHidden()
+      ..noteResumed();
+    expect(platform.calls, contains('askBattery'));
+    expect(container.read(lockProvider).locked, isFalse);
+  });
+
+  test('a battery question that opens nothing excuses no absence', () async {
+    final bridge = _bridge(
+      lock: const AppLock(kind: LockKind.pin, biometric: false),
+    )..lockSecret = '1234';
+    final platform = FakeLivePlatform(opensBatteryQuestion: false);
+    final container = ProviderContainer(
+      overrides: [
+        bridgeProvider.overrideWithValue(bridge),
+        livePlatformProvider.overrideWithValue(platform),
+        disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+      ],
+    );
+    addTearDown(container.dispose);
+    final lock = container.read(lockProvider.notifier)
+      ..syncFromSettings(const AppLock(kind: LockKind.pin, biometric: false));
+    await lock.unlock('1234');
+
+    // Neither the question nor the list exists on this phone: nothing
+    // came up, so the next time the app goes out of sight it locks.
+    expect(
+      await container.read(liveProvider.notifier).requestBatteryExemption(),
+      isFalse,
+    );
+    expect(platform.calls, contains('askBattery'));
+    expect(container.read(liveProvider).batteryExempt, isFalse);
+    lock
+      ..noteHidden()
+      ..noteResumed();
+    expect(container.read(lockProvider).locked, isTrue);
+  });
+
+  test('a battery question with nothing to ask excuses no absence', () async {
+    final bridge = _bridge(
+      lock: const AppLock(kind: LockKind.pin, biometric: false),
+    )..lockSecret = '1234';
+    final platform = FakeLivePlatform(batteryExempt: true);
+    final container = ProviderContainer(
+      overrides: [
+        bridgeProvider.overrideWithValue(bridge),
+        livePlatformProvider.overrideWithValue(platform),
+        disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+      ],
+    );
+    addTearDown(container.dispose);
+    final lock = container.read(lockProvider.notifier)
+      ..syncFromSettings(const AppLock(kind: LockKind.pin, biometric: false));
+    await lock.unlock('1234');
+
+    // Exempt already: no system screen opens, so the next time the app
+    // goes out of sight is a real absence, and it locks.
+    expect(
+      await container.read(liveProvider.notifier).requestBatteryExemption(),
+      isTrue,
+    );
+    expect(platform.calls, isNot(contains('askBattery')));
+    lock
+      ..noteHidden()
+      ..noteResumed();
+    expect(container.read(lockProvider).locked, isTrue);
+  });
+
+  group('notices the system no longer lets through', () {
+    ProviderContainer withNotices(
+      FakeBridge bridge,
+      FakeLivePlatform platform,
+      FakeNotifications notices,
+    ) {
+      final container = ProviderContainer(
+        overrides: [
+          bridgeProvider.overrideWithValue(bridge),
+          livePlatformProvider.overrideWithValue(platform),
+          disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+          notificationServiceProvider.overrideWithValue(notices),
+          backgroundSchedulerProvider.overrideWithValue((seconds) async {}),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      container.read(backgroundCheckProvider.notifier).hydrate('live');
+      return container;
+    }
+
+    /// What the app does each time it comes back on screen.
+    Future<void> comeBack(ProviderContainer container) async {
+      await container.read(notifyNewTxProvider.notifier).checkSystem();
+      await container.read(liveProvider.notifier).resume();
+    }
+
+    test('are said, and Live waits for them, the choice kept', () async {
+      final bridge = _bridge();
+      final platform = FakeLivePlatform(running: true, wanted: true);
+      final notices = FakeNotifications()..deliverableNow = false;
+      final container = withNotices(bridge, platform, notices);
+
+      await comeBack(container);
+
+      expect(container.read(notificationsRefusedProvider), isTrue);
+      expect(platform.calls, ['hold']);
+      expect(platform.held, isTrue);
+      expect(container.read(liveProvider).serviceRunning, isFalse);
+      // Live is still the choice, in the vault and on screen.
+      expect(bridge.appPrefs['notify.background'], isNot('900'));
+      expect(container.read(backgroundCheckProvider), BackgroundCheck.live);
+      // The notice itself stays on: it is the system that stops it.
+      expect(container.read(notifyNewTxProvider), isTrue);
+    });
+
+    test('let through again, Live starts again by itself', () async {
+      final bridge = _bridge();
+      final platform = FakeLivePlatform(running: true, wanted: true);
+      final notices = FakeNotifications()..deliverableNow = false;
+      final container = withNotices(bridge, platform, notices);
+      await comeBack(container);
+
+      notices.deliverableNow = true;
+      await comeBack(container);
+      expect(container.read(notificationsRefusedProvider), isFalse);
+      expect(platform.calls, ['hold', 'start']);
+      expect(platform.held, isFalse);
+      expect(container.read(liveProvider).serviceRunning, isTrue);
+      expect(container.read(backgroundCheckProvider), BackgroundCheck.live);
+    });
+
+    test('the hold outlives the process, and Live comes back', () async {
+      final bridge = _bridge();
+      final platform = FakeLivePlatform(running: true, wanted: true);
+      final notices = FakeNotifications()..deliverableNow = false;
+      final before = withNotices(bridge, platform, notices);
+      await comeBack(before);
+      // The process dies while the notices are still blocked.
+      before.dispose();
+
+      // The next open, a new process: the notices get through again.
+      notices.deliverableNow = true;
+      final after = withNotices(bridge, platform, notices);
+      await comeBack(after);
+      expect(platform.calls, ['hold', 'start']);
+      expect(after.read(liveProvider).serviceRunning, isTrue);
+      // Never taken for a Stop pressed on the notification.
+      expect(after.read(backgroundCheckProvider), BackgroundCheck.live);
+      expect(bridge.appPrefs['notify.background'], isNot('900'));
+    });
+
+    test('held across a restart while still blocked, it waits', () async {
+      final bridge = _bridge();
+      final platform = FakeLivePlatform(running: true, wanted: true);
+      final notices = FakeNotifications()..deliverableNow = false;
+      final before = withNotices(bridge, platform, notices);
+      await comeBack(before);
+      before.dispose();
+
+      final after = withNotices(bridge, platform, notices);
+      await comeBack(after);
+      expect(platform.calls, ['hold']);
+      expect(platform.held, isTrue);
+      expect(after.read(backgroundCheckProvider), BackgroundCheck.live);
+    });
+
+    test('another choice ends the hold, and nothing restarts', () async {
+      final bridge = _bridge();
+      final platform = FakeLivePlatform(running: true, wanted: true);
+      final notices = FakeNotifications()..deliverableNow = false;
+      final container = withNotices(bridge, platform, notices);
+      await comeBack(container);
+
+      await container
+          .read(backgroundCheckProvider.notifier)
+          .set(BackgroundCheck.hour);
+      expect(platform.held, isFalse);
+
+      notices.deliverableNow = true;
+      await comeBack(container);
+      expect(platform.calls, ['hold', 'stop']);
+      expect(platform.running, isFalse);
+      expect(container.read(backgroundCheckProvider), BackgroundCheck.hour);
+    });
+
+    test('a hold left behind is ended where Live is not chosen', () async {
+      final bridge = _bridge(
+        prefs: {'notify.new_tx': '1', 'notify.background': '3600'},
+      );
+      final platform = FakeLivePlatform(held: true);
+      final notices = FakeNotifications();
+      final container = withNotices(bridge, platform, notices);
+      container.read(backgroundCheckProvider.notifier).hydrate('3600');
+
+      await comeBack(container);
+      expect(platform.calls, ['stop']);
+      expect(platform.held, isFalse);
+      expect(platform.running, isFalse);
+    });
+
+    test('with the notice off, the system is not asked', () async {
+      final bridge = _bridge();
+      final platform = FakeLivePlatform(running: true, wanted: true);
+      final notices = FakeNotifications()..deliverableNow = false;
+      final container = withNotices(bridge, platform, notices);
+      container.read(notifyNewTxProvider.notifier).hydrate('0');
+
+      await container.read(notifyNewTxProvider.notifier).checkSystem();
+      expect(container.read(notificationsRefusedProvider), isFalse);
+      expect(platform.calls, isEmpty);
+    });
+
+    testWidgets('the settings say it, with a way to the system page', (
+      tester,
+    ) async {
+      final bridge = _bridge(
+        prefs: {'notify.new_tx': '1', 'notify.background': '900'},
+      );
+      final platform = FakeLivePlatform();
+      await _open(tester, _settings(bridge, platform: platform));
+      ProviderScope.containerOf(tester.element(find.byType(SettingsScreen)))
+              .read(notificationsRefusedProvider.notifier)
+              .state =
+          true;
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Notifications are off for Gerfaut in the system settings.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Open system settings'));
+      await tester.pumpAndSettle();
+      expect(platform.calls, contains('appSettings'));
+    });
+  });
+
+  group('with no wallet to watch', () {
+    ProviderContainer chosen(FakeBridge bridge, FakeLivePlatform platform) {
+      final container = ProviderContainer(
+        overrides: [
+          bridgeProvider.overrideWithValue(bridge),
+          livePlatformProvider.overrideWithValue(platform),
+          disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+          notificationServiceProvider.overrideWithValue(FakeNotifications()),
+          backgroundSchedulerProvider.overrideWithValue((seconds) async {}),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      container.read(backgroundCheckProvider.notifier).hydrate('live');
+      return container;
+    }
+
+    /// The wallet list read again, as a screen does after a change, and
+    /// whatever that sets off left to run.
+    Future<void> walletsChanged(ProviderContainer container) async {
+      container.invalidate(walletsProvider);
+      await container.read(walletsProvider.future);
+      for (var i = 0; i < 20; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+
+    test('the last wallet removed stops Live, and the next one added starts '
+        'it again, the choice kept', () async {
+      final bridge = _bridge();
+      final platform = FakeLivePlatform(running: true, wanted: true);
+      final container = chosen(bridge, platform);
+      await container.read(liveProvider.notifier).resume();
+      expect(platform.calls, isEmpty);
+
+      await bridge.removeWallet('w1');
+      await walletsChanged(container);
+
+      // Stopped, notification and all, and held rather than turned off.
+      expect(platform.calls, ['hold']);
+      expect(platform.running, isFalse);
+      expect(platform.wanted, isFalse);
+      expect(platform.held, isTrue);
+      final live = container.read(liveProvider);
+      expect(live.noWallet, isTrue);
+      expect(liveStatusLine(live), 'Off until you add a wallet.');
+      // Live is still the choice, in the vault and on screen.
+      expect(bridge.appPrefs['notify.background'], isNot('900'));
+      expect(container.read(backgroundCheckProvider), BackgroundCheck.live);
+
+      // Coming back to the screen with nothing to watch starts nothing.
+      await container.read(liveProvider.notifier).resume();
+      expect(platform.calls, ['hold']);
+
+      bridge.wallets = [makeMeta(id: 'w2', network: Network.signet)];
+      await walletsChanged(container);
+
+      expect(platform.calls, ['hold', 'start']);
+      expect(platform.running, isTrue);
+      expect(platform.held, isFalse);
+      expect(container.read(liveProvider).noWallet, isFalse);
+    });
+
+    test('a wallet on another network is none to watch', () async {
+      final bridge = _bridge()..wallets = [makeMeta(network: Network.mainnet)];
+      final platform = FakeLivePlatform(running: true, wanted: true);
+      final container = chosen(bridge, platform);
+
+      await container.read(liveProvider.notifier).resume();
+
+      expect(platform.calls, ['hold']);
+      expect(container.read(liveProvider).noWallet, isTrue);
+    });
+
+    test('Live chosen with no wallet waits for one', () async {
+      final bridge = _bridge()..wallets = [];
+      final platform = FakeLivePlatform();
+      final container = chosen(bridge, platform);
+
+      await container.read(liveProvider.notifier).apply(wanted: true);
+
+      expect(platform.calls, ['hold']);
+      expect(platform.running, isFalse);
+      expect(platform.held, isTrue);
+    });
+
+    testWidgets('the settings say why, and offer no restart', (tester) async {
+      final bridge = _bridge()..wallets = [];
+      final platform = FakeLivePlatform(held: true, batteryExempt: true);
+      await _open(tester, _settings(bridge, platform: platform));
+
+      expect(find.text('Off until you add a wallet.'), findsOneWidget);
+      expect(find.textContaining('Stopped by Android'), findsNothing);
+      await tester.tap(find.text('Off until you add a wallet.'));
+      await tester.pumpAndSettle();
+      expect(platform.calls, isNot(contains('start')));
     });
   });
 
@@ -1492,6 +2335,64 @@ void main() {
         ),
       );
       expect(LiveEvent.fromJson({'type': 'something_newer'}), isNull);
+    });
+
+    test('the status carries how much of each wallet is live', () {
+      final event =
+          LiveEvent.fromJson({
+                'type': 'status',
+                'state': 'connected',
+                'transport': 'electrum',
+                'server': 'electrum.blockstream.info',
+                'detail': null,
+                'watched_scripts': 2000,
+                'pushed_scripts': 2000,
+                'left_out_scripts': 1240,
+                'left_out_wallets': 2,
+                'wallets': [
+                  {
+                    'wallet_id': 'w1',
+                    'coverage': 'partial',
+                    'watched_scripts': 200,
+                    'left_out_scripts': 1040,
+                  },
+                  {
+                    'wallet_id': 'w2',
+                    'coverage': 'live',
+                    'watched_scripts': 36,
+                    'left_out_scripts': 0,
+                  },
+                  {
+                    'wallet_id': 'w3',
+                    'coverage': 'sync_only',
+                    'watched_scripts': 0,
+                    'left_out_scripts': 200,
+                  },
+                ],
+              })!
+              as LiveStatusChanged;
+      final status = event.status;
+      expect(status.leftOutScripts, 1240);
+      expect(status.leftOutWallets, 2);
+      expect(status.leavesSomeOut, isTrue);
+      expect(status.coverageOf('w1')!.coverage, Coverage.partial);
+      expect(status.coverageOf('w1')!.leftOutScripts, 1040);
+      expect(status.coverageOf('w2')!.coverage, Coverage.live);
+      expect(status.coverageOf('w3')!.coverage, Coverage.syncOnly);
+      expect(status.coverageOf('w4'), isNull);
+    });
+
+    test('a status from before the coverage reads as nothing left out', () {
+      final status = LiveWatchStatus.fromJson({
+        'state': 'connected',
+        'watched_scripts': 40,
+        'pushed_scripts': 40,
+      });
+      expect(status.leftOutScripts, 0);
+      expect(status.wallets, isEmpty);
+      expect(status.leavesSomeOut, isFalse);
+      // A coverage a newer core names is never taken for live.
+      expect(Coverage.fromId('something_newer'), Coverage.syncOnly);
     });
   });
 }

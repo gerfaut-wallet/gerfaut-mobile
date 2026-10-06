@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/tokens.dart';
+import 'tap_target.dart';
 
 /// Width from which the options open in a menu anchored to the field;
 /// narrower, they rise as a bottom sheet the thumb reaches.
@@ -80,7 +81,9 @@ class GerfautSelect<T> extends StatefulWidget {
   final List<GerfautSelectGroup<T>> groups;
 
   /// Called with the option picked, even when it is the current one.
-  final ValueChanged<T> onChanged;
+  /// Null greys the field out: it shows its value and opens nothing,
+  /// and the line under it says why.
+  final ValueChanged<T>? onChanged;
 
   /// Every option, groups flattened.
   List<GerfautSelectItem<T>> get items => [
@@ -104,10 +107,10 @@ class _GerfautSelectState<T> extends State<GerfautSelect<T>> {
 
   Future<void> _open() async {
     final wide = MediaQuery.sizeOf(context).width >= _anchoredFrom;
-    final T? picked = wide
+    final picked = wide
         ? await _showAnchored<T>(context, widget)
         : await _showSheet<T>(context, widget);
-    if (picked != null && mounted) widget.onChanged(picked);
+    if (picked != null && mounted) widget.onChanged?.call(picked.value);
   }
 
   @override
@@ -116,67 +119,87 @@ class _GerfautSelectState<T> extends State<GerfautSelect<T>> {
     final selected = widget.selected;
     final title = selected?.title ?? '';
     final subtitle = selected?.subtitle;
-    final titleStyle = selected?.mono ?? false
+    final enabled = widget.onChanged != null;
+    final baseStyle = selected?.mono ?? false
         ? tokens.data.copyWith(fontSize: tokens.body.fontSize)
         : tokens.body;
+    // Greyed, the value is still read: it is what applies again once
+    // the field can be changed.
+    final titleStyle = enabled
+        ? baseStyle
+        : baseStyle.copyWith(color: tokens.textMuted);
     return Semantics(
       container: true,
       button: true,
+      enabled: enabled,
       label: widget.label,
       value: subtitle == null ? title : '$title, $subtitle',
-      onTap: _open,
+      onTap: enabled ? _open : null,
       excludeSemantics: true,
-      child: Material(
-        color: tokens.surfaceSunken,
-        borderRadius: BorderRadius.circular(GerfautRadius.sm),
-        child: InkWell(
+      // Drawn at a field's height, answering the finger over a whole
+      // touch target.
+      child: TapTarget(
+        child: Material(
+          color: tokens.surfaceSunken,
           borderRadius: BorderRadius.circular(GerfautRadius.sm),
-          onTap: _open,
-          onFocusChange: (focused) => setState(() => _focused = focused),
-          child: Container(
-            height: 44,
-            padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(GerfautRadius.sm),
-              border: Border.all(
-                color: _focused ? tokens.primary : Colors.transparent,
-                width: 2,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(GerfautRadius.sm),
+            onTap: enabled ? _open : null,
+            onFocusChange: (focused) => setState(() => _focused = focused),
+            // A field's height at least, and taller when the system text
+            // is large: a fixed height would cut the value in half at 200 %.
+            child: Container(
+              constraints: const BoxConstraints(
+                minHeight: GerfautTouch.control,
               ),
-            ),
-            child: Row(
-              children: [
-                if (selected?.icon != null) ...[
-                  Icon(selected!.icon, size: 16, color: tokens.textMuted),
-                  const SizedBox(width: GerfautSpacing.sm),
-                ],
-                Text(
-                  title,
-                  style: titleStyle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              padding: const EdgeInsets.symmetric(
+                horizontal: GerfautSpacing.md,
+                vertical: GerfautSpacing.xs,
+              ),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                border: Border.all(
+                  color: _focused ? tokens.primary : Colors.transparent,
+                  width: 2,
                 ),
-                if (subtitle != null) ...[
+              ),
+              child: Row(
+                children: [
+                  if (selected?.icon != null) ...[
+                    Icon(selected!.icon, size: 16, color: tokens.textMuted),
+                    const SizedBox(width: GerfautSpacing.sm),
+                  ],
                   Text(
-                    ' · ',
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                    title,
+                    style: titleStyle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  Expanded(
-                    child: Text(
-                      subtitle,
+                  if (subtitle != null) ...[
+                    Text(
+                      ' · ',
                       style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
+                    Expanded(
+                      child: Text(
+                        subtitle,
+                        style: tokens.bodySmall.copyWith(
+                          color: tokens.textMuted,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ] else
+                    const Spacer(),
+                  const SizedBox(width: GerfautSpacing.sm),
+                  Icon(
+                    LucideIcons.chevronDown,
+                    size: 18,
+                    color: tokens.textMuted,
                   ),
-                ] else
-                  const Spacer(),
-                const SizedBox(width: GerfautSpacing.sm),
-                Icon(
-                  LucideIcons.chevronDown,
-                  size: 18,
-                  color: tokens.textMuted,
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -185,15 +208,27 @@ class _GerfautSelectState<T> extends State<GerfautSelect<T>> {
   }
 }
 
+/// What a menu closes with: the option picked, wrapped. An option may
+/// be null itself, as "Automatic" is among the public servers, and a
+/// bare null could not tell that pick from a menu closed on nothing.
+class _Picked<T> {
+  const _Picked(this.value);
+
+  final T value;
+}
+
 /// The options under the field, on a floating card. Pops with the
-/// value picked, or null.
-Future<T?> _showAnchored<T>(BuildContext context, GerfautSelect<T> select) {
+/// value picked, or null when closed without a pick.
+Future<_Picked<T>?> _showAnchored<T>(
+  BuildContext context,
+  GerfautSelect<T> select,
+) {
   final box = context.findRenderObject()! as RenderBox;
   final overlay =
       Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
   final origin = box.localToGlobal(Offset.zero, ancestor: overlay);
   final field = origin & box.size;
-  return Navigator.of(context).push<T>(
+  return Navigator.of(context).push<_Picked<T>>(
     _AnchoredMenuRoute<T>(
       select: select,
       field: field,
@@ -204,10 +239,13 @@ Future<T?> _showAnchored<T>(BuildContext context, GerfautSelect<T> select) {
 }
 
 /// The options as a sheet from the bottom of a phone screen.
-Future<T?> _showSheet<T>(BuildContext context, GerfautSelect<T> select) {
+Future<_Picked<T>?> _showSheet<T>(
+  BuildContext context,
+  GerfautSelect<T> select,
+) {
   final tokens = Theme.of(context).extension<GerfautTokens>()!;
   final maxHeight = MediaQuery.sizeOf(context).height * _sheetShare;
-  return showModalBottomSheet<T>(
+  return showModalBottomSheet<_Picked<T>>(
     context: context,
     backgroundColor: tokens.surface,
     isScrollControlled: true,
@@ -260,7 +298,7 @@ Future<T?> _showSheet<T>(BuildContext context, GerfautSelect<T> select) {
               GerfautSpacing.sm + 2,
               GerfautSpacing.md,
             ),
-            onPick: (value) => Navigator.of(sheetContext).pop(value),
+            onPick: (value) => Navigator.of(sheetContext).pop(_Picked(value)),
           ),
         ),
       ],
@@ -270,7 +308,7 @@ Future<T?> _showSheet<T>(BuildContext context, GerfautSelect<T> select) {
 
 /// A menu that sits right under (or, short of room, above) its field,
 /// with a transparent barrier: the page stays in view.
-class _AnchoredMenuRoute<T> extends PopupRoute<T> {
+class _AnchoredMenuRoute<T> extends PopupRoute<_Picked<T>> {
   _AnchoredMenuRoute({
     required this.select,
     required this.field,
@@ -356,7 +394,8 @@ class _AnchoredMenuRoute<T> extends PopupRoute<T> {
                   child: _OptionList<T>(
                     select: select,
                     padding: const EdgeInsets.all(GerfautSpacing.xs + 2),
-                    onPick: (value) => Navigator.of(context).pop(value),
+                    onPick: (value) =>
+                        Navigator.of(context).pop(_Picked(value)),
                   ),
                 ),
               ),
@@ -468,7 +507,7 @@ class _OptionRow<T> extends StatelessWidget {
         autofocus: selected,
         onTap: onTap,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 44),
+          constraints: const BoxConstraints(minHeight: GerfautTouch.target),
           padding: const EdgeInsets.symmetric(
             horizontal: GerfautSpacing.sm + 2,
             vertical: GerfautSpacing.sm - 2,

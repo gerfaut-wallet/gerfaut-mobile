@@ -35,7 +35,7 @@ class WalletIconPicker extends StatelessWidget {
     );
   }
 
-  /// A tile is a comfortable target, well past the 44px floor.
+  /// A tile is a comfortable target, past the touch target floor.
   static const double tileSize = 56;
 
   final WalletIcon current;

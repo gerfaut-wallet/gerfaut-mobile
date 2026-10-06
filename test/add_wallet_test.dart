@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:file_selector/file_selector.dart';
@@ -7,23 +8,32 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/add_wallet.dart';
+import 'package:gerfaut/screens/scan.dart';
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/choice_group.dart';
 import 'package:gerfaut/widgets/notice.dart';
 import 'package:gerfaut/widgets/select_field.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'fakes.dart';
 
-Widget screen(FakeBridge bridge, {Future<XFile?> Function()? filePicker}) {
+Widget screen(
+  FakeBridge bridge, {
+  Future<XFile?> Function()? filePicker,
+  CameraBuilder? cameraBuilder,
+}) {
   return ProviderScope(
     overrides: [bridgeProvider.overrideWithValue(bridge)],
     child: MaterialApp(
       theme: themeFrom(GerfautTokens.light, Brightness.light),
-      home: AddWalletScreen(filePicker: filePicker),
+      home: AddWalletScreen(
+        filePicker: filePicker,
+        cameraBuilder: cameraBuilder,
+      ),
     ),
   );
 }
@@ -141,6 +151,31 @@ void main() {
       findsOneWidget,
     );
     expect(bridge.parseScripts, [null]);
+
+    // The addresses' start on the network the wallet goes to, never
+    // mainnet's on a test network.
+    final options = tester
+        .widget<GerfautSelect<ScriptKind>>(
+          find.byType(GerfautSelect<ScriptKind>),
+        )
+        .items;
+    expect(
+      options.firstWhere((o) => o.value == ScriptKind.segwit).subtitle,
+      'Addresses starting with tb1q',
+    );
+    expect(
+      options.map((o) => o.subtitle ?? '').join(' '),
+      isNot(contains('bc1')),
+    );
+  });
+
+  test('each network has its own address starts', () {
+    expect(ScriptKind.segwit.addressStart(Network.mainnet), 'bc1q');
+    expect(ScriptKind.taproot.addressStart(Network.signet), 'tb1p');
+    expect(ScriptKind.taproot.addressStart(Network.regtest), 'bcrt1p');
+    expect(ScriptKind.legacy.addressStart(Network.testnet4), 'm or n');
+    expect(ScriptKind.nestedSegwit.addressStart(Network.mainnet), '3');
+    expect(ScriptKind.witnessScript.addressStart(Network.signet), isNull);
   });
 
   testWidgets('a bare key states its missing script type outside the card', (
@@ -224,7 +259,10 @@ void main() {
     await tester.tap(find.text('Taproot (P2TR)').last);
     await tester.pumpAndSettle();
 
-    expect(bridge.parseScripts, [null, ScriptKind.taproot]);
+    // The network picked asked for the same key again, on testnet 4,
+    // and the script picked after it kept that network.
+    expect(bridge.parseScripts, [null, null, ScriptKind.taproot]);
+    expect(bridge.parseOptions.last.network, Network.testnet4);
     // The core answered with new descriptors and a new first address.
     expect(find.text('tb1p0taproot0preview'), findsOneWidget);
     expect(find.text('tb1q0segwit0preview'), findsNothing);
@@ -249,6 +287,164 @@ void main() {
     await tester.pumpAndSettle();
     expect(bridge.addWalletCalls, 1);
     expect(bridge.wallets.single.network, Network.testnet4);
+  });
+
+  testWidgets('the first address shown is the one of the network picked', (
+    tester,
+  ) async {
+    // Regtest was shown the signet address, which no regtest wallet
+    // ever gives: the core derives it for the network asked, starting
+    // with the one on screen.
+    final bridge =
+        FakeBridge(
+            settings: const Settings(
+              activeNetwork: Network.regtest,
+              backends: {},
+              appPrefs: {},
+            ),
+          )
+          ..onParseWithOptions = (_, options) => makeParsedInput(
+            previewAddress: options.network == Network.regtest
+                ? 'bcrt1q0regtest0preview'
+                : 'tb1q0signet0preview',
+          );
+    await tester.pumpWidget(screen(bridge));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byType(TextField),
+      'wpkh([9a6a2580/84h/1h/0h]tpub.../<0;1>/*)',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    expect(bridge.parseOptions.single.network, Network.regtest);
+    expect(find.text('bcrt1q0regtest0preview'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Signet'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Signet'));
+    await tester.pumpAndSettle();
+    expect(bridge.parseOptions.last.network, Network.signet);
+    expect(find.text('tb1q0signet0preview'), findsOneWidget);
+    expect(find.text('bcrt1q0regtest0preview'), findsNothing);
+  });
+
+  group('networks picked in a row', () {
+    /// The network the choices show as picked.
+    Network? shownNetwork(WidgetTester tester) => tester
+        .widget<ChoiceGroup<Network?>>(find.byType(ChoiceGroup<Network?>))
+        .value;
+
+    Future<void> confirmStep(WidgetTester tester, FakeBridge bridge) async {
+      await tester.pumpWidget(screen(bridge));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField),
+        'wpkh([9a6a2580/84h/1h/0h]tpub.../<0;1>/*)',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> pick(WidgetTester tester, String network) async {
+      await tester.ensureVisible(find.text(network));
+      await tester.pump();
+      await tester.tap(find.text(network));
+      await tester.pump();
+    }
+
+    ParsedInput on(Network network) => makeParsedInput(
+      previewAddress: switch (network) {
+        Network.testnet4 => 'tb1q0testnet0preview',
+        Network.regtest => 'bcrt1q0regtest0preview',
+        _ => 'tb1q0signet0preview',
+      },
+    );
+
+    testWidgets('an older answer landing last is dropped', (tester) async {
+      final answers = <Network, Completer<ParsedInput>>{};
+      final bridge = FakeBridge()
+        ..onParseWithOptions = (_, options) {
+          final network = options.network;
+          if (network != Network.testnet4 && network != Network.regtest) {
+            return on(Network.signet);
+          }
+          return (answers[network!] = Completer<ParsedInput>()).future;
+        };
+      await confirmStep(tester, bridge);
+      expect(shownNetwork(tester), Network.signet);
+
+      await pick(tester, 'Testnet 4');
+      await pick(tester, 'Regtest');
+      // Nothing answered yet: the network shown is still the one of the
+      // address shown.
+      expect(shownNetwork(tester), Network.signet);
+      expect(find.text('tb1q0signet0preview'), findsOneWidget);
+
+      // The newer pick is answered first, the older one after it.
+      answers[Network.regtest]!.complete(on(Network.regtest));
+      await tester.pumpAndSettle();
+      answers[Network.testnet4]!.complete(on(Network.testnet4));
+      await tester.pumpAndSettle();
+
+      expect(shownNetwork(tester), Network.regtest);
+      expect(find.text('bcrt1q0regtest0preview'), findsOneWidget);
+      expect(find.text('tb1q0testnet0preview'), findsNothing);
+
+      await tester.enterText(find.byType(TextField), 'Lab');
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView), const Offset(0, -600));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Add wallet'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add wallet'));
+      await tester.pumpAndSettle();
+      expect(bridge.wallets.single.network, Network.regtest);
+    });
+
+    testWidgets('going back before the answer keeps the network shown', (
+      tester,
+    ) async {
+      final answers = <Network, Completer<ParsedInput>>{};
+      final bridge = FakeBridge()
+        ..onParseWithOptions = (_, options) {
+          final network = options.network;
+          if (network != Network.testnet4) return on(Network.signet);
+          return (answers[network!] = Completer<ParsedInput>()).future;
+        };
+      await confirmStep(tester, bridge);
+
+      await pick(tester, 'Testnet 4');
+      await pick(tester, 'Signet');
+      answers[Network.testnet4]!.complete(on(Network.testnet4));
+      await tester.pumpAndSettle();
+      expect(shownNetwork(tester), Network.signet);
+      expect(find.text('tb1q0signet0preview'), findsOneWidget);
+    });
+
+    testWidgets('a refused pick keeps the network and its address', (
+      tester,
+    ) async {
+      final bridge = FakeBridge()
+        ..onParseWithOptions = (_, options) {
+          if (options.network == Network.testnet4) {
+            throw const BridgeException('descriptor', 'no key for testnet 4');
+          }
+          return on(options.network ?? Network.signet);
+        };
+      await confirmStep(tester, bridge);
+
+      await pick(tester, 'Testnet 4');
+      await tester.pumpAndSettle();
+      expect(shownNetwork(tester), Network.signet);
+      expect(find.text('tb1q0signet0preview'), findsOneWidget);
+      expect(
+        find.text('This descriptor could not be used: no key for testnet 4'),
+        findsOneWidget,
+      );
+    });
   });
 
   testWidgets('private material is refused in words that say what to bring', (
@@ -276,6 +472,68 @@ void main() {
     );
     // Still on the input step.
     expect(find.text('NAME'), findsNothing);
+  });
+
+  testWidgets('an input that fits one network says it plainly', (tester) async {
+    // A mainnet address: no group of one option that reads as a control
+    // doing nothing, the network said in words, and the wallet added on it.
+    final bridge = FakeBridge(
+      onParse: (_) => makeParsedInput(
+        kind: RecognizedKind.address,
+        networks: const [Network.mainnet],
+        payload: const AddressPayload(
+          address: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq',
+        ),
+        previewAddress: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq',
+      ),
+    );
+    await tester.pumpWidget(screen(bridge));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextField),
+      'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('NETWORK'), findsOneWidget);
+    expect(find.byType(ChoiceGroup<Network?>), findsNothing);
+    expect(find.text('Mainnet'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'Donations');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Add wallet'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add wallet'));
+    await tester.pumpAndSettle();
+    expect(bridge.wallets.single.network, Network.mainnet);
+  });
+
+  testWidgets('a network that will not switch still opens the new wallet', (
+    tester,
+  ) async {
+    final bridge = FakeBridge(onParse: (_) => makeParsedInput())
+      ..onSetActiveNetwork = (_) {
+        throw const BridgeException('storage', 'the vault could not save');
+      };
+    await tester.pumpWidget(screen(bridge));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'wpkh(tpub.../0/*)');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Cold');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Add wallet'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add wallet'));
+    await tester.pumpAndSettle();
+
+    // Added once, and not offered again as if it had failed.
+    expect(bridge.wallets, hasLength(1));
+    expect(find.byType(AddWalletScreen), findsNothing);
+    expect(find.textContaining('could not save'), findsNothing);
   });
 
   testWidgets('a wallet the core refuses at the add step says why', (
@@ -307,6 +565,73 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('a scanned code says the branches it named none of', (
+    tester,
+  ) async {
+    // The core read a crypto-output whose key gives no child path as
+    // receive and change: it says so beside the text it gave. The notice
+    // stays with that text, through a network picked, and goes once the
+    // field holds something else.
+    const scannedText = 'wpkh([9a6a2580/84h/1h/0h]tpub.../<0;1>/*)';
+    final asked = <String>[];
+    final bridge =
+        FakeBridge(
+            onParse: (input) {
+              asked.add(input);
+              return makeParsedInput();
+            },
+          )
+          ..onAssembleQr = (_) => const QrProgress(
+            format: QrFormat.ur,
+            received: 1,
+            total: 1,
+            complete: true,
+            text: scannedText,
+            warnings: [InputWarning.assumedBranches],
+          );
+    ValueChanged<String>? camera;
+    await tester.pumpWidget(
+      screen(
+        bridge,
+        cameraBuilder: (onFrame) {
+          camera = onFrame;
+          return const SizedBox.expand();
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Scan'));
+    await tester.pumpAndSettle();
+    camera!('ur:crypto-output/payload');
+    await tester.pumpAndSettle();
+
+    final notice = find.text(
+      'This QR code carries no receive or change path, so Gerfaut assumes '
+      'the usual 0/* and 1/*. Compare the first address with your signer.',
+    );
+    expect(find.text('NAME'), findsOneWidget);
+    expect(notice, findsOneWidget);
+    expect(asked.single, scannedText);
+
+    await tester.ensureVisible(find.text('Testnet 4'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Testnet 4'));
+    await tester.pumpAndSettle();
+    expect(bridge.parseOptions.last.network, Network.testnet4);
+    expect(notice, findsOneWidget);
+
+    await tester.ensureVisible(find.text('Back'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Back'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'wpkh(tpub.../0/*)');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    expect(find.text('NAME'), findsOneWidget);
+    expect(notice, findsNothing);
   });
 
   testWidgets('a descriptor offers no derivation to change', (tester) async {

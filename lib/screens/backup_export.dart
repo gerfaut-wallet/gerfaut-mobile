@@ -19,7 +19,9 @@ import '../widgets/facts.dart';
 import '../widgets/notice.dart';
 import '../widgets/password_field.dart';
 import '../widgets/pinned_action_form.dart';
+import '../widgets/setting_switch.dart';
 import 'backup_qr.dart';
+import '../widgets/toast.dart';
 
 /// Shortest password the core accepts, after trimming. Checked here too
 /// so a short one is told before anything is sealed.
@@ -154,24 +156,23 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
     });
     // The dialog that picks where the file goes is a screen of the
     // system's: Android pauses Gerfaut behind it, and coming back from
-    // it is not coming back from the background. Announced against the
-    // call that opens it, and nothing earlier.
-    lock.expectExcursion();
+    // it is not coming back from the background.
+    final saver = ref.read(documentSaverProvider);
     try {
-      final saved = await ref
-          .read(documentSaverProvider)
-          .save(
-            bytes: bytes,
-            filename: _filename(),
-            mimeType: 'application/octet-stream',
-          );
+      final saved = await lock.excursion(
+        () => saver.save(
+          bytes: bytes,
+          filename: _filename(),
+          mimeType: 'application/octet-stream',
+        ),
+        // A save refused before the dialog came up is no trip at all.
+        cameUp: (error) => error is DocumentSaveException && error.dialogOpened,
+      );
       // A dialog waved away says nothing: the backup is still here.
       if (saved) {
-        messenger.showSnackBar(const SnackBar(content: Text('Saved')));
+        messenger.showSnackBar(Toast('Saved'));
       }
     } on DocumentSaveException catch (error) {
-      // A save refused before the dialog came up is no trip at all.
-      if (!error.dialogOpened) lock.forgetExcursion();
       _fail('The file could not be saved.', detail: error.message);
     } finally {
       if (mounted) setState(() => _trip = null);
@@ -193,15 +194,16 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
       _trip = _Trip.share;
       _failure = null;
     });
-    lock.expectExcursion();
+    final sharer = ref.read(backupSharerProvider);
     try {
-      await ref
-          .read(backupSharerProvider)
-          .shareBackup(bytes: base64Decode(bundle.data), filename: _filename());
+      await lock.excursion(
+        () => sharer.shareBackup(
+          bytes: base64Decode(bundle.data),
+          filename: _filename(),
+        ),
+      );
     } catch (_) {
-      // No sheet came up: the trip goes back, or it would be spent on
-      // a real absence hours from now.
-      lock.forgetExcursion();
+      // No sheet came up.
       _fail('The share sheet could not be opened.');
     } finally {
       if (mounted) setState(() => _trip = null);
@@ -259,58 +261,49 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
         const SizedBox(height: GerfautSpacing.md),
         FieldLabel('Wallets', tokens: tokens),
         const SizedBox(height: GerfautSpacing.sm),
-        ChoiceGroup<_Scope>(
-          label: 'Wallets',
-          value: _scope,
-          options: [
-            ChoiceOption(
-              value: _Scope.all,
-              label: all == null
-                  ? 'All wallets'
-                  : 'All wallets (${all.length})',
-            ),
-            // Both counts equal means the second option would seal the
-            // same thing under another name: it is left out.
-            if (onNetwork != null && onNetwork != all!.length)
+        // Both counts equal means a network scope would seal the same
+        // thing under another name: there is no choice to make, and a
+        // group of one option would read as a control that does
+        // nothing. The scope is said plainly, as on the desktop.
+        if (all != null && onNetwork != null && onNetwork != all.length)
+          ChoiceGroup<_Scope>(
+            label: 'Wallets',
+            value: _scope,
+            options: [
+              ChoiceOption(
+                value: _Scope.all,
+                label: 'All wallets (${all.length})',
+              ),
               ChoiceOption(
                 value: _Scope.network,
                 label: '${active!.label} only ($onNetwork)',
               ),
-          ],
-          onChanged: (scope) => setState(() => _scope = scope),
-        ),
-        const SizedBox(height: GerfautSpacing.md),
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Include node settings',
-                    style: tokens.bodySmall.copyWith(
-                      fontWeight: FontWeight.w500,
-                      fontVariations: const [FontVariation('wght', 500)],
+            ],
+            onChanged: (scope) => setState(() => _scope = scope),
+          )
+        else
+          Text.rich(
+            TextSpan(
+              text: 'All wallets',
+              children: [
+                if (all != null)
+                  TextSpan(
+                    text: ' (${all.length})',
+                    style: TextStyle(
+                      color: tokens.textMuted,
+                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
-                  Text(
-                    'Your backend choice, accepted certificates and gap '
-                    'limit.',
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  ),
-                ],
-              ),
+              ],
             ),
-            const SizedBox(width: GerfautSpacing.sm),
-            Switch(
-              value: _includeSettings,
-              activeThumbColor: tokens.onPrimary,
-              activeTrackColor: tokens.primary,
-              inactiveThumbColor: tokens.textMuted,
-              inactiveTrackColor: tokens.surfaceSunken,
-              onChanged: (value) => setState(() => _includeSettings = value),
-            ),
-          ],
+            style: tokens.body.copyWith(color: tokens.text),
+          ),
+        const SizedBox(height: GerfautSpacing.md),
+        SettingSwitch(
+          title: 'Include node settings',
+          hint: 'Your backend choice, accepted certificates and gap limit.',
+          value: _includeSettings,
+          onChanged: (value) => setState(() => _includeSettings = value),
         ),
         const SizedBox(height: GerfautSpacing.md),
         PasswordField(

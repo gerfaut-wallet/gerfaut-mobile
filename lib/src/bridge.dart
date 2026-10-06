@@ -5,6 +5,9 @@
 
 import 'dart:convert';
 
+import 'package:flutter_rust_bridge/flutter_rust_bridge.dart'
+    show PanicException;
+
 import 'models.dart';
 import 'rust/api.dart' as rust;
 
@@ -13,29 +16,35 @@ import 'rust/api.dart' as rust;
 /// Kinds match the desktop app: unrecognized_input, private_material,
 /// invalid_input, network_mismatch, wallet_not_found, duplicate_wallet,
 /// vault, vault_in_use, sync, backend_unavailable, broadcast, descriptor,
-/// tor, internal — plus the bridge-level not_initialized, bad_key, bad_json,
-/// and the premium server's, which are [premiumErrorKinds].
+/// tor, internal — plus the bridge-level not_initialized, bad_key and
+/// bad_json.
 class BridgeException implements Exception {
-  const BridgeException(
-    this.kind,
-    this.message, {
-    this.retryAfter,
-    this.pendingUntil,
-  });
+  const BridgeException(this.kind, this.message);
 
   final String kind;
   final String message;
 
-  /// Seconds the premium server asked to wait, with
-  /// `premium_rate_limited` when it named a wait.
-  final int? retryAfter;
-
-  /// Unix seconds when this device gets full access without approval,
-  /// with `premium_device_pending`.
-  final int? pendingUntil;
-
   @override
   String toString() => message;
+}
+
+/// What a screen says when the core failed in a way it has no words
+/// for: a panic, caught at the bridge.
+const String internalFailure =
+    'Something went wrong inside Gerfaut. Try again; if it happens again, '
+    'restart the app.';
+
+/// A panic in the core reaches Dart as an error of the bridge's own,
+/// outside every `{"error": ...}`: the screens, which catch a
+/// [BridgeException], would let it through and say nothing, the button
+/// set free and nobody told. It comes back as one, with a sentence fit
+/// for a screen; the panic's own words are a backtrace.
+Future<String> guardPanics(Future<String> call) async {
+  try {
+    return await call;
+  } on PanicException {
+    throw const BridgeException('internal', internalFailure);
+  }
 }
 
 /// What the page says when the core refuses wallet material handed to
@@ -61,37 +70,6 @@ String materialRefusal(BridgeException error, {bool backup = false}) {
     _ => error.message,
   };
 }
-
-/// Every kind a premium call can fail with, and the whole of it.
-///
-/// Twelve, where the core has more: the bridge folds what a screen
-/// cannot act on differently, the way the desktop app does. An answer
-/// that does not decode goes under `premium_unreachable` — on a phone
-/// that is a hotel's login page, not something to read out — and a
-/// certificate or a heartbeat that does not check out is
-/// `premium_invalid`, whichever of the two it was. A device the server
-/// wants connected first and a device with no token here are one case,
-/// `premium_no_device`: either way the key has to connect it. A key
-/// change sent and not answered is `premium_key_change_pending`: what
-/// was asked would lose the new key, and trying the change again is
-/// what finishes it.
-///
-/// This list is what holds the screens to a sentence for each: a kind
-/// added here and left unanswered fails the test that walks it.
-const List<String> premiumErrorKinds = [
-  'premium_no_key',
-  'premium_unknown_key',
-  'premium_no_paid_time',
-  'premium_rejected',
-  'premium_rate_limited',
-  'premium_unreachable',
-  'premium_invalid',
-  'premium_device_pending',
-  'premium_device_disconnected',
-  'premium_too_many_devices',
-  'premium_no_device',
-  'premium_key_change_pending',
-];
 
 /// Every operation the app can ask of the core.
 abstract class GerfautBridge {
@@ -143,6 +121,10 @@ abstract class GerfautBridge {
 
   /// Changes the glyph a wallet shows next to its name.
   Future<void> setWalletIcon(String id, WalletIcon icon);
+
+  /// Puts a wallet ahead of the others in Live, or back among them: when
+  /// Live cannot follow every address, pinned wallets come first.
+  Future<void> setWalletLivePinned(String id, bool pinned);
 
   /// Puts the listed wallets in that order. Wallets left out keep their
   /// slots, so the list of one network reorders without moving another
@@ -267,130 +249,6 @@ abstract class GerfautBridge {
 
   /// Whether anything this app sends has to go through Tor.
   Future<bool> usesTor();
-
-  // --- premium -----------------------------------------------------------
-
-  /// The premium account as the vault keeps it, the certificate's
-  /// claims verified offline by the core. Never touches the network.
-  Future<PremiumView> premiumState();
-
-  /// Connects this phone to the account with a key: the core checks
-  /// its shape, has the server make a device of it, keeps the key and
-  /// the device's token together in the vault, then fetches the
-  /// licence. The account's first device has full access at once; any
-  /// later one waits. Kinds: premium_unreachable, premium_unknown_key,
-  /// premium_too_many_devices, premium_rate_limited, and
-  /// premium_key_change_pending for another key while a key change has
-  /// not finished. An answer lost on the way leaves the connection under
-  /// way, and the next try sends the same one.
-  Future<PremiumDevice> premiumConnect(String key);
-
-  /// A connection whose answer was lost, sent again as it was, or a key
-  /// kept by a version that had no devices yet, connected now as any
-  /// key typed in. Null when there is nothing to do. Never the key on
-  /// its own after the server said it has every device it takes, and
-  /// nothing sent while a rate limit's wait runs: premium_rate_limited.
-  Future<PremiumDevice?> premiumEnsureDevice();
-
-  /// This device as the server sees it: its access, and until when it
-  /// waits. Any device may ask.
-  Future<PremiumDevice> premiumDevice();
-
-  /// Every device of the account, oldest first. Full access only.
-  Future<List<PremiumDevice>> premiumDevices();
-
-  /// Gives a waiting device full access now. Full access only.
-  Future<PremiumDevice> premiumApproveDevice(String id);
-
-  /// Refuses a waiting device or disconnects one that had access. Full
-  /// access only.
-  Future<void> premiumRemoveDevice(String id);
-
-  /// Draws a new key: the old one stops working everywhere and every
-  /// other device is disconnected. Answers the new key as it is shown.
-  /// Full access only. An answer lost on the way leaves the change under
-  /// way ([PremiumView.keyChangePending]), and the next call sends the
-  /// same key.
-  Future<String> premiumChangeKey();
-
-  /// Records whether the user put the key in a password manager.
-  Future<void> premiumSetKeySaved(bool saved);
-
-  /// Puts the "Protect your Premium account" card away for good.
-  Future<void> premiumHideChecklist();
-
-  /// Hands the ids of every device that waits, as the latest list shows
-  /// them, and takes back those no notification announced yet: each is
-  /// handed out once, whoever asks, so none is announced twice.
-  Future<List<String>> premiumMarkAnnounced(List<String> pending);
-
-  /// Fetches the certificate again with the stored key, for the time a
-  /// renewal added, and stores it.
-  Future<PremiumLicence> premiumRefreshLicence();
-
-  /// Tells the server this device is leaving, when it can, then drops
-  /// the key, the token and the certificate from this device. The
-  /// server goes on watching; the consents stay. A server out of reach
-  /// is told later, by [premiumFlushLogouts]. Refused with
-  /// premium_key_change_pending while a key change has not finished.
-  Future<void> premiumLogOut();
-
-  /// Tells the server about the connections this device left while it
-  /// could not be reached. Nothing queued costs no request. Answers how
-  /// many are still to tell.
-  Future<int> premiumFlushLogouts();
-
-  /// Keeps the "watch is offline" banner quiet until [untilUnix], or
-  /// lets it show again with null.
-  Future<void> premiumAcknowledgeOffline(int? untilUnix);
-
-  /// Paid time, counts and the network the server watches.
-  Future<PremiumAccount> premiumAccount();
-
-  /// The wallets the server watches for this key.
-  Future<List<WalletWatch>> premiumWallets();
-
-  /// Records the user's yes for [id] and hands the wallet to the server:
-  /// its descriptors as the vault holds them, or its address when the
-  /// wallet is a single address.
-  Future<void> premiumWatchWallet(String id);
-
-  /// Tells the server to stop watching [id]. The consent stays.
-  Future<void> premiumUnwatchWallet(String id);
-  Future<List<PremiumChannel>> premiumChannels();
-
-  /// Adds a channel. [target] is the e-mail address or the webhook URL;
-  /// nothing for Telegram, and nothing for ntfy, whose topic the core
-  /// draws and returns once with the URL to subscribe to.
-  Future<CreatedChannel> premiumCreateChannel(
-    ChannelKind kind, {
-    String? target,
-    String? secret,
-  });
-
-  /// Confirms a channel with the code the server sent to it. Answers
-  /// the channel, linked. A code that is wrong, expired or tried too
-  /// often comes back as premium_rejected, in the server's words.
-  Future<PremiumChannel> premiumConfirmChannel(String id, String code);
-  Future<void> premiumDeleteChannel(String id);
-
-  /// Sends a test message through a channel. A provider's refusal comes
-  /// back as premium_rejected, in the server's words.
-  Future<void> premiumTestChannel(String id);
-
-  /// The last events of the account, newest first, at most twenty.
-  Future<List<PremiumEvent>> premiumRecentEvents();
-
-  /// The server's signed heartbeat, verified by the core against the
-  /// embedded key and this device's clock. Any failure counts as a
-  /// missed beat.
-  Future<HeartbeatReport> premiumHeartbeat();
-
-  /// Deletes the account on the server — the key, the wallets it
-  /// watched, the channels, the log — and then forgets it here.
-  /// Nothing local is dropped unless the server confirmed. There is no
-  /// way back.
-  Future<void> premiumDeleteAccount();
 }
 
 /// The real bridge, backed by the generated Rust bindings.
@@ -406,8 +264,6 @@ class RustBridge implements GerfautBridge {
       throw BridgeException(
         error['kind'] as String? ?? 'internal',
         error['message'] as String? ?? 'unknown error',
-        retryAfter: error['retry_after'] as int?,
-        pendingUntil: error['pending_until'] as int?,
       );
     }
     return decoded;
@@ -421,21 +277,23 @@ class RustBridge implements GerfautBridge {
 
   static void _ok(String raw) => _decode(raw);
 
+  static Future<String> _guard(Future<String> call) => guardPanics(call);
+
   @override
   Future<ParsedInput> parseInput(String input, {ScriptKind? script}) async {
-    final raw = await rust.parseInput(input: input, script: script?.id);
+    final raw = await _guard(rust.parseInput(input: input, script: script?.id));
     return ParsedInput.fromJson(_object(raw), raw);
   }
 
   @override
   Future<QrProgress> assembleQr(List<String> frames) async {
-    final raw = await rust.assembleQr(framesJson: jsonEncode(frames));
+    final raw = await _guard(rust.assembleQr(framesJson: jsonEncode(frames)));
     return QrProgress.fromJson(_object(raw));
   }
 
   @override
   Future<ScannedBackend> parseBackend(String input) async {
-    final raw = await rust.parseBackend(input: input);
+    final raw = await _guard(rust.parseBackend(input: input));
     return ScannedBackend.fromJson(_object(raw));
   }
 
@@ -445,49 +303,63 @@ class RustBridge implements GerfautBridge {
     ParsedInput parsed,
     Network network,
   ) async {
-    final raw = await rust.addWallet(
-      name: name,
-      parsedJson: parsed.rawJson,
-      network: network.id,
+    final raw = await _guard(
+      rust.addWallet(
+        name: name,
+        parsedJson: parsed.rawJson,
+        network: network.id,
+      ),
     );
     return WalletMeta.fromJson(_object(raw));
   }
 
   @override
   Future<List<WalletMeta>> listWallets([Network? network]) async {
-    final raw = await rust.listWallets(network: network?.id);
+    final raw = await _guard(rust.listWallets(network: network?.id));
     return _list(raw).map(WalletMeta.fromJson).toList();
   }
 
   @override
   Future<WalletSnapshot> walletSnapshot(String id) async {
-    return WalletSnapshot.fromJson(_object(await rust.walletSnapshot(id: id)));
+    return WalletSnapshot.fromJson(
+      _object(await _guard(rust.walletSnapshot(id: id))),
+    );
   }
 
   @override
   Future<PolicySnapshot> walletPolicy(String id) async {
-    return PolicySnapshot.fromJson(_object(await rust.walletPolicy(id: id)));
+    return PolicySnapshot.fromJson(
+      _object(await _guard(rust.walletPolicy(id: id))),
+    );
   }
 
   @override
   Future<TxDetail> txDetail(String id, String txid) async {
-    return TxDetail.fromJson(_object(await rust.txDetail(id: id, txid: txid)));
+    return TxDetail.fromJson(
+      _object(await _guard(rust.txDetail(id: id, txid: txid))),
+    );
   }
 
   @override
   Future<List<UtxoInfo>> utxos(String id) async {
-    return _list(await rust.utxos(id: id)).map(UtxoInfo.fromJson).toList();
+    return _list(await _guard(rust.utxos(id: id)))
+        .map(UtxoInfo.fromJson)
+        .toList();
   }
 
   @override
   Future<List<AddressEntry>> receiveAddresses(String id, int lookahead) async {
-    final raw = await rust.receiveAddresses(id: id, lookahead: lookahead);
+    final raw = await _guard(
+      rust.receiveAddresses(id: id, lookahead: lookahead),
+    );
     return _list(raw).map(AddressEntry.fromJson).toList();
   }
 
   @override
   Future<AddressList> addressList(String id) async {
-    return AddressList.fromJson(_object(await rust.addressList(id: id)));
+    return AddressList.fromJson(
+      _object(await _guard(rust.addressList(id: id))),
+    );
   }
 
   @override
@@ -495,100 +367,111 @@ class RustBridge implements GerfautBridge {
     String id,
     ExportOptions options,
   ) async {
-    final raw = await rust.exportTransactions(
-      id: id,
-      optionsJson: jsonEncode(options.toJson()),
+    final raw = await _guard(
+      rust.exportTransactions(
+        id: id,
+        optionsJson: jsonEncode(options.toJson()),
+      ),
     );
     return ExportResult.fromJson(_object(raw)['ok'] as Map<String, dynamic>);
   }
 
   @override
   Future<SyncReport> syncWallet(String id) async {
-    return SyncReport.fromJson(_object(await rust.syncWallet(id: id)));
+    return SyncReport.fromJson(_object(await _guard(rust.syncWallet(id: id))));
   }
 
   @override
   Future<int> loadMoreHistory(String id) async {
-    return _decode(await rust.loadMoreHistory(id: id)) as int;
+    return _decode(await _guard(rust.loadMoreHistory(id: id))) as int;
   }
 
   @override
   Future<SyncAllReport> syncAll([Network? network]) async {
     return SyncAllReport.fromJson(
-      _object(await rust.syncAll(network: network?.id)),
+      _object(await _guard(rust.syncAll(network: network?.id))),
     );
   }
 
   @override
   Future<void> renameWallet(String id, String name) async {
-    _ok(await rust.renameWallet(id: id, name: name));
+    _ok(await _guard(rust.renameWallet(id: id, name: name)));
   }
 
   @override
   Future<void> setWalletIcon(String id, WalletIcon icon) async {
-    _ok(await rust.setWalletIcon(id: id, icon: icon.id));
+    _ok(await _guard(rust.setWalletIcon(id: id, icon: icon.id)));
+  }
+
+  @override
+  Future<void> setWalletLivePinned(String id, bool pinned) async {
+    _ok(await _guard(rust.setWalletLivePinned(id: id, pinned: pinned)));
   }
 
   @override
   Future<void> reorderWallets(List<String> ids) async {
-    _ok(await rust.reorderWallets(ids: ids));
+    _ok(await _guard(rust.reorderWallets(ids: ids)));
   }
 
   @override
   Future<void> removeWallet(String id) async {
-    _ok(await rust.removeWallet(id: id));
+    _ok(await _guard(rust.removeWallet(id: id)));
   }
 
   @override
   Future<Settings> getSettings() async {
-    return Settings.fromJson(_object(await rust.getSettings()));
+    return Settings.fromJson(_object(await _guard(rust.getSettings())));
   }
 
   @override
   Future<void> setActiveNetwork(Network network) async {
-    _ok(await rust.setActiveNetwork(network: network.id));
+    _ok(await _guard(rust.setActiveNetwork(network: network.id)));
   }
 
   @override
   Future<void> setGapLimit(int gapLimit) async {
-    _ok(await rust.setGapLimit(gapLimit: gapLimit));
+    _ok(await _guard(rust.setGapLimit(gapLimit: gapLimit)));
   }
 
   @override
   Future<void> setBackend(Network network, BackendConfig config) async {
     _ok(
-      await rust.setBackend(
-        network: network.id,
-        configJson: jsonEncode(config.toJson()),
+      await _guard(
+        rust.setBackend(
+          network: network.id,
+          configJson: jsonEncode(config.toJson()),
+        ),
       ),
     );
   }
 
   @override
   Future<List<PublicServer>> publicServers(Network network) async {
-    final raw = await rust.publicServers(network: network.id);
+    final raw = await _guard(rust.publicServers(network: network.id));
     return _list(raw).map(PublicServer.fromJson).toList();
   }
 
   @override
   Future<CertificateReport> inspectCertificate(String url) async {
-    final raw = await rust.inspectCertificate(url: url);
+    final raw = await _guard(rust.inspectCertificate(url: url));
     return CertificateReport.fromJson(_object(raw));
   }
 
   @override
   Future<void> trustCertificate(String url, String fingerprint) async {
-    _ok(await rust.trustCertificate(url: url, fingerprint: fingerprint));
+    _ok(
+      await _guard(rust.trustCertificate(url: url, fingerprint: fingerprint)),
+    );
   }
 
   @override
   Future<void> forgetCertificate(String host) async {
-    _ok(await rust.forgetCertificate(host: host));
+    _ok(await _guard(rust.forgetCertificate(host: host)));
   }
 
   @override
   Future<void> setAppPref(String key, String value) async {
-    _ok(await rust.setAppPref(key: key, value: value));
+    _ok(await _guard(rust.setAppPref(key: key, value: value)));
   }
 
   @override
@@ -596,21 +479,22 @@ class RustBridge implements GerfautBridge {
     PriceSource source,
     FiatCurrency currency,
   ) async {
-    final raw = await rust.fetchPrice(source: source.id, currency: currency.id);
+    final raw = await _guard(
+      rust.fetchPrice(source: source.id, currency: currency.id),
+    );
     return PriceQuote.fromJson(_object(raw));
   }
 
   @override
   Future<UpdateCheck> checkUpdate(String currentVersion) async {
-    final raw = await rust.checkUpdate(currentVersion: currentVersion);
+    final raw = await _guard(rust.checkUpdate(currentVersion: currentVersion));
     return UpdateCheck.fromJson(_object(raw));
   }
 
   @override
   Future<TxPreview> previewTransaction(String input, Network network) async {
-    final raw = await rust.previewTransaction(
-      input: input,
-      network: network.id,
+    final raw = await _guard(
+      rust.previewTransaction(input: input, network: network.id),
     );
     return TxPreview.fromJson(_object(raw));
   }
@@ -620,13 +504,17 @@ class RustBridge implements GerfautBridge {
     Network network,
     String hex,
   ) async {
-    final raw = await rust.broadcastTransaction(network: network.id, hex: hex);
+    final raw = await _guard(
+      rust.broadcastTransaction(network: network.id, hex: hex),
+    );
     return BroadcastReport.fromJson(_object(raw));
   }
 
   @override
   Future<BroadcastStatus> transactionStatus(Network network, String hex) async {
-    final raw = await rust.transactionStatus(network: network.id, hex: hex);
+    final raw = await _guard(
+      rust.transactionStatus(network: network.id, hex: hex),
+    );
     return BroadcastStatus.fromJson(_object(raw));
   }
 
@@ -635,21 +523,25 @@ class RustBridge implements GerfautBridge {
     String input,
     ImportOptions options,
   ) async {
-    final raw = await rust.parseInputWithOptions(
-      input: input,
-      optionsJson: jsonEncode(options.toJson()),
+    final raw = await _guard(
+      rust.parseInputWithOptions(
+        input: input,
+        optionsJson: jsonEncode(options.toJson()),
+      ),
     );
     return ParsedInput.fromJson(_object(raw), raw);
   }
 
   @override
   Future<SyncReport> rescanWallet(String id) async {
-    return SyncReport.fromJson(_object(await rust.rescanWallet(id: id)));
+    return SyncReport.fromJson(
+      _object(await _guard(rust.rescanWallet(id: id))),
+    );
   }
 
   @override
   Future<AppLock?> appLock() async {
-    final decoded = _decode(await rust.appLock());
+    final decoded = _decode(await _guard(rust.appLock()));
     if (decoded == null) return null;
     return AppLock.fromJson(decoded as Map<String, dynamic>);
   }
@@ -660,24 +552,30 @@ class RustBridge implements GerfautBridge {
     String secret, {
     String? current,
   }) async {
-    _ok(await rust.setAppLock(kind: kind.id, secret: secret, current: current));
+    _ok(
+      await _guard(
+        rust.setAppLock(kind: kind.id, secret: secret, current: current),
+      ),
+    );
   }
 
   @override
   Future<void> clearAppLock(String current) async {
-    _ok(await rust.clearAppLock(current: current));
+    _ok(await _guard(rust.clearAppLock(current: current)));
   }
 
   @override
   Future<LockVerdict> verifyAppLock(String secret) async {
     return LockVerdict.fromJson(
-      _object(await rust.verifyAppLock(secret: secret)),
+      _object(await _guard(rust.verifyAppLock(secret: secret))),
     );
   }
 
   @override
   Future<void> setBiometricUnlock(bool enabled, String current) async {
-    _ok(await rust.setBiometricUnlock(enabled: enabled, current: current));
+    _ok(
+      await _guard(rust.setBiometricUnlock(enabled: enabled, current: current)),
+    );
   }
 
   @override
@@ -685,16 +583,20 @@ class RustBridge implements GerfautBridge {
     BackupOptions options,
     String password,
   ) async {
-    final raw = await rust.exportBackup(
-      optionsJson: jsonEncode(options.toJson()),
-      password: password,
+    final raw = await _guard(
+      rust.exportBackup(
+        optionsJson: jsonEncode(options.toJson()),
+        password: password,
+      ),
     );
     return BackupBundle.fromJson(_object(raw));
   }
 
   @override
   Future<BackupPreview> previewBackup(String source, String password) async {
-    final raw = await rust.previewBackup(source: source, password: password);
+    final raw = await _guard(
+      rust.previewBackup(source: source, password: password),
+    );
     return BackupPreview.fromJson(_object(raw));
   }
 
@@ -704,27 +606,33 @@ class RustBridge implements GerfautBridge {
     String password,
     ImportChoices choices,
   ) async {
-    final raw = await rust.importBackup(
-      source: source,
-      password: password,
-      choicesJson: jsonEncode(choices.toJson()),
+    final raw = await _guard(
+      rust.importBackup(
+        source: source,
+        password: password,
+        choicesJson: jsonEncode(choices.toJson()),
+      ),
     );
     return ImportReport.fromJson(_object(raw));
   }
 
   @override
   Future<TorStatus> torStatus() async {
-    return TorStatus.fromJson(_object(await rust.torStatus()));
+    return TorStatus.fromJson(_object(await _guard(rust.torStatus())));
   }
 
   @override
   Future<void> setTorSettings(TorSettings settings) async {
-    _ok(await rust.setTorSettings(settingsJson: jsonEncode(settings.toJson())));
+    _ok(
+      await _guard(
+        rust.setTorSettings(settingsJson: jsonEncode(settings.toJson())),
+      ),
+    );
   }
 
   @override
   Future<TorRoute> torConnect() async {
-    return TorRoute.fromJson(_object(await rust.torConnect()));
+    return TorRoute.fromJson(_object(await _guard(rust.torConnect())));
   }
 
   @override
@@ -747,17 +655,17 @@ class RustBridge implements GerfautBridge {
 
   @override
   Future<void> liveStop() async {
-    _ok(await rust.liveStop());
+    _ok(await _guard(rust.liveStop()));
   }
 
   @override
   Future<void> liveTick() async {
-    _ok(await rust.liveTick());
+    _ok(await _guard(rust.liveTick()));
   }
 
   @override
   Future<LiveWatchStatus> liveStatus() async {
-    return LiveWatchStatus.fromJson(_object(await rust.liveStatus()));
+    return LiveWatchStatus.fromJson(_object(await _guard(rust.liveStatus())));
   }
 
   @override
@@ -776,171 +684,12 @@ class RustBridge implements GerfautBridge {
 
   @override
   Future<List<LiveTx>> claimAnnouncements(String walletId) async {
-    final raw = await rust.claimAnnouncements(walletId: walletId);
+    final raw = await _guard(rust.claimAnnouncements(walletId: walletId));
     return _list(raw).map(LiveTx.fromJson).toList();
   }
 
   @override
   Future<bool> usesTor() async {
-    return _decode(await rust.usesTor()) as bool;
-  }
-
-  @override
-  Future<PremiumView> premiumState() async {
-    return PremiumView.fromJson(_object(await rust.premiumState()));
-  }
-
-  @override
-  Future<PremiumDevice> premiumConnect(String key) async {
-    return PremiumDevice.fromJson(_object(await rust.premiumConnect(key: key)));
-  }
-
-  @override
-  Future<PremiumDevice?> premiumEnsureDevice() async {
-    final decoded = _decode(await rust.premiumEnsureDevice());
-    if (decoded == null) return null;
-    return PremiumDevice.fromJson(decoded as Map<String, dynamic>);
-  }
-
-  @override
-  Future<PremiumDevice> premiumDevice() async {
-    return PremiumDevice.fromJson(_object(await rust.premiumDevice()));
-  }
-
-  @override
-  Future<List<PremiumDevice>> premiumDevices() async {
-    return _list(await rust.premiumDevices())
-        .map(PremiumDevice.fromJson)
-        .toList();
-  }
-
-  @override
-  Future<PremiumDevice> premiumApproveDevice(String id) async {
-    return PremiumDevice.fromJson(
-      _object(await rust.premiumApproveDevice(id: id)),
-    );
-  }
-
-  @override
-  Future<void> premiumRemoveDevice(String id) async {
-    _ok(await rust.premiumRemoveDevice(id: id));
-  }
-
-  @override
-  Future<int> premiumFlushLogouts() async {
-    return _object(await rust.premiumFlushLogouts())['left'] as int;
-  }
-
-  @override
-  Future<String> premiumChangeKey() async {
-    return _object(await rust.premiumChangeKey())['key'] as String;
-  }
-
-  @override
-  Future<void> premiumSetKeySaved(bool saved) async {
-    _ok(await rust.premiumSetKeySaved(saved: saved));
-  }
-
-  @override
-  Future<void> premiumHideChecklist() async {
-    _ok(await rust.premiumHideChecklist());
-  }
-
-  @override
-  Future<List<String>> premiumMarkAnnounced(List<String> pending) async {
-    return (_decode(await rust.premiumMarkAnnounced(pending: pending)) as List)
-        .cast<String>();
-  }
-
-  @override
-  Future<PremiumLicence> premiumRefreshLicence() async {
-    return PremiumLicence.fromJson(_object(await rust.premiumRefreshLicence()));
-  }
-
-  @override
-  Future<void> premiumLogOut() async {
-    _ok(await rust.premiumLogOut());
-  }
-
-  @override
-  Future<void> premiumAcknowledgeOffline(int? untilUnix) async {
-    _ok(await rust.premiumAcknowledgeOffline(until: untilUnix));
-  }
-
-  @override
-  Future<PremiumAccount> premiumAccount() async {
-    return PremiumAccount.fromJson(_object(await rust.premiumAccount()));
-  }
-
-  @override
-  Future<List<WalletWatch>> premiumWallets() async {
-    return _list(await rust.premiumWallets())
-        .map(WalletWatch.fromJson)
-        .toList();
-  }
-
-  @override
-  Future<void> premiumWatchWallet(String id) async {
-    _ok(await rust.premiumWatchWallet(id: id));
-  }
-
-  @override
-  Future<void> premiumUnwatchWallet(String id) async {
-    _ok(await rust.premiumUnwatchWallet(id: id));
-  }
-
-  @override
-  Future<List<PremiumChannel>> premiumChannels() async {
-    return _list(await rust.premiumChannels())
-        .map(PremiumChannel.fromJson)
-        .toList();
-  }
-
-  @override
-  Future<CreatedChannel> premiumCreateChannel(
-    ChannelKind kind, {
-    String? target,
-    String? secret,
-  }) async {
-    final raw = await rust.premiumCreateChannel(
-      kind: kind.id,
-      target: target,
-      secret: secret,
-    );
-    return CreatedChannel.fromJson(_object(raw));
-  }
-
-  @override
-  Future<PremiumChannel> premiumConfirmChannel(String id, String code) async {
-    return PremiumChannel.fromJson(
-      _object(await rust.premiumConfirmChannel(id: id, code: code)),
-    );
-  }
-
-  @override
-  Future<void> premiumDeleteChannel(String id) async {
-    _ok(await rust.premiumDeleteChannel(id: id));
-  }
-
-  @override
-  Future<void> premiumTestChannel(String id) async {
-    _ok(await rust.premiumTestChannel(id: id));
-  }
-
-  @override
-  Future<List<PremiumEvent>> premiumRecentEvents() async {
-    return _list(await rust.premiumRecentEvents())
-        .map(PremiumEvent.fromJson)
-        .toList();
-  }
-
-  @override
-  Future<HeartbeatReport> premiumHeartbeat() async {
-    return HeartbeatReport.fromJson(_object(await rust.premiumHeartbeat()));
-  }
-
-  @override
-  Future<void> premiumDeleteAccount() async {
-    _ok(await rust.premiumDeleteAccount());
+    return _decode(await _guard(rust.usesTor())) as bool;
   }
 }

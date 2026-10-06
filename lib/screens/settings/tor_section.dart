@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -19,6 +21,18 @@ final torStatusProvider = FutureProvider.autoDispose<TorStatus>((ref) {
   return ref.watch(bridgeProvider).torStatus();
 });
 
+/// The price takes the route of the syncs, as the update check does:
+/// the core sends it through Tor as soon as a node, on any network, is
+/// a .onion address, and not at all while Tor cannot be had.
+const String priceRoute =
+    'When one of your nodes is a .onion address, the price goes through '
+    'Tor too, or is not fetched while Tor is out of reach.';
+
+/// How far the built-in client has started, in the desktop app's words
+/// and in steps of ten.
+String torStartingLine(int percent) =>
+    'Starting the built-in Tor… ${percent.clamp(0, 100) ~/ 10 * 10}%';
+
 /// The settings card for how `.onion` backends reach Tor.
 class TorSection extends ConsumerStatefulWidget {
   const TorSection({super.key});
@@ -31,6 +45,17 @@ class _TorSectionState extends ConsumerState<TorSection> {
   bool _connecting = false;
   String? _error;
   TorRoute? _route;
+
+  /// Reads the status again every second while a connection is tried,
+  /// as the desktop app does: a first start of the built-in client then
+  /// reads as progress, not as a hang.
+  Timer? _polling;
+
+  @override
+  void dispose() {
+    _polling?.cancel();
+    super.dispose();
+  }
 
   Future<void> _setMode(TorMode mode) async {
     setState(() {
@@ -57,12 +82,18 @@ class _TorSectionState extends ConsumerState<TorSection> {
       _error = null;
       _route = null;
     });
+    _polling?.cancel();
+    _polling = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) ref.invalidate(torStatusProvider);
+    });
     try {
       final route = await ref.read(bridgeProvider).torConnect();
       if (mounted) setState(() => _route = route);
     } on BridgeException catch (error) {
       if (mounted) setState(() => _error = error.message);
     } finally {
+      _polling?.cancel();
+      _polling = null;
       // A bootstrap can take a minute and a half: by the time it
       // answers the screen may be gone, and `ref` would throw.
       if (mounted) {
@@ -79,6 +110,13 @@ class _TorSectionState extends ConsumerState<TorSection> {
     final status = ref.watch(torStatusProvider).valueOrNull;
     if (tor == null) return const SizedBox.shrink();
     final embedded = status?.embeddedAvailable ?? false;
+    final intro = embedded
+        ? 'An address ending in .onion goes through Tor. Gerfaut starts its '
+              'own Tor client, or uses the one already running on this '
+              'device when told to.'
+        : 'An address ending in .onion goes through Tor. This build has no '
+              'Tor of its own: choose System below, with a Tor app such as '
+              'Orbot running on this device.';
 
     // No semantic label on the glyph: the title beside it already
     // says the word, and a screen reader would say it twice.
@@ -87,13 +125,7 @@ class _TorSectionState extends ConsumerState<TorSection> {
       title: 'Tor',
       children: [
         Text(
-          embedded
-              ? 'An address ending in .onion goes through Tor. Gerfaut '
-                    'starts its own Tor client, or uses the one already '
-                    'running on this device when told to.'
-              : 'An address ending in .onion goes through Tor. This build '
-                    'has no Tor of its own: choose System below, with a Tor '
-                    'app such as Orbot running on this device.',
+          '$intro $priceRoute',
           style: tokens.bodySmall.copyWith(color: tokens.textMuted),
         ),
         const SizedBox(height: GerfautSpacing.md),
@@ -135,11 +167,16 @@ class _TorSectionState extends ConsumerState<TorSection> {
         }, style: tokens.bodySmall.copyWith(color: tokens.textMuted)),
         if (status != null && status.running) ...[
           const SizedBox(height: GerfautSpacing.sm),
-          Text(
-            status.bootstrapped
-                ? 'Running through the ${status.via?.label ?? 'Tor'}.'
-                : 'Starting… ${status.bootstrapPercent}%',
-            style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+          // A live region, read out in steps of ten: one fed every
+          // second would have TalkBack say every step of the way.
+          Semantics(
+            liveRegion: !status.bootstrapped,
+            child: Text(
+              status.bootstrapped
+                  ? 'Running through the ${status.via?.label ?? 'Tor'}.'
+                  : torStartingLine(status.bootstrapPercent),
+              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+            ),
           ),
         ],
         if (_route != null) ...[

@@ -4,6 +4,9 @@ import 'package:gerfaut/src/clipboard.dart';
 
 const _channel = MethodChannel('gerfaut/window');
 
+/// A descriptor, what the sensitive route is for.
+const _descriptor = 'wpkh([d34db33f/84h/0h/0h]xpub661MyMwAqRbcFexample/0/*)';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -36,7 +39,11 @@ void main() {
 
   test('a secret goes to the activity, not to the plain clipboard', () async {
     install(null);
-    await const SystemSensitiveClipboard().copy('wsh(or_d(pk(A),older(52560)))');
+    final timed = await const SystemSensitiveClipboard().copy(
+      'wsh(or_d(pk(A),older(52560)))',
+    );
+    // The activity takes it off the clipboard a minute later.
+    expect(timed, isTrue);
 
     expect(sensitive.single.method, 'copySensitive');
     expect(sensitive.single.arguments, 'wsh(or_d(pk(A),older(52560)))');
@@ -60,19 +67,23 @@ void main() {
       () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
     );
 
-    await const SystemSensitiveClipboard().copy('topic-abcdefghijklmnopqrst');
+    final timed = await const SystemSensitiveClipboard().copy(_descriptor);
     expect(sensitive, isEmpty);
-    expect(
-      (plain.single.arguments as Map)['text'],
-      'topic-abcdefghijklmnopqrst',
-    );
+    // Nothing takes a plain copy off: the confirmation says no minute.
+    expect(timed, isFalse);
+    expect((plain.single.arguments as Map)['text'], _descriptor);
   });
 
   test('an activity that refuses still copies', () async {
     install((_) async => throw PlatformException(code: 'failed'));
-    await const SystemSensitiveClipboard().copy('gerf-aut1-2345-6789');
+    await const SystemSensitiveClipboard().copy(_descriptor);
 
     expect(sensitive.single.method, 'copySensitive');
-    expect((plain.single.arguments as Map)['text'], 'gerf-aut1-2345-6789');
+    expect((plain.single.arguments as Map)['text'], _descriptor);
+  });
+
+  test('the confirmation says the minute only when there is one', () {
+    expect(copiedWords('Copied', timed: true), 'Copied for 1 minute');
+    expect(copiedWords('Copied', timed: false), 'Copied');
   });
 }

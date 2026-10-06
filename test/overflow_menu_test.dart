@@ -109,7 +109,7 @@ void main() {
     expect(panel.left, greaterThan(0));
   });
 
-  testWidgets('every entry is a 44px target, label and line and all', (
+  testWidgets('every entry is a full target, label and line and all', (
     tester,
   ) async {
     final picked = <String>[];
@@ -117,7 +117,10 @@ void main() {
     await openMenu(tester);
 
     for (final label in ['Policy', 'Hide balances', 'Broadcast']) {
-      expect(menuRowHeight(tester, label), greaterThanOrEqualTo(44));
+      expect(
+        menuRowHeight(tester, label),
+        greaterThanOrEqualTo(GerfautTouch.target),
+      );
     }
     // The second line is the digest the page would have shown.
     expect(find.text('2 of 3 keys'), findsOneWidget);

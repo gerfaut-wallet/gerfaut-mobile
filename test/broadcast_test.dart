@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -497,6 +499,56 @@ void main() {
     expect(find.text('0200000001deadbeef'), findsOneWidget);
   });
 
+  testWidgets('a send that outlives its screen is still remembered', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    final sent = Completer<BroadcastReport>();
+    final bridge = FakeBridge()
+      ..onPreview = ((_, _) => makePreview())
+      ..onBroadcast = ((_, _) => sent.future);
+    // A container of the test's own: it outlives the screen, as the
+    // app's does.
+    final container = ProviderContainer(
+      overrides: [
+        bridgeProvider.overrideWithValue(bridge),
+        disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: themeFrom(GerfautTokens.light, Brightness.light),
+          home: const BroadcastScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await preview(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Broadcast'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Broadcast').last);
+    await tester.pump();
+
+    // The lock takes the screen away while the transaction travels.
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: SizedBox()),
+      ),
+    );
+    sent.complete(
+      BroadcastReport(txid: fakeTxid, backend: 'mempool.space', at: 1),
+    );
+    await tester.pumpAndSettle();
+
+    expect(container.read(recentBroadcastsProvider).map((b) => b.txid), [
+      fakeTxid,
+    ]);
+  });
+
   testWidgets('sending asks first, then follows the transaction', (
     tester,
   ) async {
@@ -896,11 +948,18 @@ void main() {
         const resting = <WidgetState>{};
         expect(another.backgroundColor!.resolve(resting), tokens.primary);
         expect(another.foregroundColor!.resolve(resting), tokens.onPrimary);
+        // Drawn a control's height, answering over a full target.
         expect(
           tester
               .getSize(find.widgetWithText(FilledButton, 'Broadcast another'))
               .height,
-          44,
+          GerfautTouch.control,
+        );
+        expect(
+          tester
+              .getSize(find.widgetWithText(PrimaryButton, 'Broadcast another'))
+              .height,
+          GerfautTouch.target,
         );
         // And it is the only one: leaving the screen is a navigation, so
         // Done steps back to a ghost rather than competing with it.

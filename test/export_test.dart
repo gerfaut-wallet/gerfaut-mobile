@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,6 +25,9 @@ class FakeCsvSharer implements CsvSharer {
   Future<void> shareCsv({required String csv, required String filename}) async {
     shared.add((csv: csv, filename: filename));
   }
+
+  @override
+  Future<void> forgetCopies() async {}
 }
 
 TxSummary tx(String txid, int netSats, {int? timestamp}) {
@@ -121,10 +125,11 @@ void main() {
     final all = option('All');
     final received = option('Received');
     final sent = option('Sent');
-    // Stacked full-width rows, 44px each, with room between them.
+    // Stacked full-width rows, drawn a control's height, with room
+    // between them.
     expect(received.top - all.bottom, GerfautSpacing.sm);
     expect(sent.top - received.bottom, GerfautSpacing.sm);
-    expect(all.height, 44);
+    expect(all.height, GerfautTouch.control);
     expect(received.width, all.width);
     expect(sent.left, all.left);
 
@@ -173,33 +178,6 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Clear From date'));
     await tester.pumpAndSettle();
     expect(find.text('3 of 3 transactions selected'), findsOneWidget);
-  });
-
-  testWidgets('the premium teaser is present, sober and disabled', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(800, 1600);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    final sharer = FakeCsvSharer();
-    await tester.pumpWidget(exportApp(makeBridge(), sharer));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Fiat value at transaction time'), findsOneWidget);
-    expect(find.text('PREMIUM'), findsOneWidget);
-    expect(
-      find.text("Adds the price at each transaction's date to the file."),
-      findsOneWidget,
-    );
-    expect(find.textContaining('Coming with'), findsNothing);
-    expect(find.textContaining('Everything stays'), findsNothing);
-
-    // The premium switch is off and inert; the pending one still works.
-    final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
-    expect(switches, hasLength(2));
-    expect(switches.last.onChanged, isNull);
-    expect(switches.last.value, isFalse);
-    expect(switches.first.onChanged, isNotNull);
   });
 
   testWidgets('saving writes the file where the user points', (tester) async {
@@ -326,5 +304,62 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  test('histories left in the cache by earlier builds are deleted', () async {
+    final cache = await Directory.systemTemp.createTemp('gerfaut-cache');
+    addTearDown(() => cache.delete(recursive: true));
+    final old = File(
+      '${cache.path}${Platform.pathSeparator}savings-transactions.csv',
+    )..writeAsStringSync('txid,amount');
+    final other = File('${cache.path}${Platform.pathSeparator}keep.txt')
+      ..writeAsStringSync('not ours');
+
+    expect(await forgetCsvCopies(cache), 1);
+    expect(old.existsSync(), isFalse);
+    expect(other.existsSync(), isTrue);
+  });
+
+  test(
+    'the copy the share sheet was handed goes too, folder and all',
+    () async {
+      final cache = await Directory.systemTemp.createTemp('gerfaut-cache');
+      addTearDown(() => cache.delete(recursive: true));
+      final sep = Platform.pathSeparator;
+      // Where share_plus writes a file it is handed from memory.
+      final folder = Directory('${cache.path}${sep}0b5f6d2e-uuid')
+        ..createSync();
+      final shared = File('${folder.path}${sep}savings-transactions.csv')
+        ..writeAsStringSync('txid,amount');
+      final backup = Directory('${cache.path}${sep}other-uuid')..createSync();
+      final kept = File('${backup.path}${sep}wallets.gerfaut')
+        ..writeAsStringSync('sealed');
+
+      expect(await forgetCsvCopies(cache), 1);
+      expect(shared.existsSync(), isFalse);
+      expect(folder.existsSync(), isFalse);
+      expect(kept.existsSync(), isTrue);
+    },
+  );
+
+  test('the copy share_plus keeps goes, and nothing deeper is read', () async {
+    final cache = await Directory.systemTemp.createTemp('gerfaut-cache');
+    addTearDown(() => cache.delete(recursive: true));
+    final sep = Platform.pathSeparator;
+    // Where share_plus copies a file before handing it to another app.
+    final shareFolder = Directory('${cache.path}${sep}share_plus')
+      ..createSync();
+    final copied = File('${shareFolder.path}${sep}savings-transactions.csv')
+      ..writeAsStringSync('txid,amount');
+    // Two levels down is no place a share writes to: left unread.
+    final deep = Directory('${cache.path}${sep}some${sep}deeper')
+      ..createSync(recursive: true);
+    final elsewhere = File('${deep.path}${sep}other-transactions.csv')
+      ..writeAsStringSync('txid,amount');
+
+    expect(await forgetCsvCopies(cache), 1);
+    expect(copied.existsSync(), isFalse);
+    expect(shareFolder.existsSync(), isFalse);
+    expect(elsewhere.existsSync(), isTrue);
   });
 }

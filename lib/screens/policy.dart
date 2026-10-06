@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/clipboard.dart';
+import '../src/descriptor.dart';
 import '../src/models.dart';
 import '../src/policy_text.dart';
 import '../src/state.dart';
@@ -12,6 +13,7 @@ import '../widgets/app_bar.dart';
 import '../widgets/facts.dart';
 import '../widgets/notice.dart';
 import '../widgets/status_pill.dart';
+import '../widgets/toast.dart';
 
 /// What the descriptor says: who can spend, under which locks, and
 /// whether each path is open right now. One page per wallet, a tap
@@ -28,7 +30,8 @@ class PolicyScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final name = ref.watch(snapshotProvider(walletId)).valueOrNull?.meta.name;
+    final meta = ref.watch(snapshotProvider(walletId)).valueOrNull?.meta;
+    final name = meta?.name;
     final policy = ref.watch(policyProvider(walletId));
 
     return Scaffold(
@@ -59,6 +62,7 @@ class PolicyScreen extends ConsumerWidget {
               // placeholder. Only a page that never had one waits.
               AsyncValue(valueOrNull: final snapshot?) => _Loaded(
                 snapshot: snapshot,
+                wallet: meta?.kind,
               ),
               _ => const PolicyPlaceholder(),
             },
@@ -99,10 +103,28 @@ class PolicyPlaceholder extends StatelessWidget {
   }
 }
 
+/// The descriptor the page shows and copies: the wallet whole, its
+/// receive and change branches as one multipath descriptor (`<0;1>`),
+/// the form it was most likely imported in. The core reads the policy
+/// from the receive branch alone, and that one copied elsewhere would
+/// watch the wallet without its change. When the two do not make one
+/// descriptor, the receive one, as before.
+String shownDescriptor(PolicySnapshot snapshot, WalletKind? wallet) {
+  if (wallet is! DescriptorsKind) return snapshot.descriptor;
+  final internal = wallet.internal;
+  if (internal == null || wallet.external != snapshot.descriptor) {
+    return snapshot.descriptor;
+  }
+  return multipathDescriptor(wallet.external, internal) ?? snapshot.descriptor;
+}
+
 class _Loaded extends StatelessWidget {
-  const _Loaded({required this.snapshot});
+  const _Loaded({required this.snapshot, this.wallet});
 
   final PolicySnapshot snapshot;
+
+  /// What the vault holds of the wallet: its two branches, when it has.
+  final WalletKind? wallet;
 
   @override
   Widget build(BuildContext context) {
@@ -124,11 +146,12 @@ class _Loaded extends StatelessWidget {
     }
 
     // A single key has one path and it is open: a card would say the
-    // sentence a second time. The page keeps to its three lines.
+    // sentence a second time. The page keeps to its three lines. The
+    // others come in reading order, the primary path first.
     final cards = snapshot.kind == PolicyKind.singleKey
         ? const <Widget>[]
         : [
-            for (final branch in snapshot.branches)
+            for (final branch in orderBranches(snapshot))
               Padding(
                 padding: const EdgeInsets.only(bottom: GerfautSpacing.gutter),
                 child: _BranchCard(branch: branch, snapshot: snapshot),
@@ -155,7 +178,7 @@ class _Loaded extends StatelessWidget {
         _KeysSection(keys: snapshot.keys),
         const SizedBox(height: GerfautSpacing.lg),
         _DescriptorSection(
-          descriptor: snapshot.descriptor,
+          descriptor: shownDescriptor(snapshot, wallet),
           policy: snapshot.policy,
         ),
       ],
@@ -196,6 +219,7 @@ class _BranchCard extends StatelessWidget {
     final status = describeBranchState(branch);
     final date = status.date;
     final progress = status.progress;
+    final nextCoin = status.nextCoin;
 
     return Container(
       width: double.infinity,
@@ -254,6 +278,22 @@ class _BranchCard extends StatelessWidget {
           ],
           const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
           _StatePill(status: status),
+          if (nextCoin != null) ...[
+            const SizedBox(height: GerfautSpacing.xs + 2),
+            // What the pill says in time, in blocks too: the coin that
+            // opens first.
+            Wrap(
+              spacing: GerfautSpacing.sm,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                FieldLabel('Next coin', tokens: tokens),
+                Text(
+                  nextCoin,
+                  style: tokens.bodySmall.copyWith(color: tokens.text),
+                ),
+              ],
+            ),
+          ],
           if (date != null) ...[
             const SizedBox(height: GerfautSpacing.xs + 2),
             Text(
@@ -349,10 +389,9 @@ class _KeyPill extends StatelessWidget {
               const SizedBox(width: GerfautSpacing.sm),
               Text(
                 fingerprint,
-                style: tokens.data.copyWith(
-                  fontSize: 11,
-                  color: tokens.textMuted,
-                ),
+                // Compared character by character with a device: the
+                // data size, never smaller.
+                style: tokens.data.copyWith(color: tokens.textMuted),
               ),
             ],
           ],
@@ -364,7 +403,7 @@ class _KeyPill extends StatelessWidget {
 
 /// The state pill of a branch, its tone mapped to the system's three:
 /// the confirmed green with a check when open, the pending amber with a
-/// clock within thirty days, neutral otherwise.
+/// clock under thirty days, neutral otherwise.
 class _StatePill extends StatelessWidget {
   const _StatePill({required this.status});
 
@@ -433,7 +472,7 @@ class _KeysSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final mono = tokens.data.copyWith(fontSize: 12, color: tokens.textMuted);
+    final mono = tokens.data.copyWith(color: tokens.textMuted);
     final name = tokens.bodySmall.copyWith(
       fontWeight: FontWeight.w500,
       fontVariations: const [FontVariation('wght', 500)],
@@ -484,7 +523,7 @@ class _KeysSection extends StatelessWidget {
                         key.originPath == null
                             ? key.keyShort
                             : '${key.originPath}  ·  ${key.keyShort}',
-                        style: tokens.data.copyWith(fontSize: 12),
+                        style: tokens.data,
                       ),
                     ],
                   ),
@@ -529,8 +568,8 @@ class _DescriptorSectionState extends State<_DescriptorSection> {
             borderRadius: BorderRadius.circular(GerfautRadius.sm),
             onTap: () => setState(() => _open = !_open),
             child: Container(
-              // A 44px tap target around a one-line disclosure.
-              constraints: const BoxConstraints(minHeight: 44),
+              // A full touch target around a one-line disclosure.
+              constraints: const BoxConstraints(minHeight: GerfautTouch.target),
               alignment: Alignment.centerLeft,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -601,11 +640,11 @@ class _CodeBoxState extends ConsumerState<_CodeBox> {
     // A descriptor names every address of a wallet, present and future,
     // and the policy read off it says who can spend and when. Neither
     // belongs in the system's clipboard preview or its history.
-    await ref.read(sensitiveClipboardProvider).copy(widget.text);
+    final timed = await ref.read(sensitiveClipboardProvider).copy(widget.text);
     if (!mounted) return;
     setState(() => _copied = true);
     ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Copied')));
+        .showSnackBar(Toast(copiedWords('Copied', timed: timed)));
     await Future<void>.delayed(const Duration(milliseconds: 1500));
     if (mounted) setState(() => _copied = false);
   }
@@ -641,7 +680,7 @@ class _CodeBoxState extends ConsumerState<_CodeBox> {
             iconSize: 16,
             icon: Icon(
               _copied ? LucideIcons.check : LucideIcons.copy,
-              color: _copied ? tokens.confirmed : tokens.textMuted,
+              color: tokens.textMuted,
             ),
           ),
         ),

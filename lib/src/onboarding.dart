@@ -5,6 +5,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'state.dart';
+import 'prefs.dart';
 
 class OnboardingNotifier extends Notifier<bool> {
   @override
@@ -22,7 +23,7 @@ class OnboardingNotifier extends Notifier<bool> {
     state = true;
     ref
         .read(bridgeProvider)
-        .setAppPref('onboarding.seen', '1')
+        .setAppPref(Pref.onboardingSeen, '1')
         .catchError((_) {});
   }
 

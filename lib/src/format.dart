@@ -14,6 +14,22 @@ const String groupSeparator = '\u00A0';
 /// Masked replacement for any amount.
 const String maskedValue = '•••••';
 
+/// A txid as a screen reader says it: its first eight characters, which
+/// tell one transaction from another by ear. All sixty-four, read one
+/// by one, tell nothing.
+String spokenTxid(String txid) =>
+    'starting ${txid.length > 8 ? txid.substring(0, 8) : txid}';
+
+/// What a screen reader says in place of [maskedValue]: left to itself
+/// it reads the dots one by one, "bullet, bullet, bullet".
+const String maskedSpoken = 'Hidden amount';
+
+/// [shown] as a screen reader should hear it, the mask said in words;
+/// null when there is no mask in it and the text reads as it is.
+String? spokenIfMasked(String shown) => shown.contains(maskedValue)
+    ? shown.replaceAll(maskedValue, maskedSpoken)
+    : null;
+
 /// `123456` -> `"0.00123456"` — always 8 decimals.
 String formatBtc(int sats) {
   final negative = sats < 0;
@@ -139,24 +155,6 @@ String relativeTime(int unixSeconds, {DateTime? now}) {
   return '$days d ago';
 }
 
-/// The same distance in whole words, for a sentence rather than a
-/// stamp: "3 days ago", "an hour ago". A stamp abbreviates because it
-/// sits in a corner; a sentence has the room to say it.
-String relativeTimeWords(int unixSeconds, {DateTime? now}) {
-  final nowMs = (now ?? DateTime.now()).millisecondsSinceEpoch;
-  var seconds = nowMs ~/ 1000 - unixSeconds;
-  if (seconds < 0) seconds = 0;
-  if (seconds < 45) return 'just now';
-  final minutes = seconds ~/ 60;
-  if (minutes < 60) {
-    return minutes <= 1 ? 'a minute ago' : '$minutes minutes ago';
-  }
-  final hours = minutes ~/ 60;
-  if (hours < 24) return hours == 1 ? 'an hour ago' : '$hours hours ago';
-  final days = hours ~/ 24;
-  return days == 1 ? 'yesterday' : '$days days ago';
-}
-
 const List<String> _months = [
   'Jan',
   'Feb',
@@ -192,13 +190,14 @@ String formatDate(int unixSeconds) {
   return '${_months[local.month - 1]} $day, ${local.year}';
 }
 
-/// A day written day first, `24 Sep 2026`: the form the Premium device
-/// texts use on both apps, beside the alerts the server sends about the
-/// same devices.
-String formatDayMonthYear(int unixSeconds) {
+/// A day without its year, in the order of [formatDate]: `Oct 03`. For
+/// a day close enough to the reader's that the year goes without
+/// saying.
+String formatDayMonth(int unixSeconds) {
   final local = DateTime.fromMillisecondsSinceEpoch(unixSeconds * 1000)
       .toLocal();
-  return '${local.day} ${_months[local.month - 1]} ${local.year}';
+  final day = local.day.toString().padLeft(2, '0');
+  return '${_months[local.month - 1]} $day';
 }
 
 /// A clock time in the reader's zone, 24-hour, no date: `12:40`. For a
@@ -327,13 +326,22 @@ NumberFormat _fiatFormatter(FiatCurrency currency, {required bool precise}) {
   return precise ? pair.precise : pair.natural;
 }
 
+/// [value] in [formatter], its thousands grouped like every other
+/// number on screen: the formatter's commas would put "€74,074.07"
+/// beside "1 297 812 sats".
+String _grouped(NumberFormat formatter, double value) => formatter
+    .format(value)
+    .replaceAll(formatter.symbols.GROUP_SEP, groupSeparator);
+
 /// Fiat value of an amount at a given BTC rate, with the currency's
 /// symbol and its own number of decimals — never two forced on a
 /// currency that has none. Small values keep four decimals so they
-/// never round to zero.
+/// never round to zero; zero itself has nothing to keep, and takes the
+/// currency's own decimals: `€0.00`, `¥0`.
 String formatFiat(int sats, double rate, FiatCurrency currency) {
   final value = sats / satsPerBtc * rate;
-  return _fiatFormatter(currency, precise: value.abs() < 1).format(value);
+  final small = value != 0 && value.abs() < 1;
+  return _grouped(_fiatFormatter(currency, precise: small), value);
 }
 
 final Map<FiatCurrency, NumberFormat> _wholeFiatFormatters = {};
@@ -342,12 +350,23 @@ final Map<FiatCurrency, NumberFormat> _wholeFiatFormatters = {};
 /// up — the cents of a five-figure price are noise, and every surface
 /// that quotes the price drops them the same way — and the currency's
 /// own decimals under that, so a currency priced in fractions still
-/// reads. `66741.37` -> `"€66,741"`, `42.5` -> `"€42.50"`.
+/// reads. `66741.37` -> `"€66 741"`, `42.5` -> `"€42.50"`.
 String formatFiatPrice(double rate, FiatCurrency currency) {
   if (rate.abs() < 100) return formatFiat(satsPerBtc, rate, currency);
   final formatter = _wholeFiatFormatters.putIfAbsent(
     currency,
     () => NumberFormat.simpleCurrency(name: currency.code, decimalDigits: 0),
   );
-  return formatter.format(rate);
+  return _grouped(formatter, rate);
+}
+
+/// What a wallet's Live badge leaves out: how many of its addresses
+/// wait for the next sync.
+String waitingWords(WalletCoverage coverage) {
+  final left = coverage.leftOutScripts;
+  if (left == 0) return 'Every address is followed live.';
+  final count = groupThousands('$left');
+  return left == 1
+      ? '1 address waits for the next sync.'
+      : '$count addresses wait for the next sync.';
 }

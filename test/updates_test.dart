@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +16,7 @@ import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/updates.dart';
 import 'package:gerfaut/src/window.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/tap_target.dart';
 import 'package:gerfaut/widgets/update_notice.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
@@ -98,6 +101,15 @@ Future<void> _launch(
 const String _line = 'Gerfaut 0.2.0 is available';
 
 void main() {
+  test('the version shown is the one pubspec.yaml stamps on the build', () {
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+    final stamped = RegExp(
+      r'^version:\s*([^+\s]+)',
+      multiLine: true,
+    ).firstMatch(pubspec)!.group(1);
+    expect(appVersion, stamped);
+  });
+
   group('versions', () {
     ReleaseVersion parse(String text) => ReleaseVersion.tryParse(text)!;
 
@@ -337,7 +349,7 @@ void main() {
       expect(bridge.appPrefs['updates.dismissed'], '0.2.0');
     });
 
-    testWidgets('both targets are 44 px and a screen reader hears it all', (
+    testWidgets('both are full targets and a screen reader hears it all', (
       tester,
     ) async {
       final handle = tester.ensureSemantics();
@@ -346,13 +358,18 @@ void main() {
 
       for (final label in ['Later', 'View release']) {
         final size = tester.getSize(
-          find.ancestor(
-            of: find.text(label),
-            matching: find.bySubtype<ButtonStyleButton>(),
-          ),
+          find.ancestor(of: find.text(label), matching: find.byType(TapTarget)),
         );
-        expect(size.height, greaterThanOrEqualTo(44), reason: label);
-        expect(size.width, greaterThanOrEqualTo(44), reason: label);
+        expect(
+          size.height,
+          greaterThanOrEqualTo(GerfautTouch.target),
+          reason: label,
+        );
+        expect(
+          size.width,
+          greaterThanOrEqualTo(GerfautTouch.target),
+          reason: label,
+        );
       }
       expect(find.bySemanticsLabel(_line), findsOneWidget);
       // One node each: the name, the hint and the tap together.
@@ -530,9 +547,16 @@ void main() {
       final bridge = _bridge();
       await open(tester, bridge);
       expect(find.text('Check automatically'), findsOneWidget);
-      expect(find.textContaining('GitHub sees your IP address'), findsOne);
-      expect(find.textContaining('goes through Tor instead'), findsOne);
-      expect(find.textContaining('or not at all if Tor'), findsOne);
+      // Two sentences, the most a setting's line may take.
+      expect(
+        find.text(
+          'Asks GitHub for the latest release at most once a day while '
+          'Gerfaut is unlocked, and downloads nothing. With a .onion node '
+          'it goes through Tor or not at all, and never while the app is '
+          'disguised.',
+        ),
+        findsOne,
+      );
       expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
 
       await tester.tap(find.byType(Switch));

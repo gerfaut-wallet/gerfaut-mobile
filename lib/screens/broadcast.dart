@@ -125,20 +125,19 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     // behind it, and coming back from a picker the user opened here is
     // not coming back from the background. Without this the lock lands
     // on the way in and takes the picked file with it.
-    lock.expectExcursion();
     final XFile? file;
     try {
-      file =
-          await (widget.filePicker ??
-              () => openBoundedFile(maxBytes: _maxTransactionBytes))();
+      file = await lock.excursion(
+        widget.filePicker ??
+            () => openBoundedFile(maxBytes: _maxTransactionBytes),
+        // Picked, then not read: the trip did happen.
+        cameUp: (error) => error is FileReadException,
+      );
     } on FileReadException catch (error) {
-      // Picked, then not read: the trip did happen.
       if (mounted) setState(() => _inputError = error.message);
       return;
     } catch (_) {
-      // No picker came up: the trip goes back, or it would be spent on
-      // a real absence hours from now.
-      lock.forgetExcursion();
+      // No picker came up.
       if (mounted) {
         setState(
           () => _inputError = 'No app on this phone can open a file to read.',
@@ -165,12 +164,13 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
   }
 
   Future<void> _scan() async {
-    final text = await Navigator.of(context).push<String>(
-      MaterialPageRoute<String>(
+    final scanned = await Navigator.of(context).push<QrProgress>(
+      MaterialPageRoute<QrProgress>(
         builder: (_) =>
             const ScanScreen(caption: ScanScreen.transactionCaption),
       ),
     );
+    final text = scanned?.text;
     if (text == null || text.trim().isEmpty || !mounted) return;
     _inputController.text = text.trim();
     await _decode();
@@ -188,6 +188,10 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
       _sending = true;
       _sendError = null;
     });
+    // Held before the await: a transaction sent while the lock took the
+    // screen away is still kept among the recent broadcasts, so its
+    // status is followed. `ref` dies with the screen.
+    final recent = ref.read(recentBroadcastsProvider.notifier);
     try {
       final report = await ref
           .read(bridgeProvider)
@@ -198,7 +202,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
         hex: hex,
         at: report.at,
       );
-      ref.read(recentBroadcastsProvider.notifier).add(record);
+      recent.add(record);
       if (!mounted) return;
       setState(() => _sent = (record: record, backend: report.backend));
     } on BridgeException catch (error) {
@@ -264,41 +268,52 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
           child: ListView(
             padding: const EdgeInsets.all(GerfautSpacing.md),
             children: [
-              FieldLabel('Signed transaction or PSBT', tokens: tokens),
+              // Read once, on the field: its hint is an example, not a
+              // name.
+              ExcludeSemantics(
+                child: FieldLabel('Signed transaction or PSBT', tokens: tokens),
+              ),
               const SizedBox(height: GerfautSpacing.sm),
-              TextField(
-                controller: _inputController,
-                minLines: 4,
-                maxLines: 8,
-                autocorrect: false,
-                enableSuggestions: false,
-                keyboardType: TextInputType.multiline,
-                style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  hintText: 'cHNidP8B… (base64) or 02000000… (hex)',
-                  hintStyle: tokens.data.copyWith(
-                    fontSize: tokens.body.fontSize,
-                    color: tokens.textMuted,
-                  ),
-                  filled: true,
-                  fillColor: tokens.surfaceSunken,
-                  contentPadding: const EdgeInsets.all(GerfautSpacing.md),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(GerfautRadius.sm),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(GerfautRadius.sm),
-                    borderSide: BorderSide(color: tokens.primary, width: 2),
+              Semantics(
+                label: 'Signed transaction or PSBT',
+                child: TextField(
+                  controller: _inputController,
+                  minLines: 4,
+                  maxLines: 8,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  keyboardType: TextInputType.multiline,
+                  style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    hintText: 'cHNidP8B… (base64) or 02000000… (hex)',
+                    hintStyle: tokens.data.copyWith(
+                      fontSize: tokens.body.fontSize,
+                      color: tokens.textMuted,
+                    ),
+                    filled: true,
+                    fillColor: tokens.surfaceSunken,
+                    contentPadding: const EdgeInsets.all(GerfautSpacing.md),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                      borderSide: BorderSide(color: tokens.primary, width: 2),
+                    ),
                   ),
                 ),
               ),
               if (_inputError != null) ...[
                 const SizedBox(height: GerfautSpacing.sm),
-                Text(
-                  _inputError!,
-                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                // Said aloud as it appears.
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    _inputError!,
+                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                  ),
                 ),
               ],
               const SizedBox(height: GerfautSpacing.sm),
@@ -534,7 +549,13 @@ class _Hero extends StatelessWidget {
         const SizedBox(height: GerfautSpacing.xs),
         Align(
           alignment: Alignment.centerLeft,
-          child: AddressChip(value: preview.txid, head: 12, tail: 10),
+          child: AddressChip(
+            value: preview.txid,
+            head: 12,
+            tail: 10,
+            kind: 'transaction ID',
+            spoken: spokenTxid(preview.txid),
+          ),
         ),
         const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
         Wrap(
@@ -884,10 +905,7 @@ class _InputRow extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               truncateMiddle(input.outpoint, head: 10, tail: 8),
-              style: tokens.data.copyWith(
-                fontSize: 11,
-                color: tokens.textMuted,
-              ),
+              style: tokens.data.copyWith(color: tokens.textMuted),
               maxLines: 1,
               softWrap: false,
             ),
@@ -960,10 +978,7 @@ class _OutputRow extends StatelessWidget {
             triggerMode: TooltipTriggerMode.longPress,
             child: Text(
               opReturnPreview(opReturn),
-              style: tokens.data.copyWith(
-                fontSize: 11,
-                color: tokens.textMuted,
-              ),
+              style: tokens.data.copyWith(color: tokens.textMuted),
               maxLines: 1,
               softWrap: false,
               overflow: TextOverflow.ellipsis,
@@ -1188,7 +1203,11 @@ class _ConfirmDialog extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(feeLine, style: tokens.bodySmall),
+          Text(
+            feeLine,
+            semanticsLabel: spokenIfMasked(feeLine),
+            style: tokens.bodySmall,
+          ),
           const SizedBox(height: GerfautSpacing.sm),
           Text(
             'Once the network has it, this cannot be undone.',
@@ -1300,6 +1319,8 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
 
   @override
   Widget build(BuildContext context) {
+    // "Sent 5 min ago" and "Checked …" move on their own.
+    ref.watch(relativeClockProvider);
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final record = widget.record;
     final status = _status;
@@ -1390,7 +1411,13 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
           if (widget.showTxid) ...[
             Align(
               alignment: Alignment.centerLeft,
-              child: AddressChip(value: record.txid, head: 12, tail: 10),
+              child: AddressChip(
+                value: record.txid,
+                head: 12,
+                tail: 10,
+                kind: 'transaction ID',
+                spoken: spokenTxid(record.txid),
+              ),
             ),
             const SizedBox(height: GerfautSpacing.xs),
             Text(

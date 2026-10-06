@@ -27,6 +27,7 @@ const _psbt = 'This QR code holds a PSBT, not a wallet to watch.';
 class _Outcome {
   int pops = 0;
   String? text;
+  List<InputWarning>? warnings;
 }
 
 /// A launcher page in front of the scanner, so the popped value can be
@@ -43,14 +44,15 @@ Widget _app(FakeBridge bridge, _Outcome outcome, {ScreenKeeper? keeper}) {
       home: Builder(
         builder: (context) => TextButton(
           onPressed: () async {
-            final text = await Navigator.of(context).push<String>(
-              MaterialPageRoute<String>(
+            final scanned = await Navigator.of(context).push<QrProgress>(
+              MaterialPageRoute<QrProgress>(
                 builder: (_) =>
                     ScanScreen(cameraBuilder: (_) => const SizedBox.expand()),
               ),
             );
             outcome.pops += 1;
-            outcome.text = text;
+            outcome.text = scanned?.text;
+            outcome.warnings = scanned?.warnings;
           },
           child: const Text('Open scanner'),
         ),
@@ -88,6 +90,7 @@ QrProgress threeParts(List<String> frames) {
     total: 3,
     complete: true,
     text: 'wsh(sortedmulti(2,tpub.../0/*,tpub.../0/*))#assembled',
+    warnings: [InputWarning.assumedBranches],
   );
 }
 
@@ -138,6 +141,8 @@ void main() {
       outcome.text,
       'wsh(sortedmulti(2,tpub.../0/*,tpub.../0/*))#assembled',
     );
+    // What the core assumed reading the code goes along with its text.
+    expect(outcome.warnings, [InputWarning.assumedBranches]);
     expect(find.byType(ScanScreen), findsNothing);
     expect(bridge.assembleCalls, [
       ['ur:crypto-output/1-3/part-one'],

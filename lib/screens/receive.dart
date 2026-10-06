@@ -14,8 +14,10 @@ import '../widgets/amounts.dart';
 import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/count_badge.dart';
+import '../widgets/load_failure.dart';
 import '../widgets/notice.dart';
 import '../widgets/status_pill.dart';
+import '../widgets/toast.dart';
 
 /// Side of the small QR code in the address block; tapping it opens the
 /// large one.
@@ -74,8 +76,7 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
     await Clipboard.setData(ClipboardData(text: address));
     if (!mounted) return;
     setState(() => _copied = true);
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Copied')));
+    ScaffoldMessenger.of(context).showSnackBar(Toast('Copied'));
     await Future<void>.delayed(const Duration(milliseconds: 1500));
     if (mounted) setState(() => _copied = false);
   }
@@ -117,11 +118,10 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
       appBar: GerfautAppBar.text('Receive'),
       body: SafeArea(
         child: addresses.hasError
-            ? Center(
-                child: Text(
-                  'The receive address could not be derived.',
-                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                ),
+            ? LoadFailure(
+                what: 'The receive address',
+                error: addresses.error,
+                onRetry: () => ref.invalidate(receiveProvider),
               )
             : entry == null
             ? Center(
@@ -150,7 +150,7 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
                     onFirst: () => setState(() => _offset = 0),
                   ),
                   const SizedBox(height: GerfautSpacing.lg),
-                  ..._auditCards(tokens, audit, single),
+                  ..._auditCards(tokens, audit, single, meta?.network),
                 ],
               ),
       ),
@@ -162,14 +162,25 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
     GerfautTokens tokens,
     AsyncValue<AddressList> audit,
     bool single,
+    Network? network,
   ) {
     final list = audit.valueOrNull;
-    if (list == null) {
+    if (list == null && audit.hasError) {
+      return [
+        LoadFailure(
+          what: 'The addresses',
+          error: audit.error,
+          centered: false,
+          onRetry: () => ref.invalidate(addressListProvider(widget.walletId)),
+        ),
+      ];
+    }
+    // The network comes with the wallet, which is in hand whenever this
+    // page is: an address's fiat value depends on it.
+    if (list == null || network == null) {
       return [
         Text(
-          audit.hasError
-              ? 'Addresses could not be loaded.'
-              : 'Loading addresses…',
+          'Loading addresses…',
           style: tokens.bodySmall.copyWith(color: tokens.textMuted),
         ),
       ];
@@ -180,18 +191,21 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
           title: 'Watched address',
           hint: 'The one address this wallet watches.',
           rows: list.external,
+          network: network,
         )
       else ...[
         _AddressCard(
           title: 'External',
           hint: 'Receive addresses, in derivation order.',
           rows: list.external,
+          network: network,
         ),
         const SizedBox(height: GerfautSpacing.gutter),
         _AddressCard(
           title: 'Change',
           hint: 'Internal addresses used by outgoing transactions.',
           rows: list.internal,
+          network: network,
           emptyText: 'No change addresses revealed yet.',
         ),
       ],
@@ -424,7 +438,13 @@ class _QrDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
-    final side = min(size.width, size.height) - 2 * GerfautSpacing.xl;
+    // The lines under the code keep their room: the address, up to
+    // three lines, and the way out.
+    const under = 160.0;
+    final side = max(
+      120.0,
+      min(size.width, size.height - under) - 2 * GerfautSpacing.xl,
+    );
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.escape): () =>
@@ -443,6 +463,21 @@ class _QrDialog extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _QrCard(address: address, side: side),
+                  const SizedBox(height: GerfautSpacing.md),
+                  // The address under its code, whole, as on the desktop
+                  // app: whoever scans it can compare both ends with
+                  // what their screen shows.
+                  SizedBox(
+                    width: side,
+                    child: Text(
+                      address,
+                      textAlign: TextAlign.center,
+                      style: GerfautTokens.dark.data.copyWith(
+                        color: GerfautTokens.dark.text,
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: GerfautSpacing.md),
                   Text(
                     'Tap anywhere to close',
@@ -469,12 +504,14 @@ class _AddressCard extends StatefulWidget {
     required this.title,
     required this.hint,
     required this.rows,
+    required this.network,
     this.emptyText,
   });
 
   final String title;
   final String hint;
   final List<AddressRow> rows;
+  final Network network;
 
   /// Shown in place of the rows when the keychain has none.
   final String? emptyText;
@@ -540,7 +577,7 @@ class _AddressCardState extends State<_AddressCard> {
           else
             for (final row in shown) ...[
               Divider(height: 1, thickness: 1, color: tokens.border),
-              _AddressRowTile(row: row),
+              _AddressRowTile(row: row, network: widget.network),
             ],
           if (rows.length > _collapsedRows) ...[
             Divider(height: 1, thickness: 1, color: tokens.border),
@@ -556,6 +593,7 @@ class _AddressCardState extends State<_AddressCard> {
                   icon: _expanded
                       ? LucideIcons.chevronUp
                       : LucideIcons.chevronDown,
+                  expanded: _expanded,
                   onPressed: () => setState(() => _expanded = !_expanded),
                 ),
               ),
@@ -567,17 +605,19 @@ class _AddressCardState extends State<_AddressCard> {
   }
 }
 
-/// One revealed address: index, chip, usage, balance. 44px minimum.
+/// One revealed address: index, chip, usage, balance. Never shorter than
+/// a touch target.
 class _AddressRowTile extends StatelessWidget {
-  const _AddressRowTile({required this.row});
+  const _AddressRowTile({required this.row, required this.network});
 
   final AddressRow row;
+  final Network network;
 
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     return Container(
-      constraints: const BoxConstraints(minHeight: 44),
+      constraints: const BoxConstraints(minHeight: GerfautTouch.target),
       padding: const EdgeInsets.symmetric(
         horizontal: GerfautSpacing.md,
         vertical: GerfautSpacing.sm,
@@ -598,7 +638,7 @@ class _AddressRowTile extends StatelessWidget {
           AddressStatePill(used: row.used),
           const SizedBox(width: GerfautSpacing.sm),
           if (row.balanceSats > 0)
-            StackedAmount(sats: row.balanceSats)
+            StackedAmount(sats: row.balanceSats, network: network)
           else
             Text('—', style: tokens.figureOf(color: tokens.textMuted)),
         ],

@@ -33,6 +33,14 @@
          recorded and no image leaves the device. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- The camera plugin declares any camera as required, and the merge
+         would keep that: stores would then hide Gerfaut from a tablet or
+         a Chromebook without one, when the scan is only a shortcut for
+         pasting. Optional here, over the plugin's word. -->
+    <uses-feature
+        android:name="android.hardware.camera.any"
+        android:required="false"
+        tools:replace="android:required" />
     <!-- Plugins merge permissions Gerfaut has no use for: the camera
          plugin brings the microphone (no sound is ever captured), the
          file plugins bring legacy external storage (files are opened
@@ -206,16 +214,5 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
-        <!-- The one app a subscribe link is handed to. A topic is the
-             whole secret of an alert channel, so the intent that carries
-             it names its package instead of being offered to whatever
-             app declared the ntfy scheme. From Android 11 a package this
-             app never asks about is invisible to it, and an installed
-             ntfy would look exactly like an absent one. -->
-        <package android:name="io.heckel.ntfy" />
-        <!-- Telegram, for the same reason: a start link carries the code
-             that links a chat to the account's alerts. -->
-        <package android:name="org.telegram.messenger" />
-        <package android:name="org.telegram.messenger.web" />
     </queries>
 </manifest>

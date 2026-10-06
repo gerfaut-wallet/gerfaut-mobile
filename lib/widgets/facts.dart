@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../src/format.dart';
 import '../theme/tokens.dart';
 
 /// Section title: uppercase label, muted.
@@ -123,6 +124,7 @@ class FactValue extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
+      semanticsLabel: spokenIfMasked(text),
       style: tokens.figureOf(
         weight: FontWeight.w500,
         color: muted ? tokens.textMuted : null,

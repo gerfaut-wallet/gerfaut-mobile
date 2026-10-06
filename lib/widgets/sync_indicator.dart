@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/format.dart';
 import '../src/models.dart';
+import '../src/state.dart';
 import '../theme/tokens.dart';
 
 /// Data freshness, always visible. While syncing, the last known sync
 /// stays on screen, never a spinner alone, never a shimmer. A failed
 /// sync is stated with its reason: silence would look like health.
-class SyncIndicator extends StatelessWidget {
+class SyncIndicator extends ConsumerWidget {
   const SyncIndicator({
     super.key,
     required this.stamp,
@@ -24,7 +26,9 @@ class SyncIndicator extends StatelessWidget {
   final String? error;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // "5 min ago" moves on its own, while the page stays open.
+    ref.watch(relativeClockProvider);
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     if (syncing) {
       return Text(

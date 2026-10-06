@@ -20,11 +20,12 @@ class BalanceWidgetProvider : GerfautWidgetProvider() {
         return RemoteViews(context.packageName, R.layout.widget_balance).apply {
             opensApp(context)
             line(
+                context,
                 R.id.balance_total,
                 data.getString("balance.total", null)
                     ?: context.getString(R.string.widget_masked_placeholder),
             )
-            line(R.id.balance_synced, data.getString("balance.synced", null))
+            line(context, R.id.balance_synced, data.getString("balance.synced", null))
             // A row stands on its name alone: masked or not, the wallets
             // are listed, and a figure the app left out reads as masked
             // rather than taking its row with it.
@@ -35,7 +36,8 @@ class BalanceWidgetProvider : GerfautWidgetProvider() {
                     setViewVisibility(rowId, View.GONE)
                 } else {
                     setTextViewText(nameId, name)
-                    setTextViewText(
+                    figure(
+                        context,
                         figureId,
                         data.getString("balance.row${index + 1}.figure", null)
                             ?: context.getString(R.string.widget_masked_placeholder),

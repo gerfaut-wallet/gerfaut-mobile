@@ -26,7 +26,13 @@ import '../src/calculator.dart';
 import '../src/lock.dart';
 
 class CalculatorScreen extends ConsumerStatefulWidget {
-  const CalculatorScreen({super.key});
+  const CalculatorScreen({super.key, this.onPin});
+
+  /// What a PIN-shaped number does on =, out of sight. By default it is
+  /// tried on the lock. A start that failed has no lock to ask yet: the
+  /// vault is tried again instead, and the calculator stays exactly as
+  /// it is unless the vault opens.
+  final Future<void> Function(String digits)? onPin;
 
   /// The bounds of a PIN, the ones the lock sheet enforces. A bare
   /// number outside them is arithmetic, never a guess: asking the core
@@ -65,6 +71,11 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
 
   Future<void> _tryPin(String digits) async {
     try {
+      final onPin = widget.onPin;
+      if (onPin != null) {
+        await onPin(digits);
+        return;
+      }
       // Unlocked, the gate replaces this screen with the app; refused,
       // the number stays on the display, the way any calculator would.
       await ref.read(lockProvider.notifier).unlock(digits);

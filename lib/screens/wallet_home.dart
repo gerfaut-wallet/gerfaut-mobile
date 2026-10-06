@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/bridge.dart';
 import '../src/format.dart';
+import '../src/live.dart';
 import '../src/models.dart';
 import '../src/policy_text.dart';
 import '../src/state.dart';
@@ -14,6 +15,7 @@ import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/count_badge.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/load_failure.dart';
 import '../widgets/overflow_menu.dart';
 import '../widgets/status_pill.dart';
 import '../widgets/sync_button.dart';
@@ -23,6 +25,7 @@ import 'export.dart';
 import 'policy.dart';
 import 'receive.dart';
 import 'tx_detail.dart';
+import '../widgets/toast.dart';
 
 /// Home of one wallet: balance, freshness, transactions and UTXOs.
 /// The one primary action, Receive, sits at the bottom under the thumb.
@@ -55,24 +58,26 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
   /// through the one call that writes a name.
   Future<void> _rename(String current) async {
     final messenger = ScaffoldMessenger.of(context);
-    final name = await showDialog<String>(
+    // Held before the dialog: the name is written even if the page goes
+    // meanwhile, and refreshing the lists must not touch a dead `ref`.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final bridge = ref.read(bridgeProvider);
+    final renamed = await showDialog<bool>(
       context: context,
-      builder: (_) => _RenameDialog(current: current),
+      builder: (_) => _RenameDialog(
+        current: current,
+        // The dialog makes the call and stays up on a refusal, the
+        // reason under the field: a toast would be gone before it is
+        // read, and the name typed with it.
+        onSave: (name) async {
+          await bridge.renameWallet(widget.walletId, name);
+          container.invalidate(walletsProvider);
+          container.invalidate(snapshotProvider(widget.walletId));
+        },
+      ),
     );
-    // Empty or unchanged: the dialog closes and nothing is written.
-    if (name == null || name.isEmpty || name == current) return;
-    try {
-      await ref.read(bridgeProvider).renameWallet(widget.walletId, name);
-      // The name is written either way; what is left is refreshing a
-      // screen that may be gone. Touching `ref` after the widget is
-      // disposed throws on a call nothing was waiting for.
-      if (!mounted) return;
-      ref.invalidate(walletsProvider);
-      ref.invalidate(snapshotProvider(widget.walletId));
-      messenger.showSnackBar(const SnackBar(content: Text('Wallet renamed')));
-    } on BridgeException catch (error) {
-      messenger.showSnackBar(SnackBar(content: Text('$error')));
-    }
+    if (renamed != true || !mounted) return;
+    messenger.showSnackBar(Toast('Wallet renamed'));
   }
 
   @override
@@ -92,8 +97,9 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
     return Scaffold(
       appBar: GerfautAppBar(
         // No pencil: a permanent target next to the title for a rare
-        // gesture, when the title is a 44px target already. What says so
-        // is the ink under the finger and the label read out loud.
+        // gesture, when the title is a full touch target already. What
+        // says so is the ink under the finger and the label read out
+        // loud.
         title: Align(
           alignment: Alignment.centerLeft,
           child: Semantics(
@@ -108,7 +114,9 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                 // No padding of its own: the title stays against the
                 // back arrow, where every other page starts.
                 child: Container(
-                  constraints: const BoxConstraints(minHeight: 44),
+                  constraints: const BoxConstraints(
+                    minHeight: GerfautTouch.target,
+                  ),
                   alignment: Alignment.centerLeft,
                   child: Text(
                     name ?? '',
@@ -172,11 +180,11 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
         child: loaded != null
             ? _buildLoaded(loaded, syncing)
             : switch (snapshot) {
-                AsyncError() => Center(
-                  child: Text(
-                    'This wallet could not be loaded.',
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  ),
+                AsyncError(:final error) => LoadFailure(
+                  what: 'This wallet',
+                  error: error,
+                  onRetry: () =>
+                      ref.invalidate(snapshotProvider(widget.walletId)),
                 ),
                 _ => Center(
                   child: Text(
@@ -205,6 +213,7 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final syncError = ref.watch(syncErrorsProvider)[widget.walletId];
     final note = _balanceNote(snapshot, syncError);
+    final coverage = ref.watch(walletCoverageProvider(widget.walletId));
     // A note about the sync outranks the pending line: a figure whose
     // source is in doubt is not one to detail.
     final pending = note == null ? snapshot.balance.pendingNetSats : null;
@@ -228,6 +237,10 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                   syncing: syncing,
                   error: syncError,
                 ),
+                if (coverage != null) ...[
+                  const SizedBox(height: GerfautSpacing.sm),
+                  _CoverageLine(coverage: coverage),
+                ],
                 const SizedBox(height: GerfautSpacing.md),
                 // The balance as a dashboard figure: its own bordered
                 // surface, with the role spelled out above it.
@@ -247,7 +260,10 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                         style: tokens.label.copyWith(color: tokens.textMuted),
                       ),
                       const SizedBox(height: GerfautSpacing.sm),
-                      BalanceAmount(sats: snapshot.balance.total),
+                      BalanceAmount(
+                        sats: snapshot.balance.total,
+                        network: snapshot.meta.network,
+                      ),
                       if (note != null) ...[
                         const SizedBox(height: GerfautSpacing.sm),
                         Text(
@@ -294,7 +310,10 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                   txs: snapshot.txs,
                   truncated: snapshot.truncated,
                 ),
-                _UtxoList(walletId: widget.walletId),
+                _UtxoList(
+                  walletId: widget.walletId,
+                  network: snapshot.meta.network,
+                ),
               ],
             ),
           ),
@@ -319,13 +338,44 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
   }
 }
 
+/// How much of the wallet Live follows, under the sync line while Live
+/// cannot follow every wallet whole: the badge, and how many addresses
+/// wait when some do.
+class _CoverageLine extends StatelessWidget {
+  const _CoverageLine({required this.coverage});
+
+  final WalletCoverage coverage;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final waits = coverage.coverage != Coverage.live;
+    return Wrap(
+      spacing: GerfautSpacing.sm,
+      runSpacing: GerfautSpacing.xs,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        LiveCoveragePill(coverage: coverage, said: waits),
+        if (waits)
+          Text(
+            waitingWords(coverage),
+            style: tokens.label.copyWith(color: tokens.textMuted),
+          ),
+      ],
+    );
+  }
+}
+
 /// Rename in place, over the page instead of away from it. The dialog
 /// rides above the soft keyboard on its own: [Dialog] adds the view
 /// insets to its inset padding.
 class _RenameDialog extends StatefulWidget {
-  const _RenameDialog({required this.current});
+  const _RenameDialog({required this.current, required this.onSave});
 
   final String current;
+
+  /// Writes the name; a [BridgeException] keeps the dialog up.
+  final Future<void> Function(String name) onSave;
 
   @override
   State<_RenameDialog> createState() => _RenameDialogState();
@@ -333,6 +383,10 @@ class _RenameDialog extends StatefulWidget {
 
 class _RenameDialogState extends State<_RenameDialog> {
   late final _controller = TextEditingController(text: widget.current);
+  bool _saving = false;
+
+  /// What the core said when it refused the name.
+  String? _refusal;
 
   @override
   void dispose() {
@@ -340,7 +394,27 @@ class _RenameDialogState extends State<_RenameDialog> {
     super.dispose();
   }
 
-  void _save() => Navigator.of(context).pop(_controller.text.trim());
+  Future<void> _save() async {
+    if (_saving) return;
+    final name = _controller.text.trim();
+    // Empty or unchanged: the dialog closes and nothing is written.
+    if (name.isEmpty || name == widget.current) {
+      Navigator.of(context).pop(false);
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _refusal = null;
+    });
+    try {
+      await widget.onSave(name);
+      if (mounted) Navigator.of(context).pop(true);
+    } on BridgeException catch (error) {
+      if (mounted) setState(() => _refusal = error.message);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -353,36 +427,60 @@ class _RenameDialogState extends State<_RenameDialog> {
       title: Text('Rename wallet', style: tokens.h2),
       // The title is the field's label: a second one over a single
       // prefilled field would say the same word twice.
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        textInputAction: TextInputAction.done,
-        style: tokens.body,
-        onSubmitted: (_) => _save(),
-        decoration: InputDecoration(
-          filled: true,
-          fillColor: tokens.surfaceSunken,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: GerfautSpacing.md,
-            vertical: GerfautSpacing.sm,
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(GerfautRadius.sm),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(GerfautRadius.sm),
-            borderSide: BorderSide(color: tokens.primary, width: 2),
-          ),
-        ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _field(tokens),
+          if (_refusal != null) ...[
+            const SizedBox(height: GerfautSpacing.sm),
+            Semantics(
+              liveRegion: true,
+              child: Text(
+                _refusal!,
+                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+              ),
+            ),
+          ],
+        ],
       ),
       actions: [
         GhostButton(
           label: 'Cancel',
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
         ),
-        PrimaryButton(label: 'Save', onPressed: _save),
+        PrimaryButton(
+          label: _saving ? 'Saving…' : 'Save',
+          onPressed: _saving ? null : _save,
+        ),
       ],
+    );
+  }
+
+  Widget _field(GerfautTokens tokens) {
+    return TextField(
+      controller: _controller,
+      autofocus: true,
+      enabled: !_saving,
+      textInputAction: TextInputAction.done,
+      style: tokens.body,
+      onSubmitted: (_) => _save(),
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: tokens.surfaceSunken,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: GerfautSpacing.md,
+          vertical: GerfautSpacing.sm,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(GerfautRadius.sm),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(GerfautRadius.sm),
+          borderSide: BorderSide(color: tokens.primary, width: 2),
+        ),
+      ),
     );
   }
 }
@@ -414,6 +512,13 @@ class _TabLabel extends StatelessWidget {
   }
 }
 
+/// Why the last "Load older transactions" failed, per wallet, said
+/// under the button until the next try: a toast would be gone before
+/// it is read.
+final _olderFailureProvider = StateProvider.autoDispose.family<String?, String>(
+  (ref, walletId) => null,
+);
+
 /// Transactions are list rows, never cards: they scan vertically.
 /// 48px rows, hairline separators, figures right-aligned.
 class _TxList extends ConsumerWidget {
@@ -434,20 +539,21 @@ class _TxList extends ConsumerWidget {
   /// Fetches one more round and states what it brought back.
   Future<void> _loadOlder(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
+    final failure = ref.read(_olderFailureProvider(walletId).notifier);
+    failure.state = null;
     try {
       final added = await ref.read(historyProvider.notifier).loadMore(walletId);
       if (added == null) return;
       messenger.showSnackBar(
-        SnackBar(
-          content: Text(switch (added) {
-            0 => 'History is complete',
-            1 => '1 older transaction',
-            _ => '$added older transactions',
-          }),
-        ),
+        Toast(switch (added) {
+          0 => 'History is complete',
+          1 => '1 older transaction',
+          _ => '$added older transactions',
+        }),
       );
     } on BridgeException catch (error) {
-      messenger.showSnackBar(SnackBar(content: Text('$error')));
+      // The page may have gone meanwhile, and its note with it.
+      if (context.mounted) failure.state = error.message;
     }
   }
 
@@ -469,6 +575,7 @@ class _TxList extends ConsumerWidget {
 
     ref.watch(historyProvider);
     final loading = ref.read(historyProvider.notifier).isLoading(walletId);
+    final olderFailure = ref.watch(_olderFailureProvider(walletId));
 
     return ListView.separated(
       itemCount: sorted.length + (truncated ? 1 : 0),
@@ -486,6 +593,17 @@ class _TxList extends ConsumerWidget {
                   icon: LucideIcons.chevronDown,
                   onPressed: loading ? null : () => _loadOlder(context, ref),
                 ),
+                if (olderFailure != null) ...[
+                  const SizedBox(height: GerfautSpacing.sm),
+                  Semantics(
+                    liveRegion: true,
+                    child: Text(
+                      'Older transactions could not be loaded. $olderFailure',
+                      style: tokens.bodySmall.copyWith(color: tokens.pending),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: GerfautSpacing.sm),
                 Text(
                   'This address has a long history: it loads in rounds. '
@@ -556,10 +674,7 @@ class _TxList extends ConsumerWidget {
                         : truncateMiddle(tx.txid, head: 8, tail: 8),
                     style: dated
                         ? tokens.figureOf(size: 13)
-                        : tokens.data.copyWith(
-                            fontSize: 12,
-                            color: tokens.textMuted,
-                          ),
+                        : tokens.data.copyWith(color: tokens.textMuted),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -567,7 +682,11 @@ class _TxList extends ConsumerWidget {
                 const SizedBox(width: GerfautSpacing.sm),
                 StatusGlyph(status: tx.status),
                 const SizedBox(width: GerfautSpacing.sm),
-                ListAmount(sats: tx.netSats, pending: pending),
+                ListAmount(
+                  sats: tx.netSats,
+                  network: network,
+                  pending: pending,
+                ),
                 const SizedBox(width: 2),
                 Icon(
                   LucideIcons.chevronRight,
@@ -585,9 +704,10 @@ class _TxList extends ConsumerWidget {
 
 /// UTXOs as dense rows: outpoint, address, status, value in sats.
 class _UtxoList extends ConsumerWidget {
-  const _UtxoList({required this.walletId});
+  const _UtxoList({required this.walletId, required this.network});
 
   final String walletId;
+  final Network network;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -599,9 +719,16 @@ class _UtxoList extends ConsumerWidget {
     final value = utxos.isLoading || !utxos.hasError ? utxos.valueOrNull : null;
 
     if (value == null) {
+      if (utxos.hasError) {
+        return LoadFailure(
+          what: 'The UTXOs',
+          error: utxos.error,
+          onRetry: () => ref.invalidate(utxosProvider(walletId)),
+        );
+      }
       return Center(
         child: Text(
-          utxos.hasError ? 'UTXOs could not be loaded.' : 'Loading UTXOs…',
+          'Loading UTXOs…',
           style: tokens.bodySmall.copyWith(color: tokens.textMuted),
         ),
       );
@@ -640,7 +767,8 @@ class _UtxoList extends ConsumerWidget {
                       spoken:
                           '${utxo.txid.substring(0, 8)}, output ${utxo.vout}',
                     ),
-                    const SizedBox(height: GerfautSpacing.xs),
+                    // No gap: each chip's touch target reaches past what
+                    // is drawn, and the two meet without overlapping.
                     if (utxo.address != null)
                       AddressChip(value: utxo.address!, kind: 'address')
                     else
@@ -668,7 +796,7 @@ class _UtxoList extends ConsumerWidget {
                 children: [
                   StatusPill(status: utxo.status),
                   const SizedBox(height: GerfautSpacing.xs),
-                  StackedAmount(sats: utxo.valueSats),
+                  StackedAmount(sats: utxo.valueSats, network: network),
                 ],
               ),
             ],

@@ -16,13 +16,14 @@ import 'src/lock.dart';
 import 'src/models.dart';
 import 'src/notifications.dart';
 import 'src/onboarding.dart';
-import 'src/premium.dart';
 import 'src/state.dart';
 import 'src/updates.dart';
 import 'src/vault_key.dart';
 import 'theme/tokens.dart';
 import 'widgets/buttons.dart';
 import 'widgets/notice.dart';
+import 'src/prefs.dart';
+import 'src/share.dart';
 
 /// Root widget: both Toundra themes, light by default, and the startup
 /// bootstrap (Rust bridge + encrypted vault) before the home screen.
@@ -49,6 +50,31 @@ class _GerfautAppState extends ConsumerState<GerfautApp> {
   /// bootstrap itself pushes: the restore page after a vault was set
   /// aside.
   final _navigator = GlobalKey<NavigatorState>();
+
+  /// A quiet retry is already running behind the calculator.
+  bool _retryingBehind = false;
+
+  /// Runs the bootstrap again behind the calculator of a disguised app
+  /// that could not start. Nothing on screen moves while it runs, nor
+  /// when it fails: a calculator that blinked on = would give the app
+  /// away. Only a vault that opens changes the screen, to the
+  /// calculator that unlocks it.
+  Future<void> _retryBehind() async {
+    final bootstrap = widget.bootstrap;
+    if (bootstrap == null || _retryingBehind) return;
+    _retryingBehind = true;
+    try {
+      await bootstrap();
+      if (!mounted) return;
+      setState(() {
+        _ready = Future<void>.value();
+      });
+    } catch (_) {
+      // Still closed: the calculator stays as it was.
+    } finally {
+      _retryingBehind = false;
+    }
+  }
 
   /// Runs the bootstrap again, on a fresh future so the gate rebuilds
   /// from its loading state.
@@ -101,6 +127,7 @@ class _GerfautAppState extends ConsumerState<GerfautApp> {
           : _BootstrapGate(
               ready: _ready!,
               onRetry: _retry,
+              onRetryBehind: _retryBehind,
               onStartOver: _startOver,
             ),
     );
@@ -123,50 +150,41 @@ class _Hydrated extends ConsumerWidget {
       if (settings != null && !ref.read(prefsHydratedProvider)) {
         ref.read(prefsHydratedProvider.notifier).state = true;
         final prefs = settings.appPrefs;
-        ref.read(themeProvider.notifier).hydrate(prefs['mobile.theme']);
-        ref.read(maskedProvider.notifier).hydrate(prefs['mobile.masked']);
-        ref.read(unitProvider.notifier).hydrate(prefs['display.unit']);
-        ref.read(fiatEnabledProvider.notifier).hydrate(prefs['display.fiat']);
+        ref.read(themeProvider.notifier).hydrate(prefs[Pref.theme]);
+        ref.read(maskedProvider.notifier).hydrate(prefs[Pref.masked]);
+        ref.read(unitProvider.notifier).hydrate(prefs[Pref.unit]);
+        ref.read(fiatEnabledProvider.notifier).hydrate(prefs[Pref.fiat]);
         // Currency before source: the source only takes if it quotes
         // the currency that was stored with it.
         ref
             .read(fiatCurrencyProvider.notifier)
-            .hydrate(prefs['display.fiat_currency']);
-        ref
-            .read(fiatSourceProvider.notifier)
-            .hydrate(prefs['display.fiat_source']);
-        ref
-            .read(explorerAckProvider.notifier)
-            .hydrate(prefs['privacy.explorer_ack']);
+            .hydrate(prefs[Pref.fiatCurrency]);
+        ref.read(fiatSourceProvider.notifier).hydrate(prefs[Pref.fiatSource]);
+        ref.read(explorerAckProvider.notifier).hydrate(prefs[Pref.explorerAck]);
         ref
             .read(recentBroadcastsProvider.notifier)
-            .hydrate(prefs['broadcast.recent']);
-        ref.read(notifyNewTxProvider.notifier).hydrate(prefs['notify.new_tx']);
+            .hydrate(prefs[Pref.recentBroadcasts]);
+        ref.read(notifyNewTxProvider.notifier).hydrate(prefs[Pref.notifyNewTx]);
         ref
             .read(backgroundCheckProvider.notifier)
-            .hydrate(prefs['notify.background']);
+            .hydrate(prefs[Pref.background]);
         ref
             .read(onboardingSeenProvider.notifier)
-            .hydrate(prefs['onboarding.seen']);
+            .hydrate(prefs[Pref.onboardingSeen]);
         ref
             .read(widgetBalancesProvider.notifier)
-            .hydrate(prefs['widgets.balances']);
+            .hydrate(prefs[Pref.widgetBalances]);
         ref.read(updateProvider.notifier).hydrate(prefs);
         // The widgets follow from here: everything they show is
         // hydrated now, so the first thing they get is the right thing.
         ref.read(widgetFeedProvider);
-        // The heartbeat too: it reads the premium state and asks the
-        // server at once when a wallet is watched, then every quarter
-        // hour, from wherever the app is.
-        ref.read(watchMonitorProvider);
-        // And the account's devices, on a device with full access: a
-        // new one waiting for approval is looked for now, then every
-        // five minutes.
-        ref.read(deviceWatchProvider);
         // Live watch: listen to the core, and see that the service runs
         // if the setting asks for it. The app is on screen, which is
-        // when Android lets it start.
-        unawaited(ref.read(liveProvider.notifier).resume());
+        // when Android lets it start. Not before the notices are known
+        // to get through: Live is there to say things.
+        unawaited(_checkNoticesThenLive(ref));
+        // A history shared last time may still sit in the cache.
+        unawaited(ref.read(csvSharerProvider).forgetCopies());
       }
       // The vault says whether a lock exists, every time it is read:
       // the first reading with one in it is what puts the screen up.
@@ -224,6 +242,17 @@ void _startUpdateSession(WidgetRef ref) {
   unawaited(ref.read(updateProvider.notifier).sessionStarted());
 }
 
+/// Reads whether the notices still get through, then brings Live in
+/// line with the setting that check may have changed.
+Future<void> _checkNoticesThenLive(WidgetRef ref) async {
+  await ref.read(notifyNewTxProvider.notifier).checkSystem();
+  try {
+    await ref.read(liveProvider.notifier).resume();
+  } catch (_) {
+    // The next return to the screen brings the service in line again.
+  }
+}
+
 /// What the app shows once the vault is open: the lock while it is
 /// locked, the welcome tour on a vault with nothing in it, otherwise
 /// the wallets.
@@ -268,24 +297,16 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
       case AppLifecycleState.hidden:
       case AppLifecycleState.detached:
         lock.noteHidden();
-        // Devices are looked at in front only: Dart timers go on firing
-        // behind the launcher, for as long as Live keeps the process.
-        if (ref.read(prefsHydratedProvider)) {
-          ref.read(deviceWatchProvider.notifier).pause();
-        }
+        ref.read(appInFrontProvider.notifier).state = false;
       case AppLifecycleState.resumed:
         lock.noteResumed();
+        ref.read(appInFrontProvider.notifier).state = true;
         // The launcher may have gained or lost a widget meanwhile. Only
         // once the preferences are in: a feed started before them would
         // publish the defaults first.
         if (ref.read(prefsHydratedProvider)) {
           ref.read(widgetFeedProvider).resume();
-          // A beat older than the period is asked for again on the way
-          // back, and the devices, whose rhythm stopped out of sight,
-          // are looked at at once.
-          ref.read(watchMonitorProvider.notifier).resume();
-          ref.read(deviceWatchProvider.notifier).resume();
-          unawaited(ref.read(liveProvider.notifier).resume());
+          unawaited(_checkNoticesThenLive(ref));
           _startUpdateSession(ref);
         }
       case AppLifecycleState.inactive:
@@ -315,6 +336,16 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
     final lock = ref.watch(lockProvider);
     final disguise = ref.watch(disguiseProvider);
     if (settings.hasError) {
+      // The error names the app and its vault: disguised, it is never
+      // shown, and the calculator stands in front of it. A PIN-shaped
+      // number reads the settings again, and settings that load bring
+      // the lock, behind the same calculator.
+      if (!disguise.loaded) return const _StartupScreen();
+      if (disguise.disguised) {
+        return CalculatorScreen(
+          onPin: (_) async => ref.invalidate(settingsProvider),
+        );
+      }
       return _StartupErrorScreen(
         error: settings.error!,
         onRetry: () => ref.invalidate(settingsProvider),
@@ -340,19 +371,28 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
 }
 
 /// Shows a quiet loading scaffold until the bootstrap future settles.
-class _BootstrapGate extends StatelessWidget {
+///
+/// A start that failed says why, unless the app is disguised: the error
+/// names the app and its vault, and the face a disguised app shows to
+/// whoever opens it is a calculator, whatever happened behind it. The
+/// error reads once the disguise is off, or the vault opens behind the
+/// calculator and the PIN unlocks it as on any other day.
+class _BootstrapGate extends ConsumerWidget {
   const _BootstrapGate({
     required this.ready,
     required this.onRetry,
+    required this.onRetryBehind,
     required this.onStartOver,
   });
 
   final Future<void> ready;
   final VoidCallback onRetry;
+  final Future<void> Function() onRetryBehind;
   final VoidCallback onStartOver;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final disguise = ref.watch(disguiseProvider);
     return FutureBuilder<void>(
       future: ready,
       builder: (context, snapshot) {
@@ -360,6 +400,10 @@ class _BootstrapGate extends StatelessWidget {
           return const _StartupScreen();
         }
         if (snapshot.hasError) {
+          if (!disguise.loaded) return const _StartupScreen();
+          if (disguise.disguised) {
+            return CalculatorScreen(onPin: (_) => onRetryBehind());
+          }
           return _StartupErrorScreen(
             error: snapshot.error!,
             onRetry: onRetry,
@@ -404,11 +448,11 @@ ThemeData themeFrom(GerfautTokens tokens, Brightness brightness) {
       titleTextStyle: tokens.h2,
     ),
     iconButtonTheme: IconButtonThemeData(
-      // 44px, the touch target of every other control in Gerfaut. The
-      // Material default is 48, which spreads a row of actions wider
-      // than the header has to give.
+      // The touch target of every control in Gerfaut, set here rather
+      // than left to the platform's padding: the glyph stays its size,
+      // the ink and the hit area are the target's.
       style: IconButton.styleFrom(
-        minimumSize: const Size(44, 44),
+        minimumSize: const Size.square(GerfautTouch.target),
         padding: EdgeInsets.zero,
       ),
     ),

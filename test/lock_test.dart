@@ -197,8 +197,18 @@ void main() {
 
       await tester.pump(const Duration(seconds: 1));
       expect(find.text('Too many attempts. Try again in 4 s'), findsOneWidget);
-      // Let the countdown finish so no timer outlives the test.
+      // A screen reader hears the wait it began at, not every second.
+      final handle = tester.ensureSemantics();
+      await tester.pump();
+      expect(
+        find.bySemanticsLabel('Too many attempts. Try again in 5 seconds.'),
+        findsOneWidget,
+      );
+      // Let the countdown finish so no timer outlives the test: the end
+      // is said as the start was.
       await tester.pump(const Duration(seconds: 5));
+      expect(find.text('You can try again.'), findsOneWidget);
+      handle.dispose();
     });
 
     testWidgets('a PIN field takes digits only', (tester) async {
@@ -211,6 +221,19 @@ void main() {
         tester.widget<TextField>(find.byType(TextField)).controller!.text,
         '1234',
       );
+    });
+
+    testWidgets('the field keeps its name once digits are typed', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(app(locked()));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), '12');
+      await tester.pumpAndSettle();
+      expect(tester.getSemantics(find.byType(TextField)).label, 'PIN');
+      handle.dispose();
     });
 
     testWidgets('a phone that confirms opens the app without the secret', (
@@ -330,6 +353,35 @@ void main() {
 
       expect(find.text('A PIN is 4 to 12 digits.'), findsOneWidget);
       expect(bridge.lockCalls, isEmpty);
+    });
+
+    testWidgets('a PIN field offers digits and takes nothing else', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      await tester.pumpWidget(settingsApp(FakeBridge()));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find
+            .descendant(
+              of: find.byType(SecuritySection),
+              matching: find.byType(Switch),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+
+      final secret = find.descendant(
+        of: find.byKey(const Key('lock.secret')),
+        matching: find.byType(TextField),
+      );
+      expect(
+        tester.widget<TextField>(secret).keyboardType,
+        TextInputType.number,
+      );
+      await tester.enterText(secret, '12ab34');
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(secret).controller!.text, '1234');
     });
 
     testWidgets('turning it off asks for the secret in place', (tester) async {
@@ -652,6 +704,24 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(WelcomeScreen), findsOneWidget);
+
+      // Skipped, it lands back on About.
+      await tester.tap(find.text('Skip'));
+      await tester.pumpAndSettle();
+      expect(find.byType(WelcomeScreen), findsNothing);
+      expect(find.text('Show the welcome tour'), findsOneWidget);
+
+      // Read to the end, the last button closes it as well.
+      await tester.tap(find.text('Show the welcome tour'));
+      await tester.pumpAndSettle();
+      for (var page = 1; page < welcomePages.length; page++) {
+        await tester.tap(find.text('Next'));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.text('Get started'));
+      await tester.pumpAndSettle();
+      expect(find.byType(WelcomeScreen), findsNothing);
+      expect(find.text('Show the welcome tour'), findsOneWidget);
     });
   });
 
@@ -701,6 +771,56 @@ void main() {
   });
 
   group('a system screen Gerfaut opened itself', () {
+    /// Whether the next return from the background locks.
+    Future<bool> nextReturnLocks(
+      ({ProviderContainer container, LockController lock}) app,
+    ) async {
+      app.lock.noteHidden();
+      app.lock.noteResumed();
+      return app.container.read(lockProvider).locked;
+    }
+
+    test('an excursion that opened covers its return', () async {
+      final app = lockedApp();
+      await app.lock.unlock('1234');
+      expect(await app.lock.excursion(() async => 'picked'), 'picked');
+      expect(await nextReturnLocks(app), isFalse);
+    });
+
+    test('an excursion that failed to open is taken back', () async {
+      final app = lockedApp();
+      await app.lock.unlock('1234');
+      await expectLater(
+        app.lock.excursion<String>(() async => throw StateError('no app')),
+        throwsStateError,
+      );
+      expect(await nextReturnLocks(app), isTrue);
+    });
+
+    test('a failure after the screen came up keeps the trip', () async {
+      final app = lockedApp();
+      await app.lock.unlock('1234');
+      await expectLater(
+        app.lock.excursion<String>(
+          () async => throw const FormatException('picked, not read'),
+          cameUp: (error) => error is FormatException,
+        ),
+        throwsFormatException,
+      );
+      expect(await nextReturnLocks(app), isFalse);
+    });
+
+    test('a result that says nothing opened is taken back', () async {
+      final app = lockedApp();
+      await app.lock.unlock('1234');
+      final opened = await app.lock.excursion(
+        () async => false,
+        shown: (opened) => opened,
+      );
+      expect(opened, isFalse);
+      expect(await nextReturnLocks(app), isTrue);
+    });
+
     test('coming back from a picker does not lock', () async {
       final app = lockedApp();
       await app.lock.unlock('1234');

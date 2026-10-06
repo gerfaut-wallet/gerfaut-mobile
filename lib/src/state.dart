@@ -11,6 +11,7 @@ import 'bridge.dart';
 import 'format.dart';
 import 'models.dart';
 import 'notifications.dart';
+import 'prefs.dart';
 
 /// The bridge to the core. Widget tests override this with a fake.
 final bridgeProvider = Provider<GerfautBridge>((ref) => const RustBridge());
@@ -73,11 +74,12 @@ final addressListProvider = FutureProvider.family<AddressList, String>((
 /// `lookahead` unused addresses past it, 200 at most: the core skips
 /// one a payment already reached, and a descriptor without a wildcard
 /// gives its one address alone. Peeking retires nothing.
-final receiveProvider =
-    FutureProvider.family<
-      List<AddressEntry>,
-      ({String walletId, int lookahead})
-    >((ref, key) {
+///
+/// Read afresh each time Receive opens, and again after every sync of
+/// any wallet: an address a payment just reached is never offered to
+/// the next payer.
+final receiveProvider = FutureProvider.autoDispose
+    .family<List<AddressEntry>, ({String walletId, int lookahead})>((ref, key) {
       return ref
           .watch(bridgeProvider)
           .receiveAddresses(key.walletId, key.lookahead);
@@ -117,10 +119,7 @@ class ThemeNotifier extends Notifier<ThemePref> {
     state = pref;
     // Persisted in the encrypted vault; a write failure only loses the
     // preference, never the UI change.
-    ref
-        .read(bridgeProvider)
-        .setAppPref('mobile.theme', pref.id)
-        .catchError((_) {});
+    ref.read(bridgeProvider).setAppPref(Pref.theme, pref.id).catchError((_) {});
   }
 }
 
@@ -140,7 +139,7 @@ class MaskedNotifier extends Notifier<bool> {
     state = !state;
     ref
         .read(bridgeProvider)
-        .setAppPref('mobile.masked', state ? '1' : '0')
+        .setAppPref(Pref.masked, state ? '1' : '0')
         .catchError((_) {});
   }
 }
@@ -161,10 +160,7 @@ class UnitNotifier extends Notifier<AmountUnit> {
 
   void set(AmountUnit unit) {
     state = unit;
-    ref
-        .read(bridgeProvider)
-        .setAppPref('display.unit', unit.id)
-        .catchError((_) {});
+    ref.read(bridgeProvider).setAppPref(Pref.unit, unit.id).catchError((_) {});
   }
 }
 
@@ -186,7 +182,7 @@ class FiatEnabledNotifier extends Notifier<bool> {
     state = enabled;
     ref
         .read(bridgeProvider)
-        .setAppPref('display.fiat', enabled ? '1' : '0')
+        .setAppPref(Pref.fiat, enabled ? '1' : '0')
         .catchError((_) {});
   }
 }
@@ -209,7 +205,7 @@ class FiatCurrencyNotifier extends Notifier<FiatCurrency> {
     state = currency;
     ref
         .read(bridgeProvider)
-        .setAppPref('display.fiat_currency', currency.id)
+        .setAppPref(Pref.fiatCurrency, currency.id)
         .catchError((_) {});
   }
 }
@@ -239,7 +235,7 @@ class FiatSourceNotifier extends Notifier<PriceSource> {
     state = source;
     ref
         .read(bridgeProvider)
-        .setAppPref('display.fiat_source', source.id)
+        .setAppPref(Pref.fiatSource, source.id)
         .catchError((_) {});
   }
 }
@@ -262,7 +258,7 @@ class ExplorerAckNotifier extends Notifier<bool> {
     state = acknowledged;
     ref
         .read(bridgeProvider)
-        .setAppPref('privacy.explorer_ack', acknowledged ? '1' : '0')
+        .setAppPref(Pref.explorerAck, acknowledged ? '1' : '0')
         .catchError((_) {});
   }
 }
@@ -273,9 +269,47 @@ final explorerAckProvider = NotifierProvider<ExplorerAckNotifier, bool>(
   ExplorerAckNotifier.new,
 );
 
-/// Current BTC price, refreshed every minute while fiat display is on.
-/// Failures surface as an error state: amounts degrade to no fiat and
-/// the settings screen shows a quiet hint.
+/// Whether the app is on screen. Dart timers go on firing behind the
+/// launcher for as long as Live keeps the process, so what runs on a
+/// clock for the screen's sake watches this and stops while it is
+/// false. Kept by the gate, from the app's lifecycle.
+final appInFrontProvider = StateProvider<bool>((ref) => true);
+
+/// Ticks every 30 seconds while the app is on screen. The lines that
+/// say how long ago something was, "Synced 5 min ago", are worked out
+/// when they are drawn: watching this draws them again, so a page left
+/// open does not say "just now" three hours later. Back on screen it
+/// ticks at once.
+class RelativeClock extends Notifier<int> {
+  Timer? _timer;
+
+  /// A count, not the time: every build and every tick must change the
+  /// value, or the lines that watch it are not drawn again. Two builds
+  /// within one millisecond would read the same time.
+  int _beats = 0;
+
+  @override
+  int build() {
+    _timer?.cancel();
+    final inFront = ref.watch(appInFrontProvider);
+    ref.onDispose(() => _timer?.cancel());
+    if (inFront) {
+      _timer = Timer.periodic(
+        const Duration(seconds: 30),
+        (_) => state = ++_beats,
+      );
+    }
+    return ++_beats;
+  }
+}
+
+final relativeClockProvider = NotifierProvider<RelativeClock, int>(
+  RelativeClock.new,
+);
+
+/// Current BTC price, refreshed every minute while fiat display is on
+/// and the app is on screen. Failures surface as an error state: amounts
+/// degrade to no fiat and the settings screen shows a quiet hint.
 class PriceNotifier extends AsyncNotifier<PriceQuote?> {
   Timer? _timer;
 
@@ -285,7 +319,22 @@ class PriceNotifier extends AsyncNotifier<PriceQuote?> {
     final enabled = ref.watch(fiatEnabledProvider);
     final currency = ref.watch(fiatCurrencyProvider);
     final source = ref.watch(fiatSourceProvider);
+    final inFront = ref.watch(appInFrontProvider);
     if (!enabled) return null;
+    // Out of sight nothing is asked, and no clock runs: the quote in
+    // hand stays, and a fresh one is asked the moment the app is back.
+    // A failure stands too: returned as a value, the quote it had
+    // hidden would come back on every amount as if it were fresh.
+    if (!inFront) {
+      final kept = state;
+      if (kept.hasError) {
+        Error.throwWithStackTrace(
+          kept.error!,
+          kept.stackTrace ?? StackTrace.current,
+        );
+      }
+      return kept.valueOrNull;
+    }
     ref.onDispose(() => _timer?.cancel());
     // Scheduled before the fetch so failures retry on the same cadence.
     _timer = Timer(const Duration(seconds: 60), () => ref.invalidateSelf());
@@ -343,7 +392,7 @@ class RecentBroadcastsNotifier extends Notifier<List<RecentBroadcast>> {
     ref
         .read(bridgeProvider)
         .setAppPref(
-          'broadcast.recent',
+          Pref.recentBroadcasts,
           jsonEncode([for (final b in state) b.toJson()]),
         )
         .catchError((_) {});
@@ -388,6 +437,9 @@ class SyncController extends Notifier<Set<String>> {
       ref.invalidate(addressListProvider);
     }
     ref.invalidate(txDetailProvider);
+    // Keyed by wallet and lookahead: every address on offer is read
+    // again, since the one shown may be the one just paid.
+    ref.invalidate(receiveProvider);
   }
 
   /// A sync that did not start here changed this wallet: the live

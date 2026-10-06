@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../src/format.dart';
 import '../src/models.dart';
 import '../theme/tokens.dart';
 
@@ -159,6 +160,48 @@ class AddressStatePill extends StatelessWidget {
         used ? 'Used' : 'Fresh',
         style: tokens.label.copyWith(fontSize: 11, color: color),
       ),
+    );
+  }
+}
+
+/// How much of a wallet Live follows, said while Live cannot follow
+/// every wallet whole. Neutral when all of it is followed; amber when a
+/// payment may wait for the next sync, which is the one thing the badge
+/// is there to say. One glyph per state, each a different shape, so the
+/// state reads without its colour: the antenna for a wallet heard
+/// whole, a broken ring for one heard in part, the clock for one that
+/// waits. How many addresses wait is read out with it.
+class LiveCoveragePill extends StatelessWidget {
+  const LiveCoveragePill({
+    super.key,
+    required this.coverage,
+    this.said = false,
+  });
+
+  final WalletCoverage coverage;
+
+  /// The count of waiting addresses is written next to the pill: it is
+  /// not read out twice.
+  final bool said;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = switch (coverage.coverage) {
+      Coverage.live => 'Live',
+      Coverage.partial => 'Partly live',
+      Coverage.syncOnly => 'At next sync',
+    };
+    return StatusPill.tone(
+      tone: coverage.coverage == Coverage.live
+          ? PillTone.neutral
+          : PillTone.pending,
+      icon: switch (coverage.coverage) {
+        Coverage.live => LucideIcons.radio,
+        Coverage.partial => LucideIcons.circleDotDashed,
+        Coverage.syncOnly => LucideIcons.clock,
+      },
+      label: label,
+      semanticLabel: said ? label : '$label. ${waitingWords(coverage)}',
     );
   }
 }

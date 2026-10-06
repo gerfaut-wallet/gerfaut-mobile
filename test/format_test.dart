@@ -145,8 +145,8 @@ void main() {
 
   group('formatFiat', () {
     test('applies the rate with the currency symbol', () {
-      expect(formatFiat(100000000, 50000, FiatCurrency.usd), r'$50,000.00');
-      expect(formatFiat(100000000, 50000, FiatCurrency.eur), '€50,000.00');
+      expect(formatFiat(100000000, 50000, FiatCurrency.usd), '\$50 000.00');
+      expect(formatFiat(100000000, 50000, FiatCurrency.eur), '€50 000.00');
     });
 
     test('small values keep four decimals', () {
@@ -164,10 +164,10 @@ void main() {
         FiatCurrency.idr,
       ]) {
         final formatted = formatFiat(100000000, 7654321, currency);
-        expect(formatted, contains('7,654,321'));
+        expect(formatted, contains('7 654 321'));
         expect(formatted, isNot(contains('.')));
       }
-      expect(formatFiat(100000000, 1234.6, FiatCurrency.jpy), '¥1,235');
+      expect(formatFiat(100000000, 1234.6, FiatCurrency.jpy), '¥1 235');
     });
 
     test('a small value in a whole currency still shows', () {
@@ -232,6 +232,14 @@ void main() {
     test('reads like the timestamp without its hour', () {
       // Noon UTC, so the day holds in any zone the tests run in.
       expect(formatDate(1899979200), 'Mar 17, 2030');
+    });
+  });
+
+  group('formatDayMonth', () {
+    test('reads like the date without its year', () {
+      final at = DateTime(2026, 10, 3, 9, 41).millisecondsSinceEpoch ~/ 1000;
+      expect(formatDayMonth(at), 'Oct 03');
+      expect(formatDate(at), 'Oct 03, 2026');
     });
   });
 }

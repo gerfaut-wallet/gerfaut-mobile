@@ -57,7 +57,7 @@ void main() {
     await pickFromMenu(tester, 'Hide balances');
 
     expect(find.textContaining('0.00123456', findRichText: true), findsNothing);
-    expect(find.textContaining('•••••', findRichText: true), findsWidgets);
+    expect(findMasked(), findsWidgets);
     expect(bridge.appPrefs['mobile.masked'], '1');
   });
 
@@ -147,7 +147,10 @@ void main() {
     for (var i = 1; i < order.length; i++) {
       expect(top(order[i]), greaterThan(top(order[i - 1])));
       // A menu row is as big a target as any other control.
-      expect(menuRowHeight(tester, order[i]), greaterThanOrEqualTo(44));
+      expect(
+        menuRowHeight(tester, order[i]),
+        greaterThanOrEqualTo(GerfautTouch.target),
+      );
     }
 
     await tester.tap(find.text('Broadcast'));
@@ -318,6 +321,49 @@ void main() {
     expect(find.text('Cold storage'), findsNothing);
 
     // Flush the snackbar timer.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a refused name keeps the dialog up, with the reason', (
+    tester,
+  ) async {
+    final meta = makeMeta();
+    final bridge = _RefusingRename(
+      wallets: [meta],
+      snapshots: {'w1': makeSnapshot(meta: meta)},
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [bridgeProvider.overrideWithValue(bridge)],
+        child: MaterialApp(
+          theme: themeFrom(GerfautTokens.light, Brightness.light),
+          home: const WalletHomeScreen(walletId: 'w1'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Cold storage'));
+    await tester.pumpAndSettle();
+    final field = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(field, 'Vault');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.text('the vault could not be written'), findsOneWidget);
+    expect(tester.widget<TextField>(field).controller?.text, 'Vault');
+    expect(find.text('Wallet renamed'), findsNothing);
+
+    bridge.refusing = false;
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('Wallet renamed'), findsOneWidget);
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
   });
@@ -672,6 +718,20 @@ void main() {
 }
 
 /// The bridge of [FakeBridge], whose UTXO reads can be held or refused.
+class _RefusingRename extends FakeBridge {
+  _RefusingRename({required super.wallets, required super.snapshots});
+
+  bool refusing = true;
+
+  @override
+  Future<void> renameWallet(String id, String name) async {
+    if (refusing) {
+      throw const BridgeException('storage', 'the vault could not be written');
+    }
+    return super.renameWallet(id, name);
+  }
+}
+
 class _UtxoBridge extends FakeBridge {
   _UtxoBridge({required super.wallets, required super.snapshots, super.utxos});
 
@@ -809,10 +869,19 @@ void _utxoTests() {
       expect(find.text('Confirmed'), findsOneWidget);
     });
 
-    testWidgets('a list that cannot be read says so', (tester) async {
-      await _openUtxos(tester, fails: true);
-      expect(find.text('UTXOs could not be loaded.'), findsOneWidget);
+    testWidgets('a list that cannot be read says so, and asks again', (
+      tester,
+    ) async {
+      final bridge = await _openUtxos(tester, fails: true);
+      expect(find.text('The UTXOs could not be loaded.'), findsOneWidget);
+      expect(find.text('vault read failed'), findsOneWidget);
       expect(find.text('No unspent outputs'), findsNothing);
+
+      bridge.fails = false;
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+      expect(find.text('The UTXOs could not be loaded.'), findsNothing);
+      expect(find.text('Confirmed'), findsOneWidget);
     });
 
     testWidgets('no coins: says what the tab is for', (tester) async {

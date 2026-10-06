@@ -17,7 +17,9 @@ import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/password_field.dart';
 import '../widgets/pinned_action_form.dart';
+import '../widgets/setting_switch.dart';
 import 'scan.dart';
+import '../widgets/toast.dart';
 
 /// Opens the system file picker; tests hand back a file of their own.
 typedef BackupFilePicker = Future<XFile?> Function();
@@ -121,20 +123,19 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
     final lock = ref.read(lockProvider.notifier);
     // The picker is a screen of the system's: Android pauses Gerfaut
     // behind it, and coming back from a picker the user opened here is
-    // not coming back from the background. Announced against the call
-    // that opens it, and nothing earlier.
-    lock.expectExcursion();
+    // not coming back from the background.
     final XFile? file;
     try {
-      file = await (widget.filePicker ?? _pickBackupFile)();
+      file = await lock.excursion(
+        widget.filePicker ?? _pickBackupFile,
+        // Picked, then not read: the trip did happen.
+        cameUp: (error) => error is FileReadException,
+      );
     } on FileReadException catch (error) {
-      // Picked, then not read: the trip did happen.
       if (mounted) setState(() => _error = error.message);
       return;
     } catch (_) {
-      // No picker came up: the trip goes back, or it would be spent on
-      // a real absence hours from now.
-      lock.forgetExcursion();
+      // No picker came up.
       if (!mounted) return;
       setState(
         () => _error = 'No app on this phone can open a file to restore.',
@@ -157,8 +158,8 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
   }
 
   Future<void> _scan() async {
-    final text = await Navigator.of(context).push<String>(
-      MaterialPageRoute<String>(
+    final scanned = await Navigator.of(context).push<QrProgress>(
+      MaterialPageRoute<QrProgress>(
         builder: (_) => ScanScreen(
           caption: BackupRestoreScreen.scanCaption,
           // A test seam of ScanScreen; this screen only forwards its
@@ -168,6 +169,7 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
         ),
       ),
     );
+    final text = scanned?.text;
     if (text == null || text.trim().isEmpty || !mounted) return;
     _landed(text.trim(), const _BackupSource.qr());
   }
@@ -235,7 +237,8 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
       );
       // The workspace follows the restored wallets when none of them is
       // on the active network, otherwise they would land invisible.
-      var active = (await ref.read(settingsProvider.future)).activeNetwork;
+      var active = (await container.read(settingsProvider.future))
+          .activeNetwork;
       final added = report.added;
       if (added.isNotEmpty && !added.any((w) => w.network == active)) {
         active = added.first.network;
@@ -256,7 +259,7 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
       );
       if (!mounted) return;
       navigator.pop();
-      messenger.showSnackBar(SnackBar(content: Text(_restoredMessage(report))));
+      messenger.showSnackBar(Toast(_restoredMessage(report)));
     } on BridgeException catch (error) {
       if (mounted) setState(() => _error = _messageOf(error));
     } finally {
@@ -403,37 +406,13 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
         ),
         if (preview.hasSettings) ...[
           const SizedBox(height: GerfautSpacing.md),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Apply node settings',
-                      style: tokens.bodySmall.copyWith(
-                        fontWeight: FontWeight.w500,
-                        fontVariations: const [FontVariation('wght', 500)],
-                      ),
-                    ),
-                    Text(
-                      'Replaces your backend choice, accepted certificates '
-                      "and gap limit with the backup's.",
-                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: GerfautSpacing.sm),
-              Switch(
-                value: _applySettings,
-                activeThumbColor: tokens.onPrimary,
-                activeTrackColor: tokens.primary,
-                inactiveThumbColor: tokens.textMuted,
-                inactiveTrackColor: tokens.surfaceSunken,
-                onChanged: (value) => setState(() => _applySettings = value),
-              ),
-            ],
+          SettingSwitch(
+            title: 'Apply node settings',
+            hint:
+                'Replaces your backend choice, accepted certificates and gap '
+                "limit with the backup's.",
+            value: _applySettings,
+            onChanged: (value) => setState(() => _applySettings = value),
           ),
           if (preview.backends.isNotEmpty ||
               preview.electrumHosts.isNotEmpty) ...[
@@ -523,7 +502,7 @@ class _SettingsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final label = tokens.label.copyWith(color: tokens.textMuted);
-    final value = tokens.data.copyWith(fontSize: 12);
+    final value = tokens.data;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(GerfautSpacing.sm + GerfautSpacing.xs),
@@ -606,49 +585,55 @@ class _WalletRow extends StatelessWidget {
     final detail = enabled
         ? '${wallet.network.label} · $kind'
         : '${wallet.network.label} · $kind · Already watched';
-    return InkWell(
-      onTap: enabled ? () => onChanged!(!chosen) : null,
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 44),
-        padding: const EdgeInsets.symmetric(
-          horizontal: GerfautSpacing.sm,
-          vertical: GerfautSpacing.xs,
-        ),
-        child: Row(
-          children: [
-            Checkbox(
-              value: enabled && chosen,
-              activeColor: tokens.primary,
-              checkColor: tokens.onPrimary,
-              side: BorderSide(color: tokens.border, width: 2),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(GerfautRadius.sm),
+    // One node: the box is read with the wallet it restores, not as a
+    // nameless "not checked".
+    return MergeSemantics(
+      child: InkWell(
+        onTap: enabled ? () => onChanged!(!chosen) : null,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: GerfautTouch.target),
+          padding: const EdgeInsets.symmetric(
+            horizontal: GerfautSpacing.sm,
+            vertical: GerfautSpacing.xs,
+          ),
+          child: Row(
+            children: [
+              Checkbox(
+                value: enabled && chosen,
+                activeColor: tokens.primary,
+                checkColor: tokens.onPrimary,
+                side: BorderSide(color: tokens.textMuted, width: 2),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                ),
+                onChanged: enabled
+                    ? (value) => onChanged!(value ?? false)
+                    : null,
               ),
-              onChanged: enabled ? (value) => onChanged!(value ?? false) : null,
-            ),
-            const SizedBox(width: GerfautSpacing.xs),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    wallet.name,
-                    style: tokens.bodySmall.copyWith(
-                      color: enabled ? tokens.text : tokens.textMuted,
-                      fontWeight: FontWeight.w500,
-                      fontVariations: const [FontVariation('wght', 500)],
+              const SizedBox(width: GerfautSpacing.xs),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      wallet.name,
+                      style: tokens.bodySmall.copyWith(
+                        color: enabled ? tokens.text : tokens.textMuted,
+                        fontWeight: FontWeight.w500,
+                        fontVariations: const [FontVariation('wght', 500)],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    detail,
-                    style: tokens.label.copyWith(color: tokens.textMuted),
-                  ),
-                ],
+                    Text(
+                      detail,
+                      style: tokens.label.copyWith(color: tokens.textMuted),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

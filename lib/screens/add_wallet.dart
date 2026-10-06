@@ -24,11 +24,18 @@ import 'wallet_home.dart';
 /// Detection is never silent — the user validates before anything is
 /// stored.
 class AddWalletScreen extends ConsumerStatefulWidget {
-  const AddWalletScreen({super.key, @visibleForTesting this.filePicker});
+  const AddWalletScreen({
+    super.key,
+    @visibleForTesting this.filePicker,
+    @visibleForTesting this.cameraBuilder,
+  });
 
   /// Stands in for the system's file picker, so a test can answer it
   /// without a platform under the test binding.
   final Future<XFile?> Function()? filePicker;
+
+  /// Replaces the camera view of the scanner; tests push frames by hand.
+  final CameraBuilder? cameraBuilder;
 
   @override
   ConsumerState<AddWalletScreen> createState() => _AddWalletScreenState();
@@ -41,6 +48,12 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
   ParsedInput? _parsed;
   Network? _network;
   bool _adding = false;
+
+  /// What the core assumed reading the last code scanned, which the text
+  /// it gave no longer shows; and of that, what goes with [_parsed]: the
+  /// warnings of a parse of that very text.
+  ({String text, List<InputWarning> warnings})? _scanned;
+  List<InputWarning> _assumed = const [];
 
   /// The advanced disclosure, and what it holds. The fields survive a
   /// re-parse: a user who tried one branch tries the next from there.
@@ -82,33 +95,75 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
     super.dispose();
   }
 
+  /// What the last parse that went through was asked, so a network
+  /// picked afterwards rebuilds that same wallet on it.
+  ImportOptions _asked = const ImportOptions();
+
+  /// The parse asked last. Only its answer is taken: picks made in a row
+  /// are answered in any order, and an older answer landing after a
+  /// newer one would put back what the user had moved away from.
+  int _parsing = 0;
+
+  /// The network of the parse asked last, while its answer is awaited;
+  /// null when that parse was not a pick of one.
+  Network? _picked;
+
+  /// Asks the core for [input]. On [network] when given, otherwise on
+  /// the one shown. The network shown changes only with the answer for
+  /// it, so the first address and the network the wallet is added on
+  /// always go together.
   Future<void> _parse(
     String input, {
     ScriptKind? script,
     DerivationChoice? derivation,
+    Network? network,
   }) async {
+    final asked = ++_parsing;
+    _picked = network;
     setState(() => _error = null);
+    // A re-parse keeps the network the user already picked; a new input
+    // starts on the one on screen. The core derives the first address
+    // for it, so the address shown is the one the wallet will give.
+    var preferred = network ?? _network;
+    if (preferred == null) {
+      try {
+        preferred = (await ref.read(settingsProvider.future)).activeNetwork;
+      } on Object {
+        // No settings to read: the first candidate stands.
+      }
+      if (!mounted) return;
+    }
+    final options = ImportOptions(
+      script: script,
+      derivation: derivation,
+      network: preferred,
+    );
     try {
       final parsed = await ref
           .read(bridgeProvider)
-          .parseInputWithOptions(
-            input,
-            ImportOptions(script: script, derivation: derivation),
-          );
-      if (!mounted) return;
-      // A re-parse keeps the network the user already picked.
-      final preferred =
-          _network ?? ref.read(settingsProvider).valueOrNull?.activeNetwork;
+          .parseInputWithOptions(input, options);
+      if (!mounted || asked != _parsing) return;
+      _picked = null;
+      final scanned = _scanned;
       setState(() {
         _parsed = parsed;
+        _assumed = scanned != null && scanned.text == input.trim()
+            ? scanned.warnings
+            : const [];
+        _asked = options;
         _network = preferred != null && parsed.networks.contains(preferred)
             ? preferred
             : parsed.networks.first;
       });
       _seedDerivation(parsed);
     } on BridgeException catch (error) {
+      // Refused, what was shown stays: the network with its address.
+      if (!mounted || asked != _parsing) return;
+      _picked = null;
       setState(() => _error = materialRefusal(error));
     } catch (error) {
+      if (!mounted || asked != _parsing) return;
+      _picked = null;
       setState(() => _error = '$error');
     }
   }
@@ -122,6 +177,27 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
       _rawController.text.trim(),
       script: chosen,
       derivation: _advanced ? _derivation() : null,
+    );
+  }
+
+  /// The first address belongs to a network: picking another one asks
+  /// the core for it again, on the wallet as it stands. A regtest
+  /// wallet shown a signet address would be compared with the wrong one.
+  void _chooseNetwork(Network? network) {
+    if (network == null || network == (_picked ?? _network)) return;
+    if (network == _network) {
+      // Back on the network shown before the last pick was answered:
+      // that answer, landing later, would move away from it.
+      _picked = null;
+      _parsing++;
+      return;
+    }
+    // ignore: unawaited_futures
+    _parse(
+      _rawController.text.trim(),
+      script: _asked.script,
+      derivation: _asked.derivation,
+      network: network,
     );
   }
 
@@ -142,21 +218,21 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
     // behind it, and coming back from a picker the user opened here is
     // not coming back from the background. Without this the lock lands
     // on the way in and takes the picked file with it.
-    lock.expectExcursion();
     final XFile? file;
     try {
       final picker = widget.filePicker;
-      file = picker != null
-          ? await picker()
-          : await openBoundedFile(maxBytes: _maxMaterialBytes);
+      file = await lock.excursion(
+        () => picker != null
+            ? picker()
+            : openBoundedFile(maxBytes: _maxMaterialBytes),
+        // Picked, then not read: the trip did happen.
+        cameUp: (error) => error is FileReadException,
+      );
     } on FileReadException catch (error) {
-      // Picked, then not read: the trip did happen.
       if (mounted) setState(() => _error = error.message);
       return;
     } catch (_) {
-      // No picker came up: the trip goes back, or it would be spent on
-      // a real absence hours from now.
-      lock.forgetExcursion();
+      // No picker came up.
       if (mounted) {
         setState(
           () => _error = 'No app on this phone can open a file to read.',
@@ -203,12 +279,21 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
   static const int _maxMaterialBytes = 64 * 1024;
 
   Future<void> _scan() async {
-    final text = await Navigator.of(context).push<String>(
-      MaterialPageRoute<String>(builder: (_) => const ScanScreen()),
+    final scanned = await Navigator.of(context).push<QrProgress>(
+      MaterialPageRoute<QrProgress>(
+        builder: (_) => ScanScreen(
+          // A test seam of ScanScreen; this screen only forwards its
+          // own, which is null outside a test.
+          // ignore: invalid_use_of_visible_for_testing_member
+          cameraBuilder: widget.cameraBuilder,
+        ),
+      ),
     );
-    if (text == null || text.trim().isEmpty) return;
-    _rawController.text = text.trim();
-    await _parse(text.trim());
+    final text = scanned?.text?.trim();
+    if (scanned == null || text == null || text.isEmpty || !mounted) return;
+    _scanned = (text: text, warnings: scanned.warnings);
+    _rawController.text = text;
+    await _parse(text);
   }
 
   Future<void> _submit() async {
@@ -233,7 +318,15 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
           .valueOrNull
           ?.activeNetwork;
       if (network != active) {
-        await bridge.setActiveNetwork(network);
+        // The wallet is in the vault whatever happens here: a switch
+        // that fails must not read as a failed add, or adding again
+        // would only be refused as a duplicate. The wallet page opens
+        // anyway; the network is set from the settings.
+        try {
+          await bridge.setActiveNetwork(network);
+        } catch (_) {
+          // The page about to open is the wallet's own.
+        }
         container.invalidate(settingsProvider);
       }
       container.invalidate(walletsProvider);
@@ -264,6 +357,9 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
   }
 
   void _back() {
+    // An answer still on its way would bring the step just left back.
+    _parsing++;
+    _picked = null;
     setState(() {
       _parsed = null;
       _network = null;
@@ -299,42 +395,53 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
             : () => _parse(_rawController.text),
       ),
       children: [
-        Text(
-          'DESCRIPTOR, EXTENDED PUBLIC KEY, OR ADDRESS',
-          style: tokens.label.copyWith(color: tokens.textMuted),
+        // Read once, on the field: its hint is an example descriptor, a
+        // string of brackets nobody needs spelled out as its name.
+        ExcludeSemantics(
+          child: Text(
+            'DESCRIPTOR, EXTENDED PUBLIC KEY, OR ADDRESS',
+            style: tokens.label.copyWith(color: tokens.textMuted),
+          ),
         ),
         const SizedBox(height: GerfautSpacing.sm),
-        TextField(
-          controller: _rawController,
-          maxLines: 5,
-          autocorrect: false,
-          enableSuggestions: false,
-          style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
-          onChanged: (_) => setState(() {}),
-          decoration: InputDecoration(
-            hintText: 'wpkh([fingerprint/84h/0h/0h]xpub.../0/*)',
-            hintStyle: tokens.data.copyWith(
-              fontSize: tokens.body.fontSize,
-              color: tokens.textMuted,
-            ),
-            filled: true,
-            fillColor: tokens.surfaceSunken,
-            contentPadding: const EdgeInsets.all(GerfautSpacing.md),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(GerfautRadius.sm),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(GerfautRadius.sm),
-              borderSide: BorderSide(color: tokens.primary, width: 2),
+        Semantics(
+          label: 'Descriptor, extended public key, or address',
+          child: TextField(
+            controller: _rawController,
+            maxLines: 5,
+            autocorrect: false,
+            enableSuggestions: false,
+            style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: 'wpkh([fingerprint/84h/0h/0h]xpub.../0/*)',
+              hintStyle: tokens.data.copyWith(
+                fontSize: tokens.body.fontSize,
+                color: tokens.textMuted,
+              ),
+              filled: true,
+              fillColor: tokens.surfaceSunken,
+              contentPadding: const EdgeInsets.all(GerfautSpacing.md),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                borderSide: BorderSide(color: tokens.primary, width: 2),
+              ),
             ),
           ),
         ),
         if (_error != null) ...[
           const SizedBox(height: GerfautSpacing.sm),
-          Text(
-            _error!,
-            style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+          // Said aloud as it appears: the field above is what was typed.
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              _error!,
+              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+            ),
           ),
         ],
         const SizedBox(height: GerfautSpacing.sm),
@@ -416,7 +523,10 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
         // What was recognized stays in the card; what was not gets its
         // own panel. Amber, never red: none of these costs the user
         // funds or privacy, they state a convention that was applied.
-        for (final warning in parsed.warnings) ...[
+        for (final warning in [
+          ...parsed.warnings,
+          ..._assumed.where((assumed) => !parsed.warnings.contains(assumed)),
+        ]) ...[
           const SizedBox(height: GerfautSpacing.gutter),
           GerfautNotice(tone: NoticeTone.info, message: warning.label),
         ],
@@ -435,7 +545,18 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
             value: payload.script,
             items: [
               for (final option in parsed.scriptOptions)
-                GerfautSelectItem(value: option, title: option.label),
+                GerfautSelectItem(
+                  value: option,
+                  title: option.label,
+                  // The start of the addresses on the network the wallet
+                  // goes to, never mainnet's on a test network.
+                  subtitle: switch (option.addressStart(
+                    _network ?? Network.mainnet,
+                  )) {
+                    final start? => 'Addresses starting with $start',
+                    null => null,
+                  },
+                ),
             ],
             onChanged: (chosen) {
               if (chosen != payload.script) _chooseScript(chosen);
@@ -456,6 +577,7 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
             child: GhostButton(
               label: 'Advanced',
               icon: _advanced ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+              expanded: _advanced,
               onPressed: () => setState(() => _advanced = !_advanced),
             ),
           ),
@@ -501,51 +623,63 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
           ],
         ],
         const SizedBox(height: GerfautSpacing.md),
-        Text('NAME', style: tokens.label.copyWith(color: tokens.textMuted)),
+        ExcludeSemantics(
+          child: Text(
+            'NAME',
+            style: tokens.label.copyWith(color: tokens.textMuted),
+          ),
+        ),
         const SizedBox(height: GerfautSpacing.sm),
-        TextField(
-          controller: _nameController,
-          autofocus: true,
-          style: tokens.body,
-          onChanged: (_) => setState(() {}),
-          decoration: InputDecoration(
-            hintText: 'Cold storage',
-            hintStyle: tokens.body.copyWith(color: tokens.textMuted),
-            filled: true,
-            fillColor: tokens.surfaceSunken,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: GerfautSpacing.md,
-              vertical: GerfautSpacing.sm,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(GerfautRadius.sm),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(GerfautRadius.sm),
-              borderSide: BorderSide(color: tokens.primary, width: 2),
+        Semantics(
+          label: 'Wallet name',
+          child: TextField(
+            controller: _nameController,
+            autofocus: true,
+            style: tokens.body,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: 'Cold storage',
+              hintStyle: tokens.body.copyWith(color: tokens.textMuted),
+              filled: true,
+              fillColor: tokens.surfaceSunken,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: GerfautSpacing.md,
+                vertical: GerfautSpacing.sm,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                borderSide: BorderSide(color: tokens.primary, width: 2),
+              ),
             ),
           ),
         ),
         const SizedBox(height: GerfautSpacing.md),
         Text('NETWORK', style: tokens.label.copyWith(color: tokens.textMuted)),
         const SizedBox(height: GerfautSpacing.sm),
-        // Nullable: nothing is picked until the descriptor is parsed.
-        ChoiceGroup<Network?>(
-          label: 'Network',
-          value: _network,
-          options: [
-            for (final candidate in parsed.networks)
-              ChoiceOption(
-                value: candidate,
-                label: candidate.label,
-                // A descriptor that names one network leaves nothing to
-                // choose: the option is shown, not offered.
-                enabled: parsed.networks.length > 1,
-              ),
-          ],
-          onChanged: (candidate) => setState(() => _network = candidate),
-        ),
+        // An input that fits one network, a mainnet address say, leaves
+        // nothing to choose: a group of one option would read as a
+        // control that does nothing. The network is said plainly, as
+        // the backup scope is, and as on the desktop.
+        if (parsed.networks.length == 1)
+          Text(
+            (_network ?? parsed.networks.single).label,
+            style: tokens.body.copyWith(color: tokens.text),
+          )
+        else
+          // Nullable: nothing is picked until the descriptor is parsed.
+          ChoiceGroup<Network?>(
+            label: 'Network',
+            value: _network,
+            options: [
+              for (final candidate in parsed.networks)
+                ChoiceOption(value: candidate, label: candidate.label),
+            ],
+            onChanged: _chooseNetwork,
+          ),
         if (_error != null) ...[
           const SizedBox(height: GerfautSpacing.md),
           Text(
@@ -592,42 +726,46 @@ class _PathField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label.toUpperCase(),
-          style: tokens.label.copyWith(color: tokens.textMuted),
-        ),
-        const SizedBox(height: GerfautSpacing.xs),
-        TextField(
-          controller: controller,
-          autocorrect: false,
-          enableSuggestions: false,
-          style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: tokens.data.copyWith(
-              fontSize: tokens.body.fontSize,
-              color: tokens.textMuted,
-            ),
-            filled: true,
-            fillColor: tokens.surfaceSunken,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: GerfautSpacing.md,
-              vertical: GerfautSpacing.sm + GerfautSpacing.xs,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(GerfautRadius.sm),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(GerfautRadius.sm),
-              borderSide: BorderSide(color: tokens.primary, width: 2),
+    // One node: the field is read with its caption, not as the example
+    // path its hint shows.
+    return MergeSemantics(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: tokens.label.copyWith(color: tokens.textMuted),
+          ),
+          const SizedBox(height: GerfautSpacing.xs),
+          TextField(
+            controller: controller,
+            autocorrect: false,
+            enableSuggestions: false,
+            style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: tokens.data.copyWith(
+                fontSize: tokens.body.fontSize,
+                color: tokens.textMuted,
+              ),
+              filled: true,
+              fillColor: tokens.surfaceSunken,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: GerfautSpacing.md,
+                vertical: GerfautSpacing.sm + GerfautSpacing.xs,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                borderSide: BorderSide(color: tokens.primary, width: 2),
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

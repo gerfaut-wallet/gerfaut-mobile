@@ -7,6 +7,7 @@ import 'package:flutter_zxing/flutter_zxing.dart' as zxing;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/tokens.dart';
+import 'tap_target.dart';
 
 /// Live camera feed, every frame decoded on the device.
 ///
@@ -93,6 +94,11 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
   /// app can be resumed before the previous start has finished.
   bool _starting = false;
 
+  /// The app is in front. A start runs across several awaits, and the
+  /// app may leave during any of them: a start that finds it gone lets
+  /// the sensor go instead of streaming behind the launcher.
+  bool _inFront = true;
+
   /// The decoder itself broke down, as opposed to a frame that simply
   /// held no code. The second is the normal case and says nothing; the
   /// first would otherwise look exactly like a camera pointed at a
@@ -119,25 +125,30 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.resumed:
+        _inFront = true;
         if (_controller == null) unawaited(_start());
       case AppLifecycleState.inactive:
       case AppLifecycleState.paused:
       case AppLifecycleState.hidden:
         // The camera belongs to whatever is in front: a scanner left
         // behind keeps neither the sensor nor the lamp.
+        _inFront = false;
         unawaited(_stop());
       case AppLifecycleState.detached:
         break;
     }
   }
 
+  /// The start is no longer wanted: the scanner closed, or the app left.
+  bool get _abandoned => _closed || !mounted || !_inFront;
+
   Future<void> _start() async {
-    if (_starting || _closed) return;
+    if (_starting || _abandoned) return;
     _starting = true;
     try {
       await zxing.zx.startCameraProcessing();
       final cameras = await availableCameras();
-      if (_closed || !mounted) return;
+      if (_abandoned) return;
       if (cameras.isEmpty) {
         setState(() => _feed = _Feed.unavailable);
         return;
@@ -156,12 +167,12 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
         imageFormatGroup: ImageFormatGroup.yuv420,
       );
       await controller.initialize();
-      if (_closed || !mounted) {
+      if (_abandoned) {
         await controller.dispose();
         return;
       }
       await controller.startImageStream(_onImage);
-      if (_closed || !mounted) {
+      if (_abandoned) {
         await controller.dispose();
         return;
       }
@@ -226,11 +237,17 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
       final text = code.text?.trim();
       if (_closed || !mounted || !code.isValid) return;
       if (text != null && text.isNotEmpty) widget.onFrame(text);
-    } catch (error) {
+    } catch (_) {
       // Said once, then the loop carries on: a decoder that refuses
       // every frame must not pass for an empty viewfinder.
       if (_trouble == null && mounted && !_closed) {
-        setState(() => _trouble = 'The decoder failed: $error');
+        // Our words, not the plugin's: what broke is no help to the
+        // person holding the phone, what to do next is.
+        setState(
+          () => _trouble =
+              'The QR reader stopped working. Close the scanner and open it '
+              'again, or paste the code instead.',
+        );
       }
     } finally {
       _decoding = false;
@@ -317,7 +334,8 @@ class _Cover extends StatelessWidget {
   }
 }
 
-/// A decoder that broke down, said on the picture itself.
+/// A decoder that broke down, said on the picture itself, in the
+/// overlay's own ink: nothing is at risk, so no red.
 class _Trouble extends StatelessWidget {
   const _Trouble({required this.message});
 
@@ -337,7 +355,7 @@ class _Trouble extends StatelessWidget {
       ),
       child: Text(
         message,
-        style: dark.bodySmall.copyWith(color: dark.alert),
+        style: dark.bodySmall.copyWith(color: dark.text),
         textAlign: TextAlign.center,
       ),
     );
@@ -356,12 +374,14 @@ class _CameraNotice extends StatelessWidget {
     final dark = GerfautTokens.dark;
     final message = switch (feed) {
       _Feed.starting || _Feed.running => 'Starting the camera…',
+      // The scanner reads wallets, transactions and backups alike:
+      // "the code" is whichever one this screen asked for.
       _Feed.denied =>
         'Gerfaut has no access to the camera. Grant it in the system '
-            'settings, or paste the descriptor in by hand.',
+            'settings, or paste the code in by hand.',
       _Feed.unavailable =>
-        'No camera answered on this device. Paste the descriptor in by '
-            'hand instead.',
+        'No camera answered on this device. Paste the code in by hand '
+            'instead.',
     };
     return ColoredBox(
       color: dark.background,
@@ -396,19 +416,21 @@ class _TorchButton extends StatelessWidget {
       label: on ? 'Turn the light off' : 'Turn the light on',
       onTap: onPressed,
       excludeSemantics: true,
-      child: Material(
-        color: dark.surface.withValues(alpha: 0.85),
-        shape: const CircleBorder(),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onPressed,
-          child: SizedBox(
-            width: 44,
-            height: 44,
-            child: Icon(
-              on ? LucideIcons.flashlight : LucideIcons.flashlightOff,
-              size: 20,
-              color: on ? dark.primary : dark.text,
+      // Drawn smaller than a touch target, it answers over a whole one.
+      child: TapTarget(
+        child: Material(
+          color: dark.surface.withValues(alpha: 0.85),
+          shape: const CircleBorder(),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onPressed,
+            child: SizedBox.square(
+              dimension: GerfautTouch.control,
+              child: Icon(
+                on ? LucideIcons.flashlight : LucideIcons.flashlightOff,
+                size: 20,
+                color: on ? dark.primary : dark.text,
+              ),
             ),
           ),
         ),

@@ -2,20 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../src/format.dart';
+import '../src/live.dart';
 import '../src/models.dart';
-import '../src/premium.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
-import '../widgets/alert_banner.dart';
 import '../widgets/amounts.dart';
 import '../widgets/app_bar.dart';
 import '../widgets/brand.dart';
 import '../widgets/buttons.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/load_failure.dart';
 import '../widgets/notice.dart';
 import '../widgets/overflow_menu.dart';
 import '../widgets/reorder.dart';
+import '../widgets/status_pill.dart';
 import '../widgets/sync_button.dart';
 import '../widgets/update_notice.dart';
 import '../widgets/wallet_icon.dart';
@@ -23,6 +23,7 @@ import 'add_wallet.dart';
 import 'broadcast.dart';
 import 'settings.dart';
 import 'wallet_home.dart';
+import '../widgets/toast.dart';
 
 /// Home: the wallets of the active workspace network as cards, or the
 /// empty state. Pull down to sync them all; the one primary action sits
@@ -136,11 +137,16 @@ class HomeScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const NewDeviceBanner(),
-            const WatchOfflineBanner(),
             const UpdateNotice(),
             Expanded(
               child: switch ((settings, wallets)) {
+                // The wallets alone failed: the vault is open, and the
+                // list can be asked for again.
+                (AsyncData(), AsyncError(:final error)) => LoadFailure(
+                  what: 'The wallets',
+                  error: error,
+                  onRetry: () => ref.invalidate(walletsProvider),
+                ),
                 (AsyncError(), _) || (_, AsyncError()) => Center(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
@@ -185,14 +191,12 @@ class HomeScreen extends ConsumerWidget {
                     final synced = report.reports.length;
                     final failed = report.failures.length;
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          failed == 0
-                              ? (synced == 1
-                                    ? '1 wallet synced'
-                                    : '$synced wallets synced')
-                              : '$synced synced, $failed failed',
-                        ),
+                      Toast(
+                        failed == 0
+                            ? (synced == 1
+                                  ? '1 wallet synced'
+                                  : '$synced wallets synced')
+                            : '$synced synced, $failed failed',
                       ),
                     );
                   },
@@ -221,80 +225,6 @@ class HomeScreen extends ConsumerWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// The red banner at the head of the home screen while a device waits
-/// for approval on the Premium account: someone entered the key, and if
-/// it was not the owner, the owner has to refuse it and change the key.
-/// It goes by itself once nothing waits; "Review" opens the devices.
-class NewDeviceBanner extends ConsumerWidget {
-  const NewDeviceBanner({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final waiting = ref.watch(waitingDevicesProvider);
-    if (waiting.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        GerfautSpacing.md,
-        GerfautSpacing.sm,
-        GerfautSpacing.md,
-        0,
-      ),
-      child: AlertBanner(
-        message:
-            'A new device asks for access to your Premium account. If it is '
-            'not yours, refuse it and change your key.',
-        actionLabel: 'Review',
-        onAction: () =>
-            SettingsScreen.open(context, section: SettingsSection.premium),
-      ),
-    );
-  }
-}
-
-/// The red banner at the head of the home screen when the server has
-/// missed two heartbeats in a row: the wallets handed to it are
-/// not being watched, and the app says so until acknowledged or until a
-/// beat verifies again. The app's own sync goes on underneath as before.
-/// Nothing at all while the server answers, or while no wallet is
-/// watched.
-class WatchOfflineBanner extends ConsumerWidget {
-  const WatchOfflineBanner({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final status = ref.watch(watchMonitorProvider);
-    final premium = ref.watch(premiumStateProvider).valueOrNull;
-    if (!watchBannerShows(status, premium)) return const SizedBox.shrink();
-    final since = status.offlineSince!;
-    final sinceLocal = DateTime.fromMillisecondsSinceEpoch(since * 1000);
-    final today = DateTime.now();
-    final sameDay =
-        sinceLocal.year == today.year &&
-        sinceLocal.month == today.month &&
-        sinceLocal.day == today.day;
-    final when = sameDay ? formatClock(since) : formatTimestamp(since);
-    final last = status.lastVerified;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        GerfautSpacing.md,
-        GerfautSpacing.sm,
-        GerfautSpacing.md,
-        0,
-      ),
-      child: AlertBanner(
-        message:
-            "Gerfaut's watch is offline since $when. Your wallets are not "
-            'being monitored.',
-        stamp: last == null
-            ? 'No heartbeat verified since the app opened'
-            : 'Last heartbeat ${relativeTime(last)}',
-        actionLabel: 'Acknowledge',
-        onAction: () => ref.read(watchMonitorProvider.notifier).acknowledge(),
       ),
     );
   }
@@ -353,6 +283,9 @@ class _WalletListState extends ConsumerState<_WalletList> {
       _order = ids;
       _refused = null;
     });
+    // The lock may take the screen away during the round trip: the list
+    // is read again through the container, which outlives it.
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
       await ref.read(bridgeProvider).reorderWallets(ids);
       // Read the vault back, then let the local order go: the provider
@@ -360,15 +293,15 @@ class _WalletListState extends ConsumerState<_WalletList> {
       // back on the way, and an order set elsewhere afterwards — in the
       // settings, say — is followed here rather than overruled by a
       // drop long since landed. A newer drop keeps its own until then.
-      ref.invalidate(walletsProvider);
-      await ref.read(walletsProvider.future);
+      container.invalidate(walletsProvider);
+      await container.read(walletsProvider.future);
       if (!mounted || !identical(_order, ids)) return;
       setState(() => _order = null);
     } catch (error) {
       if (!mounted) return;
       // The vault kept whatever order it had: read it back rather than
       // trust the list in hand, and show that one under the note.
-      ref.invalidate(walletsProvider);
+      container.invalidate(walletsProvider);
       setState(() {
         _order = null;
         _refused = (ids: ids, reason: '$error');
@@ -451,6 +384,9 @@ class _WalletListState extends ConsumerState<_WalletList> {
             child: _WalletCard(
               wallet: wallet,
               error: errors[wallet.id],
+              // How much of it Live follows, only while Live runs and
+              // cannot follow everything.
+              coverage: ref.watch(walletCoverageProvider(wallet.id)),
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute<void>(
@@ -476,10 +412,19 @@ class _WalletListState extends ConsumerState<_WalletList> {
 /// they shrink by the line they lost: more wallets fit on screen, which
 /// is the one thing this list has to do.
 class _WalletCard extends StatelessWidget {
-  const _WalletCard({required this.wallet, required this.onTap, this.error});
+  const _WalletCard({
+    required this.wallet,
+    required this.onTap,
+    this.error,
+    this.coverage,
+  });
 
   final WalletMeta wallet;
   final VoidCallback onTap;
+
+  /// How much of the wallet Live follows, while Live cannot follow
+  /// every wallet whole; null otherwise, and then nothing is said.
+  final WalletCoverage? coverage;
 
   /// The one exception to the rule above: a sync that failed contradicts
   /// the figure right above it, and a stale balance stated as fact is a
@@ -532,7 +477,14 @@ class _WalletCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: GerfautSpacing.sm),
-                  BalanceAmount(sats: wallet.cachedBalance.total),
+                  BalanceAmount(
+                    sats: wallet.cachedBalance.total,
+                    network: wallet.network,
+                  ),
+                  if (coverage != null) ...[
+                    const SizedBox(height: GerfautSpacing.sm),
+                    LiveCoveragePill(coverage: coverage!),
+                  ],
                   if (error != null) ...[
                     const SizedBox(height: GerfautSpacing.sm),
                     // One line, amber: the reason is a tap away here,
@@ -542,25 +494,33 @@ class _WalletCard extends StatelessWidget {
                     Tooltip(
                       message: error!,
                       triggerMode: TooltipTriggerMode.tap,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            LucideIcons.triangleAlert,
-                            size: 13,
-                            color: tokens.pending,
-                          ),
-                          const SizedBox(width: GerfautSpacing.xs),
-                          Flexible(
-                            child: Text(
-                              'Sync failed',
-                              style: tokens.label.copyWith(
-                                color: tokens.pending,
-                              ),
-                              overflow: TextOverflow.ellipsis,
+                      // A full touch target: a tap on the line reads
+                      // the reason rather than opening the wallet
+                      // around it.
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          minHeight: GerfautTouch.target,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              LucideIcons.triangleAlert,
+                              size: 13,
+                              color: tokens.pending,
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: GerfautSpacing.xs),
+                            Flexible(
+                              child: Text(
+                                'Sync failed',
+                                style: tokens.label.copyWith(
+                                  color: tokens.pending,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],

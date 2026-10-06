@@ -14,6 +14,7 @@ import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/explorer_link.dart';
 import '../widgets/facts.dart';
+import '../widgets/load_failure.dart';
 import '../widgets/status_pill.dart';
 import '../widgets/tx_diagram.dart';
 
@@ -46,10 +47,11 @@ class TxDetailScreen extends ConsumerWidget {
       body: SafeArea(
         child: switch (detail) {
           AsyncData(:final value) => _Detail(detail: value, network: network),
-          AsyncError() => Center(
-            child: Text(
-              'This transaction could not be loaded.',
-              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+          AsyncError(:final error) => LoadFailure(
+            what: 'This transaction',
+            error: error,
+            onRetry: () => ref.invalidate(
+              txDetailProvider((walletId: walletId, txid: txid)),
             ),
           ),
           _ => Center(
@@ -228,7 +230,7 @@ class _Hero extends ConsumerWidget {
     final summary = detail.summary;
     final sats = summary.netSats;
     // The subline carries only the fiat value, when that display is on.
-    final fiat = fiatValueOf(ref, sats);
+    final fiat = fiatValueOf(ref, sats, network: network);
     final explorer = explorerTxUrl(network, summary.txid);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -242,7 +244,10 @@ class _Hero extends ConsumerWidget {
           alignment: Alignment.centerLeft,
           child: Text(
             masked ? maskedValue : formatAmountSigned(sats, unit),
-            style: tokens.amount,
+            semanticsLabel: masked ? maskedSpoken : null,
+            // 28 px: the net of one transaction, a step under the
+            // balance a wallet's page leads with.
+            style: tokens.figureOf(size: 28, weight: FontWeight.w600),
             maxLines: 1,
           ),
         ),
@@ -307,9 +312,7 @@ String _directionOf(TxDetail detail) {
 /// technical and waits below the lists.
 ///
 /// The price is not one of them. What this page can quote is today's
-/// rate, never the one that ruled the day of the transaction; the rate
-/// as it stood belongs to the paid export, which knows the date it is
-/// pricing.
+/// rate, never the one that ruled the day of the transaction.
 class _QuickFacts extends StatelessWidget {
   const _QuickFacts({required this.summary, required this.tokens});
 
@@ -327,7 +330,13 @@ class _QuickFacts extends StatelessWidget {
         _QuickFact(
           label: 'Transaction ID',
           tokens: tokens,
-          child: AddressChip(value: summary.txid, head: 8, tail: 8),
+          child: AddressChip(
+            value: summary.txid,
+            head: 8,
+            tail: 8,
+            kind: 'transaction ID',
+            spoken: spokenTxid(summary.txid),
+          ),
         ),
         _QuickFact(
           label: 'Date',
@@ -705,27 +714,38 @@ class _RawTransactionState extends State<_RawTransaction> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        InkWell(
-          borderRadius: BorderRadius.circular(GerfautRadius.sm),
-          onTap: () => setState(() => _open = !_open),
-          child: Padding(
-            // 44px tap target around a one-line disclosure.
-            padding: const EdgeInsets.symmetric(
-              vertical: GerfautSpacing.sm + GerfautSpacing.xs,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  _open ? LucideIcons.chevronDown : LucideIcons.chevronRight,
-                  size: 14,
-                  color: tokens.textMuted,
+        // One node: a button that says whether the raw bytes are open.
+        MergeSemantics(
+          child: Semantics(
+            button: true,
+            expanded: _open,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(GerfautRadius.sm),
+              onTap: () => setState(() => _open = !_open),
+              // A full touch target around a one-line disclosure.
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  minHeight: GerfautTouch.target,
                 ),
-                const SizedBox(width: GerfautSpacing.xs),
-                // Tracked and uppercase, the label runs past the edge of
-                // a phone at a large text size: it wraps instead.
-                Flexible(child: FieldLabel('Raw transaction', tokens: tokens)),
-              ],
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _open
+                          ? LucideIcons.chevronDown
+                          : LucideIcons.chevronRight,
+                      size: 14,
+                      color: tokens.textMuted,
+                    ),
+                    const SizedBox(width: GerfautSpacing.xs),
+                    // Tracked and uppercase, the label runs past the edge of
+                    // a phone at a large text size: it wraps instead.
+                    Flexible(
+                      child: FieldLabel('Raw transaction', tokens: tokens),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -749,10 +769,7 @@ class _RawTransactionState extends State<_RawTransaction> {
                   ),
                   child: Text(
                     widget.hex,
-                    style: tokens.data.copyWith(
-                      fontSize: 11,
-                      color: tokens.textMuted,
-                    ),
+                    style: tokens.data.copyWith(color: tokens.textMuted),
                   ),
                 ),
               ),
@@ -765,7 +782,7 @@ class _RawTransactionState extends State<_RawTransaction> {
                   iconSize: 16,
                   icon: Icon(
                     _copied ? LucideIcons.check : LucideIcons.copy,
-                    color: _copied ? tokens.confirmed : tokens.textMuted,
+                    color: tokens.textMuted,
                   ),
                 ),
               ),
@@ -960,7 +977,7 @@ class _IoIdentity extends StatelessWidget {
           triggerMode: TooltipTriggerMode.longPress,
           child: _subline(
             opReturnPreview(opReturn),
-            style: tokens.data.copyWith(fontSize: 11, color: tokens.textMuted),
+            style: tokens.data.copyWith(color: tokens.textMuted),
           ),
         ),
       ];

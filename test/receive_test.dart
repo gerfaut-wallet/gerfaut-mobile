@@ -95,6 +95,88 @@ void main() {
       expect(find.text('First unused'), findsNothing);
     });
 
+    testWidgets('an address paid while on screen gives way to the next', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final meta = makeMeta();
+      final bridge = FakeBridge(
+        wallets: [meta],
+        snapshots: {'w1': makeSnapshot(meta: meta)},
+        addresses: {
+          'w1': const [
+            AddressEntry(index: 4, address: 'tb1qfirst', used: false),
+          ],
+        },
+      );
+      await tester.pumpWidget(receiveApp(bridge));
+      await tester.pumpAndSettle();
+      expect(find.text('NEXT UNUSED ADDRESS · INDEX 4'), findsOneWidget);
+
+      // The payer pays index 4, and a sync started elsewhere, Live's,
+      // sees it: the screen moves on without being left.
+      bridge.addresses['w1'] = const [
+        AddressEntry(index: 5, address: 'tb1qsecond', used: false),
+      ];
+      ProviderScope.containerOf(tester.element(find.byType(ReceiveScreen)))
+          .read(syncProvider.notifier)
+          .refreshed('w1');
+      await tester.pumpAndSettle();
+
+      expect(find.text('NEXT UNUSED ADDRESS · INDEX 5'), findsOneWidget);
+      expect(find.text('tb1qsecond'), findsOneWidget);
+      expect(find.text('tb1qfirst'), findsNothing);
+    });
+
+    testWidgets('reopening Receive after a payment asks the core again', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final meta = makeMeta();
+      final bridge = FakeBridge(
+        wallets: [meta],
+        snapshots: {'w1': makeSnapshot(meta: meta)},
+        addresses: {
+          'w1': const [
+            AddressEntry(index: 4, address: 'tb1qfirst', used: false),
+          ],
+        },
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [bridgeProvider.overrideWithValue(bridge)],
+          child: MaterialApp(
+            theme: themeFrom(GerfautTokens.light, Brightness.light),
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: TextButton(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const ReceiveScreen(walletId: 'w1'),
+                    ),
+                  ),
+                  child: const Text('Open receive'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open receive'));
+      await tester.pumpAndSettle();
+      expect(find.text('NEXT UNUSED ADDRESS · INDEX 4'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      // Paid while nobody looked, and no sync of this app saw it.
+      bridge.addresses['w1'] = const [
+        AddressEntry(index: 5, address: 'tb1qsecond', used: false),
+      ];
+      await tester.tap(find.text('Open receive'));
+      await tester.pumpAndSettle();
+      expect(find.text('NEXT UNUSED ADDRESS · INDEX 5'), findsOneWidget);
+    });
+
     testWidgets('a single-address wallet shows its one address, no skip', (
       tester,
     ) async {
@@ -353,6 +435,17 @@ void main() {
             .first,
       );
       expect((card.decoration! as BoxDecoration).color, GerfautQr.background);
+      // Under it, the address in full, in mono: both ends to compare.
+      final under = tester
+          .widgetList<Text>(find.byType(Text))
+          .where(
+            (text) =>
+                text.style?.fontFamily == GerfautFonts.data &&
+                text.style?.color == GerfautTokens.dark.text,
+          )
+          .toList();
+      expect(under, hasLength(1));
+      expect(under.single.data, 'tb1qexample');
 
       await tester.tap(find.text('Tap anywhere to close'));
       await tester.pumpAndSettle();
@@ -369,6 +462,32 @@ void main() {
   });
 
   group('the revealed addresses', () {
+    testWidgets('a test coin on an address is worth zero in the currency', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = bridgeWith(
+        AddressList(
+          external: [row(0, used: true, balance: 150000)],
+          internal: const [],
+        ),
+        meta: makeMeta(network: Network.signet),
+      );
+      await tester.pumpWidget(receiveApp(bridge));
+      await tester.pumpAndSettle();
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ReceiveScreen)),
+        listen: false,
+      );
+      container.read(fiatEnabledProvider.notifier).set(true);
+      await tester.pumpAndSettle();
+
+      // 150 000 sats at 50 000 a coin would be €75.00 on mainnet.
+      expect(find.textContaining('0.00150000'), findsOneWidget);
+      expect(find.text('€0.00'), findsOneWidget);
+      expect(find.text('€75.00'), findsNothing);
+    });
+
     testWidgets('external and change keychains sit in their own cards', (
       tester,
     ) async {

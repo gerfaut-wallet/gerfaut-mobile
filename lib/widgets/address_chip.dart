@@ -118,7 +118,9 @@ class _AddressChipState extends State<AddressChip> {
             fontVariations: const [FontVariation('wght', 500)],
           )
         : tokens.data.copyWith(color: tokens.textMuted);
-    final copiedStyle = tokens.label.copyWith(color: tokens.confirmed);
+    // Ardoise: a copy is done, not a success to celebrate. Lichen is
+    // for what the chain confirms.
+    final copiedStyle = tokens.label.copyWith(color: tokens.textMuted);
     // What the word and its own gap will occupy, given back by the
     // identifier so the chip's outer width never moves.
     final valueWidth = _widthOf(shown, valueStyle, scaler);
@@ -133,57 +135,78 @@ class _AddressChipState extends State<AddressChip> {
                 GerfautSpacing.xs,
           )
         : double.infinity;
+    // The label is the whole of what is read: the truncated value drawn
+    // inside would be read again after it, cut in the middle.
+    // Excluding what is drawn inside drops its tap too: the node carries
+    // the action itself, or a screen reader's double tap copies nothing.
     return Semantics(
       button: true,
+      excludeSemantics: true,
+      onTap: _copy,
       label: [
         'Copy',
         if (widget.kind != null) widget.kind!,
         widget.spoken ?? widget.value,
       ].join(' '),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(GerfautRadius.sm),
+      // The chip is drawn at its own height, and the finger is given a
+      // full touch target around it: a tap just above or below still
+      // copies this one, not the identifier stacked next to it.
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: _copy,
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: GerfautSpacing.sm,
-            vertical: GerfautSpacing.xs,
-          ),
-          decoration: BoxDecoration(
-            color: widget.emphasis
-                ? tokens.primary.withValues(alpha: 0.10)
-                : tokens.surfaceSunken,
-            borderRadius: BorderRadius.circular(GerfautRadius.sm),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Flexible on the outside so a narrow parent can still
-              // squeeze the chip; the cap on the inside is what keeps
-              // the confirmation from widening it.
-              Flexible(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: maxValueWidth),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) => Text(
-                      _fitted(constraints.maxWidth, valueStyle, scaler),
-                      style: valueStyle,
-                      overflow: TextOverflow.fade,
-                      softWrap: false,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: GerfautTouch.target),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            widthFactor: 1,
+            heightFactor: 1,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(GerfautRadius.sm),
+              onTap: _copy,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: GerfautSpacing.sm,
+                  vertical: GerfautSpacing.xs,
+                ),
+                decoration: BoxDecoration(
+                  color: widget.emphasis
+                      ? tokens.primary.withValues(alpha: 0.10)
+                      : tokens.surfaceSunken,
+                  borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Flexible on the outside so a narrow parent can still
+                    // squeeze the chip; the cap on the inside is what keeps
+                    // the confirmation from widening it.
+                    Flexible(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: maxValueWidth),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) => Text(
+                            _fitted(constraints.maxWidth, valueStyle, scaler),
+                            style: valueStyle,
+                            overflow: TextOverflow.fade,
+                            softWrap: false,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: GerfautSpacing.xs),
+                    Icon(
+                      _copied ? LucideIcons.check : LucideIcons.copy,
+                      size: 14,
+                      color: tokens.textMuted,
+                    ),
+                    if (_copied) ...[
+                      const SizedBox(width: GerfautSpacing.xs),
+                      Text('Copied', style: copiedStyle),
+                    ],
+                  ],
                 ),
               ),
-              const SizedBox(width: GerfautSpacing.xs),
-              Icon(
-                _copied ? LucideIcons.check : LucideIcons.copy,
-                size: 14,
-                color: _copied ? tokens.confirmed : tokens.textMuted,
-              ),
-              if (_copied) ...[
-                const SizedBox(width: GerfautSpacing.xs),
-                Text('Copied', style: copiedStyle),
-              ],
-            ],
+            ),
           ),
         ),
       ),

@@ -157,7 +157,8 @@ class _LiveSheetState extends ConsumerState<LiveSheet> {
         body:
             'A small permanent notification: Android requires one to let '
             'an app keep running. It also uses some battery, more on mobile '
-            'data than on Wi-Fi. How much has not been measured yet.',
+            'data than on Wi-Fi. Your phone’s battery settings show how '
+            'much.',
       ),
       const _Fact(
         title: 'What your server learns',
@@ -255,9 +256,10 @@ class _LiveSheetState extends ConsumerState<LiveSheet> {
   /// sheet sends the user on, and the steps are still to be read on the
   /// way back: it does not count as leaving the app.
   Future<void> _openAppSettings() async {
-    final lock = ref.read(lockProvider.notifier)..expectExcursion();
-    final opened = await ref.read(livePlatformProvider).openAppSettings();
-    if (!opened) lock.forgetExcursion();
+    final platform = ref.read(livePlatformProvider);
+    await ref
+        .read(lockProvider.notifier)
+        .excursion(platform.openAppSettings, shown: (opened) => opened);
   }
 
   List<Widget> _phoneMaker(BuildContext context) {

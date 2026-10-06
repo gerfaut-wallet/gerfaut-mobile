@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../src/bridge.dart';
 import '../../src/electrum.dart';
+import '../../src/live.dart';
 import '../../src/models.dart';
 import '../../src/state.dart';
 import '../../theme/tokens.dart';
@@ -12,16 +13,20 @@ import '../../widgets/facts.dart';
 import '../../widgets/notice.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/select_field.dart';
+import '../../widgets/setting_switch.dart';
 import '../scan.dart';
 import 'certificates.dart';
 import 'fields.dart';
 import 'tor_section.dart';
+import '../../widgets/toast.dart';
 
 /// Said when the certificate check did not get through: the backend is
-/// saved all the same, and the question comes back on first contact.
+/// saved all the same. Nothing asks about the certificate later: a sync
+/// it refuses fails, and Save backend is where it is accepted.
 const String _uncheckedNote =
-    'The certificate could not be checked yet. Gerfaut asks about it on '
-    'the first connection.';
+    'Saved. The server did not answer, so its certificate is unchecked. '
+    'If it signs its own, syncs fail until you press Save backend again '
+    'and accept it.';
 
 const List<({Network network, String hint})> _networkHints = [
   (network: Network.mainnet, hint: 'The Bitcoin network'),
@@ -53,6 +58,11 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
   final _hostController = TextEditingController();
   final _portController = TextEditingController(text: '50002');
   bool _tls = true;
+
+  /// "This is my node", for a server of the user's own. Seeded from the
+  /// saved backend and sent with every save of a custom one: a save that
+  /// left it out would turn it off.
+  bool _ownNode = false;
   String _backendKind = 'public_esplora';
 
   /// Chosen public server id; null is the automatic rotation.
@@ -72,6 +82,9 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
   /// it cannot read, such as a host with a port still in it. Shown under
   /// the button that asked, until the form changes.
   String? _saveError;
+
+  /// Why the last switch of network was refused.
+  String? _networkError;
 
   /// The last scanned address names a Tor hidden service. Said under the
   /// fields for as long as they hold what was scanned: a keystroke or
@@ -116,17 +129,30 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
     _hostController.text = electrum.host;
     _portController.text = electrum.port.isEmpty ? '50002' : electrum.port;
     _tls = electrum.tls;
+    _ownNode = switch (config) {
+      CustomEsplora(:final ownNode) ||
+      CustomElectrum(:final ownNode) => ownNode,
+      PublicEsplora() => false,
+    };
   }
 
   void _toast(String message) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(Toast(message));
   }
 
+  /// Switches the workspace network. A refusal is said under the
+  /// cards; the lists are read again even if the page was left meanwhile.
   Future<void> _setNetwork(Network network) async {
-    await ref.read(bridgeProvider).setActiveNetwork(network);
-    ref.invalidate(settingsProvider);
-    ref.invalidate(walletsProvider);
+    final container = ProviderScope.containerOf(context, listen: false);
+    setState(() => _networkError = null);
+    try {
+      await ref.read(bridgeProvider).setActiveNetwork(network);
+    } on BridgeException catch (error) {
+      if (mounted) setState(() => _networkError = error.message);
+      return;
+    }
+    container.invalidate(settingsProvider);
+    container.invalidate(walletsProvider);
     if (mounted) _toast('Setting saved');
   }
 
@@ -171,8 +197,8 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
   /// which is plainly what was meant. Nothing is saved: the fields are
   /// filled and the person still presses Save.
   Future<void> _scanBackend() async {
-    final text = await Navigator.of(context).push<String>(
-      MaterialPageRoute<String>(
+    final scanned = await Navigator.of(context).push<QrProgress>(
+      MaterialPageRoute<QrProgress>(
         builder: (_) => ScanScreen(
           caption: NetworkSection.backendScanCaption,
           // A test seam of ScanScreen; this screen only forwards its
@@ -182,6 +208,7 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
         ),
       ),
     );
+    final text = scanned?.text;
     if (text == null || text.trim().isEmpty || !mounted) return;
     final ScannedBackend backend;
     try {
@@ -194,10 +221,23 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
       return;
     }
     if (!mounted) return;
+    final settings = ref.read(settingsProvider).valueOrNull;
+    final stored = settings?.backendFor(settings.activeNetwork);
     setState(() {
       _scanError = null;
       _certificateNote = null;
       _scannedOnion = backend.onion;
+      // Another server is not the user's node until they say so: left
+      // on, the switch would have Live hand it up to 20 000 addresses.
+      // The stored server read again keeps it.
+      _ownNode = switch (stored) {
+        CustomEsplora(:final url, :final ownNode) ||
+        CustomElectrum(
+          :final url,
+          :final ownNode,
+        ) => ownNode && url == backend.url,
+        _ => false,
+      };
       if (backend.kind == 'esplora') {
         _backendKind = 'custom_esplora';
         _esploraController.text = backend.url;
@@ -221,9 +261,13 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
       _saveError = null;
     });
     final config = switch (_backendKind) {
-      'custom_esplora' => CustomEsplora(url: _esploraController.text.trim()),
+      'custom_esplora' => CustomEsplora(
+        url: _esploraController.text.trim(),
+        ownNode: _ownNode,
+      ),
       'custom_electrum' => CustomElectrum(
         url: buildElectrumUrl(_hostController.text, _portController.text, _tls),
+        ownNode: _ownNode,
       ),
       _ => PublicEsplora(server: _publicServer),
     };
@@ -384,6 +428,16 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
               'Only wallets on the selected network are shown.',
               style: tokens.bodySmall.copyWith(color: tokens.textMuted),
             ),
+            if (_networkError != null) ...[
+              const SizedBox(height: GerfautSpacing.xs),
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  _networkError!,
+                  style: tokens.bodySmall.copyWith(color: tokens.pending),
+                ),
+              ),
+            ],
           ],
         ),
         SectionCard(
@@ -425,12 +479,15 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
             ],
             if (_backendKind == 'custom_esplora') ...[
               const SizedBox(height: GerfautSpacing.sm),
-              FieldLabel('Server URL', tokens: tokens),
+              // The field below says its own name; the caption is for
+              // the eye.
+              ExcludeSemantics(child: FieldLabel('Server URL', tokens: tokens)),
               const SizedBox(height: GerfautSpacing.sm),
               Row(
                 children: [
                   Expanded(
                     child: MonoField(
+                      label: 'Server URL',
                       controller: _esploraController,
                       hint: 'https://node.example.org:3002/api',
                       onChanged: _onBackendFieldChanged,
@@ -452,12 +509,15 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
             ],
             if (_backendKind == 'custom_electrum') ...[
               const SizedBox(height: GerfautSpacing.sm),
-              FieldLabel('Host', tokens: tokens),
+              // The field below says its own name; the caption is for
+              // the eye.
+              ExcludeSemantics(child: FieldLabel('Host', tokens: tokens)),
               const SizedBox(height: GerfautSpacing.sm),
               Row(
                 children: [
                   Expanded(
                     child: MonoField(
+                      label: 'Host',
                       controller: _hostController,
                       hint: 'node.example.org or xxxxxxxx.onion',
                       onChanged: _onBackendFieldChanged,
@@ -481,9 +541,12 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        FieldLabel('Port', tokens: tokens),
+                        ExcludeSemantics(
+                          child: FieldLabel('Port', tokens: tokens),
+                        ),
                         const SizedBox(height: GerfautSpacing.sm),
                         MonoField(
+                          label: 'Port',
                           controller: _portController,
                           hint: '50002',
                           numeric: true,
@@ -496,19 +559,22 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
                   const SizedBox(width: GerfautSpacing.md),
                   Padding(
                     padding: const EdgeInsets.only(bottom: GerfautSpacing.sm),
-                    child: Row(
-                      children: [
-                        Switch(
-                          value: _tls,
-                          activeThumbColor: tokens.onPrimary,
-                          activeTrackColor: tokens.primary,
-                          inactiveThumbColor: tokens.textMuted,
-                          inactiveTrackColor: tokens.surfaceSunken,
-                          onChanged: (value) => setState(() => _tls = value),
-                        ),
-                        const SizedBox(width: GerfautSpacing.xs),
-                        Text('TLS', style: tokens.bodySmall),
-                      ],
+                    // One node: the switch is read with its name.
+                    child: MergeSemantics(
+                      child: Row(
+                        children: [
+                          Switch(
+                            value: _tls,
+                            activeThumbColor: tokens.onPrimary,
+                            activeTrackColor: tokens.primary,
+                            inactiveThumbColor: tokens.textMuted,
+                            inactiveTrackColor: tokens.surfaceSunken,
+                            onChanged: (value) => setState(() => _tls = value),
+                          ),
+                          const SizedBox(width: GerfautSpacing.xs),
+                          Text('TLS', style: tokens.bodySmall),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -519,7 +585,23 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
               ],
             ],
             if (_backendKind != 'public_esplora') ...[
-              const SizedBox(height: GerfautSpacing.sm),
+              const SizedBox(height: GerfautSpacing.md),
+              // Declared, never detected: a public server typed in by
+              // hand looks exactly like a node of one's own.
+              SettingSwitch(
+                title: 'This is my node',
+                hint:
+                    'Live then follows up to $ownNodeLiveLimit addresses '
+                    'instead of $liveLimit. Leave it off for a server you do '
+                    'not run: it would refuse most of them, and learn every '
+                    'one.',
+                value: _ownNode,
+                onChanged: (on) => setState(() {
+                  _ownNode = on;
+                  _saveError = null;
+                }),
+              ),
+              const SizedBox(height: GerfautSpacing.md),
               // The card below is the one that knows which Tor is used
               // and can test it; this line only says a .onion will take
               // that route. Naming a port and asking for Orbot outlived
@@ -597,41 +679,53 @@ class _NetworkCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    return InkWell(
-      borderRadius: BorderRadius.circular(GerfautRadius.md),
-      onTap: selected ? null : onTap,
-      child: Container(
-        padding: const EdgeInsets.all(GerfautSpacing.sm + GerfautSpacing.xs),
-        decoration: BoxDecoration(
-          color: selected ? tokens.surfaceSunken : tokens.surface,
+    // One of four, read as such: which one is in use, among how many.
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        inMutuallyExclusiveGroup: true,
+        selected: selected,
+        child: InkWell(
           borderRadius: BorderRadius.circular(GerfautRadius.md),
-          border: Border.all(color: selected ? tokens.primary : tokens.border),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+          onTap: selected ? null : onTap,
+          child: Container(
+            padding: const EdgeInsets.all(
+              GerfautSpacing.sm + GerfautSpacing.xs,
+            ),
+            decoration: BoxDecoration(
+              color: selected ? tokens.surfaceSunken : tokens.surface,
+              borderRadius: BorderRadius.circular(GerfautRadius.md),
+              border: Border.all(
+                color: selected ? tokens.primary : tokens.border,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text(
-                    entry.network.label,
-                    style: tokens.bodySmall.copyWith(
-                      color: selected ? tokens.primary : tokens.text,
-                      fontWeight: FontWeight.w500,
-                      fontVariations: const [FontVariation('wght', 500)],
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        entry.network.label,
+                        style: tokens.bodySmall.copyWith(
+                          color: selected ? tokens.primary : tokens.text,
+                          fontWeight: FontWeight.w500,
+                          fontVariations: const [FontVariation('wght', 500)],
+                        ),
+                      ),
                     ),
-                  ),
+                    if (selected)
+                      Icon(LucideIcons.check, size: 15, color: tokens.primary),
+                  ],
                 ),
-                if (selected)
-                  Icon(LucideIcons.check, size: 15, color: tokens.primary),
+                const SizedBox(height: 2),
+                Text(
+                  entry.hint,
+                  style: tokens.label.copyWith(color: tokens.textMuted),
+                ),
               ],
             ),
-            const SizedBox(height: 2),
-            Text(
-              entry.hint,
-              style: tokens.label.copyWith(color: tokens.textMuted),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -800,13 +894,6 @@ class _PublicServerField extends ConsumerWidget {
           ],
           onChanged: onChanged,
         ),
-        if (chosen?.protocol == ServerProtocol.electrum) ...[
-          const SizedBox(height: GerfautSpacing.sm),
-          Text(
-            'An Electrum server cannot serve a single-address wallet.',
-            style: tokens.bodySmall.copyWith(color: tokens.pending),
-          ),
-        ],
         if (chosen?.selfSigned ?? false) ...[
           const SizedBox(height: GerfautSpacing.sm),
           Text(
@@ -839,63 +926,75 @@ class _BackendOption extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final selected = value == groupValue;
-    return InkWell(
-      borderRadius: BorderRadius.circular(GerfautRadius.md),
-      onTap: () => onChanged(value),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: GerfautSpacing.sm),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // The dot rides the first line of a label that wraps, by
-            // measurement — the 2px nudge it replaces was right at one
-            // font size and wrong at every other.
-            FirstLine(
-              style: tokens.bodySmall,
-              child: Container(
-                width: 20,
-                height: 20,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: selected ? tokens.primary : tokens.border,
-                    width: 2,
+    // One of three, read as such: the drawn circle says nothing aloud.
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        inMutuallyExclusiveGroup: true,
+        selected: selected,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(GerfautRadius.md),
+          onTap: () => onChanged(value),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: GerfautSpacing.sm),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // The dot rides the first line of a label that wraps, by
+                // measurement — the 2px nudge it replaces was right at one
+                // font size and wrong at every other.
+                FirstLine(
+                  style: tokens.bodySmall,
+                  child: Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      // A control's edge, not a card's: Ardoise, which
+                      // holds 3:1 on both surfaces where Brume does not.
+                      border: Border.all(
+                        color: selected ? tokens.primary : tokens.textMuted,
+                        width: 2,
+                      ),
+                    ),
+                    child: selected
+                        ? Center(
+                            child: Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: tokens.primary,
+                              ),
+                            ),
+                          )
+                        : null,
                   ),
                 ),
-                child: selected
-                    ? Center(
-                        child: Container(
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: tokens.primary,
-                          ),
+                const SizedBox(width: GerfautSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: tokens.bodySmall.copyWith(
+                          fontWeight: FontWeight.w500,
+                          fontVariations: const [FontVariation('wght', 500)],
                         ),
-                      )
-                    : null,
-              ),
-            ),
-            const SizedBox(width: GerfautSpacing.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: tokens.bodySmall.copyWith(
-                      fontWeight: FontWeight.w500,
-                      fontVariations: const [FontVariation('wght', 500)],
-                    ),
+                      ),
+                      Text(
+                        hint,
+                        style: tokens.bodySmall.copyWith(
+                          color: tokens.textMuted,
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    hint,
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

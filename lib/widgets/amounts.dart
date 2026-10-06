@@ -3,35 +3,56 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/format.dart';
+import '../src/models.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
 import 'facts.dart';
 
-/// Fiat value of an amount, when the display is enabled and a quote is
-/// available. Degrades to null, never to an error.
-String? fiatValueOf(WidgetRef ref, int sats) {
+/// Fiat value of an amount held on [network], when the display is
+/// enabled and a quote is available. Degrades to null, never to an
+/// error.
+///
+/// Only a quote that stands: after a failed fetch the provider still
+/// holds the last one, hours old maybe, and the settings say amounts
+/// show without fiat until the source answers. Nor one in a currency
+/// other than the one chosen, which a quote fetched before the change
+/// is until the next one lands.
+///
+/// A test coin is worth nothing. Off mainnet the value is zero in the
+/// chosen currency, written like any other fiat figure, never the
+/// amount at the real price: a signet balance priced as bitcoin reads
+/// as money that does not exist. Every amount becomes fiat here, and
+/// every widget that shows one names its network, so no screen can
+/// leave the rule out.
+String? fiatValueOf(WidgetRef ref, int sats, {required Network network}) {
   if (!ref.watch(fiatEnabledProvider) || ref.watch(maskedProvider)) {
     return null;
   }
-  final quote = ref.watch(priceProvider).valueOrNull;
-  if (quote == null) return null;
-  return formatFiat(sats, quote.rate, quote.currency);
+  final price = ref.watch(priceProvider);
+  final quote = price.valueOrNull;
+  if (quote == null || price.hasError) return null;
+  if (quote.currency != ref.watch(fiatCurrencyProvider)) return null;
+  final priced = network == Network.mainnet ? sats : 0;
+  return formatFiat(priced, quote.rate, quote.currency);
 }
 
 /// Large balance figure: UI face, tabular, masked-aware, never
 /// animated. The primary line follows the unit setting; the second line
 /// carries only the fiat value, when that display is on.
 class BalanceAmount extends ConsumerWidget {
-  const BalanceAmount({super.key, required this.sats});
+  const BalanceAmount({super.key, required this.sats, required this.network});
 
   final int sats;
+
+  /// Where the coins are: off mainnet their fiat value is zero.
+  final Network network;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final masked = ref.watch(maskedProvider);
     final unit = ref.watch(unitProvider);
-    final fiat = fiatValueOf(ref, sats);
+    final fiat = fiatValueOf(ref, sats, network: network);
     final primary = unit == AmountUnit.btc ? formatBtc(sats) : formatSats(sats);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -44,6 +65,7 @@ class BalanceAmount extends ConsumerWidget {
           child: Text.rich(
             TextSpan(
               text: masked ? maskedValue : primary,
+              semanticsLabel: masked ? maskedSpoken : null,
               style: tokens.amount,
               children: [
                 if (unit == AmountUnit.btc)
@@ -82,7 +104,7 @@ class PendingAmount extends ConsumerWidget {
     final unit = ref.watch(unitProvider);
     final figure = masked ? maskedValue : formatAmountSigned(sats, unit);
     return Semantics(
-      label: '$figure pending',
+      label: '${spokenIfMasked(figure) ?? figure} pending',
       excludeSemantics: true,
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -137,6 +159,7 @@ class UnitAmount extends ConsumerWidget {
       alignment: Alignment.centerRight,
       child: Text(
         masked ? maskedValue : formatAmount(value, unit),
+        semanticsLabel: masked ? maskedSpoken : null,
         style: tokens.figureOf(weight: FontWeight.w500),
         maxLines: 1,
         softWrap: false,
@@ -149,9 +172,17 @@ class UnitAmount extends ConsumerWidget {
 /// Signed list amount with an optional fiat subline. Direction is also
 /// carried by icon and sign elsewhere in the row.
 class ListAmount extends ConsumerWidget {
-  const ListAmount({super.key, required this.sats, this.pending = false});
+  const ListAmount({
+    super.key,
+    required this.sats,
+    required this.network,
+    this.pending = false,
+  });
 
   final int sats;
+
+  /// Where the coins are: off mainnet their fiat value is zero.
+  final Network network;
   final bool pending;
 
   @override
@@ -159,7 +190,7 @@ class ListAmount extends ConsumerWidget {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final masked = ref.watch(maskedProvider);
     final unit = ref.watch(unitProvider);
-    final fiat = fiatValueOf(ref, sats);
+    final fiat = fiatValueOf(ref, sats, network: network);
     final color = sats > 0 && !pending ? tokens.confirmed : tokens.text;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
@@ -167,6 +198,7 @@ class ListAmount extends ConsumerWidget {
       children: [
         Text(
           masked ? maskedValue : formatAmountSigned(sats, unit),
+          semanticsLabel: masked ? maskedSpoken : null,
           style: tokens.figureOf(weight: FontWeight.w500, color: color),
           textAlign: TextAlign.right,
         ),
@@ -184,22 +216,26 @@ class ListAmount extends ConsumerWidget {
 /// Unsigned amount stacked over its fiat value, for dense rows: the
 /// amount never wraps, the fiat line carries the small print.
 class StackedAmount extends ConsumerWidget {
-  const StackedAmount({super.key, required this.sats});
+  const StackedAmount({super.key, required this.sats, required this.network});
 
   final int sats;
+
+  /// Where the coins are: off mainnet their fiat value is zero.
+  final Network network;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final masked = ref.watch(maskedProvider);
     final unit = ref.watch(unitProvider);
-    final fiat = fiatValueOf(ref, sats);
+    final fiat = fiatValueOf(ref, sats, network: network);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           masked ? maskedValue : formatAmount(sats, unit),
+          semanticsLabel: masked ? maskedSpoken : null,
           style: tokens.figureOf(weight: FontWeight.w500),
           maxLines: 1,
           softWrap: false,
@@ -265,6 +301,7 @@ class IoListHeading extends ConsumerWidget {
         Flexible(
           child: Text(
             total,
+            semanticsLabel: spokenIfMasked(total),
             style: tokens.figureOf(
               size: 12,
               weight: FontWeight.w500,
@@ -286,10 +323,7 @@ class IoListHeading extends ConsumerWidget {
         heading,
         Text(
           note,
-          style: tokens.label.copyWith(
-            letterSpacing: 0,
-            color: tokens.pending,
-          ),
+          style: tokens.label.copyWith(letterSpacing: 0, color: tokens.pending),
         ),
       ],
     );
@@ -305,35 +339,4 @@ int? sideTotal(Iterable<int?> values) {
     total += value;
   }
   return total;
-}
-
-/// Inline amount for detail views: primary unit plus fiat.
-class InlineAmount extends ConsumerWidget {
-  const InlineAmount({super.key, required this.sats});
-
-  final int sats;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final masked = ref.watch(maskedProvider);
-    final unit = ref.watch(unitProvider);
-    if (masked) {
-      return Text(maskedValue, style: tokens.figure);
-    }
-    final fiat = fiatValueOf(ref, sats);
-    return Text.rich(
-      TextSpan(
-        text: formatAmount(sats, unit),
-        style: tokens.figure,
-        children: [
-          if (fiat != null)
-            TextSpan(
-              text: ' · $fiat',
-              style: tokens.figureOf(color: tokens.textMuted),
-            ),
-        ],
-      ),
-    );
-  }
 }

@@ -8,8 +8,8 @@ import '../theme/tokens.dart';
 import 'notice.dart';
 import 'buttons.dart';
 
-/// The "View on mempool.space" row: a 44px tap target around a one-line
-/// link, behind the privacy warning.
+/// The "View on mempool.space" row: a full touch target around a
+/// one-line link, behind the privacy warning.
 class ExplorerLink extends ConsumerWidget {
   const ExplorerLink({super.key, required this.url});
 
@@ -23,10 +23,8 @@ class ExplorerLink extends ConsumerWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(GerfautRadius.sm),
         onTap: () => openExplorer(context, ref, url),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            vertical: GerfautSpacing.sm + GerfautSpacing.xs,
-          ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: GerfautTouch.target),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -92,40 +90,49 @@ void openExplorer(BuildContext context, WidgetRef ref, String url) {
                     style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                   ),
                   const SizedBox(height: GerfautSpacing.sm),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(GerfautRadius.sm),
-                    onTap: () => setState(() => skipNextTime = !skipNextTime),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: GerfautSpacing.sm + 2,
-                      ),
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: Checkbox(
-                              value: skipNextTime,
-                              activeColor: tokens.primary,
-                              checkColor: tokens.onPrimary,
-                              side: BorderSide(
-                                color: tokens.textMuted,
-                                width: 1.5,
+                  // One node: the box is read with its sentence.
+                  MergeSemantics(
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                      onTap: () => setState(() => skipNextTime = !skipNextTime),
+                      child: Container(
+                        // The whole line is the box: a touch target
+                        // high at least.
+                        constraints: const BoxConstraints(
+                          minHeight: GerfautTouch.target,
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: GerfautSpacing.sm + 2,
+                        ),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: Checkbox(
+                                value: skipNextTime,
+                                activeColor: tokens.primary,
+                                checkColor: tokens.onPrimary,
+                                side: BorderSide(
+                                  color: tokens.textMuted,
+                                  width: 1.5,
+                                ),
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                onChanged: (value) => setState(
+                                  () => skipNextTime = value ?? false,
+                                ),
                               ),
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
-                              onChanged: (value) =>
-                                  setState(() => skipNextTime = value ?? false),
                             ),
-                          ),
-                          const SizedBox(width: GerfautSpacing.sm),
-                          Expanded(
-                            child: Text(
-                              'Do not show this warning again',
-                              style: tokens.bodySmall,
+                            const SizedBox(width: GerfautSpacing.sm),
+                            Expanded(
+                              child: Text(
+                                'Do not show this warning again',
+                                style: tokens.bodySmall,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),

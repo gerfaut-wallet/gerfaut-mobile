@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/backup_export.dart';
+import 'package:gerfaut/widgets/choice_group.dart';
 import 'package:gerfaut/screens/backup_qr.dart';
 import 'package:gerfaut/screens/backup_restore.dart';
 import 'package:gerfaut/screens/scan.dart';
@@ -170,6 +171,48 @@ void main() {
       await tester.tap(done);
       await tester.pumpAndSettle();
       expect(find.byType(BackupExportScreen), findsNothing);
+    });
+
+    testWidgets('says the scope plainly when there is no choice to make', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge(wallets: [makeMeta()]);
+      await tester.pumpWidget(screen(bridge, const BackupExportScreen()));
+      await tester.pumpAndSettle();
+
+      // Every wallet is on the network shown: no group of one option,
+      // which would read as a control, only the scope and its count.
+      expect(
+        find.byWidgetPredicate((widget) => widget is ChoiceGroup),
+        findsNothing,
+      );
+      expect(find.text('All wallets (1)'), findsOneWidget);
+      expect(find.textContaining(' only ('), findsNothing);
+    });
+
+    testWidgets('offers the network scope when it differs', (tester) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge(
+        wallets: [
+          makeMeta(id: 'w1', network: Network.signet),
+          makeMeta(id: 'w2', name: 'Other', network: Network.mainnet),
+        ],
+        settings: const Settings(
+          activeNetwork: Network.signet,
+          backends: {},
+          appPrefs: {},
+        ),
+      );
+      await tester.pumpWidget(screen(bridge, const BackupExportScreen()));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byWidgetPredicate((widget) => widget is ChoiceGroup),
+        findsOneWidget,
+      );
+      expect(find.text('All wallets (2)'), findsOneWidget);
+      expect(find.text('Signet only (1)'), findsOneWidget);
     });
 
     testWidgets('the network scope sends only that network ids', (
