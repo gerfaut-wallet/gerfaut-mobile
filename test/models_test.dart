@@ -260,16 +260,16 @@ void main() {
 
     test('reads a public server entry', () {
       final server = PublicServer.fromJson(const {
-        'id': 'electrum:frigate.2140.dev',
-        'label': 'frigate.2140.dev:50002',
+        'id': 'electrum:electrum.diynodes.com',
+        'label': 'electrum.diynodes.com:50022',
         'protocol': 'electrum',
-        'url': 'ssl://frigate.2140.dev:50002',
+        'url': 'ssl://electrum.diynodes.com:50022',
       });
-      expect(server.id, 'electrum:frigate.2140.dev');
-      expect(server.label, 'frigate.2140.dev:50002');
+      expect(server.id, 'electrum:electrum.diynodes.com');
+      expect(server.label, 'electrum.diynodes.com:50022');
       expect(server.protocol, ServerProtocol.electrum);
       expect(server.protocol.label, 'Electrum');
-      expect(server.url, 'ssl://frigate.2140.dev:50002');
+      expect(server.url, 'ssl://electrum.diynodes.com:50022');
       // A public authority vouches for this one.
       expect(server.selfSigned, isFalse);
       expect(

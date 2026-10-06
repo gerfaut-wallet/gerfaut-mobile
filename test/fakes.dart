@@ -486,11 +486,6 @@ final Map<Network, List<PublicServer>> defaultPublicServers = {
       'electrum.diynodes.com:50022',
       'ssl://electrum.diynodes.com:50022',
     ),
-    _electrum(
-      'frigate.2140.dev',
-      'frigate.2140.dev:50002',
-      'ssl://frigate.2140.dev:50002',
-    ),
     // The rest of Sparrow's list; these four sign their own certificate.
     _electrum(
       'bitcoin.lu.ke',
