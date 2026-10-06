@@ -547,9 +547,16 @@ void main() {
       final bridge = _bridge();
       await open(tester, bridge);
       expect(find.text('Check automatically'), findsOneWidget);
-      expect(find.textContaining('GitHub sees your IP address'), findsOne);
-      expect(find.textContaining('goes through Tor instead'), findsOne);
-      expect(find.textContaining('or not at all if Tor'), findsOne);
+      // Two sentences, the most a setting's line may take.
+      expect(
+        find.text(
+          'Asks GitHub for the latest release at most once a day while '
+          'Gerfaut is unlocked, and downloads nothing. With a .onion node '
+          'it goes through Tor or not at all, and never while the app is '
+          'disguised.',
+        ),
+        findsOne,
+      );
       expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
 
       await tester.tap(find.byType(Switch));

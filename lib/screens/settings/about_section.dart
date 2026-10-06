@@ -129,13 +129,12 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
         const SizedBox(height: GerfautSpacing.md),
         SettingSwitch(
           title: 'Check automatically',
+          // Worded as on the desktop; the disguise is the phone's alone.
           hint:
-              'Once a day at most, when you open Gerfaut, it asks GitHub for '
-              'the latest release. GitHub sees your IP address and nothing '
-              'about your wallets. When one of your nodes is a .onion '
-              'address, the request goes through Tor instead, or not at all '
-              'if Tor cannot be reached. Nothing is asked while the app is '
-              'disguised.',
+              'Asks GitHub for the latest release at most once a day while '
+              'Gerfaut is unlocked, and downloads nothing. With a .onion '
+              'node it goes through Tor or not at all, and never while the '
+              'app is disguised.',
           value: automatic,
           onChanged: (on) => ref.read(updateProvider.notifier).setAutomatic(on),
         ),
