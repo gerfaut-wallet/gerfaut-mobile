@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/tokens.dart';
+import 'tap_target.dart';
 
 /// Width from which the options open in a menu anchored to the field;
 /// narrower, they rise as a bottom sheet the thumb reaches.
@@ -135,62 +136,70 @@ class _GerfautSelectState<T> extends State<GerfautSelect<T>> {
       value: subtitle == null ? title : '$title, $subtitle',
       onTap: enabled ? _open : null,
       excludeSemantics: true,
-      child: Material(
-        color: tokens.surfaceSunken,
-        borderRadius: BorderRadius.circular(GerfautRadius.sm),
-        child: InkWell(
+      // Drawn at a field's height, answering the finger over a whole
+      // touch target.
+      child: TapTarget(
+        child: Material(
+          color: tokens.surfaceSunken,
           borderRadius: BorderRadius.circular(GerfautRadius.sm),
-          onTap: enabled ? _open : null,
-          onFocusChange: (focused) => setState(() => _focused = focused),
-          // At least 44 high, and taller when the system text is large:
-          // a fixed height would cut the value in half at 200 %.
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 44),
-            padding: const EdgeInsets.symmetric(
-              horizontal: GerfautSpacing.md,
-              vertical: GerfautSpacing.xs,
-            ),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(GerfautRadius.sm),
-              border: Border.all(
-                color: _focused ? tokens.primary : Colors.transparent,
-                width: 2,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(GerfautRadius.sm),
+            onTap: enabled ? _open : null,
+            onFocusChange: (focused) => setState(() => _focused = focused),
+            // A field's height at least, and taller when the system text
+            // is large: a fixed height would cut the value in half at 200 %.
+            child: Container(
+              constraints: const BoxConstraints(
+                minHeight: GerfautTouch.control,
               ),
-            ),
-            child: Row(
-              children: [
-                if (selected?.icon != null) ...[
-                  Icon(selected!.icon, size: 16, color: tokens.textMuted),
-                  const SizedBox(width: GerfautSpacing.sm),
-                ],
-                Text(
-                  title,
-                  style: titleStyle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              padding: const EdgeInsets.symmetric(
+                horizontal: GerfautSpacing.md,
+                vertical: GerfautSpacing.xs,
+              ),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                border: Border.all(
+                  color: _focused ? tokens.primary : Colors.transparent,
+                  width: 2,
                 ),
-                if (subtitle != null) ...[
+              ),
+              child: Row(
+                children: [
+                  if (selected?.icon != null) ...[
+                    Icon(selected!.icon, size: 16, color: tokens.textMuted),
+                    const SizedBox(width: GerfautSpacing.sm),
+                  ],
                   Text(
-                    ' · ',
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                    title,
+                    style: titleStyle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  Expanded(
-                    child: Text(
-                      subtitle,
+                  if (subtitle != null) ...[
+                    Text(
+                      ' · ',
                       style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
+                    Expanded(
+                      child: Text(
+                        subtitle,
+                        style: tokens.bodySmall.copyWith(
+                          color: tokens.textMuted,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ] else
+                    const Spacer(),
+                  const SizedBox(width: GerfautSpacing.sm),
+                  Icon(
+                    LucideIcons.chevronDown,
+                    size: 18,
+                    color: tokens.textMuted,
                   ),
-                ] else
-                  const Spacer(),
-                const SizedBox(width: GerfautSpacing.sm),
-                Icon(
-                  LucideIcons.chevronDown,
-                  size: 18,
-                  color: tokens.textMuted,
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -498,7 +507,7 @@ class _OptionRow<T> extends StatelessWidget {
         autofocus: selected,
         onTap: onTap,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 44),
+          constraints: const BoxConstraints(minHeight: GerfautTouch.target),
           padding: const EdgeInsets.symmetric(
             horizontal: GerfautSpacing.sm + 2,
             vertical: GerfautSpacing.sm - 2,

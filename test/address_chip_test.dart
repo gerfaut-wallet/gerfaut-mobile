@@ -228,7 +228,9 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
   });
 
-  testWidgets('the finger gets 44 around a chip drawn smaller', (tester) async {
+  testWidgets('the finger gets a full target around a chip drawn smaller', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: themeFrom(GerfautTokens.light, Brightness.light),
@@ -242,7 +244,7 @@ void main() {
     );
     expect(
       tester.getSize(find.byType(AddressChip)).height,
-      greaterThanOrEqualTo(44),
+      greaterThanOrEqualTo(GerfautTouch.target),
     );
     // What is drawn keeps its own height.
     final drawn = tester.getSize(
@@ -253,6 +255,6 @@ void main() {
           )
           .first,
     );
-    expect(drawn.height, lessThan(44));
+    expect(drawn.height, lessThan(GerfautTouch.target));
   });
 }

@@ -7,6 +7,7 @@ import 'package:flutter_zxing/flutter_zxing.dart' as zxing;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/tokens.dart';
+import 'tap_target.dart';
 
 /// Live camera feed, every frame decoded on the device.
 ///
@@ -415,19 +416,21 @@ class _TorchButton extends StatelessWidget {
       label: on ? 'Turn the light off' : 'Turn the light on',
       onTap: onPressed,
       excludeSemantics: true,
-      child: Material(
-        color: dark.surface.withValues(alpha: 0.85),
-        shape: const CircleBorder(),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onPressed,
-          child: SizedBox(
-            width: 44,
-            height: 44,
-            child: Icon(
-              on ? LucideIcons.flashlight : LucideIcons.flashlightOff,
-              size: 20,
-              color: on ? dark.primary : dark.text,
+      // Drawn smaller than a touch target, it answers over a whole one.
+      child: TapTarget(
+        child: Material(
+          color: dark.surface.withValues(alpha: 0.85),
+          shape: const CircleBorder(),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onPressed,
+            child: SizedBox.square(
+              dimension: GerfautTouch.control,
+              child: Icon(
+                on ? LucideIcons.flashlight : LucideIcons.flashlightOff,
+                size: 20,
+                color: on ? dark.primary : dark.text,
+              ),
             ),
           ),
         ),

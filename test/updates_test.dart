@@ -16,6 +16,7 @@ import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/updates.dart';
 import 'package:gerfaut/src/window.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/tap_target.dart';
 import 'package:gerfaut/widgets/update_notice.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
@@ -348,7 +349,7 @@ void main() {
       expect(bridge.appPrefs['updates.dismissed'], '0.2.0');
     });
 
-    testWidgets('both targets are 44 px and a screen reader hears it all', (
+    testWidgets('both are full targets and a screen reader hears it all', (
       tester,
     ) async {
       final handle = tester.ensureSemantics();
@@ -357,13 +358,18 @@ void main() {
 
       for (final label in ['Later', 'View release']) {
         final size = tester.getSize(
-          find.ancestor(
-            of: find.text(label),
-            matching: find.bySubtype<ButtonStyleButton>(),
-          ),
+          find.ancestor(of: find.text(label), matching: find.byType(TapTarget)),
         );
-        expect(size.height, greaterThanOrEqualTo(44), reason: label);
-        expect(size.width, greaterThanOrEqualTo(44), reason: label);
+        expect(
+          size.height,
+          greaterThanOrEqualTo(GerfautTouch.target),
+          reason: label,
+        );
+        expect(
+          size.width,
+          greaterThanOrEqualTo(GerfautTouch.target),
+          reason: label,
+        );
       }
       expect(find.bySemanticsLabel(_line), findsOneWidget);
       // One node each: the name, the hint and the tap together.

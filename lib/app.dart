@@ -448,11 +448,11 @@ ThemeData themeFrom(GerfautTokens tokens, Brightness brightness) {
       titleTextStyle: tokens.h2,
     ),
     iconButtonTheme: IconButtonThemeData(
-      // 44px, the touch target of every other control in Gerfaut. The
-      // Material default is 48, which spreads a row of actions wider
-      // than the header has to give.
+      // The touch target of every control in Gerfaut, set here rather
+      // than left to the platform's padding: the glyph stays its size,
+      // the ink and the hit area are the target's.
       style: IconButton.styleFrom(
-        minimumSize: const Size(44, 44),
+        minimumSize: const Size.square(GerfautTouch.target),
         padding: EdgeInsets.zero,
       ),
     ),

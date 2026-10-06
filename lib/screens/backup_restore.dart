@@ -591,7 +591,7 @@ class _WalletRow extends StatelessWidget {
       child: InkWell(
         onTap: enabled ? () => onChanged!(!chosen) : null,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 44),
+          constraints: const BoxConstraints(minHeight: GerfautTouch.target),
           padding: const EdgeInsets.symmetric(
             horizontal: GerfautSpacing.sm,
             vertical: GerfautSpacing.xs,

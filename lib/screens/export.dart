@@ -337,6 +337,10 @@ class _SectionLabel extends StatelessWidget {
 }
 
 /// A tappable date bound: sunken field look, clearable once set.
+///
+/// Drawn a touch target tall, not a field's height: the clear button
+/// sits inside it and needs a whole target of its own, which a field
+/// drawn smaller and padded out could not give it.
 class _DateField extends StatelessWidget {
   const _DateField({
     required this.placeholder,
@@ -358,7 +362,7 @@ class _DateField extends StatelessWidget {
       borderRadius: BorderRadius.circular(GerfautRadius.sm),
       onTap: onTap,
       child: Container(
-        height: 44,
+        height: GerfautTouch.target,
         padding: const EdgeInsets.only(left: GerfautSpacing.md),
         decoration: BoxDecoration(
           color: tokens.surfaceSunken,
@@ -385,9 +389,8 @@ class _DateField extends StatelessWidget {
                 child: Semantics(
                   button: true,
                   label: 'Clear $placeholder date',
-                  child: SizedBox(
-                    width: 44,
-                    height: 44,
+                  child: SizedBox.square(
+                    dimension: GerfautTouch.target,
                     child: Icon(
                       LucideIcons.x,
                       size: 15,

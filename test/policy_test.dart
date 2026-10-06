@@ -978,13 +978,16 @@ void main() {
         isFalse,
       );
       // The copy glyph has a column of its own: no character under it,
-      // and the target around it is a full 44px.
+      // and the target around it is a full one.
       final copy = find.byTooltip('Copy descriptor');
       final glyph = tester.getRect(
         find.descendant(of: copy, matching: find.byType(Icon)),
       );
       expect(text.right, lessThan(glyph.left));
-      expect(tester.getSize(copy).height, greaterThanOrEqualTo(44));
+      expect(
+        tester.getSize(copy).height,
+        greaterThanOrEqualTo(GerfautTouch.target),
+      );
 
       // The normalized policy reads the same way, with its own copy.
       final policy = find.text(snapshot.policy);

@@ -221,7 +221,9 @@ class _LiveStatusState extends ConsumerState<_LiveStatus> {
                   borderRadius: BorderRadius.circular(GerfautRadius.sm),
                   onTap: () => ref.read(liveProvider.notifier).restart(),
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 44),
+                    constraints: const BoxConstraints(
+                      minHeight: GerfautTouch.target,
+                    ),
                     child: row,
                   ),
                 )

@@ -13,6 +13,7 @@ import '../../widgets/reorder.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/setting_switch.dart';
 import '../../widgets/status_pill.dart';
+import '../../widgets/tap_target.dart';
 import '../../widgets/wallet_icon.dart';
 import 'fields.dart';
 import '../../widgets/toast.dart';
@@ -622,7 +623,7 @@ class _WalletRow extends StatelessWidget {
                                   // The height of every other field: a
                                   // box the thumb lands in.
                                   constraints: const BoxConstraints(
-                                    minHeight: 44,
+                                    minHeight: GerfautTouch.target,
                                   ),
                                   contentPadding: const EdgeInsets.symmetric(
                                     horizontal: GerfautSpacing.sm,
@@ -692,9 +693,8 @@ class _WalletRow extends StatelessWidget {
                 ReorderableDragStartListener(
                   index: index,
                   child: ExcludeSemantics(
-                    child: SizedBox(
-                      width: 44,
-                      height: 44,
+                    child: SizedBox.square(
+                      dimension: GerfautTouch.target,
                       child: Center(
                         child: Icon(
                           LucideIcons.gripVertical,
@@ -793,28 +793,30 @@ class _AlertGhostButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    return SizedBox(
-      height: 44,
-      child: TextButton(
-        style: TextButton.styleFrom(
-          foregroundColor: tokens.alert,
-          padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(GerfautRadius.md),
+    return TapTarget(
+      child: SizedBox(
+        height: GerfautTouch.control,
+        child: TextButton(
+          style: TextButton.styleFrom(
+            foregroundColor: tokens.alert,
+            padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(GerfautRadius.md),
+            ),
+            textStyle: tokens.bodySmall.copyWith(
+              fontWeight: FontWeight.w500,
+              fontVariations: const [FontVariation('wght', 500)],
+            ),
           ),
-          textStyle: tokens.bodySmall.copyWith(
-            fontWeight: FontWeight.w500,
-            fontVariations: const [FontVariation('wght', 500)],
+          onPressed: onPressed,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14),
+              const SizedBox(width: GerfautSpacing.xs),
+              Text(label),
+            ],
           ),
-        ),
-        onPressed: onPressed,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14),
-            const SizedBox(width: GerfautSpacing.xs),
-            Text(label),
-          ],
         ),
       ),
     );

@@ -147,7 +147,10 @@ void main() {
     for (var i = 1; i < order.length; i++) {
       expect(top(order[i]), greaterThan(top(order[i - 1])));
       // A menu row is as big a target as any other control.
-      expect(menuRowHeight(tester, order[i]), greaterThanOrEqualTo(44));
+      expect(
+        menuRowHeight(tester, order[i]),
+        greaterThanOrEqualTo(GerfautTouch.target),
+      );
     }
 
     await tester.tap(find.text('Broadcast'));

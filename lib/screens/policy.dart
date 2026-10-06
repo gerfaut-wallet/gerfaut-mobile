@@ -568,8 +568,8 @@ class _DescriptorSectionState extends State<_DescriptorSection> {
             borderRadius: BorderRadius.circular(GerfautRadius.sm),
             onTap: () => setState(() => _open = !_open),
             child: Container(
-              // A 44px tap target around a one-line disclosure.
-              constraints: const BoxConstraints(minHeight: 44),
+              // A full touch target around a one-line disclosure.
+              constraints: const BoxConstraints(minHeight: GerfautTouch.target),
               alignment: Alignment.centerLeft,
               child: Row(
                 mainAxisSize: MainAxisSize.min,

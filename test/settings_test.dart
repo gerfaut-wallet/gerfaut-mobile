@@ -264,8 +264,8 @@ void main() {
         final tile = find.bySemanticsLabel(icon.label);
         expect(tile, findsOneWidget, reason: icon.label);
         final size = tester.getSize(tile);
-        expect(size.width, greaterThanOrEqualTo(44));
-        expect(size.height, greaterThanOrEqualTo(44));
+        expect(size.width, greaterThanOrEqualTo(GerfautTouch.target));
+        expect(size.height, greaterThanOrEqualTo(GerfautTouch.target));
         final semantics = tester.getSemantics(tile);
         expect(
           semantics.flagsCollection.isSelected,
@@ -684,7 +684,7 @@ void main() {
       expect(cancel.center.dy, closeTo(remove.center.dy, 1));
       expect(cancel.right, lessThan(remove.left));
       expect(remove.right, closeTo(panel.right - 12, 1));
-      expect(remove.height, 44);
+      expect(remove.height, GerfautTouch.target);
 
       // Nothing has moved yet; Cancel closes the panel and keeps the row.
       expect(bridge.wallets, hasLength(1));
@@ -729,12 +729,12 @@ void main() {
       find.widgetWithText(DangerButton, 'Remove wallet'),
     );
     final panel = tester.getRect(find.byType(GerfautNotice));
-    // Two lines, the deed last, both inside the panel and 44px tall.
+    // Two lines, the deed last, both inside the panel and full targets.
     expect(remove.top, greaterThanOrEqualTo(cancel.bottom));
     expect(remove.right, lessThanOrEqualTo(panel.right));
     expect(cancel.right, lessThanOrEqualTo(panel.right));
-    expect(remove.height, 44);
-    expect(cancel.height, 44);
+    expect(remove.height, GerfautTouch.target);
+    expect(cancel.height, GerfautTouch.target);
 
     await tester.tap(find.text('Remove wallet'));
     await tester.pumpAndSettle();
@@ -2336,7 +2336,7 @@ void main() {
                 ),
               )
               .height,
-          greaterThanOrEqualTo(44),
+          greaterThanOrEqualTo(GerfautTouch.target),
         );
       }
     });

@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../theme/tokens.dart';
+import 'tap_target.dart';
 
-/// The single primary action of a screen: Glacier surface, 44px tall.
+/// The single primary action of a screen: Glacier surface.
+///
+/// Every button here is drawn [GerfautTouch.control] tall and answers
+/// the finger over [GerfautTouch.target]: the extra height is invisible
+/// padding, so a tap just above or below the button still presses it.
 class PrimaryButton extends StatelessWidget {
   const PrimaryButton({
     super.key,
@@ -22,46 +27,48 @@ class PrimaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    return SizedBox(
-      height: 44,
-      width: expand ? double.infinity : null,
-      child: FilledButton(
-        style: FilledButton.styleFrom(
-          backgroundColor: tokens.primary,
-          foregroundColor: tokens.onPrimary,
-          disabledBackgroundColor: tokens.surfaceSunken,
-          disabledForegroundColor: tokens.textMuted,
-          elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(GerfautRadius.md),
+    return TapTarget(
+      child: SizedBox(
+        height: GerfautTouch.control,
+        width: expand ? double.infinity : null,
+        child: FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: tokens.primary,
+            foregroundColor: tokens.onPrimary,
+            disabledBackgroundColor: tokens.surfaceSunken,
+            disabledForegroundColor: tokens.textMuted,
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(GerfautRadius.md),
+            ),
+            textStyle: tokens.bodySmall.copyWith(
+              fontWeight: FontWeight.w500,
+              fontVariations: const [FontVariation('wght', 500)],
+            ),
           ),
-          textStyle: tokens.bodySmall.copyWith(
-            fontWeight: FontWeight.w500,
-            fontVariations: const [FontVariation('wght', 500)],
-          ),
-        ),
-        onPressed: onPressed,
-        child: icon == null
-            ? Text(label)
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon, size: 16),
-                  const SizedBox(width: GerfautSpacing.sm),
-                  // The height is fixed, so a label wider than the
-                  // phone at a large text size gives ground at its end
-                  // rather than running past the button.
-                  Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+          onPressed: onPressed,
+          child: icon == null
+              ? Text(label)
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, size: 16),
+                    const SizedBox(width: GerfautSpacing.sm),
+                    // The height is fixed, so a label wider than the
+                    // phone at a large text size gives ground at its end
+                    // rather than running past the button.
+                    Flexible(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+        ),
       ),
     );
   }
@@ -83,41 +90,43 @@ class SecondaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    return SizedBox(
-      height: 44,
-      child: FilledButton(
-        style: FilledButton.styleFrom(
-          backgroundColor: tokens.surfaceSunken,
-          foregroundColor: tokens.text,
-          disabledBackgroundColor: tokens.surfaceSunken,
-          disabledForegroundColor: tokens.textMuted,
-          elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(GerfautRadius.md),
+    return TapTarget(
+      child: SizedBox(
+        height: GerfautTouch.control,
+        child: FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: tokens.surfaceSunken,
+            foregroundColor: tokens.text,
+            disabledBackgroundColor: tokens.surfaceSunken,
+            disabledForegroundColor: tokens.textMuted,
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(GerfautRadius.md),
+            ),
+            textStyle: tokens.bodySmall.copyWith(
+              fontWeight: FontWeight.w500,
+              fontVariations: const [FontVariation('wght', 500)],
+            ),
           ),
-          textStyle: tokens.bodySmall.copyWith(
-            fontWeight: FontWeight.w500,
-            fontVariations: const [FontVariation('wght', 500)],
-          ),
-        ),
-        onPressed: onPressed,
-        child: icon == null
-            ? Text(label)
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, size: 16),
-                  const SizedBox(width: GerfautSpacing.sm),
-                  Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+          onPressed: onPressed,
+          child: icon == null
+              ? Text(label)
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 16),
+                    const SizedBox(width: GerfautSpacing.sm),
+                    Flexible(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+        ),
       ),
     );
   }
@@ -156,37 +165,39 @@ class GhostButton extends StatelessWidget {
 
   Widget _button(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    return SizedBox(
-      height: 44,
-      child: TextButton(
-        style: TextButton.styleFrom(
-          foregroundColor: tokens.textMuted,
-          padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(GerfautRadius.md),
+    return TapTarget(
+      child: SizedBox(
+        height: GerfautTouch.control,
+        child: TextButton(
+          style: TextButton.styleFrom(
+            foregroundColor: tokens.textMuted,
+            padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(GerfautRadius.md),
+            ),
+            textStyle: tokens.bodySmall.copyWith(
+              fontWeight: FontWeight.w500,
+              fontVariations: const [FontVariation('wght', 500)],
+            ),
           ),
-          textStyle: tokens.bodySmall.copyWith(
-            fontWeight: FontWeight.w500,
-            fontVariations: const [FontVariation('wght', 500)],
-          ),
-        ),
-        onPressed: onPressed,
-        child: icon == null
-            ? Text(label)
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, size: 16),
-                  const SizedBox(width: GerfautSpacing.sm),
-                  Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+          onPressed: onPressed,
+          child: icon == null
+              ? Text(label)
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 16),
+                    const SizedBox(width: GerfautSpacing.sm),
+                    Flexible(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+        ),
       ),
     );
   }
@@ -204,26 +215,28 @@ class DangerButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    return SizedBox(
-      height: 44,
-      child: FilledButton(
-        style: FilledButton.styleFrom(
-          backgroundColor: tokens.alert,
-          // Light: white text on the deep red. Dark: near-black text on
-          // the bright red, mirroring the desktop danger variant.
-          foregroundColor: dark ? tokens.background : tokens.surface,
-          elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(GerfautRadius.md),
+    return TapTarget(
+      child: SizedBox(
+        height: GerfautTouch.control,
+        child: FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: tokens.alert,
+            // Light: white text on the deep red. Dark: near-black text on
+            // the bright red, mirroring the desktop danger variant.
+            foregroundColor: dark ? tokens.background : tokens.surface,
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(GerfautRadius.md),
+            ),
+            textStyle: tokens.bodySmall.copyWith(
+              fontWeight: FontWeight.w500,
+              fontVariations: const [FontVariation('wght', 500)],
+            ),
           ),
-          textStyle: tokens.bodySmall.copyWith(
-            fontWeight: FontWeight.w500,
-            fontVariations: const [FontVariation('wght', 500)],
-          ),
+          onPressed: onPressed,
+          child: Text(label),
         ),
-        onPressed: onPressed,
-        child: Text(label),
       ),
     );
   }

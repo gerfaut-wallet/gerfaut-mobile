@@ -125,10 +125,11 @@ void main() {
     final all = option('All');
     final received = option('Received');
     final sent = option('Sent');
-    // Stacked full-width rows, 44px each, with room between them.
+    // Stacked full-width rows, drawn a control's height, with room
+    // between them.
     expect(received.top - all.bottom, GerfautSpacing.sm);
     expect(sent.top - received.bottom, GerfautSpacing.sm);
-    expect(all.height, 44);
+    expect(all.height, GerfautTouch.control);
     expect(received.width, all.width);
     expect(sent.left, all.left);
 

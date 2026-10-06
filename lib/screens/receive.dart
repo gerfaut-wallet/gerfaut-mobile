@@ -605,7 +605,8 @@ class _AddressCardState extends State<_AddressCard> {
   }
 }
 
-/// One revealed address: index, chip, usage, balance. 44px minimum.
+/// One revealed address: index, chip, usage, balance. Never shorter than
+/// a touch target.
 class _AddressRowTile extends StatelessWidget {
   const _AddressRowTile({required this.row, required this.network});
 
@@ -616,7 +617,7 @@ class _AddressRowTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     return Container(
-      constraints: const BoxConstraints(minHeight: 44),
+      constraints: const BoxConstraints(minHeight: GerfautTouch.target),
       padding: const EdgeInsets.symmetric(
         horizontal: GerfautSpacing.md,
         vertical: GerfautSpacing.sm,

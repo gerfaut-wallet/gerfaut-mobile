@@ -204,8 +204,8 @@ class _OverflowMenuRoute extends PopupRoute<OverflowMenuItem> {
 }
 
 /// One entry: the glyph, the label, and the quiet line under it. Same
-/// row as the select's options — 44px, radius 8 — so the two floating
-/// lists of the app read as one.
+/// row as the select's options — a touch target tall, radius 8 — so the
+/// two floating lists of the app read as one.
 class _MenuRow extends StatelessWidget {
   const _MenuRow({required this.item, required this.onTap});
 
@@ -229,7 +229,7 @@ class _MenuRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(GerfautRadius.md),
         onTap: onTap,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 44),
+          constraints: const BoxConstraints(minHeight: GerfautTouch.target),
           padding: const EdgeInsets.symmetric(
             horizontal: GerfautSpacing.sm + 2,
             vertical: GerfautSpacing.sm - 2,

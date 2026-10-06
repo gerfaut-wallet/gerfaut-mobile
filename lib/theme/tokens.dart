@@ -19,6 +19,17 @@ abstract final class GerfautSpacing {
   static const double gutter = 12;
 }
 
+/// Touch targets, Android's figure.
+abstract final class GerfautTouch {
+  /// The smallest hit area of anything a finger can press, both ways.
+  /// What is drawn may be smaller; what answers the finger never is.
+  static const double target = 48;
+
+  /// How tall a button, a select or a choice is drawn. The hit area
+  /// around it is still [target]: the difference is invisible padding.
+  static const double control = 44;
+}
+
 /// Corner radii. Nothing above [lg] on a container; [canvas] is shell
 /// geometry, kept for the top edge of a bottom sheet.
 abstract final class GerfautRadius {

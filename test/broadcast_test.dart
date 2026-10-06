@@ -948,11 +948,18 @@ void main() {
         const resting = <WidgetState>{};
         expect(another.backgroundColor!.resolve(resting), tokens.primary);
         expect(another.foregroundColor!.resolve(resting), tokens.onPrimary);
+        // Drawn a control's height, answering over a full target.
         expect(
           tester
               .getSize(find.widgetWithText(FilledButton, 'Broadcast another'))
               .height,
-          44,
+          GerfautTouch.control,
+        );
+        expect(
+          tester
+              .getSize(find.widgetWithText(PrimaryButton, 'Broadcast another'))
+              .height,
+          GerfautTouch.target,
         );
         // And it is the only one: leaving the screen is a navigation, so
         // Done steps back to a ghost rather than competing with it.

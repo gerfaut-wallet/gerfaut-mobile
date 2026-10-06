@@ -97,8 +97,9 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
     return Scaffold(
       appBar: GerfautAppBar(
         // No pencil: a permanent target next to the title for a rare
-        // gesture, when the title is a 44px target already. What says so
-        // is the ink under the finger and the label read out loud.
+        // gesture, when the title is a full touch target already. What
+        // says so is the ink under the finger and the label read out
+        // loud.
         title: Align(
           alignment: Alignment.centerLeft,
           child: Semantics(
@@ -113,7 +114,9 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                 // No padding of its own: the title stays against the
                 // back arrow, where every other page starts.
                 child: Container(
-                  constraints: const BoxConstraints(minHeight: 44),
+                  constraints: const BoxConstraints(
+                    minHeight: GerfautTouch.target,
+                  ),
                   alignment: Alignment.centerLeft,
                   child: Text(
                     name ?? '',
@@ -764,7 +767,8 @@ class _UtxoList extends ConsumerWidget {
                       spoken:
                           '${utxo.txid.substring(0, 8)}, output ${utxo.vout}',
                     ),
-                    const SizedBox(height: GerfautSpacing.xs),
+                    // No gap: each chip's touch target reaches past what
+                    // is drawn, and the two meet without overlapping.
                     if (utxo.address != null)
                       AddressChip(value: utxo.address!, kind: 'address')
                     else

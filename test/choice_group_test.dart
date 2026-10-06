@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/choice_group.dart';
+import 'package:gerfaut/widgets/tap_target.dart';
 
 /// One group of three, the middle one out of reach.
 Widget _app({
@@ -37,6 +38,11 @@ Widget _app({
 Rect _option(WidgetTester tester, String label) =>
     tester.getRect(find.widgetWithText(InkWell, label));
 
+/// The area that answers the finger for the option [label].
+Rect _target(WidgetTester tester, String label) => tester.getRect(
+  find.ancestor(of: find.text(label), matching: find.byType(TapTarget)).first,
+);
+
 void main() {
   testWidgets('two options never touch', (tester) async {
     await tester.pumpWidget(_app(value: 'first', onChanged: (_) {}));
@@ -49,9 +55,15 @@ void main() {
     final third = _option(tester, 'mempool.space');
     expect(second.top - first.bottom, GerfautSpacing.sm);
     expect(third.top - second.bottom, GerfautSpacing.sm);
-    // And each one is a full 44px target.
-    expect(first.height, 44);
-    expect(second.height, 44);
+    // Each one is drawn a control's height and answers the finger over
+    // a full target, and the targets stand apart.
+    expect(first.height, GerfautTouch.control);
+    expect(second.height, GerfautTouch.control);
+    final firstTarget = _target(tester, 'CoinGecko');
+    final secondTarget = _target(tester, 'Kraken');
+    expect(firstTarget.height, GerfautTouch.target);
+    expect(secondTarget.height, GerfautTouch.target);
+    expect(secondTarget.top, greaterThan(firstTarget.bottom));
   });
 
   testWidgets('picking an option reports it once', (tester) async {

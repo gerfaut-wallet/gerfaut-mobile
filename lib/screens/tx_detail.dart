@@ -722,10 +722,10 @@ class _RawTransactionState extends State<_RawTransaction> {
             child: InkWell(
               borderRadius: BorderRadius.circular(GerfautRadius.sm),
               onTap: () => setState(() => _open = !_open),
-              child: Padding(
-                // 44px tap target around a one-line disclosure.
-                padding: const EdgeInsets.symmetric(
-                  vertical: GerfautSpacing.sm + GerfautSpacing.xs,
+              // A full touch target around a one-line disclosure.
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  minHeight: GerfautTouch.target,
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,

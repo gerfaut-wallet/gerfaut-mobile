@@ -148,14 +148,14 @@ class _AddressChipState extends State<AddressChip> {
         if (widget.kind != null) widget.kind!,
         widget.spoken ?? widget.value,
       ].join(' '),
-      // The chip is drawn at its own height, and the finger is given
-      // 44 around it: a tap just above or below still copies this one,
-      // not the identifier stacked next to it.
+      // The chip is drawn at its own height, and the finger is given a
+      // full touch target around it: a tap just above or below still
+      // copies this one, not the identifier stacked next to it.
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: _copy,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 44),
+          constraints: const BoxConstraints(minHeight: GerfautTouch.target),
           child: Align(
             alignment: Alignment.centerLeft,
             widthFactor: 1,

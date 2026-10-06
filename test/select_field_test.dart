@@ -116,7 +116,7 @@ void main() {
       ),
     );
     final field = find.byType(GerfautSelect<String>);
-    expect(tester.getSize(field).height, greaterThan(44));
+    expect(tester.getSize(field).height, greaterThan(GerfautTouch.target));
     final value = tester.getRect(find.text('EUR'));
     expect(tester.getRect(field).contains(value.topLeft), isTrue);
     expect(tester.getRect(field).contains(value.bottomLeft), isTrue);
@@ -128,7 +128,17 @@ void main() {
     final handle = tester.ensureSemantics();
     await tester.pumpWidget(host([]));
 
-    expect(tester.getSize(find.byType(GerfautSelect<String>)).height, 44);
+    // Drawn a field's height, answering the finger over a full target.
+    final select = find.byType(GerfautSelect<String>);
+    expect(tester.getSize(select).height, GerfautTouch.target);
+    expect(
+      tester
+          .getSize(
+            find.descendant(of: select, matching: find.byType(Material)).first,
+          )
+          .height,
+      GerfautTouch.control,
+    );
     expect(find.byIcon(LucideIcons.chevronDown), findsOneWidget);
     expect(find.text('EUR'), findsOneWidget);
     expect(find.text('Euro'), findsOneWidget);

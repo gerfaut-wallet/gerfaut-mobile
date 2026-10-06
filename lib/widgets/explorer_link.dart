@@ -8,8 +8,8 @@ import '../theme/tokens.dart';
 import 'notice.dart';
 import 'buttons.dart';
 
-/// The "View on mempool.space" row: a 44px tap target around a one-line
-/// link, behind the privacy warning.
+/// The "View on mempool.space" row: a full touch target around a
+/// one-line link, behind the privacy warning.
 class ExplorerLink extends ConsumerWidget {
   const ExplorerLink({super.key, required this.url});
 
@@ -23,10 +23,8 @@ class ExplorerLink extends ConsumerWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(GerfautRadius.sm),
         onTap: () => openExplorer(context, ref, url),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            vertical: GerfautSpacing.sm + GerfautSpacing.xs,
-          ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: GerfautTouch.target),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -98,8 +96,11 @@ void openExplorer(BuildContext context, WidgetRef ref, String url) {
                       borderRadius: BorderRadius.circular(GerfautRadius.sm),
                       onTap: () => setState(() => skipNextTime = !skipNextTime),
                       child: Container(
-                        // The whole line is the box: 44 high at least.
-                        constraints: const BoxConstraints(minHeight: 44),
+                        // The whole line is the box: a touch target
+                        // high at least.
+                        constraints: const BoxConstraints(
+                          minHeight: GerfautTouch.target,
+                        ),
                         padding: const EdgeInsets.symmetric(
                           vertical: GerfautSpacing.sm + 2,
                         ),

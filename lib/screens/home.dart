@@ -494,10 +494,13 @@ class _WalletCard extends StatelessWidget {
                     Tooltip(
                       message: error!,
                       triggerMode: TooltipTriggerMode.tap,
-                      // 44 high: a tap on the line reads the reason
-                      // rather than opening the wallet around it.
+                      // A full touch target: a tap on the line reads
+                      // the reason rather than opening the wallet
+                      // around it.
                       child: ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 44),
+                        constraints: const BoxConstraints(
+                          minHeight: GerfautTouch.target,
+                        ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [

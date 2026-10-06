@@ -224,7 +224,7 @@ void main() {
       expect(top('Cold storage'), lessThan(top('Spending')));
       expect(
         tester.getSize(find.widgetWithText(GhostButton, 'Try again')).height,
-        44,
+        GerfautTouch.target,
       );
 
       // Try again: the same order goes out once more, and lands.
@@ -735,7 +735,10 @@ void main() {
     double top(String label) => tester.getTopLeft(find.text(label)).dy;
     for (var i = 0; i < order.length; i++) {
       if (i > 0) expect(top(order[i]), greaterThan(top(order[i - 1])));
-      expect(menuRowHeight(tester, order[i]), greaterThanOrEqualTo(44));
+      expect(
+        menuRowHeight(tester, order[i]),
+        greaterThanOrEqualTo(GerfautTouch.target),
+      );
     }
 
     // A tap beside it closes it, and the page underneath is untouched.
