@@ -155,6 +155,13 @@ The first release: Gerfaut for Android.
   time".
 - TalkBack now calls the pin icon "Pin", like the desktop app, instead of
   "Map pin".
+- With Live and the Automatic backend, syncs now go first to the server Live
+  talks to, Blockstream's Electrum server on mainnet, so one operator sees
+  your addresses instead of two. When blockstream.info:700 fails, Live moves
+  to electrum.blockstream.info:50002 before it falls back to mempool.space.
+- frigate.2140.dev is no longer in the list of public servers. It is a Silent
+  Payments server, of no use to a wallet that only watches. If you picked it,
+  Gerfaut goes back to Automatic.
 
 ### Fixed
 
