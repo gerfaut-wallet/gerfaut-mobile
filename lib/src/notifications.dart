@@ -113,8 +113,8 @@ class LocalNotificationService implements NotificationService {
           // Private: on a phone set to hide sensitive content on its
           // lock screen, only the app's name shows there. On one set to
           // show everything, the text shows as written, which is why
-          // it is generic under an app lock and carries no amount while
-          // balances are hidden.
+          // it names no wallet and no amount once the user says so,
+          // and carries no amount while balances are hidden.
           visibility: NotificationVisibility.private,
         ),
       ),
@@ -173,13 +173,14 @@ class NewTxAnnouncer {
   /// one line counting the rest. A payment that is no longer coming is
   /// always said on its own, never folded into the count: it takes back
   /// what an earlier notice promised. Pure: the same transactions,
-  /// names, unit, mask and lock always say the same.
+  /// names, unit, mask and choice of details always say the same.
   ///
-  /// While balances are masked, no amount. While an app lock is set, no
-  /// amount and no wallet name either: the title is the app's, the body
-  /// says what happened and nothing more, word for word as the desktop
-  /// app says it. A notification is read on a phone whose app is locked
-  /// the moment it leaves the screen, by whoever holds it.
+  /// While balances are masked, no amount. Without [details], no amount
+  /// and no wallet name either: the title is the app's, the body says
+  /// what happened and nothing more, word for word as the desktop app
+  /// says it under its lock. The user chooses, and the app lock has no
+  /// say: a notification is read on the lock screen by whoever holds
+  /// the phone, whether the app is locked or not.
   ///
   /// Every notice about one payment carries its id, the txid it was
   /// first announced under, so the confirmation, a fee bump's included,
@@ -190,7 +191,7 @@ class NewTxAnnouncer {
     required Map<String, String> walletNames,
     required AmountUnit unit,
     required bool masked,
-    required bool locked,
+    required bool details,
   }) {
     final byWallet = <String, List<LiveTx>>{};
     for (final tx in txs) {
@@ -198,16 +199,18 @@ class NewTxAnnouncer {
     }
     final notices = <TxNotice>[];
     for (final MapEntry(key: walletId, value: mine) in byWallet.entries) {
-      final title = locked
-          ? lockedTitle
-          : notificationTitle(walletNames[walletId] ?? walletId);
+      final title = details
+          ? notificationTitle(walletNames[walletId] ?? walletId)
+          : genericTitle;
       TxNotice notice(LiveTx tx) => TxNotice(
         // The wallet is part of it: a payment from one watched wallet to
         // another is announced for each, and neither takes the other's
         // place.
         id: noticeId('${tx.walletId}:${tx.payment}'),
         title: title,
-        body: locked ? _generic(tx) : _describe(tx, unit: unit, masked: masked),
+        body: details
+            ? _describe(tx, unit: unit, masked: masked)
+            : _generic(tx),
       );
       final moved = [
         for (final tx in mine)
@@ -238,14 +241,14 @@ class NewTxAnnouncer {
     required Map<String, String> walletNames,
     required AmountUnit unit,
     required bool masked,
-    required bool locked,
+    required bool details,
   }) async {
     final notices = compose(
       txs,
       walletNames: walletNames,
       unit: unit,
       masked: masked,
-      locked: locked,
+      details: details,
     );
     for (final notice in notices) {
       await service.show(notice.id, notice.title, notice.body);
@@ -275,11 +278,12 @@ String _describe(LiveTx tx, {required AmountUnit unit, required bool masked}) {
       : '$what · pending';
 }
 
-/// The title of every notification while an app lock is set.
-const String lockedTitle = 'Gerfaut';
+/// The title of every notification said without its details.
+const String genericTitle = 'Gerfaut';
 
-/// What a notification says while an app lock is set: what happened,
-/// and nothing of the wallet or the amount. The desktop app's words.
+/// What a notification says without its details: what happened, and
+/// nothing of the wallet or the amount. The desktop app's words under
+/// its lock.
 String _generic(LiveTx tx) {
   final outgoing = tx.netSats < 0;
   return switch (tx.stage) {
@@ -313,7 +317,7 @@ String notificationTitle(String name) {
     plain.writeCharCode(control ? 0x20 : rune);
   }
   final flat = plain.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
-  if (flat.isEmpty) return lockedTitle;
+  if (flat.isEmpty) return genericTitle;
   final runes = flat.runes.toList();
   if (runes.length <= notificationTitleMax) return flat;
   final cut = String.fromCharCodes(runes.take(notificationTitleMax - 1));
@@ -344,16 +348,12 @@ const Set<int> _invisible = {
   0xFEFF,
 };
 
-/// Whether notifications are said as [NewTxAnnouncer.compose] says
-/// them under a lock: while an app lock is set.
-bool notifiesLocked(Settings settings) => settings.appLock != null;
-
 /// Says what a background isolate claimed, the way the open app would
-/// say it: the names, the unit and the mask read from the vault, since
-/// these isolates have no screen to ask, and nothing at all while the
-/// notice is off or the app is disguised. The periodic task and Live
-/// both come through here, so a rule of silence added once holds for
-/// both.
+/// say it: the names, the unit, the mask and the choice of details read
+/// from the vault, since these isolates have no screen to ask, and
+/// nothing at all while the notice is off or the app is disguised. The
+/// periodic task and Live both come through here, so a rule of silence
+/// added once holds for both.
 Future<void> announceFromVault(
   GerfautBridge bridge,
   NotificationService service,
@@ -370,7 +370,7 @@ Future<void> announceFromVault(
     walletNames: {for (final wallet in wallets) wallet.id: wallet.name},
     unit: prefs.unit,
     masked: prefs.masked,
-    locked: notifiesLocked(settings),
+    details: prefs.notifyDetails,
   );
 }
 
@@ -398,9 +398,9 @@ final newTxAnnouncerProvider = Provider<NewTxAnnouncer>(
 );
 
 /// The open app's side of it. Every sync the screens run is claimed,
-/// then said with the names, unit and mask the screen shows, or
-/// dropped when nothing may be said: the notice is off, or the app is
-/// disguised.
+/// then said with the names, unit, mask and choice of details the
+/// screens hold, or dropped when nothing may be said: the notice is
+/// off, or the app is disguised.
 ///
 /// A wallet's first sync says nothing: the core records none of an
 /// import's history as news, so there is nothing to leave out here.
@@ -428,9 +428,8 @@ class SyncAnnouncer {
       final wallets =
           _ref.read(walletsProvider).valueOrNull ??
           await _ref.read(bridgeProvider).listWallets();
-      // Settings not read yet say nothing of a lock: said as if there
-      // were one, rather than a name and an amount a lock would hide.
-      final settings = _ref.read(settingsProvider).valueOrNull;
+      // The choice of details is read from the vault in the same pass
+      // as the notice itself: a notice on means it is in.
       await _ref
           .read(newTxAnnouncerProvider)
           .announce(
@@ -438,7 +437,7 @@ class SyncAnnouncer {
             walletNames: {for (final w in wallets) w.id: w.name},
             unit: _ref.read(unitProvider),
             masked: _ref.read(maskedProvider),
-            locked: settings == null || notifiesLocked(settings),
+            details: _ref.read(notifyDetailsProvider),
           );
     } catch (_) {
       // A notification that cannot be posted is not a failed sync.
@@ -516,6 +515,33 @@ class NotifyNewTxNotifier extends Notifier<bool> {
 /// "notify.new_tx".
 final notifyNewTxProvider = NotifierProvider<NotifyNewTxNotifier, bool>(
   NotifyNewTxNotifier.new,
+);
+
+class NotifyDetailsNotifier extends Notifier<bool> {
+  @override
+  bool build() => true;
+
+  void hydrate(String? stored) {
+    // On unless turned off: nothing stored, an install from before the
+    // switch included, names the wallet and says the amount.
+    state = stored != '0';
+  }
+
+  /// Read fresh by every isolate at its next notice: nothing to start,
+  /// stop or reschedule.
+  void set(bool on) {
+    state = on;
+    ref
+        .read(bridgeProvider)
+        .setAppPref(Pref.notifyDetails, on ? '1' : '0')
+        .catchError((_) {});
+  }
+}
+
+/// The wallet's name and the amount in a notification, app lock or
+/// not. On by default, persisted as "notify.details".
+final notifyDetailsProvider = NotifierProvider<NotifyDetailsNotifier, bool>(
+  NotifyDetailsNotifier.new,
 );
 
 /// The system refused notifications the last time it was asked, when

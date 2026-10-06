@@ -150,9 +150,9 @@ class BalancePayload {
   ///
   /// [locked], an app lock is set, and neither goes: the widget sits on
   /// the home screen of a phone whose app is locked, for whoever holds
-  /// it, as a notification does, and says what a notification says
-  /// then, which is nothing of the wallets. The total stays, masked, so
-  /// the widget still shows when it was last brought up to date.
+  /// it, and says nothing of the wallets. Notifications follow a switch
+  /// of their own; the widget follows the lock. The total stays, masked,
+  /// so the widget still shows when it was last brought up to date.
   factory BalancePayload.of(
     List<WalletMeta> wallets, {
     required AmountUnit unit,

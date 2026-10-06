@@ -17,8 +17,9 @@ import '../../widgets/setting_switch.dart';
 import 'live_sheet.dart';
 
 /// The settings card for what Gerfaut says on its own: a notice when a
-/// sync finds a transaction, and how often to look while the app is
-/// closed. Both are off until asked for.
+/// sync finds a transaction, whether it names the wallet and the
+/// amount, and how often to look while the app is closed. The notice
+/// and the cadence are off until asked for; the details are on.
 class NotificationsSection extends ConsumerWidget {
   const NotificationsSection({super.key});
 
@@ -51,6 +52,7 @@ class NotificationsSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final on = ref.watch(notifyNewTxProvider);
+    final details = ref.watch(notifyDetailsProvider);
     final refused = ref.watch(notificationsRefusedProvider);
     final cadence = ref.watch(backgroundCheckProvider);
     final disguised = ref.watch(disguiseProvider).disguised;
@@ -95,6 +97,20 @@ class NotificationsSection extends ConsumerWidget {
             ),
           ),
         ],
+        const SizedBox(height: GerfautSpacing.md),
+        // What a notification says, the app lock aside: the switch alone
+        // decides. Greyed while nothing is posted, the notice off or the
+        // app disguised, and drawn as chosen, for when it is back.
+        SettingSwitch(
+          title: 'Show wallet and amount',
+          hint:
+              'Even while Gerfaut is locked. Off, a notification only says '
+              'that a transaction came in or went out.',
+          value: details,
+          onChanged: on && !disguised
+              ? (next) => ref.read(notifyDetailsProvider.notifier).set(next)
+              : null,
+        ),
         const SizedBox(height: GerfautSpacing.md),
         FieldLabel('Check for transactions', tokens: tokens),
         const SizedBox(height: GerfautSpacing.xs),

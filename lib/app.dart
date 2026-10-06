@@ -166,6 +166,9 @@ class _Hydrated extends ConsumerWidget {
             .hydrate(prefs[Pref.recentBroadcasts]);
         ref.read(notifyNewTxProvider.notifier).hydrate(prefs[Pref.notifyNewTx]);
         ref
+            .read(notifyDetailsProvider.notifier)
+            .hydrate(prefs[Pref.notifyDetails]);
+        ref
             .read(backgroundCheckProvider.notifier)
             .hydrate(prefs[Pref.background]);
         ref
