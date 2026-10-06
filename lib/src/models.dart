@@ -343,7 +343,7 @@ enum WalletIcon {
   wallet('wallet', 'Wallet'),
   key('key', 'Key'),
   shield('shield', 'Shield'),
-  mapPin('map_pin', 'Map pin'),
+  mapPin('map_pin', 'Pin'),
   snowflake('snowflake', 'Snowflake'),
   landmark('landmark', 'Landmark'),
   piggyBank('piggy_bank', 'Piggy bank');

@@ -154,6 +154,18 @@ void main() {
       expect(WalletIcon.piggyBank.id, 'piggy_bank');
     });
 
+    test('names each icon the way the desktop app does', () {
+      expect(WalletIcon.values.map((icon) => icon.label), [
+        'Wallet',
+        'Key',
+        'Shield',
+        'Pin',
+        'Snowflake',
+        'Landmark',
+        'Piggy bank',
+      ]);
+    });
+
     test('falls back to the wallet glyph when the icon is missing or '
         'unknown', () {
       // A vault written before icons existed carries none.
