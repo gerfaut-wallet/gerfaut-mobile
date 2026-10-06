@@ -474,6 +474,42 @@ void main() {
     expect(find.text('NAME'), findsNothing);
   });
 
+  testWidgets('an input that fits one network says it plainly', (tester) async {
+    // A mainnet address: no group of one option that reads as a control
+    // doing nothing, the network said in words, and the wallet added on it.
+    final bridge = FakeBridge(
+      onParse: (_) => makeParsedInput(
+        kind: RecognizedKind.address,
+        networks: const [Network.mainnet],
+        payload: const AddressPayload(
+          address: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq',
+        ),
+        previewAddress: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq',
+      ),
+    );
+    await tester.pumpWidget(screen(bridge));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextField),
+      'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('NETWORK'), findsOneWidget);
+    expect(find.byType(ChoiceGroup<Network?>), findsNothing);
+    expect(find.text('Mainnet'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'Donations');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Add wallet'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add wallet'));
+    await tester.pumpAndSettle();
+    expect(bridge.wallets.single.network, Network.mainnet);
+  });
+
   testWidgets('a network that will not switch still opens the new wallet', (
     tester,
   ) async {

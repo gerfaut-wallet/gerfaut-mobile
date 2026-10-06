@@ -138,6 +138,8 @@ The first release: Gerfaut for Android.
   never locked the app, however long it lasted.
 - A release build no longer writes the text of an unexpected error to the
   system log, where it could quote an address.
+- In Add a wallet, an input that fits a single network, such as a mainnet
+  address, names that network instead of offering a choice of one.
 - On the Policy page, a coin that cannot be counted down before the first
   sync says "next known after the first sync" instead of "next in an unknown
   time".

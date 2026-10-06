@@ -660,22 +660,26 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
         const SizedBox(height: GerfautSpacing.md),
         Text('NETWORK', style: tokens.label.copyWith(color: tokens.textMuted)),
         const SizedBox(height: GerfautSpacing.sm),
-        // Nullable: nothing is picked until the descriptor is parsed.
-        ChoiceGroup<Network?>(
-          label: 'Network',
-          value: _network,
-          options: [
-            for (final candidate in parsed.networks)
-              ChoiceOption(
-                value: candidate,
-                label: candidate.label,
-                // A descriptor that names one network leaves nothing to
-                // choose: the option is shown, not offered.
-                enabled: parsed.networks.length > 1,
-              ),
-          ],
-          onChanged: _chooseNetwork,
-        ),
+        // An input that fits one network, a mainnet address say, leaves
+        // nothing to choose: a group of one option would read as a
+        // control that does nothing. The network is said plainly, as
+        // the backup scope is, and as on the desktop.
+        if (parsed.networks.length == 1)
+          Text(
+            (_network ?? parsed.networks.single).label,
+            style: tokens.body.copyWith(color: tokens.text),
+          )
+        else
+          // Nullable: nothing is picked until the descriptor is parsed.
+          ChoiceGroup<Network?>(
+            label: 'Network',
+            value: _network,
+            options: [
+              for (final candidate in parsed.networks)
+                ChoiceOption(value: candidate, label: candidate.label),
+            ],
+            onChanged: _chooseNetwork,
+          ),
         if (_error != null) ...[
           const SizedBox(height: GerfautSpacing.md),
           Text(
