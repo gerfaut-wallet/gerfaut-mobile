@@ -1115,11 +1115,11 @@ void main() {
         items.skip(1).map((item) => item.title).toList(),
         defaultPublicServers[Network.mainnet]!.map((s) => s.label).toList(),
       );
-      // Three Esplora instances, eight Electrum servers, each marked.
+      // Three Esplora instances, seven Electrum servers, each marked.
       expect(items.where((i) => i.subtitle == 'Esplora'), hasLength(3));
       expect(
         items.where((i) => i.subtitle?.startsWith('Electrum') ?? false),
-        hasLength(8),
+        hasLength(7),
       );
     });
 
@@ -1160,7 +1160,7 @@ void main() {
       final field = tester.widget<GerfautSelect<String?>>(
         find.byType(GerfautSelect<String?>),
       );
-      field.onChanged!('electrum:frigate.2140.dev');
+      field.onChanged!('electrum:electrum.diynodes.com');
       await tester.pumpAndSettle();
 
       expect(find.textContaining('single-address'), findsNothing);
@@ -1169,7 +1169,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         (bridge.savedBackends[Network.mainnet]! as PublicEsplora).server,
-        'electrum:frigate.2140.dev',
+        'electrum:electrum.diynodes.com',
       );
     });
 
@@ -1208,8 +1208,8 @@ void main() {
             .value,
         'mempool.emzy.de',
       );
-      // Signet has no frigate.2140.dev: the list follows the network.
-      expect(find.text('frigate.2140.dev:50002'), findsNothing);
+      // Signet has no electrum.diynodes.com: the list follows the network.
+      expect(find.text('electrum.diynodes.com:50022'), findsNothing);
     });
 
     testWidgets('a network without a public server says so', (tester) async {
@@ -1250,7 +1250,9 @@ void main() {
       expect(selfSigned.subtitle, 'Electrum · signs its own certificate');
       // A server a public authority vouches for says nothing more.
       expect(
-        items.firstWhere((i) => i.title == 'frigate.2140.dev:50002').subtitle,
+        items
+            .firstWhere((i) => i.title == 'electrum.diynodes.com:50022')
+            .subtitle,
         'Electrum',
       );
 
@@ -1677,16 +1679,18 @@ void main() {
 
       // Every Electrum server is checked, whether the catalogue calls it
       // self-signed or not: what it presents today is what counts.
-      serverField(tester).onChanged!('electrum:frigate.2140.dev');
+      serverField(tester).onChanged!('electrum:electrum.diynodes.com');
       await tester.pumpAndSettle();
       await save(tester);
-      expect(bridge.inspectedCertificates, ['ssl://frigate.2140.dev:50002']);
+      expect(bridge.inspectedCertificates, [
+        'ssl://electrum.diynodes.com:50022',
+      ]);
 
       serverField(tester).onChanged!('electrum:bitcoin.lu.ke');
       await tester.pumpAndSettle();
       await save(tester);
       expect(bridge.inspectedCertificates, [
-        'ssl://frigate.2140.dev:50002',
+        'ssl://electrum.diynodes.com:50022',
         'ssl://bitcoin.lu.ke:50002',
       ]);
     });
