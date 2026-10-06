@@ -233,8 +233,13 @@ The first release: Gerfaut for Android.
 - TalkBack names every switch, field and checkbox, reads errors aloud, says
   "Hidden amount" instead of reading out dots, and reads a transaction ID
   once.
-- Every small target, the address chips included, is now at least 44 dp
-  high.
+- Everything you can tap, address chips included, now has a touch area of
+  at least 48 by 48 dp, the minimum Android asks for. Most buttons and
+  fields look the same: the extra room is invisible padding around them.
+- With fiat values on, a wallet on signet, testnet4 or regtest now shows 0
+  in your currency. Test coins have no price, yet Gerfaut used to value them
+  at the price of real bitcoin. A zero amount also reads €0.00 instead of
+  €0.0000.
 - The app lock sheet takes only digits for a PIN, on the number keyboard,
   and counts its length the way the app does when it saves it.
 - Saving a file to a slow cloud provider no longer freezes the screen.
