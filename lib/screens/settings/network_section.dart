@@ -21,10 +21,12 @@ import 'tor_section.dart';
 import '../../widgets/toast.dart';
 
 /// Said when the certificate check did not get through: the backend is
-/// saved all the same, and the question comes back on first contact.
+/// saved all the same. Nothing asks about the certificate later: a sync
+/// it refuses fails, and Save backend is where it is accepted.
 const String _uncheckedNote =
-    'The certificate could not be checked yet. Gerfaut asks about it on '
-    'the first connection.';
+    'Saved. The server did not answer, so its certificate is unchecked. '
+    'If it signs its own, syncs fail until you press Save backend again '
+    'and accept it.';
 
 const List<({Network network, String hint})> _networkHints = [
   (network: Network.mainnet, hint: 'The Bitcoin network'),

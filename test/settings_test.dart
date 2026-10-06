@@ -1509,8 +1509,9 @@ void main() {
       expect(bridge.savedBackends[Network.mainnet], isA<CustomElectrum>());
       expect(
         find.text(
-          'The certificate could not be checked yet. Gerfaut asks about it '
-          'on the first connection.',
+          'Saved. The server did not answer, so its certificate is '
+          'unchecked. If it signs its own, syncs fail until you press Save '
+          'backend again and accept it.',
         ),
         findsOneWidget,
       );
@@ -1636,7 +1637,8 @@ void main() {
       expect(bridge.forgottenCertificates, isEmpty);
       expect(
         find.text(
-          'Gerfaut asks again the next time it connects to node.local:50002.',
+          'Syncs with node.local:50002 will fail until you press Save '
+          'backend again and accept its certificate.',
         ),
         findsOneWidget,
       );
