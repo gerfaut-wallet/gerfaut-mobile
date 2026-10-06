@@ -46,11 +46,12 @@ abstract class LivePlatform {
   /// a hold too.
   Future<void> stop();
 
-  /// Stops the service while Android lets no notification through, and
+  /// Stops the service while Live has nothing to do, Android letting no
+  /// notification through or the network in use holding no wallet, and
   /// records it as held: no longer wanted, so nothing restarts it
-  /// meanwhile, and meant to start again once they get through. Kept by
-  /// the platform, so the hold outlives the process. [start] and [stop]
-  /// end it.
+  /// meanwhile, and meant to start again once it has. Kept by the
+  /// platform, so the hold outlives the process. [start] and [stop] end
+  /// it.
   Future<void> hold();
 
   /// Whether Live was held, and nothing said of it since.
@@ -280,10 +281,15 @@ class LiveState {
     this.status = const LiveWatchStatus(),
     this.batteryExempt = true,
     this.checked = false,
+    this.noWallet = false,
   });
 
   /// The Android service is up.
   final bool serviceRunning;
+
+  /// Live is the choice, and the network in use holds no wallet: the
+  /// service waits for one, with no connection and no notification.
+  final bool noWallet;
 
   /// What the core says of its connection.
   final LiveWatchStatus status;
@@ -298,12 +304,14 @@ class LiveState {
     LiveWatchStatus? status,
     bool? batteryExempt,
     bool? checked,
+    bool? noWallet,
   }) {
     return LiveState(
       serviceRunning: serviceRunning ?? this.serviceRunning,
       status: status ?? this.status,
       batteryExempt: batteryExempt ?? this.batteryExempt,
       checked: checked ?? this.checked,
+      noWallet: noWallet ?? this.noWallet,
     );
   }
 }
@@ -311,6 +319,9 @@ class LiveState {
 /// The one line under the setting. Null while there is nothing to say.
 String? liveStatusLine(LiveState live) {
   if (!live.checked) return null;
+  // Nothing to watch, so nothing runs: not Android's doing, and nothing
+  // a tap would change.
+  if (live.noWallet) return liveNoWalletLine;
   if (!live.serviceRunning) return 'Stopped by Android. Tap to restart.';
   final status = live.status;
   switch (status.state) {
@@ -331,6 +342,9 @@ String? liveStatusLine(LiveState live) {
       return 'Connecting…';
   }
 }
+
+/// The status line while the network in use holds no wallet.
+const String liveNoWalletLine = 'Off until you add a wallet.';
 
 /// The same, for the permanent notification: no host, ever, and no
 /// count either. That Live leaves addresses to the syncs is said in a
@@ -443,6 +457,16 @@ class LiveController extends Notifier<LiveState> {
   @override
   LiveState build() {
     ref.onDispose(() => _events?.cancel());
+    // The watch follows the wallets of the network in use, as the core
+    // does: removing the last one leaves it nothing to watch, and
+    // adding one gives it something again, the app on screen either
+    // way. A list read again with the same answer changes nothing.
+    ref.listen(walletsProvider, (previous, next) {
+      final had = previous?.valueOrNull?.isNotEmpty;
+      final has = next.valueOrNull?.isNotEmpty;
+      if (had == null || has == null || had == has) return;
+      unawaited(resume().catchError((Object _) {}));
+    });
     return const LiveState();
   }
 
@@ -450,18 +474,31 @@ class LiveController extends Notifier<LiveState> {
       ref.read(notifyNewTxProvider) &&
       ref.read(backgroundCheckProvider) == BackgroundCheck.live;
 
+  /// Whether the network in use holds a wallet. Without one the core's
+  /// watch holds no connection and says nothing, and a service kept up
+  /// for it would show "Connecting…" for good. A list that cannot be
+  /// read counts as one: it never stops Live.
+  Future<bool> _hasWallets() async {
+    try {
+      return (await ref.read(walletsProvider.future)).isNotEmpty;
+    } catch (_) {
+      return true;
+    }
+  }
+
   /// Called once the preferences are in, and each time the app comes
   /// back on screen. Listens to the core, and brings the service in line
   /// with the setting: started when it should run and does not, and the
   /// setting taken back to a periodic check when Live was stopped from
   /// its notification while no Dart code could write that down.
   ///
-  /// While Android lets no notice through, the service is held: stopped,
-  /// and the setting left as it is. A connection kept open to say
-  /// nothing costs battery for nothing, and the choice of Live is the
-  /// user's, for when the notices get through again. The platform keeps
-  /// the hold, so a process that dies meanwhile does not take it for a
-  /// Stop pressed on the notification, which clears the flag alike.
+  /// While Android lets no notice through, or the network in use holds
+  /// no wallet, the service is held: stopped, and the setting left as it
+  /// is. A connection kept open to say nothing costs battery for
+  /// nothing, and the choice of Live is the user's, for when there is
+  /// something to say again. The platform keeps the hold, so a process
+  /// that dies meanwhile does not take it for a Stop pressed on the
+  /// notification, which clears the flag alike.
   Future<void> resume() async {
     _events ??= ref
         .read(bridgeProvider)
@@ -478,7 +515,7 @@ class LiveController extends Notifier<LiveState> {
       await _fallBack();
       return;
     }
-    if (ref.read(notificationsRefusedProvider)) {
+    if (ref.read(notificationsRefusedProvider) || !await _hasWallets()) {
       if (await platform.isWanted() || await platform.isRunning()) {
         await platform.hold();
       }
@@ -511,19 +548,26 @@ class LiveController extends Notifier<LiveState> {
         // The line says "Connecting…" until the core answers.
       }
     }
+    final noWallet = !running && _chosen && !await _hasWallets();
     state = LiveState(
       serviceRunning: running,
       status: status,
       batteryExempt: exempt,
       checked: true,
+      noWallet: noWallet,
     );
   }
 
-  /// Starts or stops the service to match the setting.
+  /// Starts or stops the service to match the setting. Chosen while the
+  /// network in use holds no wallet, Live waits for the first one.
   Future<void> apply({required bool wanted}) async {
     final platform = ref.read(livePlatformProvider);
     if (wanted && !ref.read(disguiseProvider).disguised) {
-      await platform.start();
+      if (await _hasWallets()) {
+        await platform.start();
+      } else {
+        await platform.hold();
+      }
     } else {
       await platform.stop();
     }

@@ -169,6 +169,10 @@ The first release: Gerfaut for Android.
   too.
 - Turning Live off and on again within a few seconds now starts it again.
   It used to stay off until the app came back to the screen.
+- With Live on, removing your last wallet left the permanent notification
+  on "Connecting…" for good. Live now stops, notification included, while
+  the selected network has no wallet, and starts again by itself when you
+  add one.
 - With the screen off, Live now keeps the phone awake while it checks the
   server, and until it has announced a new transaction, so the notification
   arrives within seconds rather than at the next check. A status that

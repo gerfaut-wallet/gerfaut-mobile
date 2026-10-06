@@ -172,9 +172,11 @@ class _LiveStatusState extends ConsumerState<_LiveStatus> {
     final live = ref.watch(liveProvider);
     final line = liveStatusLine(live);
     if (line == null) return const SizedBox.shrink();
-    final stopped = !live.serviceRunning;
+    // No wallet to watch: off, said in grey, and no tap restarts it.
+    final idle = live.noWallet;
+    final stopped = !idle && !live.serviceRunning;
     final settings = ref.watch(settingsProvider).valueOrNull;
-    final note = stopped
+    final note = idle || stopped
         ? null
         : liveCoverageNote(
             live.status,
@@ -185,11 +187,16 @@ class _LiveStatusState extends ConsumerState<_LiveStatus> {
             },
           );
     final connected =
+        !idle &&
         !stopped &&
         (live.status.state == WatchState.connected ||
             live.status.state == WatchState.polling);
-    final color = connected ? tokens.text : tokens.pending;
-    final icon = stopped
+    final color = idle
+        ? tokens.textMuted
+        : connected
+        ? tokens.text
+        : tokens.pending;
+    final icon = idle || stopped
         ? LucideIcons.circlePause
         : connected
         ? LucideIcons.radio

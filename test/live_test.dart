@@ -36,7 +36,8 @@ FakeBridge _bridge({
   Map<Network, BackendConfig> backends = const {},
 }) {
   return FakeBridge(
-    wallets: [makeMeta()],
+    // On the network in use: the one whose wallets Live watches.
+    wallets: [makeMeta(network: network)],
     settings: Settings(
       activeNetwork: network,
       backends: backends,
@@ -2076,6 +2077,105 @@ void main() {
       await tester.tap(find.text('Open system settings'));
       await tester.pumpAndSettle();
       expect(platform.calls, contains('appSettings'));
+    });
+  });
+
+  group('with no wallet to watch', () {
+    ProviderContainer chosen(FakeBridge bridge, FakeLivePlatform platform) {
+      final container = ProviderContainer(
+        overrides: [
+          bridgeProvider.overrideWithValue(bridge),
+          livePlatformProvider.overrideWithValue(platform),
+          disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+          notificationServiceProvider.overrideWithValue(FakeNotifications()),
+          backgroundSchedulerProvider.overrideWithValue((seconds) async {}),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      container.read(backgroundCheckProvider.notifier).hydrate('live');
+      return container;
+    }
+
+    /// The wallet list read again, as a screen does after a change, and
+    /// whatever that sets off left to run.
+    Future<void> walletsChanged(ProviderContainer container) async {
+      container.invalidate(walletsProvider);
+      await container.read(walletsProvider.future);
+      for (var i = 0; i < 20; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+
+    test('the last wallet removed stops Live, and the next one added starts '
+        'it again, the choice kept', () async {
+      final bridge = _bridge();
+      final platform = FakeLivePlatform(running: true, wanted: true);
+      final container = chosen(bridge, platform);
+      await container.read(liveProvider.notifier).resume();
+      expect(platform.calls, isEmpty);
+
+      await bridge.removeWallet('w1');
+      await walletsChanged(container);
+
+      // Stopped, notification and all, and held rather than turned off.
+      expect(platform.calls, ['hold']);
+      expect(platform.running, isFalse);
+      expect(platform.wanted, isFalse);
+      expect(platform.held, isTrue);
+      final live = container.read(liveProvider);
+      expect(live.noWallet, isTrue);
+      expect(liveStatusLine(live), 'Off until you add a wallet.');
+      // Live is still the choice, in the vault and on screen.
+      expect(bridge.appPrefs['notify.background'], isNot('900'));
+      expect(container.read(backgroundCheckProvider), BackgroundCheck.live);
+
+      // Coming back to the screen with nothing to watch starts nothing.
+      await container.read(liveProvider.notifier).resume();
+      expect(platform.calls, ['hold']);
+
+      bridge.wallets = [makeMeta(id: 'w2', network: Network.signet)];
+      await walletsChanged(container);
+
+      expect(platform.calls, ['hold', 'start']);
+      expect(platform.running, isTrue);
+      expect(platform.held, isFalse);
+      expect(container.read(liveProvider).noWallet, isFalse);
+    });
+
+    test('a wallet on another network is none to watch', () async {
+      final bridge = _bridge()..wallets = [makeMeta(network: Network.mainnet)];
+      final platform = FakeLivePlatform(running: true, wanted: true);
+      final container = chosen(bridge, platform);
+
+      await container.read(liveProvider.notifier).resume();
+
+      expect(platform.calls, ['hold']);
+      expect(container.read(liveProvider).noWallet, isTrue);
+    });
+
+    test('Live chosen with no wallet waits for one', () async {
+      final bridge = _bridge()..wallets = [];
+      final platform = FakeLivePlatform();
+      final container = chosen(bridge, platform);
+
+      await container.read(liveProvider.notifier).apply(wanted: true);
+
+      expect(platform.calls, ['hold']);
+      expect(platform.running, isFalse);
+      expect(platform.held, isTrue);
+    });
+
+    testWidgets('the settings say why, and offer no restart', (tester) async {
+      final bridge = _bridge()..wallets = [];
+      final platform = FakeLivePlatform(held: true, batteryExempt: true);
+      await _open(tester, _settings(bridge, platform: platform));
+
+      expect(find.text('Off until you add a wallet.'), findsOneWidget);
+      expect(find.textContaining('Stopped by Android'), findsNothing);
+      await tester.tap(find.text('Off until you add a wallet.'));
+      await tester.pumpAndSettle();
+      expect(platform.calls, isNot(contains('start')));
     });
   });
 

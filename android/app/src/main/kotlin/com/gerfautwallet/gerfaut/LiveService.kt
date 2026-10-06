@@ -547,10 +547,10 @@ class LiveService : Service() {
                 .edit().putBoolean(PREF_WANTED, wanted).remove(PREF_HELD).apply()
         }
 
-        // Whether the app stopped Live because Android let no
-        // notification through, to start it again once they get
-        // through. Kept beside the flag, so the pause outlives the
-        // process.
+        // Whether the app stopped Live because it had nothing to do,
+        // Android letting no notification through or no wallet to
+        // watch, to start it again once it has. Kept beside the flag,
+        // so the pause outlives the process.
         fun isHeld(context: Context): Boolean =
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .getBoolean(PREF_HELD, false)
@@ -580,10 +580,10 @@ class LiveService : Service() {
             leave(context)
         }
 
-        // Stopped from the app while Android lets no notification
-        // through. Not wanted meanwhile, so neither a boot nor the
-        // heartbeat brings it back; held, so the app starts it again
-        // once they get through.
+        // Stopped from the app while Live has nothing to do: Android
+        // lets no notification through, or no wallet is left to watch.
+        // Not wanted meanwhile, so neither a boot nor the heartbeat
+        // brings it back; held, so the app starts it again once it has.
         fun hold(context: Context) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit().putBoolean(PREF_WANTED, false).putBoolean(PREF_HELD, true).apply()
