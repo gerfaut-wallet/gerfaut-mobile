@@ -15,6 +15,7 @@ import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/notifications.dart';
 import 'package:gerfaut/src/state.dart';
+import 'package:gerfaut/src/updates.dart' show isBetaVersion;
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/buttons.dart';
 import 'package:gerfaut/widgets/notice.dart';
@@ -2321,7 +2322,15 @@ void main() {
       expect(find.text('No app lock'), findsOneWidget);
       expect(find.text('Off'), findsOneWidget);
       expect(find.text('Export or restore the wallet list'), findsOneWidget);
-      expect(find.text('Gerfaut $appVersion'), findsOneWidget);
+      // The beta rides with the version until 1.0.0.
+      expect(
+        find.text(
+          isBetaVersion(appVersion)
+              ? 'Gerfaut $appVersion · Beta'
+              : 'Gerfaut $appVersion',
+        ),
+        findsOneWidget,
+      );
       // Nothing of the sections themselves is on the root.
       expect(find.text('Gap limit'), findsNothing);
       expect(find.text('Save backend'), findsNothing);

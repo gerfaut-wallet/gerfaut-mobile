@@ -31,6 +31,16 @@ const String appVersion = '0.1.0';
 const String releasePageUrl =
     'https://github.com/gerfaut-wallet/gerfaut-mobile/releases/latest';
 
+/// Where "Report a problem" goes: the issues of this repository.
+const String issuesPageUrl =
+    'https://github.com/gerfaut-wallet/gerfaut-mobile/issues';
+
+/// Whether a version of this app is a beta: every 0.x version is, and
+/// the label goes away by itself at 1.0.0. A version that does not
+/// parse is not called a beta.
+bool isBetaVersion(String version) =>
+    ReleaseVersion.tryParse(version)?.major == 0;
+
 /// Seconds between two automatic checks.
 const int updateCheckPeriod = 24 * 60 * 60;
 

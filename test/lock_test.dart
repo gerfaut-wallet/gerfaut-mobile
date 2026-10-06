@@ -11,6 +11,7 @@ import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
+import 'package:gerfaut/src/updates.dart';
 import 'package:gerfaut/src/window.dart';
 import 'package:gerfaut/theme/tokens.dart';
 
@@ -596,6 +597,23 @@ void main() {
 
       expect(find.byType(WelcomeScreen), findsOneWidget);
       expect(find.text('Watch, never spend'), findsOneWidget);
+    });
+
+    testWidgets('a 0.x version says on the first page, and only there, '
+        'that it is a public beta', (tester) async {
+      await tester.pumpWidget(app(FakeBridge()));
+      await tester.pumpAndSettle();
+
+      final line = find.text(
+        'Public beta. Check addresses and amounts on your signing device.',
+        findRichText: true,
+      );
+      expect(line, isBetaVersion(appVersion) ? findsOneWidget : findsNothing);
+
+      await tester.tap(find.text('Next'));
+      await tester.pumpAndSettle();
+      expect(find.text('Add a wallet'), findsOneWidget);
+      expect(line, findsNothing);
     });
 
     testWidgets('it is not shown again once seen', (tester) async {

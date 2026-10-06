@@ -6,6 +6,7 @@ import '../src/disguise.dart';
 import '../src/models.dart';
 import '../src/notifications.dart';
 import '../src/state.dart';
+import '../src/updates.dart' show isBetaVersion;
 import '../theme/tokens.dart';
 import '../widgets/app_bar.dart';
 import 'scan.dart';
@@ -176,7 +177,11 @@ class SettingsScreen extends ConsumerWidget {
       case SettingsSection.backup:
         return 'Export or restore the wallet list';
       case SettingsSection.about:
-        return 'Gerfaut $appVersion';
+        // The beta is said where the version is, on the row as in the
+        // card, until 1.0.0.
+        return isBetaVersion(appVersion)
+            ? 'Gerfaut $appVersion · Beta'
+            : 'Gerfaut $appVersion';
     }
   }
 }
