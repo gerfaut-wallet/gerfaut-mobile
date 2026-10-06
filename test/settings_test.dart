@@ -1865,6 +1865,51 @@ void main() {
       expect(find.textContaining('built-in Tor first'), findsNothing);
     });
 
+    testWidgets('a test of the connection shows Tor starting, as on the '
+        'desktop', (tester) async {
+      useTallSurface(tester);
+      final bridge = withTor(TorMode.embedded);
+      var percent = 0;
+      bridge.onTorStatus = (tor) => TorStatus(
+        mode: tor.mode,
+        socksProxy: '127.0.0.1:9050',
+        via: TorVia.embedded,
+        socks: null,
+        running: percent > 0,
+        bootstrapped: percent >= 100,
+        bootstrapPercent: percent,
+        error: null,
+        embeddedAvailable: true,
+      );
+      final connected = Completer<TorRoute>();
+      bridge.onTorConnect = () => connected.future;
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Starting the built-in Tor'), findsNothing);
+
+      await tester.tap(find.text('Test the connection'));
+      await tester.pump();
+      // The status is read again every second while the test runs.
+      percent = 47;
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+      expect(find.text('Starting the built-in Tor… 40%'), findsOneWidget);
+      percent = 85;
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+      expect(find.text('Starting the built-in Tor… 80%'), findsOneWidget);
+
+      percent = 100;
+      connected.complete(
+        const TorRoute(socks: '127.0.0.1:41000', via: TorVia.embedded),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Starting the built-in Tor'), findsNothing);
+      expect(find.text('Reached through the built-in Tor.'), findsOneWidget);
+    });
+
     testWidgets('a build without its own Tor says what to choose', (
       tester,
     ) async {
