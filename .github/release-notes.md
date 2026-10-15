@@ -22,5 +22,4 @@ RWTz3c4gUmglCX5Uvjthigz1ts3TS3ZSdhRNpFgOJRW/Wr4XjGlqTR3O
    - macOS: `shasum -a 256 --check SHA256SUMS --ignore-missing`
    - Windows: `(Get-FileHash .\<file>).Hash` must match the file's line in `SHA256SUMS`
 
-### Rebuild it yourself (optional)
-These APKs come out of a container where every tool version is pinned, so the same commit always produces the same bytes. Rebuild them on your own machine and compare: only the signature should differ. The procedure is in [docs/REPRODUCIBLE-BUILDS.md](https://github.com/gerfaut-wallet/gerfaut-mobile/blob/main/docs/REPRODUCIBLE-BUILDS.md).
+Step by step: [Verify a download](https://gerfaut-wallet.com/docs/getting-started/verify-your-download).

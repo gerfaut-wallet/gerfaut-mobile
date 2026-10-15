@@ -44,7 +44,7 @@ flutter test
 cd rust && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
 
-`flutter build apk --debug` builds an APK for an emulator or a phone. Release APKs come from the pinned container described in [docs/REPRODUCIBLE-BUILDS.md](docs/REPRODUCIBLE-BUILDS.md).
+`flutter build apk --debug` builds an APK for an emulator or a phone. Release APKs come out of the pinned container in `reproducible/`: to build the three unsigned APKs the way CI does, run `reproducible/build.sh`, which needs git and Docker.
 
 When you change a function in `rust/src/api/`, regenerate the Dart side of the bridge with `flutter_rust_bridge_codegen generate`, version 2.12.0 like the crate, and commit `lib/src/rust/` along with it.
 

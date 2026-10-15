@@ -160,8 +160,8 @@ try {
         Write-Output "signing $final..."
         # With v1 off, apksigner adds no zip entry at all: it only inserts
         # an APK signing block, so every entry stays exactly where the
-        # container put it and the published APK can be compared with a
-        # rebuild. v1 is only needed below API 24, and minSdk here is 24.
+        # container put it. v1 is only needed below API 24, and minSdk
+        # here is 24.
         # v4 is a separate .idsig file for adb incremental installs, and
         # nothing here ships one.
         Invoke-Native $java @(
@@ -176,10 +176,9 @@ try {
             "--v4-signing-enabled", "false",
             "--out", $out, $in)
         Assert-ReleaseCertificate $out
-        # Not a reproducibility check: both files come from the same
-        # build. It asserts that signing left the payload alone, entry for
-        # entry, which is what lets a verifier compare the published APK
-        # with an unsigned rebuild at all.
+        # Both files come from the same build. This asserts that signing
+        # left the payload alone, entry for entry: what goes up is what CI
+        # built, plus a signature.
         Invoke-Native $python @($compare, "--signed", $out, $in)
     }
 }
