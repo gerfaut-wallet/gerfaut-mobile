@@ -51,5 +51,5 @@ app.*.map.json
 # Rust
 /rust/target/
 
-# Reproducible build output
+# Container build output
 /reproducible/out/

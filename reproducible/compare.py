@@ -4,12 +4,13 @@
 Two uses:
 
   compare.py a.apk b.apk
-      Two rebuilds of the same commit. Any difference is a bug.
+      Two unsigned APKs. Any difference is reported.
 
-  compare.py --signed released.apk rebuilt-unsigned.apk
-      A published release against your own unsigned rebuild. The APK
-      signing block and the v1 signature files under META-INF are
-      expected to differ and are skipped; everything else must match.
+  compare.py --signed signed.apk unsigned.apk
+      An APK after signing against the unsigned one CI built, as
+      scripts/sign-release.ps1 runs it. The APK signing block and the v1
+      signature files under META-INF are expected to differ and are
+      skipped; everything else must match.
 
 Exit code 0 means the two APKs carry the same payload.
 """
@@ -123,8 +124,7 @@ def main() -> int:
         print("payload identical, only the signature differs")
         return 0
 
-    # Two rebuilds of the same commit: any difference is a bug, and one
-    # that shows up outside the entries — in the central directory, in an
+    # Two unsigned APKs: a difference that shows up outside the entries — in the central directory, in an
     # extra field, in the alignment padding — is still a difference.
     print("every entry matches, but the files are not byte for byte equal")
     return 1
