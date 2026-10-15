@@ -4,8 +4,7 @@ name: CI
 # request, and the Rust crate's formatting, Clippy pass and tests on push
 # only: the crate depends on the sibling gerfaut-core checkout, which
 # comes from a deploy key, and a pull request from a fork never gets one.
-# The APKs themselves are built by the release and reproducible
-# workflows.
+# The APKs themselves are built by the release workflow.
 on:
   push:
     branches: [main]
