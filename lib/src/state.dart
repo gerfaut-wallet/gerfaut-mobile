@@ -248,10 +248,10 @@ class MaskedNotifier extends Notifier<bool> {
 
   /// Shows [masked] and writes it. The home screen widget and the
   /// notifications posted in the background read the mask from the
-  /// vault: balances hidden on screen that the vault refused to keep
-  /// hidden are hidden on this screen only, and the screen says so
-  /// until a write goes through. Only the last change asked says it: an
-  /// older one that settles after it would say what the vault no longer
+  /// vault: balances hidden in the app that the vault refused to keep
+  /// hidden are hidden in the app only, and the screens say so until a
+  /// write goes through. Only the last change asked says it: an older
+  /// one that settles after it would say what the vault no longer
   /// holds.
   Future<void> _save(bool masked) async {
     // Read before the change: shown, it rebuilds this notifier, whose
@@ -276,7 +276,7 @@ class MaskUnsavedNotifier extends Notifier<bool> {
   void set(bool unsaved) => state = unsaved;
 }
 
-/// Balances are hidden on screen and the vault refused, twice, to keep
+/// Balances are hidden in the app and the vault refused, twice, to keep
 /// them hidden: see [MaskedNotifier].
 final maskUnsavedProvider = NotifierProvider<MaskUnsavedNotifier, bool>(
   MaskUnsavedNotifier.new,

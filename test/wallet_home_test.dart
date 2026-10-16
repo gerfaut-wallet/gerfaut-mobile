@@ -90,7 +90,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    const said = 'Balances are hidden on this screen only.';
+    const said = 'Balances are hidden in the app only.';
     expect(find.text(said), findsNothing);
 
     await pickFromMenu(tester, 'Hide balances');
@@ -98,6 +98,15 @@ void main() {
     expect(find.textContaining('0.00123456', findRichText: true), findsNothing);
     expect(bridge.preferences.masked, isFalse);
     expect(find.text(said), findsOneWidget);
+    // Nothing tries again on its own: the note says until when, and
+    // offers the try.
+    expect(
+      find.text(
+        'Gerfaut could not save the change. Until it is saved, the widget '
+        'and notifications may still show amounts.',
+      ),
+      findsOneWidget,
+    );
     expect(
       tester.widget<GerfautNotice>(find.byType(GerfautNotice)).tone,
       NoticeTone.alert,
