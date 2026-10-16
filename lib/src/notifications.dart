@@ -251,16 +251,29 @@ Future<void> announceFromVault(
   final settings = await bridge.getSettings();
   final shared = settings.preferences;
   if (!shared.notifyNewTx || await isDisguised()) return;
-  final wallets = await bridge.listWallets();
   await NewTxAnnouncer(service, bridge).announce(
     claimed,
     NoticeContext(
-      names: {for (final wallet in wallets) wallet.id: wallet.name},
+      names: await _namesOr(bridge.listWallets),
       unit: shared.unit,
       masked: shared.masked,
       details: AppPrefs(settings.appPrefs).notifyDetails,
     ),
   );
+}
+
+/// The name of each wallet, by id, or none when the list cannot be read:
+/// what was claimed is said all the same, under the app's name, which
+/// the core gives a notice it has no name for. Claimed, it is never
+/// handed out again, so failing here would be silence for good.
+Future<Map<String, String>> _namesOr(
+  Future<List<WalletMeta>> Function() list,
+) async {
+  try {
+    return {for (final wallet in await list()) wallet.id: wallet.name};
+  } catch (_) {
+    return const {};
+  }
 }
 
 /// What the syncs behind these reports found that nobody has announced
@@ -317,9 +330,10 @@ class SyncAnnouncer {
     // everything the disguise hides.
     if (_ref.read(disguiseProvider).disguised) return;
     try {
-      final wallets =
-          _ref.read(walletsProvider).valueOrNull ??
-          await _ref.read(bridgeProvider).listWallets();
+      final listed = _ref.read(walletsProvider).valueOrNull;
+      final names = await _namesOr(
+        () async => listed ?? await _ref.read(bridgeProvider).listWallets(),
+      );
       // The choice of details is read from the vault in the same pass
       // as the notice itself: a notice on means it is in.
       await _ref
@@ -327,7 +341,7 @@ class SyncAnnouncer {
           .announce(
             claimed,
             NoticeContext(
-              names: {for (final w in wallets) w.id: w.name},
+              names: names,
               unit: _ref.read(unitProvider),
               masked: _ref.read(maskedProvider),
               details: _ref.read(notifyDetailsProvider),
