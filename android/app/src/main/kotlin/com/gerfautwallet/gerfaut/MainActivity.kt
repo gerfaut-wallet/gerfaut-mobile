@@ -148,6 +148,7 @@ class MainActivity : FlutterFragmentActivity() {
         // The task switcher must show the calculator from the first frame
         // of a disguised app, before the Dart side has asked anything.
         applyTaskDescription(isDisguised())
+        recallSensitive()
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -369,9 +370,52 @@ class MainActivity : FlutterFragmentActivity() {
             0L
         }
         sensitiveCopiedAt = SystemClock.elapsedRealtime()
+        noteSensitive()
         main.removeCallbacks(clearSensitive)
         main.postDelayed(clearSensitive, SENSITIVE_CLEAR_MS)
     }
+
+    // The copy waiting to be cleared, as the process knows it, written
+    // down beside the app's data: a process that dies within the minute
+    // takes its timer with it, and the copy would otherwise stay on the
+    // clipboard for good. Only the mark and two clock readings, never
+    // the text. Written at once, not in the background: the process may
+    // be about to go.
+    private fun noteSensitive() {
+        clipboardNote().edit()
+            .putString(NOTE_MARK, sensitiveMark)
+            .putLong(NOTE_STAMP, sensitiveStamp)
+            .putLong(NOTE_COPIED_AT, sensitiveCopiedAt)
+            .commit()
+    }
+
+    private fun forgetSensitive() {
+        sensitiveMark = null
+        clipboardNote().edit().clear().commit()
+    }
+
+    // The first activity of a process reads back a copy an earlier one
+    // left: its minute is counted from when it was made, and once over,
+    // the next focus clears it if it is still on the clipboard. A copy
+    // from before the phone restarted is gone with the clipboard: the
+    // clock it was timed by started again from zero.
+    private fun recallSensitive() {
+        if (recalled) return
+        recalled = true
+        if (sensitiveMark != null) return
+        val note = clipboardNote()
+        val mark = note.getString(NOTE_MARK, null) ?: return
+        val copiedAt = note.getLong(NOTE_COPIED_AT, 0L)
+        if (copiedAt <= 0L || copiedAt > SystemClock.elapsedRealtime()) {
+            forgetSensitive()
+            return
+        }
+        sensitiveMark = mark
+        sensitiveStamp = note.getLong(NOTE_STAMP, 0L)
+        sensitiveCopiedAt = copiedAt
+    }
+
+    private fun clipboardNote() = getSharedPreferences(CLIPBOARD_NOTE, Context.MODE_PRIVATE)
 
     // A minute after a secret was copied, it leaves the clipboard: long
     // enough to paste it, and it does not wait there for whatever reads
@@ -406,7 +450,7 @@ class MainActivity : FlutterFragmentActivity() {
             // Unreadable: nothing is cleared on a guess.
             return
         }
-        sensitiveMark = null
+        forgetSensitive()
         val marked = description?.extras?.getString(COPY_MARK) == mark
         val stamped = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             sensitiveStamp != 0L && description?.timestamp == sensitiveStamp
@@ -757,6 +801,17 @@ class MainActivity : FlutterFragmentActivity() {
         private var sensitiveMark: String? = null
         private var sensitiveStamp = 0L
         private var sensitiveCopiedAt = 0L
+
+        // Whether this process read back what an earlier one wrote down
+        // (see recallSensitive): once, by its first activity.
+        private var recalled = false
+
+        // Where the copy waiting to be cleared is written down, and its
+        // three entries. Plain names: nothing here says what was copied.
+        const val CLIPBOARD_NOTE = "clipboard"
+        const val NOTE_MARK = "mark"
+        const val NOTE_STAMP = "stamp"
+        const val NOTE_COPIED_AT = "copied_at"
 
         // The key of the mark on a sensitive copy. Plain on purpose: a
         // clipboard manager that lists extras must find no app's name.
