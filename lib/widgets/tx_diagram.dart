@@ -72,7 +72,7 @@ class TxBranch {
   final bool mine;
 }
 
-/// Boxes per side before the tail folds into one. DESIGN.md allows ten
+/// Boxes per side before the tail folds into one. The design system allows ten
 /// in the desktop modal; a phone gets five — half the height for half
 /// the width.
 const int _rowsPerSide = 5;
@@ -94,7 +94,7 @@ const double _tightFrame = 340;
 const double _boxGap = GerfautSpacing.sm;
 const double _feeGap = 18;
 
-/// Stroke of every connector, DESIGN.md.
+/// Stroke of every connector, set by the design system.
 const double _wire = 1.5;
 
 /// How much of the accent a connector touching the wallet carries, and

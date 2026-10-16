@@ -192,7 +192,7 @@ void main() {
     final output = tester.getRect(boxOfRole(LucideIcons.arrowUpRight));
     expect(input.right, lessThan(square.left));
     expect(output.left, greaterThan(square.right));
-    // The junction is a square of the size DESIGN.md fixes, not a card
+    // The junction is a square of the size the design system fixes, not a card
     // that grows with what it holds.
     expect(square.size, const Size(40, 40));
     // Each side keeps the room its curve needs to turn in.

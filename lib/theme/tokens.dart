@@ -15,7 +15,7 @@ abstract final class GerfautSpacing {
   static const double xl = 32;
   static const double xxl = 48;
 
-  /// Mobile gutter between cards (DESIGN.md layout constant).
+  /// Mobile gutter between cards (a layout constant of the design system).
   static const double gutter = 12;
 }
 
@@ -335,7 +335,7 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
       leadingDistribution: _even,
       fontSize: size,
       height: size >= 24 ? 1.1 : 1.4,
-      // DESIGN.md: -0.01em under 24px, -0.02em above, the way a
+      // The design system: -0.01em under 24px, -0.02em above, the way a
       // large figure needs more tightening than a table cell.
       letterSpacing: size >= 24 ? -size * 0.02 : -size * 0.01,
       color: color,

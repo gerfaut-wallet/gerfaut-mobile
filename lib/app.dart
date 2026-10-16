@@ -461,7 +461,7 @@ ThemeData themeFrom(GerfautTokens tokens, Brightness brightness) {
       ),
     ),
     // Every sheet from the bottom of the screen, whoever opens it: the
-    // card surface and the rounded top edge of DESIGN.md, in place of
+    // card surface and the rounded top edge of the design system, in place of
     // the Material defaults (a tinted surface, 28px corners) that a
     // sheet left to itself would take.
     bottomSheetTheme: BottomSheetThemeData(
