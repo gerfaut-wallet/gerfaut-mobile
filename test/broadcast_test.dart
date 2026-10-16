@@ -141,7 +141,25 @@ void main() {
 
     await preview(tester, 'hello world');
 
-    expect(find.textContaining('not a transaction'), findsOneWidget);
+    // What to paste, then the core's own words, smaller.
+    const headline =
+        'This is not a transaction Gerfaut can read. Paste a signed '
+        'transaction in hex, or a PSBT.';
+    expect(find.text(headline), findsOneWidget);
+    expect(find.textContaining('expected a PSBT'), findsOneWidget);
+    // An error, not a hint: the text colour with its glyph, never the
+    // grey of the hint and never red, which belongs to the chain.
+    final light = GerfautTokens.light;
+    expect(tester.widget<Text>(find.text(headline)).style?.color, light.text);
+    expect(find.byIcon(LucideIcons.circleAlert), findsOneWidget);
+    // Said aloud as it appears.
+    final announced = find.ancestor(
+      of: find.text(headline),
+      matching: find.byWidgetPredicate(
+        (w) => w is Semantics && w.properties.liveRegion == true,
+      ),
+    );
+    expect(announced, findsOneWidget);
     expect(find.text('Preview'), findsOneWidget);
     expect(find.byType(SnackBar), findsNothing);
   });

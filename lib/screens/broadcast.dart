@@ -55,6 +55,17 @@ const String _uncommittedHint =
     "told otherwise: check the signer's settings, then have it signed "
     'again.';
 
+/// What the screen says when the core cannot read the input as a
+/// transaction: what to paste instead. The core's own words follow,
+/// smaller, for the case it names. The desktop's words.
+const String _unreadableTransaction =
+    'This is not a transaction Gerfaut can read. Paste a signed '
+    'transaction in hex, or a PSBT.';
+
+/// A refusal to read the input, said under the field: what to do, and
+/// the core's words when it had any.
+typedef _InputError = ({String headline, String? detail});
+
 /// Broadcast a transaction somebody else signed: paste, import or scan
 /// it, read what it does, then hand it to the network of the workspace.
 /// Gerfaut never signs and never edits the transaction; the preview
@@ -73,7 +84,7 @@ class BroadcastScreen extends ConsumerStatefulWidget {
 class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
   final _inputController = TextEditingController();
   bool _decoding = false;
-  String? _inputError;
+  _InputError? _inputError;
   TxPreview? _preview;
   bool _sending = false;
 
@@ -106,9 +117,16 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
         _sent = null;
       });
     } on BridgeException catch (error) {
-      if (mounted) setState(() => _inputError = error.message);
+      if (!mounted) return;
+      setState(
+        () => _inputError = error.kind == 'invalid_input'
+            ? (headline: _unreadableTransaction, detail: error.message)
+            : (headline: error.message, detail: null),
+      );
     } catch (error) {
-      if (mounted) setState(() => _inputError = '$error');
+      if (mounted) {
+        setState(() => _inputError = (headline: '$error', detail: null));
+      }
     } finally {
       if (mounted) setState(() => _decoding = false);
     }
@@ -134,13 +152,18 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
         cameUp: (error) => error is FileReadException,
       );
     } on FileReadException catch (error) {
-      if (mounted) setState(() => _inputError = error.message);
+      if (mounted) {
+        setState(() => _inputError = (headline: error.message, detail: null));
+      }
       return;
     } catch (_) {
       // No picker came up.
       if (mounted) {
         setState(
-          () => _inputError = 'No app on this phone can open a file to read.',
+          () => _inputError = (
+            headline: 'No app on this phone can open a file to read.',
+            detail: null,
+          ),
         );
       }
       return;
@@ -152,7 +175,10 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     if (await file.length() > _maxTransactionBytes) {
       if (mounted) {
         setState(
-          () => _inputError = 'This file is too large to be a transaction.',
+          () => _inputError = (
+            headline: 'This file is too large to be a transaction.',
+            detail: null,
+          ),
         );
       }
       return;
@@ -305,16 +331,9 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                   ),
                 ),
               ),
-              if (_inputError != null) ...[
+              if (_inputError case final error?) ...[
                 const SizedBox(height: GerfautSpacing.sm),
-                // Said aloud as it appears.
-                Semantics(
-                  liveRegion: true,
-                  child: Text(
-                    _inputError!,
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  ),
-                ),
+                _InputErrorLine(error: error, tokens: tokens),
               ],
               const SizedBox(height: GerfautSpacing.sm),
               Text(
@@ -490,6 +509,59 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// What went wrong with the input, under the field: in the text colour
+/// with its glyph, never the grey of a hint, and never red, which
+/// belongs to the chain (DESIGN.md). Said aloud as it appears.
+class _InputErrorLine extends StatelessWidget {
+  const _InputErrorLine({required this.error, required this.tokens});
+
+  final _InputError error;
+  final GerfautTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    final detail = error.detail;
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(LucideIcons.circleAlert, size: 16, color: tokens.text),
+          ),
+          const SizedBox(width: GerfautSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  error.headline,
+                  style: tokens.bodySmall.copyWith(
+                    color: tokens.text,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                if (detail != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    detail,
+                    style: tokens.bodySmall.copyWith(
+                      fontSize: 12,
+                      color: tokens.textMuted,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
