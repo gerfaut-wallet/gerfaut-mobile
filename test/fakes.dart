@@ -1290,6 +1290,45 @@ class FakeBridge implements GerfautBridge {
     return news.remove(walletId) ?? const [];
   }
 
+  /// Every batch handed to the core for its words, with what the app let
+  /// them say, in order.
+  final List<({List<LiveTx> txs, NoticeContext context})> noticeAsks = [];
+
+  /// What the core answers instead of the default below.
+  List<TxNotice> Function(List<LiveTx> txs, NoticeContext context)?
+  onLiveNotices;
+
+  /// One notice per transaction, whose words say which transaction at
+  /// which stage, under the wallet's name. The core's own words, and
+  /// what the context does to them, are tested in the core: here a test
+  /// reads what reached the core and what was posted of its answer.
+  @override
+  Future<List<TxNotice>> liveNotices(
+    List<LiveTx> txs,
+    NoticeContext context,
+  ) async {
+    noticeAsks.add((txs: txs, context: context));
+    final answer = onLiveNotices;
+    if (answer != null) return answer(txs, context);
+    return [
+      for (final tx in txs)
+        TxNotice(
+          title: context.names[tx.walletId] ?? tx.walletId,
+          body:
+              '${tx.txid} · ${switch (tx.stage) {
+                TxStage.mempool => 'pending',
+                TxStage.confirmed => 'confirmed',
+                TxStage.dropped => 'no longer coming',
+              }}',
+          kind: tx.stage == TxStage.dropped
+              ? NoticeKind.dropped
+              : NoticeKind.transaction,
+          payment: (walletId: tx.walletId, txid: tx.payment),
+          walletId: tx.walletId,
+        ),
+    ];
+  }
+
   @override
   Future<bool> usesTor() async => usesTorValue;
 

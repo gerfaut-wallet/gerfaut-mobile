@@ -254,6 +254,13 @@ abstract class GerfautBridge {
   /// ever returned again.
   Future<List<LiveTx>> claimAnnouncements(String walletId);
 
+  /// What [txs] amount to, as notifications ready to post, in order:
+  /// the core composes the words, the desktop app's, from what [context]
+  /// lets them say, and counts them against the budget it keeps for the
+  /// whole process, twenty a minute. Ask only for what is about to be
+  /// posted.
+  Future<List<TxNotice>> liveNotices(List<LiveTx> txs, NoticeContext context);
+
   /// Whether anything this app sends has to go through Tor.
   Future<bool> usesTor();
 }
@@ -698,6 +705,20 @@ class RustBridge implements GerfautBridge {
   Future<List<LiveTx>> claimAnnouncements(String walletId) async {
     final raw = await _guard(rust.claimAnnouncements(walletId: walletId));
     return _list(raw).map(LiveTx.fromJson).toList();
+  }
+
+  @override
+  Future<List<TxNotice>> liveNotices(
+    List<LiveTx> txs,
+    NoticeContext context,
+  ) async {
+    final raw = await _guard(
+      rust.liveNotices(
+        txsJson: jsonEncode([for (final tx in txs) tx.toJson()]),
+        contextJson: jsonEncode(context.toJson()),
+      ),
+    );
+    return _list(raw).map(TxNotice.fromJson).toList();
   }
 
   @override
