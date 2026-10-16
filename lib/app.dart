@@ -177,7 +177,8 @@ class _Hydrated extends ConsumerWidget {
         ref
             .read(widgetBalancesProvider.notifier)
             .hydrate(prefs[Pref.widgetBalances]);
-        ref.read(updateProvider.notifier).hydrate(prefs);
+        // The switch in About reads the core, not the preferences.
+        unawaited(ref.read(updateProvider.notifier).load());
         // The widgets follow from here: everything they show is
         // hydrated now, so the first thing they get is the right thing.
         ref.read(widgetFeedProvider);

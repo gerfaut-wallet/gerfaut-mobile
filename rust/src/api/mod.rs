@@ -870,8 +870,24 @@ pub async fn fetch_price(source: String, currency: String) -> String {
 /// GitHub repository whose releases this build follows.
 const UPDATE_REPO: &str = "gerfaut-wallet/gerfaut-mobile";
 
-/// Checks the latest published release against the running version.
-/// Returns a serialized `UpdateCheck`.
+/// What to say about releases to someone running `current_version`, as
+/// the core decides it from what the vault keeps. Reads only. Returns a
+/// serialized `UpdateStatus`.
+pub async fn update_status(current_version: String) -> String {
+    let manager = try_json!(manager());
+    to_json(&manager.update_status(&current_version).await)
+}
+
+/// The wallets came on screen, unlocked and not disguised: the core
+/// asks for the latest release if a check is due, at most once a day,
+/// and says what to announce. Returns a serialized `UpdateStatus`.
+pub async fn update_session(current_version: String) -> String {
+    let manager = try_json!(manager());
+    to_json(&manager.update_session(UPDATE_REPO, &current_version).await)
+}
+
+/// Checks the latest published release now, due or not. Returns a
+/// serialized `UpdateStatus`.
 ///
 /// Through the manager, so the request takes the route the syncs take:
 /// with an onion backend it goes through Tor, and with Tor out of reach
@@ -879,7 +895,25 @@ const UPDATE_REPO: &str = "gerfaut-wallet/gerfaut-mobile";
 pub async fn check_update(current_version: String) -> String {
     let manager = try_json!(manager());
     match manager.check_update(UPDATE_REPO, &current_version).await {
-        Ok(check) => to_json(&check),
+        Ok(status) => to_json(&status),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Closes the notice on the release it announced.
+pub async fn dismiss_update(version: String) -> String {
+    let manager = try_json!(manager());
+    match manager.dismiss_update(&version).await {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Turns the daily check on or off.
+pub async fn set_update_automatic(automatic: bool) -> String {
+    let manager = try_json!(manager());
+    match manager.set_update_automatic(automatic).await {
+        Ok(()) => ok_json(),
         Err(e) => core_error_json(&e),
     }
 }
