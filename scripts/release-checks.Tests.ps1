@@ -336,3 +336,17 @@ Describe "Assert-SameBytes" {
         { Assert-SameBytes -Path $changed -Reference $built -What "the APK in the draft" } | Should -Throw "the APK in the draft has SHA-256 *"
     }
 }
+
+Describe 'sign-release.ps1' {
+    # compare.py runs beside the keystore passwords: in isolated mode,
+    # Python imports nothing from the script's folder, the PYTHON*
+    # variables or the user site, so no file left in reproducible/ can
+    # stand in for the standard library.
+    It 'runs every python call in isolated mode' {
+        $source = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'sign-release.ps1') -Raw
+        $calls = [regex]::Matches($source, 'Invoke-Native \$python @\(([^)]*)\)')
+        $calls.Count | Should -BeGreaterThan 0
+        foreach ($call in $calls) { $call.Groups[1].Value | Should -Match '^\s*"-I",' }
+        $source | Should -Not -Match '&\s*\$python\b'
+    }
+}
