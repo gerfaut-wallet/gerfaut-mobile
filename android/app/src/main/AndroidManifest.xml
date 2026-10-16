@@ -184,7 +184,7 @@
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Keeps one connection open to the Bitcoin server the user chose, so the user is told the moment a transaction touching a watched wallet is broadcast or confirmed. The user turns it on in Settings, a notification shows it is running, and it stops when the user turns it off. The app has no vendor server and no Firebase: only the device knows which addresses are watched." />
+                android:value="Keeps one connection open to the Bitcoin server set in the app, a public one or a node the user runs, so the user is told the moment a transaction touching a watched wallet is broadcast or confirmed. The user turns it on in Settings, a notification shows it is running, and it stops when the user turns it off. The app runs no server of its own and uses no Firebase. The Bitcoin server it connects to sees the watched addresses, as it does at every sync." />
         </service>
         <!-- Brings Live watch back after a restart of the phone or an
              update of the app, and receives its heartbeat alarm. Not
