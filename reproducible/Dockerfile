@@ -32,6 +32,11 @@ ARG ANDROID_CMAKE=3.22.1
 ARG FLUTTER_VERSION=3.47.1
 ARG FLUTTER_COMMIT=6655482ec06e547f90abf8ae7590466f4415978d
 ARG RUST_VERSION=1.97.0
+# rustup-init 1.29.1, the installer of the toolchain above, fetched as a
+# binary and checked against the checksum rustup publishes beside it
+# (rustup-init.sha256), never piped from a script into a shell.
+ARG RUSTUP_VERSION=1.29.1
+ARG RUSTUP_INIT_SHA256=dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71
 
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=UTC \
@@ -81,9 +86,13 @@ RUN git clone --depth 1 --branch "$FLUTTER_VERSION" \
 # RUSTUP_TOOLCHAIN and therefore ignores rust/rust-toolchain.toml; the
 # symlink below makes `stable` resolve to the pinned toolchain so the
 # two agree.
-RUN CARGO_HOME=/opt/cargo curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-      | CARGO_HOME=/opt/cargo sh -s -- -y \
-          --no-modify-path --profile minimal --default-toolchain "$RUST_VERSION" \
+RUN curl --proto '=https' --tlsv1.2 -fsSL -o /tmp/rustup-init \
+      "https://static.rust-lang.org/rustup/archive/${RUSTUP_VERSION}/x86_64-unknown-linux-gnu/rustup-init" \
+ && echo "${RUSTUP_INIT_SHA256}  /tmp/rustup-init" | sha256sum -c - \
+ && chmod +x /tmp/rustup-init \
+ && CARGO_HOME=/opt/cargo /tmp/rustup-init -y \
+      --no-modify-path --profile minimal --default-toolchain "$RUST_VERSION" \
+ && rm /tmp/rustup-init \
  && ln -s "$RUSTUP_HOME/toolchains/${RUST_VERSION}-x86_64-unknown-linux-gnu" \
           "$RUSTUP_HOME/toolchains/stable-x86_64-unknown-linux-gnu" \
  && CARGO_HOME=/opt/cargo rustup target add --toolchain "$RUST_VERSION" \
