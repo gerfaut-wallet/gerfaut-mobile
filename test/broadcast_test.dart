@@ -23,6 +23,7 @@ import 'package:gerfaut/widgets/notice.dart';
 import 'package:gerfaut/widgets/tx_diagram.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'core_fixtures.dart';
 import 'fakes.dart';
 import 'menu.dart';
 
@@ -165,6 +166,30 @@ void main() {
     expect(find.byType(SnackBar), findsNothing);
   });
 
+  testWidgets('a pasted qr code with too many parts is unreadable input', (
+    tester,
+  ) async {
+    final bridge = FakeBridge()
+      ..onPreview = (_, _) => throw coreFailure(
+        'too_many_parts',
+        'invalid qr: this QR code announces 6000 parts, more than Gerfaut '
+            'reads',
+      );
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+
+    await preview(tester, 'ur:crypto-psbt/1-6000/aaaa');
+
+    expect(
+      find.text(
+        'This is not a transaction Gerfaut can read. Paste a signed '
+        'transaction in hex, or a PSBT.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('announces 6000 parts'), findsOneWidget);
+  });
+
   testWidgets('the error goes as the text changes, in the slot of the hint', (
     tester,
   ) async {
@@ -286,7 +311,7 @@ void main() {
     expect(await container.read(priceProvider.future), isNotNull);
     await tester.pumpAndSettle();
     expect(container.read(priceProvider).valueOrNull?.rate, 50000);
-    expect(container.read(fiatCurrencyProvider), FiatCurrency.eur);
+    expect(container.read(fiatCurrencyProvider), FiatCurrency('eur'));
 
     // The preview and the transaction detail are one page with two
     // entries: a row that carries euros here and only bitcoin there
@@ -756,9 +781,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(container.read(recentBroadcastsProvider).map((b) => b.txid), [
-      fakeTxid,
-    ]);
+    // The vault kept it, and the list the screen opens on next is read
+    // again rather than the one it left with.
+    final recent = await container.read(
+      recentBroadcastsProvider(Network.mainnet).future,
+    );
+    expect(recent.map((b) => b.txid), [fakeTxid]);
   });
 
   testWidgets('sending asks first, then follows the transaction', (
@@ -809,12 +837,10 @@ void main() {
     expect(find.text('Broadcast another'), findsOneWidget);
     expect(find.text('View on mempool.space'), findsOneWidget);
 
-    // Kept for a later check, as JSON in the vault.
-    final stored = jsonDecode(bridge.appPrefs['broadcast.recent']!) as List;
-    expect(stored, hasLength(1));
-    expect((stored.single as Map)['txid'], fakeTxid);
-    expect((stored.single as Map)['hex'], '0200000001deadbeef');
-    expect((stored.single as Map)['network'], 'mainnet');
+    // Kept for a later check by the vault, which the core writes: the
+    // app keeps no copy of its own among the preferences.
+    expect(bridge.keptBroadcasts.map((b) => b.hex), ['0200000001deadbeef']);
+    expect(bridge.appPrefs.containsKey('broadcast.recent'), isFalse);
 
     // Polled every thirty seconds, until it confirms.
     bridge.onStatus = (_, _) => BroadcastStatus(
@@ -902,7 +928,7 @@ void main() {
       isTrue,
     );
     // Nothing was recorded, and the transaction can be sent again.
-    expect(bridge.appPrefs.containsKey('broadcast.recent'), isFalse);
+    expect(bridge.keptBroadcasts, isEmpty);
     expect(primaryButton(tester, 'Broadcast').onPressed, isNotNull);
   });
 
@@ -1069,43 +1095,42 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(find.text('RECENT BROADCASTS'), findsOneWidget);
-    expect(
-      jsonDecode(bridge.appPrefs['broadcast.recent']!) as List,
-      hasLength(1),
-    );
+    expect(bridge.keptBroadcasts, hasLength(1));
 
     await tester.tap(find.byTooltip('Forget this broadcast'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Forget'));
     await tester.pumpAndSettle();
     expect(find.text('RECENT BROADCASTS'), findsNothing);
-    expect(jsonDecode(bridge.appPrefs['broadcast.recent']!) as List, isEmpty);
+    expect(bridge.keptBroadcasts, isEmpty);
   });
 
   testWidgets('recent broadcasts come back after a restart', (tester) async {
-    final bridge = FakeBridge(
-      settings: Settings(
-        activeNetwork: Network.mainnet,
-        backends: const {},
-        appPrefs: {
-          'onboarding.seen': '1',
-          'broadcast.recent': jsonEncode([
-            {
-              'txid': fakeTxid,
-              'network': 'mainnet',
-              'hex': '0200000001deadbeef',
-              'at': 1755000000,
-            },
-            {
-              'txid': 'e' * 64,
-              'network': 'signet',
-              'hex': '0200000001cafe',
-              'at': 1755000000,
-            },
-          ]),
-        },
-      ),
-    );
+    final bridge =
+        FakeBridge(
+            settings: Settings(
+              preferences: kPreferences,
+              activeNetwork: Network.mainnet,
+              backends: const {},
+              appPrefs: const {'onboarding.seen': '1'},
+            ),
+          )
+          ..keptBroadcasts.addAll([
+            RecentBroadcast(
+              txid: fakeTxid,
+              network: Network.mainnet,
+              hex: '0200000001deadbeef',
+              backend: 'mempool.space',
+              at: 1755000000,
+            ),
+            RecentBroadcast(
+              txid: 'e' * 64,
+              network: Network.signet,
+              hex: '0200000001cafe',
+              backend: 'mempool.space',
+              at: 1755000000,
+            ),
+          ]);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [

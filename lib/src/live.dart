@@ -361,91 +361,71 @@ String liveNotificationText(LiveWatchStatus status) {
       : state;
 }
 
-/// The most addresses Live follows, as the core caps them: on a public
-/// server, in all and per wallet, then on a node the user says is
-/// theirs. Grouped the way every figure in the app is.
-final String liveLimit = groupThousands('2000');
-final String livePerWalletLimit = groupThousands('200');
-final String ownNodeLiveLimit = groupThousands('20000');
+/// What Live takes on any server and on a node the user says is theirs,
+/// as the core keeps them, for the words under "This is my node". The
+/// same for the whole run, so asked once.
+final liveLimitsProvider = FutureProvider<WatchLimitsChoice>(
+  (ref) => ref.watch(bridgeProvider).liveLimits(),
+);
 
 /// What the settings say under the status line when Live cannot follow
-/// every address: how many wait for a sync instead, and what lifts the
-/// limit. Null while every address is followed.
-///
-/// On a node already declared the user's own, two things can leave
-/// addresses out. The list may have reached the 20,000 of an own node,
-/// and nothing in the app lifts that further. Or the node refused some
-/// of a shorter list: its own limit, which its owner can raise, named
-/// by the setting of the software it runs when that is known.
-({String fact, String? remedy})? liveCoverageNote(
-  LiveWatchStatus status, {
-  required bool ownNode,
-}) {
-  if (!status.leavesSomeOut) return null;
+/// every address, in the words of the core's verdict: how many wait for
+/// a sync instead, why, and what lifts the limit when something does.
+/// Null while every address is followed.
+({String fact, String? remedy})? liveCoverageNote(LiveWatchStatus status) {
+  final leftOut = status.leftOut;
+  if (leftOut == null) return null;
   final addresses = _counted(status.leftOutScripts, 'address', 'addresses');
   final wallets = _counted(status.leftOutWallets, 'wallet', 'wallets');
   final verb = status.leftOutScripts == 1 ? 'is' : 'are';
   final waiting =
       '$addresses of $wallets $verb checked at the next sync instead.';
-  // On the user's own node, a list below the cap that still leaves
-  // addresses out is the node refusing them, as much as a public server
-  // that takes fewer than the list holds.
-  final refused =
-      serverRefused(status) || (ownNode && status.watchedScripts < _ownNodeCap);
-  final fact = refused
-      ? '${ownNode ? 'Your node' : 'The server'} refuses some of the '
-            'addresses Live asks it to follow. $waiting'
-      : ownNode
-      ? 'Live follows at most $ownNodeLiveLimit addresses, even on your '
-            'own node. $waiting'
-      : 'Live follows at most $livePerWalletLimit addresses per wallet '
-            'and $liveLimit in all. $waiting';
-  final remedy = ownNode
-      ? (refused ? _raiseLimit(status.serverSoftware) : null)
-      : 'Connect your own node and turn on "This is my node" in Network '
-            'to follow up to $ownNodeLiveLimit.';
+  final ownNode = leftOut.ownNode;
+  final total = groupThousands('${leftOut.limits.total}');
+  final perWallet = groupThousands('${leftOut.limits.perWallet}');
+  final fact = switch (leftOut.reason) {
+    LeftOutReason.serverRefused =>
+      '${ownNode ? 'Your node' : 'The server'} refuses some of the '
+          'addresses Live asks it to follow. $waiting',
+    LeftOutReason.liveLimit when ownNode =>
+      'Live follows at most $total addresses, even on your own node. '
+          '$waiting',
+    LeftOutReason.liveLimit =>
+      'Live follows at most $perWallet addresses per wallet and $total in '
+          'all. $waiting',
+  };
+  final remedy = switch (leftOut.remedy) {
+    null => null,
+    final LiveRemedy remedy => liveRemedyWords(remedy),
+  };
   return (fact: fact, remedy: remedy);
 }
 
-/// Whether the server Live last spoke to refused part of the list: the
-/// wallets then hear fewer addresses than the list holds. An address two
-/// wallets share counts for each of them, so this can miss a refusal but
-/// never makes one up. Without the wallets, nothing can be told.
-bool serverRefused(LiveWatchStatus status) {
-  if (status.wallets.isEmpty) return false;
-  final heard = status.wallets.fold(0, (sum, w) => sum + w.watchedScripts);
-  return heard < status.watchedScripts;
-}
-
-/// The most addresses Live lists on an own node, as the core caps it.
-const int _ownNodeCap = 20000;
-
-/// Where a node's owner lets it take more subscriptions, by what the
-/// server says it runs: the settings these servers document, as the
-/// desktop app names them. electrs as its author publishes it has no
-/// such limit, and nothing to raise. Anything else gets the general
-/// advice.
-String? _raiseLimit(String? software) {
-  final name = software?.trim().toLowerCase() ?? '';
-  if (name.startsWith('fulcrum')) {
-    return 'Raise max_subs_per_ip in the Fulcrum configuration to follow '
-        'them all.';
+/// The way out the core names, in words: a node of one's own, or on it,
+/// the setting the core named for the software it runs, phrased the way
+/// that software's documentation does.
+String liveRemedyWords(LiveRemedy remedy) {
+  switch (remedy) {
+    case OwnNodeRemedy(:final limits):
+      return 'Connect your own node and turn on "This is my node" in '
+          'Network to follow up to ${groupThousands('${limits.total}')}.';
+    case RaiseServerLimit(:final server, :final settings):
+      final named = settings.join(' and ');
+      if (named.isEmpty) {
+        return 'Raise the subscription limit of your server to follow them '
+            'all.';
+      }
+      return switch (server) {
+        ServerSoftware.fulcrum =>
+          'Raise $named in the Fulcrum configuration to follow them all.',
+        ServerSoftware.electrumx =>
+          'Raise $named in the ElectrumX settings to follow them all.',
+        ServerSoftware.electrsEsplora || ServerSoftware.mempoolElectrs =>
+          'Raise $named on this electrs to follow them all.',
+        null =>
+          'Raise the subscription limit of your server to follow them all.',
+      };
   }
-  if (name.startsWith('electrumx')) {
-    return 'Raise COST_SOFT_LIMIT and COST_HARD_LIMIT in the ElectrumX '
-        'settings to follow them all.';
-  }
-  // Blockstream's electrs.
-  if (name.startsWith('electrs-esplora')) {
-    return 'Raise --electrum-subscription-limit on this electrs to follow '
-        'them all.';
-  }
-  if (name.startsWith('mempool-electrs')) {
-    return 'Raise --electrum-max-subscriptions on this electrs to follow '
-        'them all.';
-  }
-  if (name.startsWith('electrs/')) return null;
-  return 'Raise the subscription limit of your server to follow them all.';
 }
 
 String _counted(int count, String one, String many) =>
@@ -674,11 +654,7 @@ final walletCoverageProvider = Provider.family<WalletCoverage?, String>((
   if (!chosen) return null;
   final live = ref.watch(liveProvider);
   final status = live.status;
-  if (!live.serviceRunning ||
-      !status.leavesSomeOut ||
-      status.leftOutWallets == 0) {
-    return null;
-  }
+  if (!live.serviceRunning || !status.leavesSomeOut) return null;
   return status.coverageOf(walletId);
 });
 
@@ -799,7 +775,7 @@ class LiveRunner {
       final settings = await bridge.getSettings();
       final prefs = settings.appPrefs;
       final wanted =
-          prefs[Pref.notifyNewTx] == '1' &&
+          settings.preferences.notifyNewTx &&
           prefs[Pref.background] == BackgroundCheck.live.stored;
       if (!wanted || await isDisguised()) {
         await _tell('standDown');

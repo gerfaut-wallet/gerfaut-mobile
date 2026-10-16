@@ -147,11 +147,11 @@ class _Loaded extends StatelessWidget {
 
     // A single key has one path and it is open: a card would say the
     // sentence a second time. The page keeps to its three lines. The
-    // others come in reading order, the primary path first.
+    // others come in the core's reading order, the primary path first.
     final cards = snapshot.kind == PolicyKind.singleKey
         ? const <Widget>[]
         : [
-            for (final branch in orderBranches(snapshot))
+            for (final branch in snapshot.branches)
               Padding(
                 padding: const EdgeInsets.only(bottom: GerfautSpacing.gutter),
                 child: _BranchCard(branch: branch, snapshot: snapshot),

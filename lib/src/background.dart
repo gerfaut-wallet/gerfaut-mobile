@@ -97,7 +97,7 @@ Future<bool> runBackgroundCheck({
     final prefs = settings.appPrefs;
     // The isolate reads the same preferences the screens write: a check
     // that the user turned off must not notify, and must not sync.
-    if (!AppPrefs(prefs).notifyNewTx) return true;
+    if (!settings.preferences.notifyNewTx) return true;
     // Nothing is posted while disguised. The isolate has no channel to
     // the activity, so it reads the marker the activity keeps on disk.
     if (await isDisguised()) return true;

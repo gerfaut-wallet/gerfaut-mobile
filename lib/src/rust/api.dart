@@ -7,7 +7,7 @@ import 'frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `console_log_level`, `core_error_json`, `core_error_kind`, `decode_key`, `error_json`, `from_json`, `manager`, `ok_json`, `parse_network_opt`, `parse_network`, `parse_variant`, `refuse_oversized_nested_ur`, `refuse_oversized_ur`, `to_json`
+// These functions are ignored because they are not marked as `pub`: `console_log_level`, `core_error_json`, `decode_key`, `error_json`, `from_json`, `manager`, `ok_json`, `parse_network_opt`, `parse_network`, `parse_variant`, `to_json`
 
 /// Opens (or creates) the vault under `data_dir` with a 32-byte key given
 /// as 64 hex characters. Idempotent: once initialized, later calls (hot
@@ -213,9 +213,16 @@ Future<String> trustCertificate({
 Future<String> forgetCertificate({required String host}) =>
     RustLib.instance.api.crateApiForgetCertificate(host: host);
 
-/// Stores one small app preference in the encrypted vault.
+/// Stores one small preference of this app alone in the encrypted
+/// vault. The ones both apps keep go through [`set_preferences`].
 Future<String> setAppPref({required String key, required String value}) =>
     RustLib.instance.api.crateApiSetAppPref(key: key, value: value);
+
+/// Changes some of the preferences both apps keep, from a serialized
+/// `PreferencesChange` (the fields left out keep their value), and
+/// returns them all as stored, a serialized `Preferences`.
+Future<String> setPreferences({required String changeJson}) =>
+    RustLib.instance.api.crateApiSetPreferences(changeJson: changeJson);
 
 /// Decodes a transaction somebody else signed (PSBT as base64, hex or a
 /// binary file passed as hex; raw transaction as hex; a `ur:crypto-psbt`
@@ -247,6 +254,16 @@ Future<String> transactionStatus({
   required String hex,
 }) =>
     RustLib.instance.api.crateApiTransactionStatus(network: network, hex: hex);
+
+/// The last transactions broadcast on `network`, newest first, as the
+/// vault keeps them. Returns a serialized list of `RecentBroadcast`.
+Future<String> recentBroadcasts({required String network}) =>
+    RustLib.instance.api.crateApiRecentBroadcasts(network: network);
+
+/// Drops the vault's record of a broadcast; the transaction itself is
+/// on the network and untouched.
+Future<String> forgetBroadcast({required String txid}) =>
+    RustLib.instance.api.crateApiForgetBroadcast(txid: txid);
 
 /// Where Tor stands for `.onion` backends. Returns a serialized
 /// `TorStatus`: the mode, the route in use, and how far the built-in
@@ -355,6 +372,12 @@ Future<String> liveTick() => RustLib.instance.api.crateApiLiveTick();
 /// state is `off` when none runs.
 Future<String> liveStatus() => RustLib.instance.api.crateApiLiveStatus();
 
+/// What the watch takes on any server and on the user's own node, for
+/// the words under "This is my node". Returns the serialized
+/// `WatchLimitsChoice`; needs no manager, the limits are the same for
+/// everyone.
+Future<String> liveLimits() => RustLib.instance.api.crateApiLiveLimits();
+
 /// Subscribes this isolate to what the running watch says for the
 /// screens (its status, the wallets it synced, blocks), each a
 /// serialized `LiveEvent`, plus
@@ -372,25 +395,65 @@ Stream<String> liveEvents() => RustLib.instance.api.crateApiLiveEvents();
 Future<String> claimAnnouncements({required String walletId}) =>
     RustLib.instance.api.crateApiClaimAnnouncements(walletId: walletId);
 
+/// What a batch of announced transactions amounts to, as notifications
+/// ready to post: their title, their text, and the payment and wallet
+/// each is about. The core composes the words, the same as the desktop
+/// app's, and counts them against the budget it keeps for the whole
+/// process, twenty a minute: the screens, Live and the periodic task
+/// draw on the same one. `txs_json` is a `Vec<LiveTx>`, as
+/// [`claim_announcements`] and [`live_run`] hand them out; `context_json`
+/// a `notice::Context`: the wallet names, the unit, the mask and the
+/// choice of details. Returns a serialized `Vec<Notice>`. Ask only for
+/// what is about to be posted: what comes back has been counted.
+Future<String> liveNotices({
+  required String txsJson,
+  required String contextJson,
+}) => RustLib.instance.api.crateApiLiveNotices(
+  txsJson: txsJson,
+  contextJson: contextJson,
+);
+
 /// Whether anything this app sends has to go through Tor.
 Future<String> usesTor() => RustLib.instance.api.crateApiUsesTor();
 
-/// Fetches the current BTC price. `source` is one of `coingecko`,
-/// `kraken`, `mempool_space`; `currency` is one of the `FiatCurrency`
-/// identifiers. The source must quote the currency: only CoinGecko
-/// serves the ones past the first seven. Returns a `PriceQuote`.
+/// The currencies and price sources the settings offer, and how often
+/// the price is asked. Returns a serialized `PriceTable`: a fixed
+/// table, which only changes with the core.
+Future<String> priceTable() => RustLib.instance.api.crateApiPriceTable();
+
+/// Fetches the current BTC price, in the currency and from the source
+/// of the preferences. Returns a `PriceQuote`.
 ///
 /// Through the manager, so the request takes the route the syncs take:
 /// with a .onion node on any network it goes through Tor, and with Tor
 /// out of reach it does not go at all and comes back as `tor`.
-Future<String> fetchPrice({required String source, required String currency}) =>
-    RustLib.instance.api.crateApiFetchPrice(source: source, currency: currency);
+Future<String> fetchPrice() => RustLib.instance.api.crateApiFetchPrice();
 
-/// Checks the latest published release against the running version.
-/// Returns a serialized `UpdateCheck`.
+/// What to say about releases to someone running `current_version`, as
+/// the core decides it from what the vault keeps. Reads only. Returns a
+/// serialized `UpdateStatus`.
+Future<String> updateStatus({required String currentVersion}) =>
+    RustLib.instance.api.crateApiUpdateStatus(currentVersion: currentVersion);
+
+/// The wallets came on screen, unlocked and not disguised: the core
+/// asks for the latest release if a check is due, at most once a day,
+/// and says what to announce. Returns a serialized `UpdateStatus`.
+Future<String> updateSession({required String currentVersion}) =>
+    RustLib.instance.api.crateApiUpdateSession(currentVersion: currentVersion);
+
+/// Checks the latest published release now, due or not. Returns a
+/// serialized `UpdateStatus`.
 ///
 /// Through the manager, so the request takes the route the syncs take:
 /// with an onion backend it goes through Tor, and with Tor out of reach
 /// it does not go at all and comes back as `tor`.
 Future<String> checkUpdate({required String currentVersion}) =>
     RustLib.instance.api.crateApiCheckUpdate(currentVersion: currentVersion);
+
+/// Closes the notice on the release it announced.
+Future<String> dismissUpdate({required String version}) =>
+    RustLib.instance.api.crateApiDismissUpdate(version: version);
+
+/// Turns the daily check on or off.
+Future<String> setUpdateAutomatic({required bool automatic}) =>
+    RustLib.instance.api.crateApiSetUpdateAutomatic(automatic: automatic);

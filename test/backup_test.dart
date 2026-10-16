@@ -13,7 +13,6 @@ import 'package:gerfaut/widgets/choice_group.dart';
 import 'package:gerfaut/screens/backup_qr.dart';
 import 'package:gerfaut/screens/backup_restore.dart';
 import 'package:gerfaut/screens/scan.dart';
-import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/documents.dart';
 import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
@@ -25,6 +24,7 @@ import 'package:gerfaut/widgets/buttons.dart';
 import 'package:gerfaut/widgets/notice.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import 'core_fixtures.dart';
 import 'fakes.dart';
 
 /// Records what would have been shared instead of touching the system.
@@ -201,6 +201,7 @@ void main() {
           makeMeta(id: 'w2', name: 'Other', network: Network.mainnet),
         ],
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.signet,
           backends: {},
           appPrefs: {},
@@ -227,6 +228,7 @@ void main() {
           makeMeta(id: 'w2', name: 'Other', network: Network.mainnet),
         ],
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.signet,
           backends: {},
           appPrefs: {},
@@ -1083,8 +1085,10 @@ void main() {
     testWidgets('a wrong password says so in plain words', (tester) async {
       useTallSurface(tester);
       final bridge = FakeBridge();
-      bridge.onPreviewBackup = (_, _) =>
-          throw const BridgeException('vault', 'vault decryption failed');
+      bridge.onPreviewBackup = (_, _) => throw coreFailure(
+        'wrong_key',
+        'vault decryption failed: wrong key or corrupted file',
+      );
       await openBackup(tester, bridge);
 
       expect(
@@ -1093,23 +1097,58 @@ void main() {
       );
     });
 
-    testWidgets('a file from a newer Gerfaut is refused in the core words', (
-      tester,
-    ) async {
+    testWidgets('a file from a newer Gerfaut says to update', (tester) async {
       useTallSurface(tester);
       final bridge = FakeBridge();
-      // The core opens the file — so the password was right — and
-      // refuses the schema by name. That sentence is the whole answer,
-      // and reading it as a wrong password would send the person back
-      // to retype what they got right.
-      bridge.onPreviewBackup = (_, _) => throw const BridgeException(
-        'invalid_input',
-        'invalid backup: backup version 3 needs a newer Gerfaut',
+      // The core refuses the file by its format, whichever layer is
+      // newer: reading it as a wrong password would send the person
+      // back to retype what they got right.
+      bridge.onPreviewBackup = (_, _) => throw coreFailure(
+        'newer_format',
+        'invalid backup: this backup was written by a newer Gerfaut '
+            '(backup version 3); update Gerfaut to open it',
       );
       await openBackup(tester, bridge);
 
       expect(
-        find.text('invalid backup: backup version 3 needs a newer Gerfaut'),
+        find.text(
+          'This backup was made with a newer version of Gerfaut. Update '
+          'Gerfaut to open it.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Wrong password'), findsNothing);
+    });
+
+    testWidgets('a file that is not a backup is not blamed on the password', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge();
+      // Any vault failure used to read as a wrong password here. A
+      // picture picked by mistake is not one, and neither is a vault.
+      bridge.onPreviewBackup = (_, _) => throw coreFailure(
+        'unreadable_backup',
+        'invalid backup: this is not a Gerfaut backup',
+      );
+      await pushRestore(
+        tester,
+        bridge,
+        filePicker: () async => XFile.fromData(
+          utf8.encode('a holiday photo, as far as anyone knows'),
+          path: 'IMG_2041.jpg',
+        ),
+      );
+      await tester.tap(find.text('Open a file'));
+      await tester.pumpAndSettle();
+      expect(find.text('Backup read from IMG_2041.jpg'), findsOneWidget);
+      await tester.enterText(find.byType(TextField), 'correct horse');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Open backup'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('This is not a Gerfaut backup, or it is damaged.'),
         findsOneWidget,
       );
       expect(find.textContaining('Wrong password'), findsNothing);
@@ -1121,7 +1160,7 @@ void main() {
       useTallSurface(tester);
       final bridge = FakeBridge();
       bridge.onPreviewBackup = (_, _) => preview();
-      bridge.onImportBackup = (_, _, _) => throw const BridgeException(
+      bridge.onImportBackup = (_, _, _) => throw coreFailure(
         'private_material',
         'input contains private key material and was rejected',
       );
@@ -1131,8 +1170,8 @@ void main() {
 
       expect(
         find.text(
-          'This backup holds a private key, and Gerfaut only watches: '
-          'nothing was restored.',
+          'A wallet in this backup holds a private key, and Gerfaut only '
+          'watches: nothing was restored.',
         ),
         findsOneWidget,
       );

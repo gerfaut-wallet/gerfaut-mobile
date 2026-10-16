@@ -24,6 +24,7 @@ import 'package:gerfaut/widgets/setting_switch.dart';
 import 'package:gerfaut/widgets/wallet_icon.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'core_fixtures.dart';
 import 'fakes.dart';
 import 'menu.dart';
 
@@ -71,6 +72,7 @@ void main() {
     // A vault opened before: the welcome tour is behind this user.
     final bridge = FakeBridge(
       settings: const Settings(
+        preferences: kPreferences,
         activeNetwork: Network.mainnet,
         backends: {},
         appPrefs: {'onboarding.seen': '1'},
@@ -119,7 +121,7 @@ void main() {
     // to answer.
     useTallSurface(tester);
     final bridge = FakeBridge()
-      ..onFetchPrice = (_, _) => throw const BridgeException(
+      ..onFetchPrice = (_, _) => throw coreFailure(
         'tor',
         'tor: no Tor proxy answers at 127.0.0.1:9050',
       );
@@ -784,6 +786,7 @@ void main() {
     useTallSurface(tester);
     final bridge = FakeBridge(
       settings: const Settings(
+        preferences: kPreferences,
         activeNetwork: Network.mainnet,
         backends: {},
         appPrefs: {},
@@ -871,17 +874,18 @@ void main() {
       await enableFiat(tester);
 
       final groups = currencyField(tester).groups;
-      // Thirty currencies, in the core's order, in two named groups.
+      // Every currency the core lists, in its order, in two named groups.
       expect(groups, hasLength(2));
       expect([
         for (final group in groups) ...group.items.map((i) => i.value),
-      ], FiatCurrency.values);
-      // The seven every source quotes come first, then the ones
-      // CoinGecko alone serves.
+      ], kPriceTable.currencies.map((entry) => entry.currency));
+      // The ones every source quotes come first, then the ones
+      // CoinGecko alone serves, each with its name beside the code.
       expect(groups.first.label, 'Every source');
-      expect(groups.first.items, hasLength(7));
+      expect(groups.first.items, hasLength(4));
+      expect(groups.first.items.first.subtitle, 'Euro');
       expect(groups.last.label, 'CoinGecko only');
-      expect(groups.last.items, hasLength(23));
+      expect(groups.last.items, hasLength(3));
     });
 
     testWidgets('the currency list reads group by group', (tester) async {
@@ -923,8 +927,8 @@ void main() {
       await tester.tap(find.text('US dollar'));
       await tester.pumpAndSettle();
 
-      expect(currencyField(tester).value, FiatCurrency.usd);
-      expect(bridge.appPrefs['display.fiat_currency'], 'usd');
+      expect(currencyField(tester).value, FiatCurrency('usd'));
+      expect(bridge.preferences.fiatCurrency, FiatCurrency('usd'));
     });
 
     testWidgets('a CoinGecko-only currency moves the source over', (
@@ -940,14 +944,17 @@ void main() {
 
       await tester.tap(find.text('Kraken'));
       await tester.pumpAndSettle();
-      expect(bridge.appPrefs['display.fiat_source'], 'kraken');
+      expect(bridge.preferences.priceSource, PriceSource.kraken);
       expect(sourcePill(tester, 'mempool.space').onTap, isNotNull);
 
-      currencyField(tester).onChanged!(FiatCurrency.ngn);
+      currencyField(tester).onChanged!(FiatCurrency('ngn'));
       await tester.pumpAndSettle();
 
-      expect(bridge.appPrefs['display.fiat_currency'], 'ngn');
-      expect(bridge.appPrefs['display.fiat_source'], 'coingecko');
+      // Only the currency is asked for: the core moves the source, and
+      // the screen shows the one it kept.
+      expect(bridge.preferencesChanges.last.toJson(), {'fiat_currency': 'ngn'});
+      expect(bridge.preferences.fiatCurrency, FiatCurrency('ngn'));
+      expect(bridge.preferences.priceSource, PriceSource.coingecko);
       expect(
         find.text('CoinGecko is the only source that quotes NGN.'),
         findsOneWidget,
@@ -963,7 +970,7 @@ void main() {
       );
 
       // Back to a currency everyone quotes: the sources return.
-      currencyField(tester).onChanged!(FiatCurrency.chf);
+      currencyField(tester).onChanged!(FiatCurrency('chf'));
       await tester.pumpAndSettle();
       expect(sourcePill(tester, 'Kraken').onTap, isNotNull);
       expect(find.textContaining('the only source that quotes'), findsNothing);
@@ -1001,7 +1008,7 @@ void main() {
       await tester.pumpAndSettle();
       await enableFiat(tester);
 
-      currencyField(tester).onChanged!(FiatCurrency.krw);
+      currencyField(tester).onChanged!(FiatCurrency('inr'));
       await tester.pumpAndSettle();
 
       final kraken = tester.getSemantics(find.text('Kraken'));
@@ -1105,6 +1112,7 @@ void main() {
       useTallSurface(tester);
       final bridge = FakeBridge(
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: {
             Network.mainnet: PublicEsplora(server: 'blockstream.info'),
@@ -1213,6 +1221,7 @@ void main() {
       useTallSurface(tester);
       final bridge = FakeBridge(
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: {
             Network.mainnet: PublicEsplora(server: 'blockstream.info'),
@@ -1250,6 +1259,7 @@ void main() {
       useTallSurface(tester);
       final bridge = FakeBridge(
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.regtest,
           backends: {},
           appPrefs: {},
@@ -1334,6 +1344,7 @@ void main() {
     FakeBridge ownElectrum({Map<String, String> certs = const {}}) {
       return FakeBridge(
         settings: Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: const {
             Network.mainnet: CustomElectrum(url: 'ssl://node.local:50002'),
@@ -1368,7 +1379,7 @@ void main() {
       bridge.onInspectCertificate = (_) =>
           const UnreachableCertificate(detail: 'not a server name');
       bridge.onSetBackend = (_, _) =>
-          throw const BridgeException('invalid_input', reason);
+          throw coreFailure('invalid_input', reason);
       await tester.pumpWidget(
         settingsApp(bridge, section: SettingsSection.network),
       );
@@ -1734,6 +1745,7 @@ void main() {
     FakeBridge withBackend(BackendConfig config) {
       return FakeBridge(
         settings: Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: {Network.mainnet: config},
           appPrefs: const {},
@@ -1853,6 +1865,7 @@ void main() {
     FakeBridge withTor(TorMode mode) {
       return FakeBridge(
         settings: Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: const {},
           appPrefs: const {},
@@ -1902,6 +1915,36 @@ void main() {
       );
       expect(find.textContaining('if it answers'), findsNothing);
       expect(find.textContaining('built-in Tor first'), findsNothing);
+    });
+
+    testWidgets('the caution follows the core, which says whether the '
+        'local port can be trusted', (tester) async {
+      useTallSurface(tester);
+      final bridge = withTor(TorMode.auto);
+      bridge.onTorStatus = (tor) => TorStatus(
+        mode: tor.mode,
+        socksProxy: '127.0.0.1:9050',
+        via: null,
+        socks: null,
+        running: false,
+        bootstrapped: false,
+        bootstrapPercent: 0,
+        error: null,
+        embeddedAvailable: true,
+        systemSocksTrusted: true,
+      );
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'The Tor on this device if it answers, the built-in one otherwise.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('pose as Tor'), findsNothing);
     });
 
     testWidgets('a test of the connection shows Tor starting, as on the '
@@ -2020,6 +2063,7 @@ void main() {
     FakeBridge ownElectrum() {
       return FakeBridge(
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: {
             Network.mainnet: CustomElectrum(url: 'ssl://node.local:50002'),
@@ -2110,6 +2154,7 @@ void main() {
       useTallSurface(tester);
       FakeBridge declared() => FakeBridge(
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: {
             Network.mainnet: CustomElectrum(
@@ -2158,6 +2203,7 @@ void main() {
       useTallSurface(tester);
       final bridge = FakeBridge(
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: {
             Network.mainnet: CustomElectrum(url: 'ssl://node.local:50002'),
@@ -2325,6 +2371,7 @@ void main() {
     FakeBridge bridge() => FakeBridge(
       wallets: [makeMeta()],
       settings: const Settings(
+        preferences: kPreferences,
         activeNetwork: Network.mainnet,
         backends: {},
         appPrefs: {},
@@ -2401,7 +2448,7 @@ void main() {
       container.read(unitProvider.notifier).set(AmountUnit.sats);
       container.read(fiatEnabledProvider.notifier).set(true);
       container.read(themeProvider.notifier).set(ThemePref.dark);
-      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      holdPreferences(container, const PreferencesChange(notifyNewTx: true));
       container.read(backgroundCheckProvider.notifier).hydrate('900');
       await tester.pumpAndSettle();
       expect(find.text('sats · EUR · Dark theme'), findsOneWidget);

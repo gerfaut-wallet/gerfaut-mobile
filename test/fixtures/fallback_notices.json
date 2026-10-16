@@ -1,0 +1,16 @@
+[
+  {
+    "title": "Gerfaut",
+    "body": "More transactions are coming in. Open Gerfaut to see them.",
+    "kind": "transaction",
+    "id": null,
+    "wallet_id": null
+  },
+  {
+    "title": "Gerfaut",
+    "body": "More pending payments are no longer coming. Open Gerfaut to see them.",
+    "kind": "dropped",
+    "id": null,
+    "wallet_id": null
+  }
+]

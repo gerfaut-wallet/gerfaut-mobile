@@ -6,6 +6,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:gerfaut/src/bridge.dart';
@@ -18,9 +19,76 @@ import 'package:gerfaut/src/home_widgets.dart';
 import 'package:gerfaut/src/live.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/screen.dart';
+import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/window.dart';
 import 'package:url_launcher_platform_interface/link.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
+
+import 'core_fixtures.dart';
+
+/// The preferences of a vault that never stored any: the core's
+/// defaults, as it sends them.
+const kPreferences = Preferences(
+  unit: AmountUnit.btc,
+  masked: false,
+  fiat: false,
+  fiatCurrency: FiatCurrency('eur'),
+  priceSource: PriceSource.coingecko,
+  notifyNewTx: false,
+  explorerAck: false,
+);
+
+const _everySource = [
+  PriceSource.coingecko,
+  PriceSource.kraken,
+  PriceSource.mempoolSpace,
+];
+
+CurrencyEntry _currency(String id, String name, {bool everySource = true}) {
+  return CurrencyEntry(
+    currency: FiatCurrency(id),
+    name: name,
+    reach: everySource ? CurrencyReach.every : CurrencyReach.coingeckoOnly,
+    sources: everySource ? _everySource : const [PriceSource.coingecko],
+  );
+}
+
+/// Part of the core's table, in its order: four currencies every source
+/// quotes, three only CoinGecko does.
+final kPriceTable = PriceTable(
+  currencies: [
+    _currency('eur', 'Euro'),
+    _currency('usd', 'US dollar'),
+    _currency('chf', 'Swiss franc'),
+    _currency('jpy', 'Japanese yen'),
+    _currency('inr', 'Indian rupee', everySource: false),
+    _currency('ngn', 'Nigerian naira', everySource: false),
+    _currency('try', 'Turkish lira', everySource: false),
+  ],
+  sources: const [
+    SourceEntry(source: PriceSource.coingecko, label: 'CoinGecko'),
+    SourceEntry(source: PriceSource.kraken, label: 'Kraken'),
+    SourceEntry(source: PriceSource.mempoolSpace, label: 'mempool.space'),
+  ],
+  refresh: const Duration(seconds: 60),
+);
+
+/// Puts [change] in what the screens hold, as hydration does with the
+/// preferences a vault stored.
+void holdPreferences(ProviderContainer container, PreferencesChange change) {
+  container
+      .read(preferencesProvider.notifier)
+      .hydrate(change.applyTo(container.read(preferencesProvider)));
+}
+
+/// The core's answer to a change of the preferences: the change made,
+/// and the currency winning, by [kPriceTable].
+Preferences coreChange(Preferences stored, PreferencesChange change) {
+  final next = change.applyTo(stored);
+  final entry = kPriceTable.entryOf(next.fiatCurrency);
+  if (entry == null || entry.sources.contains(next.priceSource)) return next;
+  return next.copyWith(priceSource: PriceSource.coingecko);
+}
 
 /// Captures external launches instead of touching the platform.
 /// Install with `UrlLauncherPlatform.instance = FakeUrlLauncher()`.
@@ -414,6 +482,7 @@ PolicySnapshot makePolicy({
             timelocks: [],
             state: SpendableNow(),
             spendableNow: true,
+            tone: BranchTone.confirmed,
           ),
         ],
     tipHeight: tipHeight,
@@ -567,6 +636,7 @@ class FakeBridge implements GerfautBridge {
       activeNetwork: Network.mainnet,
       backends: {},
       appPrefs: {},
+      preferences: kPreferences,
     ),
     Map<String, WalletSnapshot>? snapshots,
     Map<String, List<UtxoInfo>>? utxos,
@@ -964,7 +1034,7 @@ class FakeBridge implements GerfautBridge {
       }
     }
     if (ids.toSet().length != ids.length) {
-      throw const BridgeException('invalid_input', 'a wallet is listed twice');
+      throw coreFailure('invalid_input', 'a wallet is listed twice');
     }
     final moving = ids.toSet();
     var next = 0;
@@ -1014,6 +1084,7 @@ class FakeBridge implements GerfautBridge {
       activeNetwork: settings.activeNetwork,
       backends: settings.backends,
       appPrefs: {...settings.appPrefs, ...appPrefs},
+      preferences: settings.preferences,
       gapLimit: settings.gapLimit,
       electrumCerts: settings.electrumCerts,
       appLock: lock,
@@ -1029,11 +1100,13 @@ class FakeBridge implements GerfautBridge {
     int? gapLimit,
     Map<String, String>? electrumCerts,
     TorSettings? tor,
+    Preferences? preferences,
   }) {
     settings = Settings(
       activeNetwork: activeNetwork ?? settings.activeNetwork,
       backends: backends ?? settings.backends,
       appPrefs: settings.appPrefs,
+      preferences: preferences ?? settings.preferences,
       gapLimit: gapLimit ?? settings.gapLimit,
       electrumCerts: electrumCerts ?? settings.electrumCerts,
       appLock: settings.appLock,
@@ -1058,10 +1131,7 @@ class FakeBridge implements GerfautBridge {
   Future<void> setGapLimit(int gapLimit) async {
     // Mirrors the core bound: 1..=500 or CoreError::InvalidInput.
     if (gapLimit < 1 || gapLimit > 500) {
-      throw const BridgeException(
-        'invalid_input',
-        'gap limit must be between 1 and 500',
-      );
+      throw coreFailure('invalid_input', 'gap limit must be between 1 and 500');
     }
     lastGapLimitSet = gapLimit;
     _store(gapLimit: gapLimit);
@@ -1135,15 +1205,41 @@ class FakeBridge implements GerfautBridge {
     appPrefs[key] = value;
   }
 
-  /// Price hook; throw a [BridgeException] to simulate an unreachable
-  /// source. The default rate keeps fiat lines deterministic in tests.
+  /// The preferences both apps keep, as the vault holds them.
+  Preferences get preferences => settings.preferences;
+
+  /// Puts preferences in the vault, the way another isolate's write
+  /// would land.
+  set preferences(Preferences stored) => _store(preferences: stored);
+
+  /// Every change asked of the preferences, for assertions.
+  final List<PreferencesChange> preferencesChanges = [];
+
+  /// Preferences hook; throw a [BridgeException] to have the vault
+  /// refuse the change. The default is the core's answer.
+  Preferences Function(Preferences stored, PreferencesChange change)
+  onSetPreferences = coreChange;
+
+  @override
+  Future<Preferences> setPreferences(PreferencesChange change) async {
+    preferencesChanges.add(change);
+    final stored = onSetPreferences(settings.preferences, change);
+    _store(preferences: stored);
+    return stored;
+  }
+
+  @override
+  Future<PriceTable> priceTable() async => kPriceTable;
+
+  /// Price hook, handed the pair the preferences name; throw a
+  /// [BridgeException] to simulate an unreachable source. The default
+  /// rate keeps fiat lines deterministic in tests.
   PriceQuote Function(PriceSource source, FiatCurrency currency)? onFetchPrice;
 
   @override
-  Future<PriceQuote> fetchPrice(
-    PriceSource source,
-    FiatCurrency currency,
-  ) async {
+  Future<PriceQuote> fetchPrice() async {
+    final source = settings.preferences.priceSource;
+    final currency = settings.preferences.fiatCurrency;
     final fetch = onFetchPrice;
     if (fetch != null) return fetch(source, currency);
     return PriceQuote(
@@ -1271,6 +1367,15 @@ class FakeBridge implements GerfautBridge {
   @override
   Future<LiveWatchStatus> liveStatus() async => watchStatus;
 
+  /// What the core's watch takes, for the words under "This is my node".
+  WatchLimitsChoice liveLimitsChoice = const WatchLimitsChoice(
+    any: WatchLimits(perWallet: 200, total: 2000),
+    ownNode: WatchLimits(perWallet: 20000, total: 20000),
+  );
+
+  @override
+  Future<WatchLimitsChoice> liveLimits() async => liveLimitsChoice;
+
   @override
   Stream<LiveEvent> liveEvents() => liveController.stream;
 
@@ -1280,25 +1385,84 @@ class FakeBridge implements GerfautBridge {
     return news.remove(walletId) ?? const [];
   }
 
+  /// Every batch handed to the core for its words, with what the app let
+  /// them say, in order.
+  final List<({List<LiveTx> txs, NoticeContext context})> noticeAsks = [];
+
+  /// What the core answers instead of the default below.
+  List<TxNotice> Function(List<LiveTx> txs, NoticeContext context)?
+  onLiveNotices;
+
+  /// One notice per transaction, whose words say which transaction at
+  /// which stage, under the wallet's name. The core's own words, and
+  /// what the context does to them, are tested in the core: here a test
+  /// reads what reached the core and what was posted of its answer.
+  @override
+  Future<List<TxNotice>> liveNotices(
+    List<LiveTx> txs,
+    NoticeContext context,
+  ) async {
+    noticeAsks.add((txs: txs, context: context));
+    final answer = onLiveNotices;
+    if (answer != null) return answer(txs, context);
+    return [
+      for (final tx in txs)
+        TxNotice(
+          title: context.names[tx.walletId] ?? tx.walletId,
+          body:
+              '${tx.txid} · ${switch (tx.stage) {
+                TxStage.mempool => 'pending',
+                TxStage.confirmed => 'confirmed',
+                TxStage.dropped => 'no longer coming',
+              }}',
+          kind: tx.stage == TxStage.dropped
+              ? NoticeKind.dropped
+              : NoticeKind.transaction,
+          payment: (walletId: tx.walletId, txid: tx.payment),
+          walletId: tx.walletId,
+        ),
+    ];
+  }
+
   @override
   Future<bool> usesTor() async => usesTorValue;
 
-  /// Update hook; the default reports the running version as current.
-  UpdateCheck Function(String currentVersion)? onCheckUpdate;
-
-  /// How many times a release check was asked for.
-  int checkUpdateCalls = 0;
+  /// The core's side of the update check; by default nothing is due
+  /// and nothing newer is out.
+  final FakeUpdates updates = FakeUpdates();
 
   @override
-  Future<UpdateCheck> checkUpdate(String currentVersion) async {
-    checkUpdateCalls++;
-    final check = onCheckUpdate;
-    if (check != null) return check(currentVersion);
-    return UpdateCheck(
-      latest: 'v$currentVersion',
-      url: 'https://github.com/gerfaut-wallet/gerfaut-mobile/releases/latest',
-      updateAvailable: false,
-    );
+  Future<UpdateStatus> updateStatus(String currentVersion) async =>
+      updates.status;
+
+  @override
+  Future<UpdateStatus> updateSession(String currentVersion) async {
+    updates.sessions++;
+    if (updates.automatic && updates.due && updates.ask()) {
+      updates.due = false;
+    }
+    return updates.status;
+  }
+
+  @override
+  Future<UpdateStatus> checkUpdate(String currentVersion) async {
+    if (!updates.ask()) {
+      throw coreFailure('tor', 'tor: no proxy answers');
+    }
+    if (updates.offline) throw coreFailure('sync', 'offline');
+    // The answer is on screen: the core counts it as seen.
+    updates.dismissed = updates.available;
+    return updates.status;
+  }
+
+  @override
+  Future<void> dismissUpdate(String version) async {
+    updates.dismissed = version;
+  }
+
+  @override
+  Future<void> setUpdateAutomatic(bool automatic) async {
+    updates.automatic = automatic;
   }
 
   /// Preview hook; throw a [BridgeException] to simulate input the core
@@ -1313,7 +1477,7 @@ class FakeBridge implements GerfautBridge {
     previewInputs.add(input);
     final preview = onPreview;
     if (preview == null) {
-      throw const BridgeException(
+      throw coreFailure(
         'invalid_input',
         'not a transaction: expected a PSBT (base64, hex or .psbt file) or '
             'a signed transaction (hex or .txn file)',
@@ -1329,6 +1493,11 @@ class FakeBridge implements GerfautBridge {
   /// Every broadcast call's hex, for assertions.
   final List<String> broadcastHexes = [];
 
+  /// What the vault keeps of the broadcasts, newest first, the way the
+  /// core keeps it: a send the network took at the head, in place of an
+  /// earlier one of the same txid.
+  final List<RecentBroadcast> keptBroadcasts = [];
+
   @override
   Future<BroadcastReport> broadcastTransaction(
     Network network,
@@ -1336,12 +1505,37 @@ class FakeBridge implements GerfautBridge {
   ) async {
     broadcastHexes.add(hex);
     final broadcast = onBroadcast;
-    if (broadcast != null) return broadcast(network, hex);
-    return BroadcastReport(
-      txid: fakeTxid,
-      backend: 'mempool.space',
-      at: 1755000000,
-    );
+    final report = broadcast != null
+        ? await broadcast(network, hex)
+        : BroadcastReport(
+            txid: fakeTxid,
+            backend: 'mempool.space',
+            at: 1755000000,
+          );
+    keptBroadcasts
+      ..removeWhere((kept) => kept.txid == report.txid)
+      ..insert(
+        0,
+        RecentBroadcast(
+          txid: report.txid,
+          network: network,
+          hex: hex,
+          backend: report.backend,
+          at: report.at,
+        ),
+      );
+    return report;
+  }
+
+  @override
+  Future<List<RecentBroadcast>> recentBroadcasts(Network network) async => [
+    for (final kept in keptBroadcasts)
+      if (kept.network == network) kept,
+  ];
+
+  @override
+  Future<void> forgetBroadcast(String txid) async {
+    keptBroadcasts.removeWhere((kept) => kept.txid == txid);
   }
 
   /// Status hook; the default reports the transaction waiting in the
@@ -1569,6 +1763,7 @@ class FakeBridge implements GerfautBridge {
       activeNetwork: settings.activeNetwork,
       backends: settings.backends,
       appPrefs: settings.appPrefs,
+      preferences: settings.preferences,
       gapLimit: settings.gapLimit,
       electrumCerts: settings.electrumCerts,
       appLock: settings.appLock,
@@ -1581,6 +1776,29 @@ class FakeBridge implements GerfautBridge {
     final connect = onTorConnect;
     if (connect != null) return connect();
     return const TorRoute(socks: '127.0.0.1:9050', via: TorVia.system);
+  }
+}
+
+/// A bridge whose preference writes wait for the test to answer each
+/// one, in the order they were asked.
+class GatedBridge extends FakeBridge {
+  final List<PreferencesChange> asked = [];
+  final List<Completer<void>> _gates = [];
+
+  /// Lets the oldest write waiting through.
+  void release() => _gates.removeAt(0).complete();
+
+  /// Has the vault refuse the oldest write waiting.
+  void refuse() =>
+      _gates.removeAt(0).completeError(coreFailure('vault', 'disk full'));
+
+  @override
+  Future<Preferences> setPreferences(PreferencesChange change) async {
+    asked.add(change);
+    final gate = Completer<void>();
+    _gates.add(gate);
+    await gate.future;
+    return super.setPreferences(change);
   }
 }
 
@@ -1649,4 +1867,59 @@ TxPreview makePreview({
     warnings: warnings,
     hex: ready ? '0200000001deadbeef' : null,
   );
+}
+
+/// The core's side of the update check, as a test sets it. Which
+/// release is newer, when a check is due and what counts as closed are
+/// the core's to decide, and tested there: this one does what the test
+/// tells it, so that the screens can be held to what it says.
+class FakeUpdates {
+  /// What a check finds: a release newer than the running one, or null
+  /// for nothing newer.
+  String? finds;
+
+  /// Checks get no answer.
+  bool offline = false;
+
+  /// Tor is needed and cannot be had: nothing goes out.
+  bool torDown = false;
+
+  /// The next session asks GitHub.
+  bool due = false;
+
+  bool automatic = true;
+
+  /// The newer release known.
+  String? available;
+
+  /// The release the notice was closed on.
+  String? dismissed;
+
+  bool torUnavailable = false;
+
+  /// How many sessions the app opened.
+  int sessions = 0;
+
+  /// How many times GitHub was asked.
+  int checks = 0;
+
+  UpdateStatus get status => UpdateStatus(
+    automatic: automatic,
+    announce: available != null && available != dismissed ? available : null,
+    available: available,
+    torUnavailable: torUnavailable,
+  );
+
+  /// One request to GitHub, as the core would make it; false when Tor
+  /// kept it from going.
+  bool ask() {
+    if (torDown) {
+      torUnavailable = true;
+      return false;
+    }
+    checks++;
+    torUnavailable = false;
+    if (!offline) available = finds;
+    return true;
+  }
 }

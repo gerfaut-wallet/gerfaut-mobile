@@ -264,21 +264,6 @@ String syncedLine(List<WalletMeta> wallets, {DateTime? now}) {
   return 'Synced ${relativeTime(stamp.at, now: now)}';
 }
 
-/// The currency and source the preferences name, with the fallback the
-/// screens apply when they hydrate: a source that does not quote the
-/// currency yields to CoinGecko.
-({FiatCurrency currency, PriceSource source}) priceChoice(
-  Map<String, String> prefs,
-) {
-  final currency =
-      FiatCurrency.fromId(prefs[Pref.fiatCurrency]) ?? FiatCurrency.eur;
-  final stored = PriceSource.fromId(prefs[Pref.fiatSource]);
-  final source = stored != null && stored.supportsCurrency(currency)
-      ? stored
-      : PriceSource.coingecko;
-  return (currency: currency, source: source);
-}
-
 // --- the platform side -------------------------------------------------
 
 /// The platform's side of the widgets: the store the providers read,
@@ -402,8 +387,9 @@ class WidgetPriceNotifier extends AsyncNotifier<PriceQuote?> {
     _timer?.cancel();
     final fiatOn = ref.watch(fiatEnabledProvider);
     final appQuote = ref.watch(priceProvider);
-    final currency = ref.watch(fiatCurrencyProvider);
-    final source = ref.watch(fiatSourceProvider);
+    // Asked again when the pair changes: the core prices by it.
+    ref.watch(fiatCurrencyProvider);
+    ref.watch(fiatSourceProvider);
     final inFront = ref.watch(appInFrontProvider);
     final installed = await ref.watch(installedWidgetsProvider.future);
     if (!installed.contains(HomeWidgets.price)) return null;
@@ -412,10 +398,11 @@ class WidgetPriceNotifier extends AsyncNotifier<PriceQuote?> {
     // minute clock runs behind the launcher.
     if (!inFront) return state.valueOrNull;
     ref.onDispose(() => _timer?.cancel());
+    final every = (await ref.read(priceTableProvider.future)).refresh;
     // Scheduled before the fetch so failures retry on the same cadence
     // as the app's own quote.
-    _timer = Timer(const Duration(seconds: 60), () => ref.invalidateSelf());
-    return ref.read(bridgeProvider).fetchPrice(source, currency);
+    _timer = Timer(every, () => ref.invalidateSelf());
+    return ref.read(bridgeProvider).fetchPrice();
   }
 }
 
@@ -624,14 +611,14 @@ Future<bool> refreshWidgets({
     await bootstrap();
     final settings = await bridge.getSettings();
     final prefs = settings.appPrefs;
+    final shared = settings.preferences;
     final network = settings.activeNetwork;
     final wallets = await bridge.listWallets(network);
     PriceQuote? quote;
     if (installed.contains(HomeWidgets.price)) {
-      final choice = priceChoice(prefs);
       try {
         if (await priceWithoutStartingTor(bridge)) {
-          quote = await bridge.fetchPrice(choice.source, choice.currency);
+          quote = await bridge.fetchPrice();
         }
       } catch (_) {
         // The last quote stays up, with the time it carries.
@@ -643,8 +630,8 @@ Future<bool> refreshWidgets({
       price: quote == null ? null : PricePayload.of(quote, now: now),
       balance: BalancePayload.of(
         wallets,
-        unit: AmountUnit.fromId(prefs[Pref.unit]) ?? AmountUnit.btc,
-        masked: prefs[Pref.masked] == '1' || prefs[Pref.widgetBalances] != '1',
+        unit: shared.unit,
+        masked: shared.masked || prefs[Pref.widgetBalances] != '1',
         locked: settings.appLock != null,
         now: now,
       ),

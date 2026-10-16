@@ -30,10 +30,6 @@ const Duration _statusPollInterval = Duration(seconds: 30);
 /// Confirmations after which a broadcast stops being watched.
 const int _settledConfirmations = 6;
 
-/// What a broadcast left behind: the record kept for later checks and
-/// the host that accepted it.
-typedef _Sent = ({RecentBroadcast record, String backend});
-
 /// The mark under a figure the PSBT states and nobody confirmed: the
 /// inputs total, the fee, its rate. Outputs need none — they are the
 /// transaction's own, not a claim about the chain. The desktop's words.
@@ -90,7 +86,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
 
   /// The node's refusal, verbatim.
   String? _sendError;
-  _Sent? _sent;
+  RecentBroadcast? _sent;
 
   @override
   void dispose() {
@@ -119,7 +115,8 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     } on BridgeException catch (error) {
       if (!mounted) return;
       setState(
-        () => _inputError = error.kind == 'invalid_input'
+        () => _inputError =
+            error.kind == 'invalid_input' || error.kind == 'too_many_parts'
             ? (headline: _unreadableTransaction, detail: error.message)
             : (headline: error.message, detail: null),
       );
@@ -214,10 +211,10 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
       _sending = true;
       _sendError = null;
     });
-    // Held before the await: a transaction sent while the lock took the
-    // screen away is still kept among the recent broadcasts, so its
-    // status is followed. `ref` dies with the screen.
-    final recent = ref.read(recentBroadcastsProvider.notifier);
+    // Held before the await: the vault keeps a transaction sent while
+    // the lock took the screen away, and the list is read again all the
+    // same, so its status is followed. `ref` dies with the screen.
+    final recent = ref.read(recentBroadcastsProvider(preview.network).notifier);
     try {
       final report = await ref
           .read(bridgeProvider)
@@ -226,11 +223,12 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
         txid: report.txid,
         network: preview.network,
         hex: hex,
+        backend: report.backend,
         at: report.at,
       );
-      recent.add(record);
+      recent.reload();
       if (!mounted) return;
-      setState(() => _sent = (record: record, backend: report.backend));
+      setState(() => _sent = record);
     } on BridgeException catch (error) {
       if (mounted) setState(() => _sendError = error.message);
     } catch (error) {
@@ -283,10 +281,9 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
   }
 
   Widget _buildInputStep(GerfautTokens tokens, Network network) {
-    final recent = ref
-        .watch(recentBroadcastsProvider)
-        .where((b) => b.network == network)
-        .toList();
+    final recent =
+        ref.watch(recentBroadcastsProvider(network)).valueOrNull ??
+        const <RecentBroadcast>[];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -422,8 +419,8 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
               if (sent != null) ...[
                 const SizedBox(height: GerfautSpacing.lg),
                 _StatusCard(
-                  key: ValueKey(sent.record.txid),
-                  record: sent.record,
+                  key: ValueKey(sent.txid),
+                  record: sent,
                   sentTo: sent.backend,
                 ),
               ],
@@ -1432,7 +1429,11 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
       builder: (_) => const _ForgetDialog(),
     );
     if (confirmed != true || !mounted) return;
-    ref.read(recentBroadcastsProvider.notifier).forget(widget.record.txid);
+    unawaited(
+      ref
+          .read(recentBroadcastsProvider(widget.record.network).notifier)
+          .forget(widget.record.txid),
+    );
   }
 
   @override

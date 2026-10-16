@@ -3783,7 +3783,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "ur",
 ]
 
 [[package]]

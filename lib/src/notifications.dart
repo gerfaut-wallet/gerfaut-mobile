@@ -1,6 +1,6 @@
 // Local notifications: what Gerfaut says when a sync finds a
-// transaction it had not seen. Composed here, posted by the platform,
-// and sent nowhere: the only traffic is the sync itself.
+// transaction it had not seen. Composed by the core, posted by the
+// platform, and sent nowhere: the only traffic is the sync itself.
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'background.dart';
 import 'bridge.dart';
 import 'disguise.dart';
-import 'format.dart';
 import 'live.dart';
 import 'models.dart';
 import 'state.dart';
@@ -134,19 +133,6 @@ final notificationServiceProvider = Provider<NotificationService>(
 
 // --- what is said ------------------------------------------------------
 
-/// One notification, ready to post.
-class TxNotice {
-  const TxNotice({required this.id, required this.title, required this.body});
-
-  final int id;
-  final String title;
-  final String body;
-}
-
-/// Transactions said one by one for a wallet in one sync; the rest are
-/// counted in a single line.
-const int noticesPerWallet = 3;
-
 /// FNV-1a over the text, kept to 31 bits. The same transaction gets the
 /// same id from any isolate on any run, so a repeat replaces the
 /// notification instead of stacking another.
@@ -158,195 +144,96 @@ int noticeId(String key) {
   return hash & 0x7FFFFFFF;
 }
 
-/// Composes and posts what a batch of announcements amounts to.
+/// The id Android posts [notice] under. Every notice about one payment
+/// shares one, the wallet included, so the confirmation, a fee bump's
+/// included, or the news that it is not coming takes the place of the
+/// arrival; a payment between two watched wallets is said in each. The
+/// line that counts the rest of a wallet's sync takes the place of the
+/// last one, and so does the line that says more is waiting.
+int postedId(TxNotice notice) {
+  final payment = notice.payment;
+  if (payment != null) {
+    return noticeId('${payment.walletId}:${payment.txid}');
+  }
+  final walletId = notice.walletId;
+  if (walletId == null) return noticeId('waiting:${notice.kind.id}');
+  return noticeId(
+    notice.kind == NoticeKind.dropped ? 'gone:$walletId' : 'more:$walletId',
+  );
+}
+
+/// The title of a notice said without the core: the app's name.
+const String fallbackTitle = 'Gerfaut';
+
+/// What is said of the transactions of a batch the core could not put
+/// into words. The core's own line for "more is waiting", word for
+/// word: no wallet, no amount, only that there is something to open
+/// the app for. test/fixtures/fallback_notices.json holds the core's
+/// words, and the bridge's tests check them against the core.
+const String fallbackTransactions =
+    'More transactions are coming in. Open Gerfaut to see them.';
+
+/// [fallbackTransactions] for the payments no longer coming.
+const String fallbackDropped =
+    'More pending payments are no longer coming. Open Gerfaut to see them.';
+
+/// What is posted when the core cannot say what [txs] amount to: the
+/// vault closed under a background isolate, an answer that does not
+/// read, a panic. The batch is claimed already, and nothing claimed is
+/// handed out twice: left unsaid here, its payments would never be
+/// said. One notice for the transactions and one for the payments no
+/// longer coming, as the core's budget says them, posted under the id
+/// of the core's own line, so a second failure takes the place of the
+/// first rather than piling up.
+List<TxNotice> fallbackNotices(List<LiveTx> txs) => [
+  if (txs.any((tx) => tx.stage != TxStage.dropped))
+    const TxNotice(
+      title: fallbackTitle,
+      body: fallbackTransactions,
+      kind: NoticeKind.transaction,
+    ),
+  if (txs.any((tx) => tx.stage == TxStage.dropped))
+    const TxNotice(
+      title: fallbackTitle,
+      body: fallbackDropped,
+      kind: NoticeKind.dropped,
+    ),
+];
+
+/// Posts what a batch of announcements amounts to.
 ///
 /// What it is handed are [LiveTx]: transactions the core gave out once,
 /// at one stage, to whoever asked first. The live watch hands them as
 /// events; a sync of the app's own gets them from
 /// [GerfautBridge.claimAnnouncements]. Either way nothing is said twice.
+///
+/// The words are the core's, the same as the desktop app's
+/// ([GerfautBridge.liveNotices]): what is said here is what the context
+/// lets it say. While balances are masked, no amount. Without details,
+/// no amount and no wallet name either. The user chooses, and the app
+/// lock has no say: a notification is read on the lock screen by
+/// whoever holds the phone, whether the app is locked or not.
 class NewTxAnnouncer {
-  const NewTxAnnouncer(this.service);
+  const NewTxAnnouncer(this.service, this.bridge);
 
   final NotificationService service;
+  final GerfautBridge bridge;
 
-  /// One notice per transaction up to [noticesPerWallet] a wallet, then
-  /// one line counting the rest. A payment that is no longer coming is
-  /// always said on its own, never folded into the count: it takes back
-  /// what an earlier notice promised. Pure: the same transactions,
-  /// names, unit, mask and choice of details always say the same.
-  ///
-  /// While balances are masked, no amount. Without [details], no amount
-  /// and no wallet name either: the title is the app's, the body says
-  /// what happened and nothing more, word for word as the desktop app
-  /// says it under its lock. The user chooses, and the app lock has no
-  /// say: a notification is read on the lock screen by whoever holds
-  /// the phone, whether the app is locked or not.
-  ///
-  /// Every notice about one payment carries its id, the txid it was
-  /// first announced under, so the confirmation, a fee bump's included,
-  /// or the news that it is not coming takes the place of the arrival
-  /// instead of stacking under it.
-  static List<TxNotice> compose(
-    List<LiveTx> txs, {
-    required Map<String, String> walletNames,
-    required AmountUnit unit,
-    required bool masked,
-    required bool details,
-  }) {
-    final byWallet = <String, List<LiveTx>>{};
-    for (final tx in txs) {
-      byWallet.putIfAbsent(tx.walletId, () => []).add(tx);
+  /// Posts what the core says about [txs], in its order, or, when the
+  /// core cannot say it, [fallbackNotices].
+  Future<void> announce(List<LiveTx> txs, NoticeContext context) async {
+    if (txs.isEmpty) return;
+    List<TxNotice> notices;
+    try {
+      notices = await bridge.liveNotices(txs, context);
+    } catch (_) {
+      notices = fallbackNotices(txs);
     }
-    final notices = <TxNotice>[];
-    for (final MapEntry(key: walletId, value: mine) in byWallet.entries) {
-      final title = details
-          ? notificationTitle(walletNames[walletId] ?? walletId)
-          : genericTitle;
-      TxNotice notice(LiveTx tx) => TxNotice(
-        // The wallet is part of it: a payment from one watched wallet to
-        // another is announced for each, and neither takes the other's
-        // place.
-        id: noticeId('${tx.walletId}:${tx.payment}'),
-        title: title,
-        body: details
-            ? _describe(tx, unit: unit, masked: masked)
-            : _generic(tx),
-      );
-      final moved = [
-        for (final tx in mine)
-          if (tx.stage != TxStage.dropped) tx,
-      ];
-      notices.addAll(moved.take(noticesPerWallet).map(notice));
-      final rest = moved.length - noticesPerWallet;
-      if (rest > 0) {
-        notices.add(
-          TxNotice(
-            id: noticeId('more:$walletId'),
-            title: title,
-            body: _plural(rest, 'more new transaction'),
-          ),
-        );
-      }
-      notices.addAll([
-        for (final tx in mine)
-          if (tx.stage == TxStage.dropped) notice(tx),
-      ]);
-    }
-    return notices;
-  }
-
-  /// Posts what [compose] says about the transactions.
-  Future<void> announce(
-    List<LiveTx> txs, {
-    required Map<String, String> walletNames,
-    required AmountUnit unit,
-    required bool masked,
-    required bool details,
-  }) async {
-    final notices = compose(
-      txs,
-      walletNames: walletNames,
-      unit: unit,
-      masked: masked,
-      details: details,
-    );
     for (final notice in notices) {
-      await service.show(notice.id, notice.title, notice.body);
+      await service.show(postedId(notice), notice.title, notice.body);
     }
   }
 }
-
-/// A balance change is stated, never celebrated: an amount, a
-/// direction, and whether the chain has it yet.
-String _describe(LiveTx tx, {required AmountUnit unit, required bool masked}) {
-  final sats = tx.netSats;
-  if (tx.stage == TxStage.dropped) {
-    return masked
-        ? 'A pending payment is no longer coming'
-        : 'A pending payment of ${formatAmount(sats.abs(), unit)} is no '
-              'longer coming';
-  }
-  final what = switch ((masked, sats)) {
-    (_, 0) => 'New transaction',
-    (true, > 0) => 'New transaction',
-    (true, _) => 'New outgoing transaction',
-    (false, > 0) => 'Received ${formatAmount(sats, unit)}',
-    (false, _) => '${formatAmount(-sats, unit)} left this wallet',
-  };
-  return tx.stage == TxStage.confirmed
-      ? '$what · confirmed'
-      : '$what · pending';
-}
-
-/// The title of every notification said without its details.
-const String genericTitle = 'Gerfaut';
-
-/// What a notification says without its details: what happened, and
-/// nothing of the wallet or the amount. The desktop app's words under
-/// its lock.
-String _generic(LiveTx tx) {
-  final outgoing = tx.netSats < 0;
-  return switch (tx.stage) {
-    TxStage.mempool =>
-      outgoing
-          ? 'New outgoing transaction · pending'
-          : 'New transaction · pending',
-    TxStage.confirmed =>
-      outgoing ? 'Outgoing transaction confirmed' : 'Transaction confirmed',
-    TxStage.dropped => 'A pending payment is no longer coming',
-  };
-}
-
-String _plural(int count, String noun) =>
-    '$count $noun${count == 1 ? '' : 's'}';
-
-/// The longest wallet name a notification carries, in characters.
-const int notificationTitleMax = 64;
-
-/// A wallet's name as a notification carries it: on one line, without
-/// the invisible marks that reorder text or hide it, and at most
-/// [notificationTitleMax] characters. A name is typed, or comes in a
-/// backup made elsewhere, and the notification is read by whoever holds
-/// the phone: it names the wallet in plain letters or not at all.
-String notificationTitle(String name) {
-  final plain = StringBuffer();
-  for (final rune in name.runes) {
-    if (_invisible.contains(rune)) continue;
-    // A control character, a line break among them, is a space here.
-    final control = rune < 0x20 || (rune >= 0x7F && rune <= 0x9F);
-    plain.writeCharCode(control ? 0x20 : rune);
-  }
-  final flat = plain.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
-  if (flat.isEmpty) return genericTitle;
-  final runes = flat.runes.toList();
-  if (runes.length <= notificationTitleMax) return flat;
-  final cut = String.fromCharCodes(runes.take(notificationTitleMax - 1));
-  return '${cut.trimRight()}…';
-}
-
-/// Characters that draw nothing yet reorder or hide what is around
-/// them, the set the desktop app strips: the Arabic letter mark, the
-/// left-to-right and right-to-left marks, the embeddings, overrides and
-/// isolates, the zero-width space, the word joiner and the byte order
-/// mark. The two zero-width joiners stay: some scripts and emoji need
-/// them.
-const Set<int> _invisible = {
-  0x061C,
-  0x200B,
-  0x200E,
-  0x200F,
-  0x202A,
-  0x202B,
-  0x202C,
-  0x202D,
-  0x202E,
-  0x2066,
-  0x2067,
-  0x2068,
-  0x2069,
-  0x2060,
-  0xFEFF,
-};
 
 /// Says what a background isolate claimed, the way the open app would
 /// say it: the names, the unit, the mask and the choice of details read
@@ -362,16 +249,31 @@ Future<void> announceFromVault(
 }) async {
   if (claimed.isEmpty) return;
   final settings = await bridge.getSettings();
-  final prefs = AppPrefs(settings.appPrefs);
-  if (!prefs.notifyNewTx || await isDisguised()) return;
-  final wallets = await bridge.listWallets();
-  await NewTxAnnouncer(service).announce(
+  final shared = settings.preferences;
+  if (!shared.notifyNewTx || await isDisguised()) return;
+  await NewTxAnnouncer(service, bridge).announce(
     claimed,
-    walletNames: {for (final wallet in wallets) wallet.id: wallet.name},
-    unit: prefs.unit,
-    masked: prefs.masked,
-    details: prefs.notifyDetails,
+    NoticeContext(
+      names: await _namesOr(bridge.listWallets),
+      unit: shared.unit,
+      masked: shared.masked,
+      details: AppPrefs(settings.appPrefs).notifyDetails,
+    ),
   );
+}
+
+/// The name of each wallet, by id, or none when the list cannot be read:
+/// what was claimed is said all the same, under the app's name, which
+/// the core gives a notice it has no name for. Claimed, it is never
+/// handed out again, so failing here would be silence for good.
+Future<Map<String, String>> _namesOr(
+  Future<List<WalletMeta>> Function() list,
+) async {
+  try {
+    return {for (final wallet in await list()) wallet.id: wallet.name};
+  } catch (_) {
+    return const {};
+  }
 }
 
 /// What the syncs behind these reports found that nobody has announced
@@ -394,7 +296,10 @@ Future<List<LiveTx>> claimAll(
 }
 
 final newTxAnnouncerProvider = Provider<NewTxAnnouncer>(
-  (ref) => NewTxAnnouncer(ref.watch(notificationServiceProvider)),
+  (ref) => NewTxAnnouncer(
+    ref.watch(notificationServiceProvider),
+    ref.watch(bridgeProvider),
+  ),
 );
 
 /// The open app's side of it. Every sync the screens run is claimed,
@@ -425,19 +330,22 @@ class SyncAnnouncer {
     // everything the disguise hides.
     if (_ref.read(disguiseProvider).disguised) return;
     try {
-      final wallets =
-          _ref.read(walletsProvider).valueOrNull ??
-          await _ref.read(bridgeProvider).listWallets();
+      final listed = _ref.read(walletsProvider).valueOrNull;
+      final names = await _namesOr(
+        () async => listed ?? await _ref.read(bridgeProvider).listWallets(),
+      );
       // The choice of details is read from the vault in the same pass
       // as the notice itself: a notice on means it is in.
       await _ref
           .read(newTxAnnouncerProvider)
           .announce(
             claimed,
-            walletNames: {for (final w in wallets) w.id: w.name},
-            unit: _ref.read(unitProvider),
-            masked: _ref.read(maskedProvider),
-            details: _ref.read(notifyDetailsProvider),
+            NoticeContext(
+              names: names,
+              unit: _ref.read(unitProvider),
+              masked: _ref.read(maskedProvider),
+              details: _ref.read(notifyDetailsProvider),
+            ),
           );
     } catch (_) {
       // A notification that cannot be posted is not a failed sync.
@@ -453,12 +361,7 @@ final syncAnnouncerProvider = Provider<SyncAnnouncer>(
 
 class NotifyNewTxNotifier extends Notifier<bool> {
   @override
-  bool build() => false;
-
-  void hydrate(String? stored) {
-    // Only an explicit "1" turns it on: notifications are opt-in.
-    state = stored == '1';
-  }
+  bool build() => ref.watch(preferencesProvider.select((p) => p.notifyNewTx));
 
   /// Turning it on asks the system first; a refusal leaves it off and
   /// is said on screen rather than pretended away.
@@ -470,22 +373,22 @@ class NotifyNewTxNotifier extends Notifier<bool> {
       ref.read(notificationsRefusedProvider.notifier).state = !granted;
       if (!granted) return;
     }
-    state = on;
-    ref
-        .read(bridgeProvider)
-        .setAppPref(Pref.notifyNewTx, on ? '1' : '0')
-        .catchError((_) {});
+    // Read before the change: it rebuilds this notifier, whose ref
+    // answers nothing until then.
     final cadence = ref.read(backgroundCheckProvider);
+    final scheduler = ref.read(backgroundSchedulerProvider);
+    final live = ref.read(liveProvider.notifier);
+    ref
+        .read(preferencesProvider.notifier)
+        .show(PreferencesChange(notifyNewTx: on));
     await rescheduleBackgroundCheck(
-      ref,
+      scheduler,
       notifying: on,
       seconds: cadence.seconds,
     );
     // With nothing to say there is nothing to watch for: Live follows
     // the notice off, and back on.
-    await ref
-        .read(liveProvider.notifier)
-        .apply(wanted: on && cadence == BackgroundCheck.live);
+    await live.apply(wanted: on && cadence == BackgroundCheck.live);
   }
 
   /// Reads again whether Android lets the notices through, each time the
@@ -511,8 +414,7 @@ class NotifyNewTxNotifier extends Notifier<bool> {
   }
 }
 
-/// The new-transaction notice, off by default, persisted as
-/// "notify.new_tx".
+/// The new-transaction notice, one of the preferences both apps keep.
 final notifyNewTxProvider = NotifierProvider<NotifyNewTxNotifier, bool>(
   NotifyNewTxNotifier.new,
 );
@@ -599,7 +501,7 @@ class BackgroundCheckNotifier extends Notifier<BackgroundCheck> {
         .catchError((_) {});
     final notifying = ref.read(notifyNewTxProvider);
     await rescheduleBackgroundCheck(
-      ref,
+      ref.read(backgroundSchedulerProvider),
       notifying: notifying,
       seconds: check.seconds,
     );
@@ -626,13 +528,14 @@ final backgroundSchedulerProvider = Provider<BackgroundScheduler>(
 
 /// Brings the task in line with both preferences: it runs at the chosen
 /// cadence only while the notice is on, so nothing is fetched for
-/// nothing. Both values are passed in — a notifier that read them back
-/// through its own provider would be reading itself.
+/// nothing. Both values are passed in, and the scheduler with them — a
+/// notifier that read them back through its own provider would be
+/// reading itself.
 Future<void> rescheduleBackgroundCheck(
-  Ref ref, {
+  BackgroundScheduler scheduler, {
   required bool notifying,
   required int seconds,
 }) {
   final wanted = notifying ? seconds : 0;
-  return ref.read(backgroundSchedulerProvider)(wanted).catchError((_) {});
+  return scheduler(wanted).catchError((_) {});
 }

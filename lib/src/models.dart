@@ -2,6 +2,8 @@
 // DTOs one to one (snake_case keys); if a field changes there, it
 // changes here.
 
+import 'format.dart' show AmountUnit;
+
 /// Networks Gerfaut can operate on.
 enum Network {
   mainnet('mainnet', 'Mainnet'),
@@ -1018,6 +1020,100 @@ class LiveTx {
   /// one announced. A fee bump confirms under a txid of its own, and its
   /// confirmation takes the place of the pending notice this way.
   String get payment => replaces ?? txid;
+
+  /// As the core reads it back, to compose what is said about it.
+  Map<String, dynamic> toJson() => {
+    'wallet_id': walletId,
+    'txid': txid,
+    'net_sats': netSats,
+    'stage': stage.id,
+    if (replaces != null) 'replaces': replaces,
+  };
+}
+
+/// What the app lets a notification say, read at the moment of posting.
+/// The core composes the words from it (`notice::Context`).
+class NoticeContext {
+  const NoticeContext({
+    required this.names,
+    required this.unit,
+    required this.masked,
+    required this.details,
+  });
+
+  /// The name of each wallet, by id.
+  final Map<String, String> names;
+  final AmountUnit unit;
+
+  /// Balances are hidden: no amount.
+  final bool masked;
+
+  /// "Show wallet and amount": off, no wallet name and no amount, app
+  /// lock or not.
+  final bool details;
+
+  Map<String, dynamic> toJson() => {
+    'names': names,
+    'unit': unit.id,
+    'masked': masked,
+    'details': details,
+  };
+}
+
+/// Which budget of the core a notification drew on.
+enum NoticeKind {
+  transaction('transaction'),
+
+  /// A pending payment that is no longer coming.
+  dropped('dropped');
+
+  const NoticeKind(this.id);
+
+  final String id;
+
+  static NoticeKind fromId(String? id) {
+    for (final kind in NoticeKind.values) {
+      if (kind.id == id) return kind;
+    }
+    return NoticeKind.transaction;
+  }
+}
+
+/// One notification as the core composed it, ready to post.
+class TxNotice {
+  const TxNotice({
+    required this.title,
+    required this.body,
+    required this.kind,
+    this.payment,
+    this.walletId,
+  });
+
+  factory TxNotice.fromJson(Map<String, dynamic> json) {
+    final id = json['id'] as Map<String, dynamic>?;
+    return TxNotice(
+      title: json['title'] as String,
+      body: json['body'] as String,
+      kind: NoticeKind.fromId(json['kind'] as String?),
+      payment: id == null
+          ? null
+          : (walletId: id['wallet_id'] as String, txid: id['txid'] as String),
+      walletId: json['wallet_id'] as String?,
+    );
+  }
+
+  final String title;
+  final String body;
+  final NoticeKind kind;
+
+  /// The payment it is about, in the wallet it is posted for: every
+  /// notice of one payment takes the place of the one before. Null for
+  /// a line that counts the rest or sums up.
+  final ({String walletId, String txid})? payment;
+
+  /// The wallet it is about, a line that counts the rest of a sync
+  /// included; null for the line that says more is waiting.
+  final String? walletId;
 }
 
 /// Where the live watch stands.
@@ -1073,6 +1169,7 @@ class LiveWatchStatus {
     this.leftOutWallets = 0,
     this.wallets = const [],
     this.serverSoftware,
+    this.leftOut,
   });
 
   /// A core from before the coverage was reported leaves its three
@@ -1093,6 +1190,7 @@ class LiveWatchStatus {
           WalletCoverage.fromJson(wallet as Map<String, dynamic>),
       ],
       serverSoftware: json['server_software'] as String?,
+      leftOut: LiveLeftOut.fromJson(json['left_out'] as Map<String, dynamic>?),
     );
   }
 
@@ -1123,9 +1221,13 @@ class LiveWatchStatus {
   /// like; null over the other transports and from an older core.
   final String? serverSoftware;
 
+  /// Why the watch leaves addresses to the syncs and the way out, as the
+  /// core decides it: present exactly while it runs and leaves some out.
+  final LiveLeftOut? leftOut;
+
   /// The watch runs and cannot follow every address: the one case where
   /// coverage is worth a word on screen.
-  bool get leavesSomeOut => state != WatchState.off && leftOutScripts > 0;
+  bool get leavesSomeOut => leftOut != null;
 
   /// The coverage of one wallet, or null when the watch does not list
   /// it.
@@ -1170,6 +1272,7 @@ class WalletCoverage {
     required this.coverage,
     this.watchedScripts = 0,
     this.leftOutScripts = 0,
+    this.refusedScripts = 0,
   });
 
   factory WalletCoverage.fromJson(Map<String, dynamic> json) {
@@ -1178,6 +1281,7 @@ class WalletCoverage {
       coverage: Coverage.fromId(json['coverage'] as String?),
       watchedScripts: json['watched_scripts'] as int? ?? 0,
       leftOutScripts: json['left_out_scripts'] as int? ?? 0,
+      refusedScripts: json['refused_scripts'] as int? ?? 0,
     );
   }
 
@@ -1190,6 +1294,155 @@ class WalletCoverage {
 
   /// Scripts of the wallet it leaves to the regular syncs.
   final int leftOutScripts;
+
+  /// Of those, the ones the server refused; the rest are past the limits
+  /// of the watch.
+  final int refusedScripts;
+}
+
+/// What the live watch takes of one wallet and in all.
+class WatchLimits {
+  const WatchLimits({required this.perWallet, required this.total});
+
+  factory WatchLimits.fromJson(Map<String, dynamic>? json) {
+    return WatchLimits(
+      perWallet: json?['per_wallet'] as int? ?? 0,
+      total: json?['total'] as int? ?? 0,
+    );
+  }
+
+  final int perWallet;
+  final int total;
+}
+
+/// The two sets of limits "This is my node" chooses between, as the core
+/// keeps them.
+class WatchLimitsChoice {
+  const WatchLimitsChoice({required this.any, required this.ownNode});
+
+  factory WatchLimitsChoice.fromJson(Map<String, dynamic> json) {
+    return WatchLimitsChoice(
+      any: WatchLimits.fromJson(json['any'] as Map<String, dynamic>?),
+      ownNode: WatchLimits.fromJson(json['own_node'] as Map<String, dynamic>?),
+    );
+  }
+
+  final WatchLimits any;
+  final WatchLimits ownNode;
+}
+
+/// What leaves addresses to the syncs: the server, as soon as it refused
+/// any, or the limits of the watch.
+enum LeftOutReason {
+  liveLimit('live_limit'),
+  serverRefused('server_refused');
+
+  const LeftOutReason(this.id);
+
+  final String id;
+
+  /// A reason a newer core may add reads as the limits of the watch:
+  /// never a refusal the server did not make.
+  static LeftOutReason fromId(String? id) {
+    for (final reason in LeftOutReason.values) {
+      if (reason.id == id) return reason;
+    }
+    return LeftOutReason.liveLimit;
+  }
+}
+
+/// The core's verdict on what the live watch leaves to the syncs.
+class LiveLeftOut {
+  const LiveLeftOut({
+    required this.reason,
+    required this.limits,
+    this.ownNode = false,
+    this.remedy,
+  });
+
+  /// Null for a status that carries no verdict: one from an older core,
+  /// or one that leaves nothing out.
+  static LiveLeftOut? fromJson(Map<String, dynamic>? json) {
+    if (json == null) return null;
+    return LiveLeftOut(
+      reason: LeftOutReason.fromId(json['reason'] as String?),
+      limits: WatchLimits.fromJson(json['limits'] as Map<String, dynamic>?),
+      ownNode: json['own_node'] as bool? ?? false,
+      remedy: LiveRemedy.fromJson(json['remedy'] as Map<String, dynamic>?),
+    );
+  }
+
+  final LeftOutReason reason;
+
+  /// What the watch takes under the backend in use.
+  final WatchLimits limits;
+
+  /// The backend is the user's own node.
+  final bool ownNode;
+
+  /// Null when nothing the user can do takes more.
+  final LiveRemedy? remedy;
+}
+
+/// What lets the live watch hear the addresses it leaves out.
+sealed class LiveRemedy {
+  const LiveRemedy();
+
+  /// Null for none, and for a way out a newer core may add.
+  static LiveRemedy? fromJson(Map<String, dynamic>? json) {
+    switch (json?['type']) {
+      case 'own_node':
+        return OwnNodeRemedy(
+          WatchLimits.fromJson(json!['limits'] as Map<String, dynamic>?),
+        );
+      case 'raise_server_limit':
+        return RaiseServerLimit(
+          server: ServerSoftware.fromId(json!['server'] as String?),
+          settings: [
+            for (final setting in json['settings'] as List? ?? const [])
+              if (setting is String) setting,
+          ],
+        );
+      default:
+        return null;
+    }
+  }
+}
+
+/// A node of one's own, marked "This is my node": the watch then takes
+/// [limits].
+final class OwnNodeRemedy extends LiveRemedy {
+  const OwnNodeRemedy(this.limits);
+
+  final WatchLimits limits;
+}
+
+/// The setting of the user's node to raise, as its software calls it;
+/// none named when the core does not know that software.
+final class RaiseServerLimit extends LiveRemedy {
+  const RaiseServerLimit({this.server, this.settings = const []});
+
+  final ServerSoftware? server;
+  final List<String> settings;
+}
+
+/// An Electrum server whose subscription limit the core can name.
+enum ServerSoftware {
+  fulcrum('fulcrum'),
+  electrumx('electrumx'),
+  electrsEsplora('electrs_esplora'),
+  mempoolElectrs('mempool_electrs');
+
+  const ServerSoftware(this.id);
+
+  final String id;
+
+  static ServerSoftware? fromId(String? id) {
+    for (final software in ServerSoftware.values) {
+      if (software.id == id) return software;
+    }
+    return null;
+  }
 }
 
 /// What a running live watch says.
@@ -1474,6 +1727,7 @@ class Settings {
     required this.activeNetwork,
     required this.backends,
     required this.appPrefs,
+    required this.preferences,
     this.gapLimit = 20,
     this.electrumCerts = const {},
     this.appLock,
@@ -1493,6 +1747,9 @@ class Settings {
       appPrefs: (json['app_prefs'] as Map<String, dynamic>? ?? {}).map(
         (key, value) => MapEntry(key, value as String),
       ),
+      preferences: Preferences.fromJson(
+        json['preferences'] as Map<String, dynamic>,
+      ),
       gapLimit: json['gap_limit'] as int? ?? 20,
       electrumCerts: (json['electrum_certs'] as Map<String, dynamic>? ?? {})
           .map((key, value) => MapEntry(key, value as String)),
@@ -1507,7 +1764,12 @@ class Settings {
 
   final Network activeNetwork;
   final Map<Network, BackendConfig> backends;
+
+  /// The preferences of this app alone: the theme, the widgets...
   final Map<String, String> appPrefs;
+
+  /// What both apps keep with the same meaning.
+  final Preferences preferences;
 
   /// Global gap limit applied to every descriptor wallet on sync.
   final int gapLimit;
@@ -1695,21 +1957,16 @@ class UnreachableCertificate extends CertificateStatus {
 }
 
 /// Where a fiat quote comes from. All endpoints are public and keyless.
+/// Which currencies each quotes, and its name, are the core's: see
+/// [PriceTable].
 enum PriceSource {
-  coingecko('coingecko', 'CoinGecko'),
-  kraken('kraken', 'Kraken'),
-  mempoolSpace('mempool_space', 'mempool.space');
+  coingecko('coingecko'),
+  kraken('kraken'),
+  mempoolSpace('mempool_space');
 
-  const PriceSource(this.id, this.label);
+  const PriceSource(this.id);
 
   final String id;
-  final String label;
-
-  /// Whether this source quotes a currency without an API key. Kraken
-  /// lists seven fiat pairs against XBT and the mempool projects
-  /// publish the same seven; CoinGecko publishes them all.
-  bool supportsCurrency(FiatCurrency currency) =>
-      this == PriceSource.coingecko || currency.reach == CurrencyReach.every;
 
   static PriceSource? fromId(String? id) {
     for (final source in PriceSource.values) {
@@ -1721,73 +1978,260 @@ enum PriceSource {
 
 /// How many price sources quote a currency.
 enum CurrencyReach {
-  /// Every source quotes it: the seven Kraken and the mempool projects
-  /// publish.
-  every,
+  /// Every source quotes it.
+  every('every'),
 
   /// CoinGecko alone quotes it.
-  coingeckoOnly,
-}
+  coingeckoOnly('coingecko_only');
 
-/// Display currencies offered in the settings, in display order.
-///
-/// The first seven are quoted by every source. The rest are the
-/// currencies of the most populous countries and of the places where
-/// Bitcoin is most used; CoinGecko is the only keyless source that
-/// publishes them.
-enum FiatCurrency {
-  eur('eur', 'EUR', 'Euro', CurrencyReach.every),
-  usd('usd', 'USD', 'US dollar', CurrencyReach.every),
-  gbp('gbp', 'GBP', 'Pound sterling', CurrencyReach.every),
-  chf('chf', 'CHF', 'Swiss franc', CurrencyReach.every),
-  jpy('jpy', 'JPY', 'Japanese yen', CurrencyReach.every),
-  cad('cad', 'CAD', 'Canadian dollar', CurrencyReach.every),
-  aud('aud', 'AUD', 'Australian dollar', CurrencyReach.every),
-  inr('inr', 'INR', 'Indian rupee', CurrencyReach.coingeckoOnly),
-  cny('cny', 'CNY', 'Chinese yuan', CurrencyReach.coingeckoOnly),
-  brl('brl', 'BRL', 'Brazilian real', CurrencyReach.coingeckoOnly),
-  ngn('ngn', 'NGN', 'Nigerian naira', CurrencyReach.coingeckoOnly),
-  idr('idr', 'IDR', 'Indonesian rupiah', CurrencyReach.coingeckoOnly),
-  pkr('pkr', 'PKR', 'Pakistani rupee', CurrencyReach.coingeckoOnly),
-  bdt('bdt', 'BDT', 'Bangladeshi taka', CurrencyReach.coingeckoOnly),
-  rub('rub', 'RUB', 'Russian ruble', CurrencyReach.coingeckoOnly),
-  mxn('mxn', 'MXN', 'Mexican peso', CurrencyReach.coingeckoOnly),
-  php('php', 'PHP', 'Philippine peso', CurrencyReach.coingeckoOnly),
-  vnd('vnd', 'VND', 'Vietnamese dong', CurrencyReach.coingeckoOnly),
-  // `try` is a Dart keyword, so only the constant is spelled out; the
-  // identifier the core stores stays `try`.
-  tryLira('try', 'TRY', 'Turkish lira', CurrencyReach.coingeckoOnly),
-  ars('ars', 'ARS', 'Argentine peso', CurrencyReach.coingeckoOnly),
-  krw('krw', 'KRW', 'South Korean won', CurrencyReach.coingeckoOnly),
-  zar('zar', 'ZAR', 'South African rand', CurrencyReach.coingeckoOnly),
-  thb('thb', 'THB', 'Thai baht', CurrencyReach.coingeckoOnly),
-  uah('uah', 'UAH', 'Ukrainian hryvnia', CurrencyReach.coingeckoOnly),
-  pln('pln', 'PLN', 'Polish zloty', CurrencyReach.coingeckoOnly),
-  sek('sek', 'SEK', 'Swedish krona', CurrencyReach.coingeckoOnly),
-  sgd('sgd', 'SGD', 'Singapore dollar', CurrencyReach.coingeckoOnly),
-  hkd('hkd', 'HKD', 'Hong Kong dollar', CurrencyReach.coingeckoOnly),
-  aed('aed', 'AED', 'UAE dirham', CurrencyReach.coingeckoOnly),
-  nzd('nzd', 'NZD', 'New Zealand dollar', CurrencyReach.coingeckoOnly);
-
-  const FiatCurrency(this.id, this.code, this.label, this.reach);
+  const CurrencyReach(this.id);
 
   final String id;
 
-  /// ISO 4217 code, uppercase.
-  final String code;
+  static CurrencyReach fromId(String id) =>
+      CurrencyReach.values.firstWhere((reach) => reach.id == id);
+}
 
-  /// English name, so a list of thirty codes stays readable.
-  final String label;
+/// A display currency, by the identifier the core names it with (`eur`,
+/// `try`...). The list on offer, its order, the names and which source
+/// quotes what are the core's: see [PriceTable].
+class FiatCurrency {
+  const FiatCurrency(this.id);
 
-  /// Which sources quote this currency.
+  final String id;
+
+  /// ISO 4217 code: the identifier, in capitals.
+  String get code => id.toUpperCase();
+
+  @override
+  bool operator ==(Object other) => other is FiatCurrency && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
+
+  @override
+  String toString() => id;
+}
+
+/// One currency of the [PriceTable].
+class CurrencyEntry {
+  const CurrencyEntry({
+    required this.currency,
+    required this.name,
+    required this.reach,
+    required this.sources,
+  });
+
+  factory CurrencyEntry.fromJson(Map<String, dynamic> json) {
+    return CurrencyEntry(
+      currency: FiatCurrency(json['currency'] as String),
+      name: json['name'] as String,
+      reach: CurrencyReach.fromId(json['reach'] as String),
+      sources: [
+        for (final id in json['sources'] as List)
+          ?PriceSource.fromId(id as String),
+      ],
+    );
+  }
+
+  final FiatCurrency currency;
+
+  /// Its English name, read beside the code.
+  final String name;
+
+  /// How many sources quote it, which is how the settings group it.
   final CurrencyReach reach;
 
-  static FiatCurrency? fromId(String? id) {
-    for (final currency in FiatCurrency.values) {
-      if (currency.id == id) return currency;
+  /// The sources that quote it, in display order.
+  final List<PriceSource> sources;
+}
+
+/// One price source of the [PriceTable].
+class SourceEntry {
+  const SourceEntry({required this.source, required this.label});
+
+  final PriceSource source;
+
+  /// Its name, as it writes it.
+  final String label;
+}
+
+/// What the settings offer for the fiat value, and how often its price
+/// is asked: the core's table, which both apps offer in its order.
+class PriceTable {
+  const PriceTable({
+    required this.currencies,
+    required this.sources,
+    required this.refresh,
+  });
+
+  factory PriceTable.fromJson(Map<String, dynamic> json) {
+    return PriceTable(
+      currencies: [
+        for (final entry in json['currencies'] as List)
+          CurrencyEntry.fromJson(entry as Map<String, dynamic>),
+      ],
+      sources: [
+        for (final entry in json['sources'] as List)
+          if (PriceSource.fromId(
+                (entry as Map<String, dynamic>)['source'] as String,
+              )
+              case final source?)
+            SourceEntry(source: source, label: entry['label'] as String),
+      ],
+      refresh: Duration(seconds: json['refresh_secs'] as int),
+    );
+  }
+
+  /// Every currency on offer, in display order.
+  final List<CurrencyEntry> currencies;
+
+  /// Every source, in display order.
+  final List<SourceEntry> sources;
+
+  /// From one price to the next while it is shown, and from a failure
+  /// to the next try.
+  final Duration refresh;
+
+  /// The entry of a currency, if the table lists it.
+  CurrencyEntry? entryOf(FiatCurrency currency) {
+    for (final entry in currencies) {
+      if (entry.currency == currency) return entry;
     }
     return null;
   }
+}
+
+/// The preferences both apps keep, as the vault holds them, mirroring
+/// `Preferences` in gerfaut-core. A vault that never stored one answers
+/// its default: the core decides those, and every field comes filled.
+class Preferences {
+  const Preferences({
+    required this.unit,
+    required this.masked,
+    required this.fiat,
+    required this.fiatCurrency,
+    required this.priceSource,
+    required this.notifyNewTx,
+    required this.explorerAck,
+  });
+
+  factory Preferences.fromJson(Map<String, dynamic> json) {
+    return Preferences(
+      unit: AmountUnit.fromId(json['unit'] as String)!,
+      masked: json['masked'] as bool,
+      fiat: json['fiat'] as bool,
+      fiatCurrency: FiatCurrency(json['fiat_currency'] as String),
+      priceSource: PriceSource.fromId(json['price_source'] as String)!,
+      notifyNewTx: json['notify_new_tx'] as bool,
+      explorerAck: json['explorer_ack'] as bool,
+    );
+  }
+
+  /// The unit of every amount.
+  final AmountUnit unit;
+
+  /// Amounts hidden on screen, and in what a notification says.
+  final bool masked;
+
+  /// The fiat value beside every amount.
+  final bool fiat;
+  final FiatCurrency fiatCurrency;
+
+  /// Always one that quotes [fiatCurrency]: the core sees to it.
+  final PriceSource priceSource;
+
+  /// A notice when a sync finds a transaction.
+  final bool notifyNewTx;
+
+  /// The warning before an external explorer was read and accepted.
+  final bool explorerAck;
+
+  Preferences copyWith({
+    AmountUnit? unit,
+    bool? masked,
+    bool? fiat,
+    FiatCurrency? fiatCurrency,
+    PriceSource? priceSource,
+    bool? notifyNewTx,
+    bool? explorerAck,
+  }) {
+    return Preferences(
+      unit: unit ?? this.unit,
+      masked: masked ?? this.masked,
+      fiat: fiat ?? this.fiat,
+      fiatCurrency: fiatCurrency ?? this.fiatCurrency,
+      priceSource: priceSource ?? this.priceSource,
+      notifyNewTx: notifyNewTx ?? this.notifyNewTx,
+      explorerAck: explorerAck ?? this.explorerAck,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is Preferences &&
+      other.unit == unit &&
+      other.masked == masked &&
+      other.fiat == fiat &&
+      other.fiatCurrency == fiatCurrency &&
+      other.priceSource == priceSource &&
+      other.notifyNewTx == notifyNewTx &&
+      other.explorerAck == explorerAck;
+
+  @override
+  int get hashCode => Object.hash(
+    unit,
+    masked,
+    fiat,
+    fiatCurrency,
+    priceSource,
+    notifyNewTx,
+    explorerAck,
+  );
+}
+
+/// A change to some of the [Preferences], mirroring `PreferencesChange`:
+/// what is left out keeps its value.
+class PreferencesChange {
+  const PreferencesChange({
+    this.unit,
+    this.masked,
+    this.fiat,
+    this.fiatCurrency,
+    this.priceSource,
+    this.notifyNewTx,
+    this.explorerAck,
+  });
+
+  final AmountUnit? unit;
+  final bool? masked;
+  final bool? fiat;
+  final FiatCurrency? fiatCurrency;
+  final PriceSource? priceSource;
+  final bool? notifyNewTx;
+  final bool? explorerAck;
+
+  /// These preferences with the change made here: the fields it names,
+  /// and nothing else.
+  Preferences applyTo(Preferences preferences) => preferences.copyWith(
+    unit: unit,
+    masked: masked,
+    fiat: fiat,
+    fiatCurrency: fiatCurrency,
+    priceSource: priceSource,
+    notifyNewTx: notifyNewTx,
+    explorerAck: explorerAck,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'unit': ?unit?.id,
+    'masked': ?masked,
+    'fiat': ?fiat,
+    'fiat_currency': ?fiatCurrency?.id,
+    'price_source': ?priceSource?.id,
+    'notify_new_tx': ?notifyNewTx,
+    'explorer_ack': ?explorerAck,
+  };
 }
 
 /// One BTC priced in a fiat currency, at a point in time.
@@ -1802,7 +2246,7 @@ class PriceQuote {
   factory PriceQuote.fromJson(Map<String, dynamic> json) {
     return PriceQuote(
       rate: (json['rate'] as num).toDouble(),
-      currency: FiatCurrency.fromId(json['currency'] as String)!,
+      currency: FiatCurrency(json['currency'] as String),
       source: PriceSource.fromId(json['source'] as String)!,
       at: json['at'] as int,
     );
@@ -1817,30 +2261,38 @@ class PriceQuote {
   final int at;
 }
 
-/// Outcome of a release check.
-class UpdateCheck {
-  const UpdateCheck({
-    required this.latest,
-    required this.url,
-    required this.updateAvailable,
+/// What to say about releases: all of it decided by the core, which
+/// keeps the state of the check in the vault.
+class UpdateStatus {
+  const UpdateStatus({
+    this.automatic = true,
+    this.announce,
+    this.available,
+    this.torUnavailable = false,
   });
 
-  factory UpdateCheck.fromJson(Map<String, dynamic> json) {
-    return UpdateCheck(
-      latest: json['latest'] as String,
-      url: json['url'] as String,
-      updateAvailable: json['update_available'] as bool,
+  factory UpdateStatus.fromJson(Map<String, dynamic> json) {
+    return UpdateStatus(
+      automatic: json['automatic'] as bool,
+      announce: json['announce'] as String?,
+      available: json['available'] as String?,
+      torUnavailable: json['tor_unavailable'] as bool,
     );
   }
 
-  /// Latest published tag, for example `v0.2.0`.
-  final String latest;
+  /// The daily check is on.
+  final bool automatic;
 
-  /// Web page of the latest release.
-  final String url;
+  /// The release the home card announces; null when it has nothing to
+  /// say.
+  final String? announce;
 
-  /// True when the latest tag is newer than the running version.
-  final bool updateAvailable;
+  /// The newer release known, closed or not: what About offers.
+  final String? available;
+
+  /// The last check that was to go out did not: Tor is needed and could
+  /// not be had.
+  final bool torUnavailable;
 }
 
 /// Envelope recognized around a scanned QR frame.
@@ -2277,13 +2729,14 @@ class BroadcastStatus {
   final int at;
 }
 
-/// A transaction this app sent, kept so it can be checked again after a
-/// restart. Stored as JSON under the `broadcast.recent` preference.
+/// A transaction this app sent, kept by the vault so it can be checked
+/// again after a restart.
 class RecentBroadcast {
   const RecentBroadcast({
     required this.txid,
     required this.network,
     required this.hex,
+    required this.backend,
     required this.at,
   });
 
@@ -2292,6 +2745,7 @@ class RecentBroadcast {
       txid: json['txid'] as String,
       network: Network.fromId(json['network'] as String),
       hex: json['hex'] as String,
+      backend: json['backend'] as String,
       at: json['at'] as int,
     );
   }
@@ -2302,15 +2756,12 @@ class RecentBroadcast {
   /// The transaction as sent: what the status check decodes.
   final String hex;
 
+  /// Host that accepted it; empty for one this app kept before the vault
+  /// did, which did not note it.
+  final String backend;
+
   /// Unix timestamp, seconds, of the broadcast.
   final int at;
-
-  Map<String, dynamic> toJson() => {
-    'txid': txid,
-    'network': network.id,
-    'hex': hex,
-    'at': at,
-  };
 }
 
 // --- backup ------------------------------------------------------------
@@ -2562,6 +3013,7 @@ class TorStatus {
     required this.bootstrapPercent,
     required this.error,
     required this.embeddedAvailable,
+    this.systemSocksTrusted = false,
   });
 
   factory TorStatus.fromJson(Map<String, dynamic> json) {
@@ -2575,6 +3027,7 @@ class TorStatus {
       bootstrapPercent: json['bootstrap_percent'] as int? ?? 0,
       error: json['error'] as String?,
       embeddedAvailable: json['embedded_available'] as bool? ?? false,
+      systemSocksTrusted: json['system_socks_trusted'] as bool? ?? false,
     );
   }
 
@@ -2593,6 +3046,11 @@ class TorStatus {
 
   /// Whether this build carries the built-in client.
   final bool embeddedAvailable;
+
+  /// Whether Automatic may take a Tor found on this device's local port,
+  /// as the core decides it: not on a phone, where any app can answer
+  /// there and pose as Tor.
+  final bool systemSocksTrusted;
 }
 
 // --- policy --------------------------------------------------------------
@@ -3021,6 +3479,21 @@ class NeedsPreimage extends BranchState {
   const NeedsPreimage();
 }
 
+/// The tone the core shows a branch's state in: confirmed when it is
+/// open, pending when it opens in under thirty days, neutral otherwise.
+enum BranchTone {
+  confirmed('confirmed'),
+  pending('pending'),
+  neutral('neutral');
+
+  const BranchTone(this.id);
+
+  final String id;
+
+  static BranchTone fromId(String id) =>
+      BranchTone.values.firstWhere((t) => t.id == id);
+}
+
 /// One way to spend: a top-level alternative of the policy.
 class PolicyBranch {
   const PolicyBranch({
@@ -3032,6 +3505,7 @@ class PolicyBranch {
     required this.timelocks,
     required this.state,
     required this.spendableNow,
+    required this.tone,
   });
 
   factory PolicyBranch.fromJson(Map<String, dynamic> json) {
@@ -3048,6 +3522,7 @@ class PolicyBranch {
           .toList(),
       state: BranchState.fromJson(json['state'] as Map<String, dynamic>),
       spendableNow: json['spendable_now'] as bool,
+      tone: BranchTone.fromId(json['tone'] as String),
     );
   }
 
@@ -3067,6 +3542,9 @@ class PolicyBranch {
   final List<PolicyTimelock> timelocks;
   final BranchState state;
   final bool spendableNow;
+
+  /// The colour [state] is shown in, the core's call.
+  final BranchTone tone;
 }
 
 /// A wallet's policy read against the chain.
@@ -3116,6 +3594,9 @@ class PolicySnapshot {
   /// `or(pk(Key A),and(pk(Key B),older(52560)))`.
   final String policy;
   final List<PolicyKey> keys;
+
+  /// In reading order: the primary paths, then recovery, emergency and
+  /// the rest, each from the nearest lock to the farthest.
   final List<PolicyBranch> branches;
 
   /// The chain tip the absolute locks were read against; null for a

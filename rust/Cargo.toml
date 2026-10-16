@@ -32,7 +32,5 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
 saturating-time = { git = "https://github.com/gerfaut-wallet/saturating-time", rev = "7bef6ba00f3adaa6aff7e68966614c9d55bb60ec" }
 
 [dev-dependencies]
-# To build a hostile QR frame in a test; the version the core already
-# pulls in, so nothing new is fetched.
+# To run the bridge's async functions in a test.
 tokio = { version = "1", features = ["macros", "rt"] }
-ur = "0.5"

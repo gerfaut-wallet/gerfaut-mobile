@@ -16,6 +16,7 @@ import '../widgets/buttons.dart';
 import '../widgets/count_badge.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/load_failure.dart';
+import '../widgets/mask_unsaved_notice.dart';
 import '../widgets/overflow_menu.dart';
 import '../widgets/status_pill.dart';
 import '../widgets/sync_button.dart';
@@ -177,22 +178,32 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
       // A wallet already loaded stays on screen while it refreshes: a
       // loading line in place of a balance would hide what is known.
       body: SafeArea(
-        child: loaded != null
-            ? _buildLoaded(loaded, syncing)
-            : switch (snapshot) {
-                AsyncError(:final error) => LoadFailure(
-                  what: 'This wallet',
-                  error: error,
-                  onRetry: () =>
-                      ref.invalidate(snapshotProvider(widget.walletId)),
-                ),
-                _ => Center(
-                  child: Text(
-                    'Loading wallet…',
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  ),
-                ),
-              },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const MaskUnsavedNotice(),
+            Expanded(
+              child: loaded != null
+                  ? _buildLoaded(loaded, syncing)
+                  : switch (snapshot) {
+                      AsyncError(:final error) => LoadFailure(
+                        what: 'This wallet',
+                        error: error,
+                        onRetry: () =>
+                            ref.invalidate(snapshotProvider(widget.walletId)),
+                      ),
+                      _ => Center(
+                        child: Text(
+                          'Loading wallet…',
+                          style: tokens.bodySmall.copyWith(
+                            color: tokens.textMuted,
+                          ),
+                        ),
+                      ),
+                    },
+            ),
+          ],
+        ),
       ),
     );
   }

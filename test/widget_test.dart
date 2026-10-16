@@ -46,6 +46,7 @@ FakeBridge returning({List<WalletMeta> wallets = const []}) {
   return FakeBridge(
     wallets: wallets,
     settings: const Settings(
+      preferences: kPreferences,
       activeNetwork: Network.mainnet,
       backends: {},
       appPrefs: {'onboarding.seen': '1'},
@@ -503,14 +504,11 @@ void main() {
           makeMeta(id: 'w2', name: 'Spending'),
           makeMeta(id: 'w3', name: 'Archive'),
         ],
-        settings: const Settings(
+        settings: Settings(
+          preferences: kPreferences.copyWith(notifyNewTx: true),
           activeNetwork: Network.mainnet,
-          backends: {},
-          appPrefs: {
-            'onboarding.seen': '1',
-            'notify.new_tx': '1',
-            'notify.background': 'live',
-          },
+          backends: const {},
+          appPrefs: const {'onboarding.seen': '1', 'notify.background': 'live'},
         ),
       )..watchStatus = status;
       for (final meta in bridge.wallets) {
@@ -547,6 +545,11 @@ void main() {
               leftOutScripts: 200,
             ),
           ],
+          leftOut: LiveLeftOut(
+            reason: LeftOutReason.liveLimit,
+            limits: WatchLimits(perWallet: 200, total: 2000),
+            remedy: OwnNodeRemedy(WatchLimits(perWallet: 20000, total: 20000)),
+          ),
         ),
       );
       await tester.pumpWidget(liveApp(bridge));
@@ -586,6 +589,11 @@ void main() {
           leftOutScripts: 200,
         ),
       ],
+      leftOut: LiveLeftOut(
+        reason: LeftOutReason.liveLimit,
+        limits: WatchLimits(perWallet: 200, total: 2000),
+        remedy: OwnNodeRemedy(WatchLimits(perWallet: 20000, total: 20000)),
+      ),
     );
 
     testWidgets('the page of a wallet says how many of its addresses wait', (
@@ -651,7 +659,7 @@ void main() {
       final container = ProviderScope.containerOf(
         tester.element(find.byType(SettingsScreen)),
       );
-      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      holdPreferences(container, const PreferencesChange(notifyNewTx: true));
       container.read(backgroundCheckProvider.notifier).hydrate('live');
       await container.read(liveProvider.notifier).refresh();
       await tester.pumpAndSettle();
@@ -784,7 +792,7 @@ void main() {
 
     expect(find.textContaining('0.00123456', findRichText: true), findsNothing);
     expect(findMasked(), findsWidgets);
-    expect(bridge.appPrefs['mobile.masked'], '1');
+    expect(bridge.preferences.masked, isTrue);
 
     // The entry now offers the way back, under the other label.
     await openMenu(tester);
@@ -796,7 +804,7 @@ void main() {
       find.textContaining('0.00123456', findRichText: true),
       findsOneWidget,
     );
-    expect(bridge.appPrefs['mobile.masked'], '0');
+    expect(bridge.preferences.masked, isFalse);
   });
 
   testWidgets('a failed bootstrap shows the startup error screen', (
@@ -1024,6 +1032,7 @@ class _GatedVault extends FakeBridge {
   _GatedVault({required super.wallets})
     : super(
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: {},
           appPrefs: {'onboarding.seen': '1'},
@@ -1047,6 +1056,7 @@ class _ListFails extends FakeBridge {
   _ListFails()
     : super(
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: {},
           appPrefs: {'onboarding.seen': '1'},
@@ -1068,6 +1078,7 @@ class _ClosedUntilOpen extends FakeBridge {
   _ClosedUntilOpen()
     : super(
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: {},
           appPrefs: {'onboarding.seen': '1'},

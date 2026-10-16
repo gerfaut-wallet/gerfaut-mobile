@@ -15,6 +15,7 @@ import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
 
+import 'core_fixtures.dart';
 import 'fakes.dart';
 import 'menu.dart';
 import 'policy_fixtures.dart';
@@ -58,7 +59,64 @@ void main() {
 
     expect(find.textContaining('0.00123456', findRichText: true), findsNothing);
     expect(findMasked(), findsWidgets);
-    expect(bridge.appPrefs['mobile.masked'], '1');
+    expect(bridge.preferences.masked, isTrue);
+  });
+
+  testWidgets('a mask the vault does not keep is said, and tried again', (
+    tester,
+  ) async {
+    // Room for the note above the page.
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final meta = makeMeta(totalSats: 123456);
+    var refusals = 2;
+    final bridge =
+        FakeBridge(
+            wallets: [meta],
+            snapshots: {'w1': makeSnapshot(meta: meta, totalSats: 123456)},
+          )
+          ..onSetPreferences = (stored, change) {
+            if (refusals-- > 0) throw coreFailure('vault', 'disk full');
+            return coreChange(stored, change);
+          };
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [bridgeProvider.overrideWithValue(bridge)],
+        child: MaterialApp(
+          theme: themeFrom(GerfautTokens.light, Brightness.light),
+          home: const WalletHomeScreen(walletId: 'w1'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    const said = 'Balances are hidden in the app only.';
+    expect(find.text(said), findsNothing);
+
+    await pickFromMenu(tester, 'Hide balances');
+    // Hidden here all the same, and the screen does not pretend more.
+    expect(find.textContaining('0.00123456', findRichText: true), findsNothing);
+    expect(bridge.preferences.masked, isFalse);
+    expect(find.text(said), findsOneWidget);
+    // Nothing tries again on its own: the note says until when, and
+    // offers the try.
+    expect(
+      find.text(
+        'Gerfaut could not save the change. Until it is saved, the widget '
+        'and notifications may still show amounts.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester.widget<GerfautNotice>(find.byType(GerfautNotice)).tone,
+      NoticeTone.alert,
+    );
+
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+    expect(bridge.preferences.masked, isTrue);
+    expect(find.text(said), findsNothing);
+    expect(findMasked(), findsWidgets);
   });
 
   testWidgets('a failed sync stays visible on the wallet screen', (

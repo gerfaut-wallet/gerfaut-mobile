@@ -41,7 +41,7 @@ SyncStamp _stamp(int at, {int tipHeight = 912345}) =>
 
 const PriceQuote _quote = PriceQuote(
   rate: 50000,
-  currency: FiatCurrency.eur,
+  currency: FiatCurrency('eur'),
   source: PriceSource.coingecko,
   at: _syncedAt,
 );
@@ -66,6 +66,7 @@ FakeBridge _bridge({List<WalletMeta>? wallets}) {
           ),
         ],
     settings: const Settings(
+      preferences: kPreferences,
       activeNetwork: Network.mainnet,
       backends: {},
       appPrefs: {'onboarding.seen': '1'},
@@ -132,7 +133,7 @@ void main() {
       final data = PricePayload.of(
         PriceQuote(
           rate: 50000,
-          currency: FiatCurrency.eur,
+          currency: FiatCurrency('eur'),
           source: PriceSource.coingecko,
           at: at,
         ),
@@ -157,15 +158,15 @@ void main() {
       // the cents of a five-figure price are noise on both.
       const quote = PriceQuote(
         rate: 66741.37,
-        currency: FiatCurrency.eur,
+        currency: FiatCurrency('eur'),
         source: PriceSource.kraken,
         at: _syncedAt,
       );
       expect(PricePayload.of(quote).figure, '€66 741');
-      expect(formatFiatPrice(66741.37, FiatCurrency.eur), '€66 741');
-      expect(formatFiatPrice(9876543.2, FiatCurrency.jpy), '¥9 876 543');
+      expect(formatFiatPrice(66741.37, FiatCurrency('eur')), '€66 741');
+      expect(formatFiatPrice(9876543.2, FiatCurrency('jpy')), '¥9 876 543');
       // Under a hundred the currency keeps its own decimals.
-      expect(formatFiatPrice(42.5, FiatCurrency.eur), '€42.50');
+      expect(formatFiatPrice(42.5, FiatCurrency('eur')), '€42.50');
     });
 
     test('the clock is the reader\'s, on 24 hours', () {
@@ -176,29 +177,6 @@ void main() {
           '${local.minute.toString().padLeft(2, '0')}';
       expect(formatClock(_syncedAt), expected);
       expect(formatClock(_syncedAt), matches(RegExp(r'^\d\d:\d\d$')));
-    });
-
-    test('the source and currency follow the preferences, with the '
-        'same fallback the screens apply', () {
-      expect(priceChoice(const {}), (
-        currency: FiatCurrency.eur,
-        source: PriceSource.coingecko,
-      ));
-      expect(
-        priceChoice(const {
-          'display.fiat_currency': 'usd',
-          'display.fiat_source': 'kraken',
-        }),
-        (currency: FiatCurrency.usd, source: PriceSource.kraken),
-      );
-      // Kraken does not quote the rupee: CoinGecko answers instead.
-      expect(
-        priceChoice(const {
-          'display.fiat_currency': 'inr',
-          'display.fiat_source': 'kraken',
-        }),
-        (currency: FiatCurrency.inr, source: PriceSource.coingecko),
-      );
     });
   });
 
@@ -459,7 +437,7 @@ void main() {
       final evening = DateTime(2026, 10, 3, 23, 55);
       final quote = PriceQuote(
         rate: 50000,
-        currency: FiatCurrency.eur,
+        currency: FiatCurrency('eur'),
         source: PriceSource.coingecko,
         at: _secs(DateTime(2026, 10, 3, 23, 50)),
       );
@@ -533,6 +511,7 @@ void main() {
           ),
         ],
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.regtest,
           backends: {},
           appPrefs: {},
@@ -548,9 +527,13 @@ void main() {
 
   group('the background refresh', () {
     /// Preferences as the vault would hand them to the isolate.
-    FakeBridge prefBridge(Map<String, String> prefs) {
+    FakeBridge prefBridge(
+      Map<String, String> prefs, [
+      Preferences preferences = kPreferences,
+    ]) {
       final bridge = _bridge();
       bridge.settings = Settings(
+        preferences: preferences,
         activeNetwork: Network.mainnet,
         backends: const {},
         appPrefs: prefs,
@@ -561,9 +544,8 @@ void main() {
     test('publishes the placed widgets from the vault, without ever '
         'syncing', () async {
       final bridge = prefBridge(const {
-        'display.unit': 'sats',
         'widgets.balances': '1',
-      });
+      }, kPreferences.copyWith(unit: AmountUnit.sats));
       final board = FakeWidgetBoard(
         installed: {
           HomeWidgets.price,
@@ -629,8 +611,7 @@ void main() {
       await refreshWidgets(
         bridge: prefBridge(const {
           'widgets.balances': '1',
-          'mobile.masked': '1',
-        }),
+        }, kPreferences.copyWith(masked: true)),
         board: board,
         bootstrap: () async {},
         now: _now,
@@ -640,11 +621,10 @@ void main() {
 
     test('under an app lock, no name and no figure, whatever the '
         'notifications show', () async {
-      final bridge = prefBridge(const {
-        'widgets.balances': '1',
-        'notify.new_tx': '1',
-        'notify.details': '1',
-      })..lock = const AppLock(kind: LockKind.pin, biometric: false);
+      final bridge = prefBridge(
+        const {'widgets.balances': '1', 'notify.details': '1'},
+        kPreferences.copyWith(notifyNewTx: true),
+      )..lock = const AppLock(kind: LockKind.pin, biometric: false);
       final board = FakeWidgetBoard(installed: {HomeWidgets.balance});
       await refreshWidgets(
         bridge: bridge,

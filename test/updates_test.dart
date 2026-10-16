@@ -8,7 +8,6 @@ import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/calculator.dart';
 import 'package:gerfaut/screens/lock_screen.dart';
 import 'package:gerfaut/screens/settings.dart';
-import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
@@ -33,42 +32,27 @@ class _NoBiometrics implements BiometricGate {
   Future<bool> authenticate(String reason) async => false;
 }
 
-/// A clock a test moves by hand.
-class _Clock {
-  int now = 1800000000;
-}
-
-/// A vault opened before, whose release check answers [latest]; null is
-/// a phone that is offline.
+/// A vault with one wallet, whose core already knows of [known], a
+/// newer release, and finds [finds] when a session asks.
 FakeBridge _bridge({
-  String? latest = 'v0.2.0',
+  String? known,
+  String? finds = '0.2.0',
+  bool due = false,
   Map<String, String> prefs = const {},
-  Map<Network, BackendConfig> backends = const {},
-  bool openedBefore = true,
 }) {
   final bridge = FakeBridge(
     wallets: [makeMeta()],
     settings: Settings(
+      preferences: kPreferences,
       activeNetwork: Network.mainnet,
-      backends: backends,
-      // An app that has been open before today, unless a test says
-      // otherwise: the first day is a case of its own.
-      appPrefs: {
-        'onboarding.seen': '1',
-        if (openedBefore) 'updates.checked_at': '1',
-        ...prefs,
-      },
+      backends: const {},
+      appPrefs: {'onboarding.seen': '1', ...prefs},
     ),
   );
-  bridge.onCheckUpdate = (current) {
-    if (latest == null) throw const BridgeException('sync', 'offline');
-    return UpdateCheck(
-      latest: latest,
-      // Never the page that opens: the app has its own.
-      url: 'https://evil.example/releases',
-      updateAvailable: true,
-    );
-  };
+  bridge.updates
+    ..available = known
+    ..finds = finds
+    ..due = due;
   return bridge;
 }
 
@@ -76,10 +60,8 @@ FakeBridge _bridge({
 Future<void> _launch(
   WidgetTester tester,
   FakeBridge bridge, {
-  _Clock? clock,
   bool disguised = false,
 }) async {
-  final time = clock ?? _Clock();
   await tester.pumpWidget(
     ProviderScope(
       // A new scope each time: nothing in memory survives a launch.
@@ -91,7 +73,6 @@ Future<void> _launch(
         ),
         biometricGateProvider.overrideWithValue(_NoBiometrics()),
         windowGuardProvider.overrideWithValue(FakeWindowGuard()),
-        updateClockProvider.overrideWithValue(() => time.now),
       ],
       child: const GerfautApp(),
     ),
@@ -118,7 +99,6 @@ void main() {
         '0.1.1',
         '0.2.0',
         '0.99.12',
-        'v0.3.0',
         '0.2.0-rc.1',
       ]) {
         expect(isBetaVersion(version), isTrue, reason: version);
@@ -126,113 +106,27 @@ void main() {
     });
 
     test('it stops at 1.0.0', () {
-      for (final version in ['1.0.0', '1.0.0-rc.1', '1.2.3', '2.0.0']) {
+      for (final version in [
+        '1.0.0',
+        '1.0.0-rc.1',
+        '1.2.3',
+        '2.0.0',
+        '10.0.0',
+      ]) {
         expect(isBetaVersion(version), isFalse, reason: version);
       }
-    });
-
-    test('nothing that does not parse is called a beta', () {
-      for (final garbage in ['', 'beta', '0.1', '00.1.0']) {
-        expect(isBetaVersion(garbage), isFalse, reason: garbage);
-      }
-    });
-  });
-
-  group('versions', () {
-    ReleaseVersion parse(String text) => ReleaseVersion.tryParse(text)!;
-
-    test('a leading v and build metadata change nothing', () {
-      expect(parse('v1.2.3'), parse('1.2.3'));
-      expect(parse('V1.2.3'), parse('1.2.3'));
-      expect(parse('1.2.3+build.7'), parse('1.2.3'));
-      expect('${parse(' v1.2.3+build ')}', '1.2.3');
-    });
-
-    test('numbers compare as numbers', () {
-      expect(parse('0.1.10') > parse('0.1.9'), isTrue);
-      expect(parse('0.10.0') > parse('0.9.9'), isTrue);
-      expect(parse('1.0.0') > parse('0.99.99'), isTrue);
-      expect(parse('0.1.0') > parse('0.1.0'), isFalse);
-    });
-
-    test('pre-releases follow the order of the specification', () {
-      const ordered = [
-        '1.0.0-alpha',
-        '1.0.0-alpha.1',
-        '1.0.0-alpha.beta',
-        '1.0.0-beta',
-        '1.0.0-beta.2',
-        '1.0.0-beta.11',
-        '1.0.0-rc.1',
-        '1.0.0',
-      ];
-      for (var i = 0; i + 1 < ordered.length; i++) {
-        expect(
-          parse(ordered[i + 1]) > parse(ordered[i]),
-          isTrue,
-          reason: '${ordered[i + 1]} > ${ordered[i]}',
-        );
-        expect(parse(ordered[i]) > parse(ordered[i + 1]), isFalse);
-      }
-      // A numeric identifier of any size, without overflow.
-      expect(
-        parse('1.0.0-99999999999999999999999') >
-            parse('1.0.0-9999999999999999999999'),
-        isTrue,
-      );
-    });
-
-    test('anything else is not a version', () {
-      final garbage = [
-        '',
-        ' ',
-        'v',
-        'nightly',
-        'latest',
-        '1',
-        '1.2',
-        '1.2.3.4',
-        '01.2.3',
-        '1.02.3',
-        '1.2.3-',
-        '1.2.3-01',
-        '1.2.3-a..b',
-        '1.2.3+',
-        '-1.2.3',
-        'vv1.2.3',
-        '1.2.3 is out',
-        '1.2.3\n<script>',
-        '1.2.٣',
-        '9999999.0.0',
-        '1.2.3-${'a' * 80}',
-      ];
-      for (final text in garbage) {
-        expect(ReleaseVersion.tryParse(text), isNull, reason: text);
-      }
-      expect(ReleaseVersion.tryParse(null), isNull);
-    });
-
-    test('only a newer stable release is announced', () {
-      expect('${announcedVersion('v0.2.0', current: '0.1.0')}', '0.2.0');
-      expect(announcedVersion('0.1.0', current: '0.1.0'), isNull);
-      expect(announcedVersion('0.0.9', current: '0.1.0'), isNull);
-      expect(announcedVersion('0.2.0-rc.1', current: '0.1.0'), isNull);
-      expect(announcedVersion('nightly', current: '0.1.0'), isNull);
-      expect(announcedVersion('0.2.0', current: 'garbage'), isNull);
-      // Someone on a release candidate hears about the release.
-      expect('${announcedVersion('0.2.0', current: '0.2.0-rc.1')}', '0.2.0');
     });
   });
 
   group('the update notice', () {
-    testWidgets('shows on the launch after a newer release is known', (
+    testWidgets('shows on the launch after the core found a newer release', (
       tester,
     ) async {
-      final bridge = _bridge();
+      final bridge = _bridge(due: true);
       await _launch(tester, bridge);
       // The check ran, and what it found waits for the next time.
-      expect(bridge.checkUpdateCalls, 1);
-      expect(bridge.appPrefs['updates.latest'], '0.2.0');
+      expect(bridge.updates.sessions, 1);
+      expect(bridge.updates.checks, 1);
       expect(find.text(_line), findsNothing);
 
       await _launch(tester, bridge);
@@ -244,105 +138,68 @@ void main() {
       expect(find.text('Cold storage'), findsOneWidget);
     });
 
-    testWidgets('Later closes it for that release, across launches', (
+    testWidgets('Later has the core close that release, across launches', (
       tester,
     ) async {
-      final bridge = _bridge(prefs: {'updates.latest': '0.2.0'});
+      final bridge = _bridge(known: '0.2.0');
       await _launch(tester, bridge);
       expect(find.text(_line), findsOneWidget);
 
       await tester.tap(find.text('Later'));
       await tester.pumpAndSettle();
       expect(find.text(_line), findsNothing);
-      expect(bridge.appPrefs['updates.dismissed'], '0.2.0');
+      expect(bridge.updates.dismissed, '0.2.0');
 
       await _launch(tester, bridge);
       expect(find.text(_line), findsNothing);
     });
 
-    testWidgets('a release newer than the one closed shows again', (
-      tester,
-    ) async {
-      final bridge = _bridge(
-        latest: 'v0.3.0',
-        prefs: {'updates.latest': '0.3.0', 'updates.dismissed': '0.2.0'},
-      );
+    testWidgets('shows nothing the core does not announce', (tester) async {
+      final bridge = _bridge(known: '0.2.0');
+      bridge.updates.dismissed = '0.2.0';
+      await _launch(tester, bridge);
+      expect(find.byType(UpdateNotice), findsOneWidget);
+      expect(find.textContaining('is available'), findsNothing);
+    });
+
+    testWidgets('a notice already up follows the core', (tester) async {
+      final bridge = _bridge(known: '0.2.0', finds: '0.3.0', due: true);
       await _launch(tester, bridge);
       expect(find.text('Gerfaut 0.3.0 is available'), findsOneWidget);
       expect(find.text(_line), findsNothing);
     });
 
     testWidgets('offline says nothing', (tester) async {
-      final bridge = _bridge(latest: null);
+      final bridge = _bridge(due: true)..updates.offline = true;
       await _launch(tester, bridge);
       await _launch(tester, bridge);
-      expect(bridge.checkUpdateCalls, 1);
+      expect(bridge.updates.checks, 1);
       expect(find.byType(UpdateNotice), findsOneWidget);
       expect(find.textContaining('is available'), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('a tag that is not a version says nothing', (tester) async {
-      for (final tag in ['nightly', 'v0.2', '0.2.0-rc.1', '<b>9.9.9</b>']) {
-        final bridge = _bridge(latest: tag);
-        await _launch(tester, bridge);
-        await _launch(tester, bridge);
-        expect(find.textContaining('is available'), findsNothing, reason: tag);
-        expect(bridge.appPrefs['updates.latest'] ?? '', isEmpty, reason: tag);
-      }
-    });
-
-    testWidgets('a stored value that is not a version says nothing', (
-      tester,
-    ) async {
-      final bridge = _bridge(latest: null, prefs: {'updates.latest': 'soon'});
-      await _launch(tester, bridge);
-      expect(find.textContaining('is available'), findsNothing);
-    });
-
-    testWidgets('a release no newer than this build says nothing', (
-      tester,
-    ) async {
-      final bridge = _bridge(
-        latest: null,
-        prefs: {'updates.latest': appVersion},
-      );
-      await _launch(tester, bridge);
-      expect(find.textContaining('is available'), findsNothing);
-    });
-
-    testWidgets('a withdrawn release stops being offered', (tester) async {
-      final bridge = _bridge(
-        latest: 'v$appVersion',
-        prefs: {'updates.latest': '0.2.0'},
-      );
-      await _launch(tester, bridge);
-      // The check of this launch answered with the running version.
-      expect(find.text(_line), findsNothing);
-      expect(bridge.appPrefs['updates.latest'], '');
-    });
-
     testWidgets('never over the lock screen, and there after the unlock', (
       tester,
     ) async {
-      final bridge = _bridge(prefs: {'updates.latest': '0.2.0'})
+      final bridge = _bridge(known: '0.2.0')
         ..lock = const AppLock(kind: LockKind.pin, biometric: false)
         ..lockSecret = '1234';
       await _launch(tester, bridge);
       expect(find.byType(LockScreen), findsOneWidget);
       expect(find.textContaining('is available'), findsNothing);
-      // Nothing is asked from behind the lock either.
-      expect(bridge.checkUpdateCalls, 0);
+      // No session is opened from behind the lock either.
+      expect(bridge.updates.sessions, 0);
 
       await tester.enterText(find.byType(TextField), '1234');
       await tester.tap(find.text('Unlock'));
       await tester.pumpAndSettle();
       expect(find.text(_line), findsOneWidget);
-      expect(bridge.checkUpdateCalls, 1);
+      expect(bridge.updates.sessions, 1);
     });
 
     testWidgets('never while disguised, locked or open', (tester) async {
-      final bridge = _bridge(prefs: {'updates.latest': '0.2.0'})
+      final bridge = _bridge(known: '0.2.0', due: true)
         ..lock = const AppLock(kind: LockKind.pin, biometric: false)
         ..lockSecret = '1234';
       await _launch(tester, bridge, disguised: true);
@@ -357,7 +214,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Cold storage'), findsOneWidget);
       expect(find.textContaining('is available'), findsNothing);
-      expect(bridge.checkUpdateCalls, 0);
+      expect(bridge.updates.sessions, 0);
+      expect(bridge.updates.checks, 0);
     });
 
     testWidgets('the button opens the release page and nothing else', (
@@ -365,7 +223,7 @@ void main() {
     ) async {
       final launcher = FakeUrlLauncher();
       UrlLauncherPlatform.instance = launcher;
-      final bridge = _bridge(prefs: {'updates.latest': '0.2.0'});
+      final bridge = _bridge(known: '0.2.0');
       await _launch(tester, bridge);
 
       await tester.tap(find.text('View release'));
@@ -374,14 +232,14 @@ void main() {
       expect(releasePageUrl, _releases);
       // Asked once: the notice does not come back for this release.
       expect(find.text(_line), findsNothing);
-      expect(bridge.appPrefs['updates.dismissed'], '0.2.0');
+      expect(bridge.updates.dismissed, '0.2.0');
     });
 
     testWidgets('both are full targets and a screen reader hears it all', (
       tester,
     ) async {
       final handle = tester.ensureSemantics();
-      final bridge = _bridge(prefs: {'updates.latest': '0.2.0'});
+      final bridge = _bridge(known: '0.2.0');
       await _launch(tester, bridge);
 
       for (final label in ['Later', 'View release']) {
@@ -429,16 +287,14 @@ void main() {
       tester.platformDispatcher.textScaleFactorTestValue = 2;
       addTearDown(tester.view.reset);
       addTearDown(tester.platformDispatcher.clearAllTestValues);
-      final bridge = _bridge(prefs: {'updates.latest': '0.2.0'});
+      final bridge = _bridge(known: '0.2.0');
       await _launch(tester, bridge);
       expect(find.text(_line), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('wears the dark theme as a plain card', (tester) async {
-      final bridge = _bridge(
-        prefs: {'updates.latest': '0.2.0', 'mobile.theme': 'dark'},
-      );
+      final bridge = _bridge(known: '0.2.0', prefs: {'mobile.theme': 'dark'});
       await _launch(tester, bridge);
       final box = tester.widget<Container>(
         find
@@ -456,96 +312,37 @@ void main() {
     });
   });
 
-  group('the automatic check', () {
-    testWidgets('asks once a day at most', (tester) async {
-      final clock = _Clock();
-      final bridge = _bridge();
-      await _launch(tester, bridge, clock: clock);
-      expect(bridge.checkUpdateCalls, 1);
-
-      clock.now += updateCheckPeriod - 1;
-      await _launch(tester, bridge, clock: clock);
-      expect(bridge.checkUpdateCalls, 1);
-
-      clock.now += 1;
-      await _launch(tester, bridge, clock: clock);
-      expect(bridge.checkUpdateCalls, 2);
-    });
-
-    testWidgets('asks nothing on the day of the first launch', (tester) async {
-      final clock = _Clock();
-      final fresh = _bridge(openedBefore: false);
-      await _launch(tester, fresh, clock: clock);
-      expect(fresh.checkUpdateCalls, 0);
-      expect(fresh.appPrefs['updates.checked_at'], '${clock.now}');
-
-      clock.now += updateCheckPeriod - 1;
-      await _launch(tester, fresh, clock: clock);
-      expect(fresh.checkUpdateCalls, 0);
-
-      clock.now += 1;
-      await _launch(tester, fresh, clock: clock);
-      expect(fresh.checkUpdateCalls, 1);
-    });
-
-    testWidgets('a failed check counts: the next one is tomorrow', (
+  group('the sessions', () {
+    testWidgets('each launch opens one, and the core decides the rest', (
       tester,
     ) async {
-      final clock = _Clock();
-      final bridge = _bridge(latest: null);
-      await _launch(tester, bridge, clock: clock);
-      clock.now += 3600;
-      await _launch(tester, bridge, clock: clock);
-      expect(bridge.checkUpdateCalls, 1);
+      final bridge = _bridge(due: true);
+      await _launch(tester, bridge);
+      await _launch(tester, bridge);
+      expect(bridge.updates.sessions, 2);
+      expect(bridge.updates.checks, 1);
     });
 
     testWidgets('coming back from the background is a session too', (
       tester,
     ) async {
-      final clock = _Clock();
-      final bridge = _bridge();
-      await _launch(tester, bridge, clock: clock);
+      final bridge = _bridge(due: true);
+      await _launch(tester, bridge);
       expect(find.text(_line), findsNothing);
 
-      clock.now += updateCheckPeriod;
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pumpAndSettle();
       expect(find.text(_line), findsOneWidget);
-      expect(bridge.checkUpdateCalls, 2);
+      expect(bridge.updates.sessions, 2);
     });
 
-    testWidgets('asks nothing once turned off', (tester) async {
-      final bridge = _bridge(prefs: {'updates.auto': '0'});
+    testWidgets('the core asks nothing once turned off', (tester) async {
+      final bridge = _bridge(due: true)..updates.automatic = false;
       await _launch(tester, bridge);
       await _launch(tester, bridge);
-      expect(bridge.checkUpdateCalls, 0);
-    });
-
-    testWidgets('still asks while the node is an onion: the core routes it', (
-      tester,
-    ) async {
-      final bridge = _bridge(
-        backends: {
-          Network.mainnet: const CustomElectrum(url: 'tcp://abc.onion:50001'),
-        },
-      );
-      await _launch(tester, bridge);
-      expect(bridge.checkUpdateCalls, 1);
-    });
-
-    testWidgets('a Tor that is down says nothing and waits for tomorrow', (
-      tester,
-    ) async {
-      final clock = _Clock();
-      final bridge = _bridge()
-        ..onCheckUpdate = (_) =>
-            throw const BridgeException('tor', 'Tor is not reachable');
-      await _launch(tester, bridge, clock: clock);
-      expect(bridge.checkUpdateCalls, 1);
-      expect(bridge.appPrefs['updates.latest'], isNull);
-      await _launch(tester, bridge, clock: clock);
-      expect(bridge.checkUpdateCalls, 1);
+      expect(bridge.updates.checks, 0);
+      expect(find.textContaining('is available'), findsNothing);
     });
   });
 
@@ -590,7 +387,13 @@ void main() {
       await tester.tap(find.byType(Switch));
       await tester.pumpAndSettle();
       expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
-      expect(bridge.appPrefs['updates.auto'], '0');
+      expect(bridge.updates.automatic, isFalse);
+    });
+
+    testWidgets('reads the setting from the core', (tester) async {
+      final bridge = _bridge()..updates.automatic = false;
+      await open(tester, bridge);
+      expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
     });
 
     testWidgets('its own button opens the release page and nothing else', (
@@ -603,11 +406,10 @@ void main() {
 
       await tester.tap(find.text('Check for updates'));
       await tester.pumpAndSettle();
+      expect(bridge.updates.checks, 1);
       await tester.tap(find.text('Get 0.2.0'));
       await tester.pumpAndSettle();
       expect(launcher.launched, [_releases]);
-      // What an asked-for check finds is kept for the notice too.
-      expect(bridge.appPrefs['updates.latest'], '0.2.0');
     });
 
     testWidgets('a 0.x version is marked Beta, with a way to report a '
@@ -650,25 +452,46 @@ void main() {
     testWidgets('a Tor that is down is said as such, not as an outage', (
       tester,
     ) async {
-      final bridge = _bridge()
-        ..onCheckUpdate = (_) =>
-            throw const BridgeException('tor', 'Tor is not reachable');
+      final bridge = _bridge()..updates.torDown = true;
       await open(tester, bridge);
       await tester.tap(find.text('Check for updates'));
       await tester.pumpAndSettle();
+      expect(bridge.updates.checks, 0);
       expect(find.textContaining('Tor could not be reached'), findsOne);
       expect(find.textContaining('Could not reach the release'), findsNothing);
+
+      // A check that goes out takes the line away.
+      bridge.updates
+        ..torDown = false
+        ..finds = null;
+      await tester.tap(find.text('Check for updates'));
+      await tester.pumpAndSettle();
+      expect(find.text('You are up to date.'), findsOneWidget);
+      expect(find.textContaining('Tor could not be reached'), findsNothing);
     });
 
-    testWidgets('a tag that is not a version reads as up to date', (
+    testWidgets('says so when the daily check found Tor down', (tester) async {
+      final bridge = _bridge()..updates.torUnavailable = true;
+      await open(tester, bridge);
+      expect(find.textContaining('Tor could not be reached'), findsOne);
+    });
+
+    testWidgets('nothing newer reads as up to date, no answer as an outage', (
       tester,
     ) async {
-      final bridge = _bridge(latest: 'Get rich <now>');
+      final bridge = _bridge(finds: null);
       await open(tester, bridge);
       await tester.tap(find.text('Check for updates'));
       await tester.pumpAndSettle();
       expect(find.text('You are up to date.'), findsOneWidget);
-      expect(find.textContaining('rich'), findsNothing);
+
+      bridge.updates.offline = true;
+      await tester.tap(find.text('Check for updates'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Could not reach the release page. Try again later.'),
+        findsOneWidget,
+      );
     });
   });
 }

@@ -24,13 +24,14 @@ import 'notifications_test.dart' show FakeNotifications;
 
 const _serviceChannel = MethodChannel('gerfaut/live_service');
 
-const Map<String, String> _livePrefs = {
-  'notify.new_tx': '1',
-  'notify.background': 'live',
-};
+const Map<String, String> _livePrefs = {'notify.background': 'live'};
+
+/// The notice on, which Live is there to say.
+final _alertsOn = kPreferences.copyWith(notifyNewTx: true);
 
 FakeBridge _bridge({
   Map<String, String> prefs = _livePrefs,
+  Preferences? preferences,
   AppLock? lock,
   Network network = Network.signet,
   Map<Network, BackendConfig> backends = const {},
@@ -39,6 +40,7 @@ FakeBridge _bridge({
     // On the network in use: the one whose wallets Live watches.
     wallets: [makeMeta(network: network)],
     settings: Settings(
+      preferences: preferences ?? _alertsOn,
       activeNetwork: network,
       backends: backends,
       appPrefs: {...prefs},
@@ -171,7 +173,7 @@ class _HydratedSettingsState extends ConsumerState<_HydratedSettings> {
     Future.microtask(() async {
       final settings = await ref.read(settingsProvider.future);
       final prefs = settings.appPrefs;
-      ref.read(notifyNewTxProvider.notifier).hydrate(prefs['notify.new_tx']);
+      ref.read(preferencesProvider.notifier).hydrate(settings.preferences);
       ref.read(notifyDetailsProvider.notifier).hydrate(prefs['notify.details']);
       ref
           .read(backgroundCheckProvider.notifier)
@@ -227,29 +229,26 @@ void main() {
       await service.settle();
 
       final posted = service.notifications.posted;
-      expect(posted.map((p) => p.body), [
-        'Received ${formatAmount(5000, AmountUnit.btc)} · pending',
-        'Received ${formatAmount(5000, AmountUnit.btc)} · confirmed',
-      ]);
+      expect(posted.map((p) => p.body), ['aa · pending', 'aa · confirmed']);
       expect(posted.map((p) => p.title).toSet(), {'Cold storage'});
       // The confirmation replaces the arrival instead of stacking.
       expect(posted[0].id, posted[1].id);
     });
 
-    test('an exit says so', () async {
+    test('an exit reaches the core as it came', () async {
       final service = _Service(_bridge());
       await service.runner.run();
       service.bridge.liveController
         ..add(LiveTransaction(_live('bb', -7000)))
         ..add(LiveWalletSynced(_report()));
       await service.settle();
-      expect(
-        service.notifications.posted.single.body,
-        '${formatAmount(7000, AmountUnit.btc)} left this wallet · pending',
-      );
+      expect(service.bridge.noticeAsks.single.txs.single.netSats, -7000);
+      expect(service.notifications.posted.single.body, 'bb · pending');
     });
 
-    test('past three in one sync, the rest are counted', () async {
+    test('the transactions of one sync reach the core together', () async {
+      // The core says the first three and counts the rest, per sync: it
+      // has to be handed the sync whole.
       final service = _Service(_bridge());
       await service.runner.run();
       for (var i = 0; i < 5; i++) {
@@ -257,9 +256,14 @@ void main() {
       }
       service.bridge.liveController.add(LiveWalletSynced(_report()));
       await service.settle();
-      final bodies = service.notifications.posted.map((p) => p.body);
-      expect(bodies, hasLength(noticesPerWallet + 1));
-      expect(bodies.last, '2 more new transactions');
+      expect(service.bridge.noticeAsks.single.txs.map((tx) => tx.txid), [
+        'tx0',
+        'tx1',
+        'tx2',
+        'tx3',
+        'tx4',
+      ]);
+      expect(service.notifications.posted, hasLength(5));
     });
 
     test('a batch whose report never comes is said all the same', () async {
@@ -279,17 +283,15 @@ void main() {
 
     test('no amount while balances are masked', () async {
       final service = _Service(
-        _bridge(prefs: {..._livePrefs, 'mobile.masked': '1'}),
+        _bridge(preferences: _alertsOn.copyWith(masked: true)),
       );
       await service.runner.run();
       service.bridge.liveController
         ..add(LiveTransaction(_live('dd', 9000)))
         ..add(LiveWalletSynced(_report()));
       await service.settle();
-      expect(
-        service.notifications.posted.single.body,
-        'New transaction · pending',
-      );
+      expect(service.bridge.noticeAsks.single.context.masked, isTrue);
+      expect(service.notifications.posted, hasLength(1));
     });
 
     test('the wallet and the amount, app lock or not', () async {
@@ -301,12 +303,10 @@ void main() {
         ..add(LiveTransaction(_live('ee', -9000)))
         ..add(LiveWalletSynced(_report()));
       await service.settle();
-      final posted = service.notifications.posted.single;
-      expect(posted.title, 'Cold storage');
-      expect(
-        posted.body,
-        '${formatAmount(9000, AmountUnit.btc)} left this wallet · pending',
-      );
+      final context = service.bridge.noticeAsks.single.context;
+      expect(context.details, isTrue);
+      expect(context.names, {'w1': 'Cold storage'});
+      expect(service.notifications.posted.single.title, 'Cold storage');
     });
 
     test('no wallet and no amount once the details are off', () async {
@@ -318,9 +318,8 @@ void main() {
         ..add(LiveTransaction(_live('ee', -9000)))
         ..add(LiveWalletSynced(_report()));
       await service.settle();
-      final posted = service.notifications.posted.single;
-      expect(posted.title, 'Gerfaut');
-      expect(posted.body, 'New outgoing transaction · pending');
+      expect(service.bridge.noticeAsks.single.context.details, isFalse);
+      expect(service.notifications.posted, hasLength(1));
     });
 
     test('the details turned off under it are off at the next', () async {
@@ -331,35 +330,31 @@ void main() {
         ..add(LiveTransaction(_live('ee', 9000)))
         ..add(LiveWalletSynced(_report()));
       await service.settle();
-      final posted = service.notifications.posted.single;
-      expect(posted.title, 'Gerfaut');
-      expect(posted.body, 'New transaction · pending');
+      expect(service.bridge.noticeAsks.single.context.details, isFalse);
     });
 
     test('the unit is the one on screen', () async {
       final service = _Service(
-        _bridge(prefs: {..._livePrefs, 'display.unit': 'sats'}),
+        _bridge(preferences: _alertsOn.copyWith(unit: AmountUnit.sats)),
       );
       await service.runner.run();
       service.bridge.liveController
         ..add(LiveTransaction(_live('ff', 1234)))
         ..add(LiveWalletSynced(_report()));
       await service.settle();
-      expect(
-        service.notifications.posted.single.body,
-        'Received ${formatAmount(1234, AmountUnit.sats)} · pending',
-      );
+      expect(service.bridge.noticeAsks.single.context.unit, AmountUnit.sats);
     });
 
     test('nothing once the notice was turned off under it', () async {
       final service = _Service(_bridge());
       await service.runner.run();
-      service.bridge.appPrefs['notify.new_tx'] = '0';
+      service.bridge.preferences = kPreferences;
       service.bridge.liveController
         ..add(LiveTransaction(_live('gg', 1)))
         ..add(LiveWalletSynced(_report()));
       await service.settle();
       expect(service.notifications.posted, isEmpty);
+      expect(service.bridge.noticeAsks, isEmpty);
     });
   });
 
@@ -372,9 +367,7 @@ void main() {
         tester.pump(const Duration(minutes: 1));
 
     test('stands down when Live is not what the settings ask for', () async {
-      final service = _Service(
-        _bridge(prefs: {'notify.new_tx': '1', 'notify.background': '900'}),
-      );
+      final service = _Service(_bridge(prefs: {'notify.background': '900'}));
       await service.runner.run();
       expect(service.bridge.liveStartCalls, 0);
       expect(service.told.single.$1, 'standDown');
@@ -726,11 +719,7 @@ void main() {
 
     test('says nothing of the wallet with the details off', () async {
       final bridge = _bridge(
-        prefs: {
-          'notify.new_tx': '1',
-          'notify.background': '900',
-          'notify.details': '0',
-        },
+        prefs: {'notify.background': '900', 'notify.details': '0'},
         lock: const AppLock(kind: LockKind.pin, biometric: false),
       )..syncedIds.add('w1');
       final pending = _report(
@@ -744,14 +733,13 @@ void main() {
         bootstrap: () async {},
         isDisguised: () async => false,
       );
-      final posted = notifications.posted.single;
-      expect(posted.title, 'Gerfaut');
-      expect(posted.body, 'New transaction · pending');
+      expect(notifications.posted, hasLength(1));
+      expect(bridge.noticeAsks.single.context.details, isFalse);
     });
 
     test('names the wallet under an app lock, details on', () async {
       final bridge = _bridge(
-        prefs: {'notify.new_tx': '1', 'notify.background': '900'},
+        prefs: {'notify.background': '900'},
         lock: const AppLock(kind: LockKind.pin, biometric: false),
       )..syncedIds.add('w1');
       final pending = _report(
@@ -765,18 +753,13 @@ void main() {
         bootstrap: () async {},
         isDisguised: () async => false,
       );
-      final posted = notifications.posted.single;
-      expect(posted.title, 'Cold storage');
-      expect(
-        posted.body,
-        'Received ${formatAmount(5000, AmountUnit.btc)} · pending',
-      );
+      expect(notifications.posted.single.title, 'Cold storage');
+      expect(bridge.noticeAsks.single.context.details, isTrue);
     });
 
     test('syncs as before at a periodic cadence', () async {
-      final bridge = _bridge(
-        prefs: {'notify.new_tx': '1', 'notify.background': '900'},
-      )..watchStatus = const LiveWatchStatus(state: WatchState.connected);
+      final bridge = _bridge(prefs: {'notify.background': '900'})
+        ..watchStatus = const LiveWatchStatus(state: WatchState.connected);
       await check(bridge);
       expect(bridge.syncAllCalls, 1);
     });
@@ -801,7 +784,7 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
-      container.read(notifyNewTxProvider.notifier).hydrate(notify ? '1' : '0');
+      holdPreferences(container, PreferencesChange(notifyNewTx: notify));
       return container;
     }
 
@@ -862,10 +845,7 @@ void main() {
       await check(pending);
       await check(mined);
       await check(mined);
-      expect(net.posted.map((p) => p.body), [
-        'Received ${formatAmount(5000, AmountUnit.btc)} · pending',
-        'Received ${formatAmount(5000, AmountUnit.btc)} · confirmed',
-      ]);
+      expect(net.posted.map((p) => p.body), ['aa · pending', 'aa · confirmed']);
     });
 
     test('by a pull to refresh, then not by the watch', () async {
@@ -909,6 +889,7 @@ void main() {
           makeMeta(id: 'w2', name: 'Spending'),
         ],
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: {},
           appPrefs: {},
@@ -996,59 +977,23 @@ void main() {
   });
 
   group('a payment that is no longer coming', () {
-    List<String> said(
-      List<LiveTx> txs, {
-      bool masked = false,
-      bool details = true,
-      AmountUnit unit = AmountUnit.btc,
-    }) => NewTxAnnouncer.compose(
-      txs,
-      walletNames: const {'w1': 'Cold storage'},
-      unit: unit,
-      masked: masked,
-      details: details,
-    ).map((notice) => notice.body).toList();
-
-    test('names the amount, in the unit on screen', () {
-      final gone = _live('gone', 150000, stage: TxStage.dropped);
-      expect(said([gone]), [
-        'A pending payment of ${formatAmount(150000, AmountUnit.btc)} is no '
-            'longer coming',
+    test('is posted in the place of the arrival it takes back', () async {
+      final service = _Service(_bridge());
+      await service.runner.run();
+      service.bridge.liveController
+        ..add(LiveTransaction(_live('aa', 150000)))
+        ..add(LiveWalletSynced(_report()));
+      await service.settle();
+      service.bridge.liveController
+        ..add(LiveTransaction(_live('aa', 150000, stage: TxStage.dropped)))
+        ..add(LiveWalletSynced(_report()));
+      await service.settle();
+      final posted = service.notifications.posted;
+      expect(posted.map((p) => p.body), [
+        'aa · pending',
+        'aa · no longer coming',
       ]);
-      expect(said([gone]).single, contains('0.00150000 BTC'));
-      expect(
-        said([gone], unit: AmountUnit.sats).single,
-        isNot(contains('BTC')),
-      );
-    });
-
-    test('says no amount while hidden', () {
-      expect(
-        said([_live('gone', 150000, stage: TxStage.dropped)], masked: true),
-        ['A pending payment is no longer coming'],
-      );
-    });
-
-    test('takes the place of the arrival it takes back', () {
-      final notices = NewTxAnnouncer.compose(
-        [_live('aa', 150000), _live('aa', 150000, stage: TxStage.dropped)],
-        walletNames: const {'w1': 'Cold storage'},
-        unit: AmountUnit.btc,
-        masked: false,
-        details: true,
-      );
-      expect(notices.map((n) => n.id).toSet(), hasLength(1));
-      expect(notices.map((n) => n.title).toSet(), {'Cold storage'});
-    });
-
-    test('is never folded into the count of the rest', () {
-      final bodies = said([
-        for (var i = 0; i < 6; i++) _live('tx$i', 1000),
-        _live('gone', 150000, stage: TxStage.dropped),
-      ]);
-      expect(bodies, hasLength(noticesPerWallet + 2));
-      expect(bodies[noticesPerWallet], '3 more new transactions');
-      expect(bodies.last, contains('is no longer coming'));
+      expect(posted[0].id, posted[1].id);
     });
 
     test(
@@ -1062,11 +1007,10 @@ void main() {
           ..add(LiveTransaction(_live('gone', 150000, stage: TxStage.dropped)))
           ..add(LiveWalletSynced(_report()));
         await service.settle();
-        expect(
-          service.notifications.posted.single.body,
-          'A pending payment is no longer coming',
-        );
-        expect(service.notifications.posted.single.title, 'Gerfaut');
+        final asked = service.bridge.noticeAsks.single;
+        expect(asked.txs.single.stage, TxStage.dropped);
+        expect(asked.context.details, isFalse);
+        expect(service.notifications.posted, hasLength(1));
       },
     );
   });
@@ -1160,16 +1104,30 @@ void main() {
   });
 
   group('what Live leaves to the syncs', () {
+    const any = WatchLimits(perWallet: 200, total: 2000);
+    const own = WatchLimits(perWallet: 20000, total: 20000);
+    const capped = LiveLeftOut(
+      reason: LeftOutReason.liveLimit,
+      limits: any,
+      remedy: OwnNodeRemedy(own),
+    );
     const short = LiveWatchStatus(
       state: WatchState.connected,
       watchedScripts: 2000,
       pushedScripts: 2000,
       leftOutScripts: 1240,
       leftOutWallets: 2,
+      leftOut: capped,
+    );
+    LiveWatchStatus judged(LiveLeftOut leftOut) => LiveWatchStatus(
+      state: WatchState.connected,
+      leftOutScripts: 1240,
+      leftOutWallets: 2,
+      leftOut: leftOut,
     );
 
-    test('a public server: how many wait, and what lifts the limit', () {
-      final note = liveCoverageNote(short, ownNode: false)!;
+    test('the limits of Live: how many wait, and what lifts them', () {
+      final note = liveCoverageNote(short)!;
       expect(
         note.fact,
         'Live follows at most 200 addresses per wallet and 2 000 in all. '
@@ -1182,16 +1140,15 @@ void main() {
       );
     });
 
-    test('a node already declared, its list full: the limit alone', () {
+    test('at the limits of a declared node: the limit alone', () {
       final note = liveCoverageNote(
-        const LiveWatchStatus(
-          state: WatchState.connected,
-          watchedScripts: 20000,
-          pushedScripts: 20000,
-          leftOutScripts: 1240,
-          leftOutWallets: 2,
+        judged(
+          const LiveLeftOut(
+            reason: LeftOutReason.liveLimit,
+            limits: own,
+            ownNode: true,
+          ),
         ),
-        ownNode: true,
       )!;
       expect(
         note.fact,
@@ -1201,107 +1158,64 @@ void main() {
       expect(note.remedy, isNull);
     });
 
-    test('a node that refused some: the setting of its software', () {
-      LiveWatchStatus refusedBy(String? software) => LiveWatchStatus(
-        state: WatchState.connected,
-        watchedScripts: 12000,
-        pushedScripts: 10000,
-        leftOutScripts: 2000,
-        leftOutWallets: 1,
-        serverSoftware: software,
-      );
-      final fulcrum = liveCoverageNote(
-        refusedBy('Fulcrum 1.12.0'),
-        ownNode: true,
+    test('a server that refused some is blamed, not the limits', () {
+      final public = liveCoverageNote(
+        judged(
+          const LiveLeftOut(
+            reason: LeftOutReason.serverRefused,
+            limits: any,
+            remedy: OwnNodeRemedy(own),
+          ),
+        ),
       )!;
       expect(
-        fulcrum.fact,
-        'Your node refuses some of the addresses Live asks it to follow. '
-        '2 000 addresses of 1 wallet are checked at the next sync instead.',
+        public.fact,
+        'The server refuses some of the addresses Live asks it to follow. '
+        '1 240 addresses of 2 wallets are checked at the next sync instead.',
       );
-      expect(fulcrum.remedy, contains('max_subs_per_ip'));
+      expect(public.remedy, contains('"This is my node"'));
+      final node = liveCoverageNote(
+        judged(
+          const LiveLeftOut(
+            reason: LeftOutReason.serverRefused,
+            limits: own,
+            ownNode: true,
+            remedy: RaiseServerLimit(
+              server: ServerSoftware.fulcrum,
+              settings: ['max_subs_per_ip'],
+            ),
+          ),
+        ),
+      )!;
+      expect(node.fact, startsWith('Your node refuses some of the addresses'));
       expect(
-        liveCoverageNote(refusedBy('ElectrumX 1.18.0'), ownNode: true)!.remedy,
-        contains('COST_SOFT_LIMIT and COST_HARD_LIMIT'),
-      );
-      expect(
-        liveCoverageNote(
-          refusedBy('electrs-esplora 0.4.1'),
-          ownNode: true,
-        )!.remedy,
-        contains('--electrum-subscription-limit'),
-      );
-      expect(
-        liveCoverageNote(
-          refusedBy('mempool-electrs 3.1.0'),
-          ownNode: true,
-        )!.remedy,
-        contains('--electrum-max-subscriptions'),
-      );
-      // electrs as its author publishes it has no limit to raise.
-      expect(
-        liveCoverageNote(refusedBy('electrs/0.10.9'), ownNode: true)!.remedy,
-        isNull,
-      );
-      expect(
-        liveCoverageNote(refusedBy(null), ownNode: true)!.remedy,
-        'Raise the subscription limit of your server to follow them all.',
+        node.remedy,
+        'Raise max_subs_per_ip in the Fulcrum configuration to follow them '
+        'all.',
       );
     });
 
-    test('a public server that refuses is blamed, not the limits', () {
-      // mempool.space's Electrum takes 100 subscriptions a connection: a
-      // list of 150, far under the limits, leaves 50 out.
-      const refusing = LiveWatchStatus(
-        state: WatchState.connected,
-        watchedScripts: 150,
-        pushedScripts: 100,
-        leftOutScripts: 50,
-        leftOutWallets: 1,
-        wallets: [
-          WalletCoverage(
-            walletId: 'w-1',
-            coverage: Coverage.partial,
-            watchedScripts: 100,
-            leftOutScripts: 50,
-          ),
-        ],
-      );
-      expect(serverRefused(refusing), isTrue);
-      final note = liveCoverageNote(refusing, ownNode: false)!;
+    test('the setting the core names, the way its software calls it', () {
+      String raise(ServerSoftware? server, List<String> settings) =>
+          liveRemedyWords(RaiseServerLimit(server: server, settings: settings));
       expect(
-        note.fact,
-        'The server refuses some of the addresses Live asks it to follow. '
-        '50 addresses of 1 wallet are checked at the next sync instead.',
+        raise(ServerSoftware.electrumx, ['COST_SOFT_LIMIT', 'COST_HARD_LIMIT']),
+        'Raise COST_SOFT_LIMIT and COST_HARD_LIMIT in the ElectrumX settings '
+        'to follow them all.',
       );
-      expect(note.remedy, contains('"This is my node"'));
-
-      // Every address heard, one of them by two wallets: past the caps,
-      // not refused.
-      const capped = LiveWatchStatus(
-        state: WatchState.connected,
-        watchedScripts: 3,
-        leftOutScripts: 50,
-        leftOutWallets: 1,
-        wallets: [
-          WalletCoverage(
-            walletId: 'w-1',
-            coverage: Coverage.partial,
-            watchedScripts: 2,
-            leftOutScripts: 50,
-          ),
-          WalletCoverage(
-            walletId: 'w-2',
-            coverage: Coverage.live,
-            watchedScripts: 2,
-            leftOutScripts: 0,
-          ),
-        ],
-      );
-      expect(serverRefused(capped), isFalse);
       expect(
-        liveCoverageNote(capped, ownNode: false)!.fact,
-        startsWith('Live follows at most'),
+        raise(ServerSoftware.electrsEsplora, ['--electrum-subscription-limit']),
+        'Raise --electrum-subscription-limit on this electrs to follow them '
+        'all.',
+      );
+      expect(
+        raise(ServerSoftware.mempoolElectrs, ['--electrum-max-subscriptions']),
+        'Raise --electrum-max-subscriptions on this electrs to follow them '
+        'all.',
+      );
+      expect(
+        raise(null, const []),
+        'Raise the subscription limit of your server to follow them all.',
       );
     });
 
@@ -1311,8 +1225,8 @@ void main() {
           state: WatchState.polling,
           leftOutScripts: 1,
           leftOutWallets: 1,
+          leftOut: capped,
         ),
-        ownNode: false,
       )!;
       expect(
         note.fact,
@@ -1320,19 +1234,15 @@ void main() {
       );
     });
 
-    test('nothing to say while every address is followed or Live is off', () {
+    test('nothing to say without a verdict of the core', () {
       expect(
-        liveCoverageNote(
-          const LiveWatchStatus(state: WatchState.connected),
-          ownNode: false,
-        ),
+        liveCoverageNote(const LiveWatchStatus(state: WatchState.connected)),
         isNull,
       );
-      // Off, the counts are zero; a stale one is not believed either.
+      // Counts without a verdict are not believed either.
       expect(
         liveCoverageNote(
           const LiveWatchStatus(leftOutScripts: 10, leftOutWallets: 1),
-          ownNode: false,
         ),
         isNull,
       );
@@ -1368,25 +1278,15 @@ void main() {
       expect(find.textContaining('"This is my node"'), findsOneWidget);
     });
 
-    testWidgets('on a declared node with its list full, no remedy', (
-      tester,
-    ) async {
-      final bridge =
-          _bridge(
-              backends: const {
-                Network.signet: CustomElectrum(
-                  url: 'ssl://node.local:50002',
-                  ownNode: true,
-                ),
-              },
-            )
-            ..watchStatus = const LiveWatchStatus(
-              state: WatchState.connected,
-              watchedScripts: 20000,
-              pushedScripts: 20000,
-              leftOutScripts: 1240,
-              leftOutWallets: 2,
-            );
+    testWidgets('at the limits of a declared node, no remedy', (tester) async {
+      final bridge = _bridge()
+        ..watchStatus = judged(
+          const LiveLeftOut(
+            reason: LeftOutReason.liveLimit,
+            limits: own,
+            ownNode: true,
+          ),
+        );
       final platform = FakeLivePlatform(
         running: true,
         wanted: true,
@@ -1418,7 +1318,7 @@ void main() {
   });
 
   group('choosing Live', () {
-    const onPrefs = {'notify.new_tx': '1', 'notify.background': '900'};
+    const onPrefs = {'notify.background': '900'};
 
     testWidgets('explains first, and "Not now" changes nothing', (
       tester,
@@ -1765,11 +1665,7 @@ void main() {
       tester,
     ) async {
       final bridge = _bridge(
-        prefs: {
-          'notify.new_tx': '1',
-          'notify.background': '900',
-          'notify.details': '0',
-        },
+        prefs: {'notify.background': '900', 'notify.details': '0'},
       );
       final platform = FakeLivePlatform();
       await _open(
@@ -1817,9 +1713,7 @@ void main() {
     testWidgets('the switch reads off, and the choice is back after', (
       tester,
     ) async {
-      final bridge = _bridge(
-        prefs: {'notify.new_tx': '1', 'notify.background': '900'},
-      );
+      final bridge = _bridge(prefs: {'notify.background': '900'});
       await _open(
         tester,
         _settings(
@@ -1840,7 +1734,7 @@ void main() {
       );
       // Only drawn off: the choice the user made is still the one held.
       expect(container.read(notifyNewTxProvider), isTrue);
-      expect(bridge.appPrefs.containsKey('notify.new_tx'), isFalse);
+      expect(bridge.preferencesChanges, isEmpty);
 
       await container.read(disguiseProvider.notifier).set(false);
       await tester.pumpAndSettle();
@@ -1850,9 +1744,7 @@ void main() {
     });
 
     testWidgets('without the disguise, nothing says it', (tester) async {
-      final bridge = _bridge(
-        prefs: {'notify.new_tx': '1', 'notify.background': '900'},
-      );
+      final bridge = _bridge(prefs: {'notify.background': '900'});
       await _open(tester, _settings(bridge, platform: FakeLivePlatform()));
       expect(find.textContaining('while the app is disguised'), findsNothing);
       final notify = tester.widget<SettingSwitch>(
@@ -1877,7 +1769,7 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
-      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      holdPreferences(container, const PreferencesChange(notifyNewTx: true));
       container.read(backgroundCheckProvider.notifier).hydrate('live');
 
       await container.read(disguiseProvider.notifier).set(true);
@@ -1999,7 +1891,7 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
-      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      holdPreferences(container, const PreferencesChange(notifyNewTx: true));
       container.read(backgroundCheckProvider.notifier).hydrate('live');
       return container;
     }
@@ -2100,9 +1992,7 @@ void main() {
     });
 
     test('a hold left behind is ended where Live is not chosen', () async {
-      final bridge = _bridge(
-        prefs: {'notify.new_tx': '1', 'notify.background': '3600'},
-      );
+      final bridge = _bridge(prefs: {'notify.background': '3600'});
       final platform = FakeLivePlatform(held: true);
       final notices = FakeNotifications();
       final container = withNotices(bridge, platform, notices);
@@ -2119,7 +2009,7 @@ void main() {
       final platform = FakeLivePlatform(running: true, wanted: true);
       final notices = FakeNotifications()..deliverableNow = false;
       final container = withNotices(bridge, platform, notices);
-      container.read(notifyNewTxProvider.notifier).hydrate('0');
+      holdPreferences(container, const PreferencesChange(notifyNewTx: false));
 
       await container.read(notifyNewTxProvider.notifier).checkSystem();
       expect(container.read(notificationsRefusedProvider), isFalse);
@@ -2129,9 +2019,7 @@ void main() {
     testWidgets('the settings say it, with a way to the system page', (
       tester,
     ) async {
-      final bridge = _bridge(
-        prefs: {'notify.new_tx': '1', 'notify.background': '900'},
-      );
+      final bridge = _bridge(prefs: {'notify.background': '900'});
       final platform = FakeLivePlatform();
       await _open(tester, _settings(bridge, platform: platform));
       ProviderScope.containerOf(tester.element(find.byType(SettingsScreen)))
@@ -2162,7 +2050,7 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
-      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      holdPreferences(container, const PreferencesChange(notifyNewTx: true));
       container.read(backgroundCheckProvider.notifier).hydrate('live');
       return container;
     }
@@ -2260,7 +2148,7 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
-      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      holdPreferences(container, const PreferencesChange(notifyNewTx: true));
       container.read(backgroundCheckProvider.notifier).hydrate('live');
       return container;
     }
@@ -2348,7 +2236,7 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
-      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      holdPreferences(container, const PreferencesChange(notifyNewTx: true));
       container.read(backgroundCheckProvider.notifier).hydrate('live');
       await container.read(notifyNewTxProvider.notifier).set(false);
       expect(platform.calls, ['stop']);
@@ -2437,14 +2325,30 @@ void main() {
                     'coverage': 'sync_only',
                     'watched_scripts': 0,
                     'left_out_scripts': 200,
+                    'refused_scripts': 200,
                   },
                 ],
+                'left_out': {
+                  'reason': 'server_refused',
+                  'limits': {'per_wallet': 200, 'total': 2000},
+                  'own_node': false,
+                  'remedy': {
+                    'type': 'own_node',
+                    'limits': {'per_wallet': 20000, 'total': 20000},
+                  },
+                },
               })!
               as LiveStatusChanged;
       final status = event.status;
       expect(status.leftOutScripts, 1240);
       expect(status.leftOutWallets, 2);
       expect(status.leavesSomeOut, isTrue);
+      expect(status.leftOut!.reason, LeftOutReason.serverRefused);
+      expect(status.leftOut!.limits.perWallet, 200);
+      expect(status.leftOut!.ownNode, isFalse);
+      expect((status.leftOut!.remedy! as OwnNodeRemedy).limits.total, 20000);
+      expect(status.coverageOf('w3')!.refusedScripts, 200);
+      expect(status.coverageOf('w1')!.refusedScripts, 0);
       expect(status.coverageOf('w1')!.coverage, Coverage.partial);
       expect(status.coverageOf('w1')!.leftOutScripts, 1040);
       expect(status.coverageOf('w2')!.coverage, Coverage.live);
@@ -2463,6 +2367,36 @@ void main() {
       expect(status.leavesSomeOut, isFalse);
       // A coverage a newer core names is never taken for live.
       expect(Coverage.fromId('something_newer'), Coverage.syncOnly);
+    });
+
+    test('the verdict names the setting of a node, or none it knows', () {
+      LiveLeftOut verdict(Map<String, dynamic> remedy) => LiveLeftOut.fromJson({
+        'reason': 'server_refused',
+        'limits': {'per_wallet': 20000, 'total': 20000},
+        'own_node': true,
+        'remedy': remedy,
+      })!;
+      final electrumx =
+          verdict({
+                'type': 'raise_server_limit',
+                'server': 'electrumx',
+                'settings': ['COST_SOFT_LIMIT', 'COST_HARD_LIMIT'],
+              }).remedy!
+              as RaiseServerLimit;
+      expect(electrumx.server, ServerSoftware.electrumx);
+      expect(electrumx.settings, ['COST_SOFT_LIMIT', 'COST_HARD_LIMIT']);
+      final unknown =
+          verdict({
+                'type': 'raise_server_limit',
+                'server': null,
+                'settings': <String>[],
+              }).remedy!
+              as RaiseServerLimit;
+      expect(unknown.server, isNull);
+      expect(unknown.settings, isEmpty);
+      // A way out a newer core names is not offered.
+      expect(verdict({'type': 'something_newer'}).remedy, isNull);
+      expect(LiveLeftOut.fromJson(null), isNull);
     });
   });
 }

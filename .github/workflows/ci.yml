@@ -3,9 +3,11 @@ name: CI
 # Flutter formatting, analysis and widget tests, the Rust crate's
 # formatting, Clippy pass and tests, and the checks of the signing
 # script, on every push to main, every pull request, and on demand
-# (Actions, CI, Run workflow). The crate depends on the sibling
-# gerfaut-core checkout, which is public: no key reads it. The APKs
-# themselves are built by the release workflow.
+# (Actions, CI, Run workflow). Both the crate and the widget tests need
+# the sibling gerfaut-core checkout, at the revision
+# reproducible/gerfaut-core.rev pins: the crate builds against it, the
+# tests read its reference JSON (test/core_fixtures.dart). It is public:
+# no key reads it. The APKs themselves are built by the release workflow.
 on:
   push:
     branches: [main]
@@ -23,7 +25,21 @@ jobs:
       # to GitHub, and the steps below run third-party code.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          path: gerfaut-mobile
           persist-credentials: false
+
+      - name: Read the pinned gerfaut-core revision
+        id: core
+        run: echo "rev=$(cat gerfaut-mobile/reproducible/gerfaut-core.rev)" >> "$GITHUB_OUTPUT"
+
+      # Only its reference JSON is read here: nothing of it runs.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: gerfaut-wallet/gerfaut-core
+          ref: ${{ steps.core.outputs.rev }}
+          path: gerfaut-core
+          persist-credentials: false
+
       # The Flutter the release builds with (reproducible/Dockerfile): a
       # green run on another one says little about the APK.
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
@@ -32,11 +48,15 @@ jobs:
           flutter-version: 3.47.1
           cache: true
       - run: flutter pub get
+        working-directory: gerfaut-mobile
       - name: Format
+        working-directory: gerfaut-mobile
         run: dart format --output=none --set-exit-if-changed lib test
       - name: Analyze
+        working-directory: gerfaut-mobile
         run: flutter analyze
       - name: Test
+        working-directory: gerfaut-mobile
         run: flutter test
 
   rust:

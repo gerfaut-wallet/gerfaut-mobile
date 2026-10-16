@@ -5,6 +5,7 @@
 
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_rust_bridge/flutter_rust_bridge.dart'
     show PanicException;
 
@@ -13,11 +14,14 @@ import 'rust/api.dart' as rust;
 
 /// Error surfaced by the core, with a stable machine-readable kind.
 ///
-/// Kinds match the desktop app: unrecognized_input, private_material,
-/// invalid_input, network_mismatch, wallet_not_found, duplicate_wallet,
-/// vault, vault_in_use, sync, backend_unavailable, broadcast, descriptor,
-/// tor, internal — plus the bridge-level not_initialized, bad_key and
-/// bad_json.
+/// A failure of the core comes under the core's own code (`ErrorCode`
+/// in gerfaut-core), the one the desktop app reads too:
+/// unrecognized_input, private_material, invalid_input, too_many_parts,
+/// network_mismatch, wallet_not_found, duplicate_wallet, wrong_key,
+/// vault_in_use, vault, unreadable_backup, newer_format, sync,
+/// broadcast, backend_unavailable, tor, descriptor, internal. The
+/// bridge adds its own: not_initialized, bad_key, bad_json, random and
+/// live_running.
 class BridgeException implements Exception {
   const BridgeException(this.kind, this.message);
 
@@ -58,8 +62,8 @@ Future<String> guardPanics(Future<String> call) async {
 String materialRefusal(BridgeException error, {bool backup = false}) {
   return switch (error.kind) {
     'private_material' when backup =>
-      'This backup holds a private key, and Gerfaut only watches: nothing '
-          'was restored.',
+      'A wallet in this backup holds a private key, and Gerfaut only '
+          'watches: nothing was restored.',
     'private_material' =>
       'This holds a private key, and Gerfaut only watches: nothing was '
           'saved. Bring the public descriptor or extended public key '
@@ -153,9 +157,39 @@ abstract class GerfautBridge {
   /// Drops an accepted certificate, keyed by `host:port`: the next
   /// connection to that host asks again.
   Future<void> forgetCertificate(String host);
+
+  /// Stores one preference of this app alone.
   Future<void> setAppPref(String key, String value);
-  Future<PriceQuote> fetchPrice(PriceSource source, FiatCurrency currency);
-  Future<UpdateCheck> checkUpdate(String currentVersion);
+
+  /// Changes some of the preferences both apps keep, and answers them
+  /// all as the vault stored them: the currency wins, the source
+  /// follows.
+  Future<Preferences> setPreferences(PreferencesChange change);
+
+  /// The currencies and price sources on offer, and how often the price
+  /// is asked.
+  Future<PriceTable> priceTable();
+
+  /// The current BTC price, in the currency and from the source of the
+  /// preferences.
+  Future<PriceQuote> fetchPrice();
+
+  /// What to say about releases to someone running [currentVersion].
+  /// Reads only.
+  Future<UpdateStatus> updateStatus(String currentVersion);
+
+  /// The wallets came on screen, unlocked and not disguised: the core
+  /// asks for the latest release if a check is due.
+  Future<UpdateStatus> updateSession(String currentVersion);
+
+  /// The button in About: asks for the latest release now, due or not.
+  Future<UpdateStatus> checkUpdate(String currentVersion);
+
+  /// Closes the notice on the release it announced.
+  Future<void> dismissUpdate(String version);
+
+  /// Turns the daily check on or off.
+  Future<void> setUpdateAutomatic(bool automatic);
 
   /// Decodes a transaction somebody else signed (PSBT as base64, hex or
   /// a binary file passed as hex; raw transaction as hex; a UR or BBQr
@@ -170,6 +204,14 @@ abstract class GerfautBridge {
 
   /// Where a broadcast transaction stands as the backend sees it.
   Future<BroadcastStatus> transactionStatus(Network network, String hex);
+
+  /// The last transactions sent on [network], newest first, as the
+  /// vault keeps them.
+  Future<List<RecentBroadcast>> recentBroadcasts(Network network);
+
+  /// Drops the vault's record of a broadcast; the transaction itself is
+  /// on the network and untouched.
+  Future<void> forgetBroadcast(String txid);
 
   /// Classifies wallet material with the advanced choices (script type,
   /// derivation paths). Inputs that fix their own ignore them.
@@ -234,6 +276,10 @@ abstract class GerfautBridge {
   /// Where the watch stands; off when none runs.
   Future<LiveWatchStatus> liveStatus();
 
+  /// What the watch takes on any server and on the user's own node, for
+  /// the words under "This is my node".
+  Future<WatchLimitsChoice> liveLimits();
+
   /// What the running watch says for the screens: its status, the
   /// wallets it synced, blocks, its end. Never a transaction to
   /// announce: those go to the caller of [liveRun] alone. Any number of
@@ -246,6 +292,13 @@ abstract class GerfautBridge {
   /// what it returns or drops it on purpose, since nothing returned is
   /// ever returned again.
   Future<List<LiveTx>> claimAnnouncements(String walletId);
+
+  /// What [txs] amount to, as notifications ready to post, in order:
+  /// the core composes the words, the desktop app's, from what [context]
+  /// lets them say, and counts them against the budget it keeps for the
+  /// whole process, twenty a minute. Ask only for what is about to be
+  /// posted.
+  Future<List<TxNotice>> liveNotices(List<LiveTx> txs, NoticeContext context);
 
   /// Whether anything this app sends has to go through Tor.
   Future<bool> usesTor();
@@ -268,6 +321,11 @@ class RustBridge implements GerfautBridge {
     }
     return decoded;
   }
+
+  /// The same, for the test that reads the core's failures the way
+  /// the bridge hands them over.
+  @visibleForTesting
+  static dynamic decode(String raw) => _decode(raw);
 
   static Map<String, dynamic> _object(String raw) =>
       _decode(raw) as Map<String, dynamic>;
@@ -475,20 +533,51 @@ class RustBridge implements GerfautBridge {
   }
 
   @override
-  Future<PriceQuote> fetchPrice(
-    PriceSource source,
-    FiatCurrency currency,
-  ) async {
+  Future<Preferences> setPreferences(PreferencesChange change) async {
     final raw = await _guard(
-      rust.fetchPrice(source: source.id, currency: currency.id),
+      rust.setPreferences(changeJson: jsonEncode(change.toJson())),
     );
-    return PriceQuote.fromJson(_object(raw));
+    return Preferences.fromJson(_object(raw));
   }
 
   @override
-  Future<UpdateCheck> checkUpdate(String currentVersion) async {
+  Future<PriceTable> priceTable() async {
+    return PriceTable.fromJson(_object(await _guard(rust.priceTable())));
+  }
+
+  @override
+  Future<PriceQuote> fetchPrice() async {
+    return PriceQuote.fromJson(_object(await _guard(rust.fetchPrice())));
+  }
+
+  @override
+  Future<UpdateStatus> updateStatus(String currentVersion) async {
+    final raw = await _guard(rust.updateStatus(currentVersion: currentVersion));
+    return UpdateStatus.fromJson(_object(raw));
+  }
+
+  @override
+  Future<UpdateStatus> updateSession(String currentVersion) async {
+    final raw = await _guard(
+      rust.updateSession(currentVersion: currentVersion),
+    );
+    return UpdateStatus.fromJson(_object(raw));
+  }
+
+  @override
+  Future<UpdateStatus> checkUpdate(String currentVersion) async {
     final raw = await _guard(rust.checkUpdate(currentVersion: currentVersion));
-    return UpdateCheck.fromJson(_object(raw));
+    return UpdateStatus.fromJson(_object(raw));
+  }
+
+  @override
+  Future<void> dismissUpdate(String version) async {
+    _ok(await _guard(rust.dismissUpdate(version: version)));
+  }
+
+  @override
+  Future<void> setUpdateAutomatic(bool automatic) async {
+    _ok(await _guard(rust.setUpdateAutomatic(automatic: automatic)));
   }
 
   @override
@@ -516,6 +605,17 @@ class RustBridge implements GerfautBridge {
       rust.transactionStatus(network: network.id, hex: hex),
     );
     return BroadcastStatus.fromJson(_object(raw));
+  }
+
+  @override
+  Future<List<RecentBroadcast>> recentBroadcasts(Network network) async {
+    final raw = await _guard(rust.recentBroadcasts(network: network.id));
+    return _list(raw).map(RecentBroadcast.fromJson).toList();
+  }
+
+  @override
+  Future<void> forgetBroadcast(String txid) async {
+    _ok(await _guard(rust.forgetBroadcast(txid: txid)));
   }
 
   @override
@@ -669,6 +769,11 @@ class RustBridge implements GerfautBridge {
   }
 
   @override
+  Future<WatchLimitsChoice> liveLimits() async {
+    return WatchLimitsChoice.fromJson(_object(await _guard(rust.liveLimits())));
+  }
+
+  @override
   Stream<LiveEvent> liveEvents() async* {
     await for (final raw in rust.liveEvents()) {
       final LiveEvent? event;
@@ -686,6 +791,20 @@ class RustBridge implements GerfautBridge {
   Future<List<LiveTx>> claimAnnouncements(String walletId) async {
     final raw = await _guard(rust.claimAnnouncements(walletId: walletId));
     return _list(raw).map(LiveTx.fromJson).toList();
+  }
+
+  @override
+  Future<List<TxNotice>> liveNotices(
+    List<LiveTx> txs,
+    NoticeContext context,
+  ) async {
+    final raw = await _guard(
+      rust.liveNotices(
+        txsJson: jsonEncode([for (final tx in txs) tx.toJson()]),
+        contextJson: jsonEncode(context.toJson()),
+      ),
+    );
+    return _list(raw).map(TxNotice.fromJson).toList();
   }
 
   @override

@@ -3,7 +3,9 @@
 //! Every function takes and returns strings carrying JSON, keeping the
 //! Dart side decoupled from the core types: success payloads mirror the
 //! core structures serialized with serde, failures serialize to
-//! `{"error": {"kind": "...", "message": "..."}}`. A panic is not one of
+//! `{"error": {"kind": "...", "message": "..."}}`, where a failure of
+//! the core has the core's own code (`ErrorCode`) as its kind and the
+//! few kinds this bridge adds are its own. A panic is not one of
 //! those: flutter_rust_bridge catches it at the boundary and raises it on
 //! the Dart side as an error of its own, outside this shape, so the Dart
 //! code must be ready for a failure that carries no `kind`.
@@ -12,12 +14,13 @@ use crate::frb_generated::StreamSink;
 use gerfaut_core::backup::{BackupOptions, ImportChoices};
 use gerfaut_core::chain::BackendConfig;
 use gerfaut_core::chain::tor::TorSettings;
-use gerfaut_core::error::VaultError;
 use gerfaut_core::export::ExportOptions;
 use gerfaut_core::input::{ImportOptions, ParsedInput, ScriptKind};
 use gerfaut_core::live::LiveEvent;
+use gerfaut_core::live::LiveTx;
+use gerfaut_core::live::notice;
 use gerfaut_core::lock::LockKind;
-use gerfaut_core::price::{FiatCurrency, PriceSource};
+use gerfaut_core::prefs::PreferencesChange;
 use gerfaut_core::store::VaultKey;
 use gerfaut_core::wallet::meta::WalletIcon;
 use gerfaut_core::wallet::snapshot::SyncReport;
@@ -63,36 +66,16 @@ fn error_json(kind: &str, message: impl std::fmt::Display) -> String {
     json!({ "error": { "kind": kind, "message": message.to_string() } }).to_string()
 }
 
-fn core_error_kind(error: &CoreError) -> &'static str {
-    match error {
-        CoreError::UnrecognizedInput(_) => "unrecognized_input",
-        CoreError::PrivateMaterialRejected => "private_material",
-        CoreError::InvalidInput { .. } => "invalid_input",
-        CoreError::NetworkMismatch { .. } => "network_mismatch",
-        CoreError::WalletNotFound(_) => "wallet_not_found",
-        CoreError::DuplicateWallet(_) => "duplicate_wallet",
-        // Another open holds the vault, and nothing was read: the vault
-        // is healthy. A kind of its own, so no screen ever takes it for
-        // one that cannot be opened and offers to set it aside.
-        CoreError::Vault(VaultError::AlreadyOpen) => "vault_in_use",
-        CoreError::Vault(_) => "vault",
-        CoreError::Sync { .. } => "sync",
-        CoreError::BackendUnavailable(_) => "backend_unavailable",
-        CoreError::Broadcast { .. } => "broadcast",
-        CoreError::Descriptor(_) => "descriptor",
-        CoreError::Tor(_) => "tor",
-        CoreError::Internal(_) => "internal",
-    }
-}
-
 /// Deserializes one JSON argument, naming what it should have been.
 fn from_json<T: serde::de::DeserializeOwned>(raw: &str, what: &str) -> Result<T, String> {
     serde_json::from_str(raw)
         .map_err(|e| error_json("bad_json", format!("invalid {what} JSON: {e}")))
 }
 
+/// A failure of the core, under the core's own code: the Dart side
+/// decides on it, the way the desktop app does on the same name.
 fn core_error_json(error: &CoreError) -> String {
-    error_json(core_error_kind(error), error)
+    error_json(error.code().as_str(), error)
 }
 
 fn ok_json() -> String {
@@ -145,60 +128,6 @@ macro_rules! try_json {
             Err(payload) => return payload,
         }
     };
-}
-
-// --- oversized QR envelopes --------------------------------------------
-
-/// The most parts a multi-part UR may announce. The decoder the core
-/// uses sizes its tables on that count before it has checked anything
-/// else, so a single frame claiming four billion parts asks for tens of
-/// gigabytes at once, and an allocation that fails ends the process:
-/// nothing on the Dart side can catch it. No wallet export, PSBT or
-/// Gerfaut backup comes near this many parts.
-const MAX_UR_PARTS: usize = 10_000;
-
-/// Turns away a UR frame that announces more parts than [`MAX_UR_PARTS`],
-/// before it reaches the decoder. Reads the header the way the decoder
-/// does, so the count checked is the count it would use; anything it
-/// would refuse on its own is left for it to refuse.
-fn refuse_oversized_ur(frame: &str) -> Result<(), String> {
-    let lower = frame.trim().to_ascii_lowercase();
-    let total = lower
-        .strip_prefix("ur:")
-        .and_then(|rest| rest.split_once('/'))
-        .and_then(|(_, rest)| rest.rsplit_once('/'))
-        .and_then(|(indices, _)| indices.split_once('-'))
-        .and_then(|(_, total)| total.parse::<usize>().ok());
-    match total {
-        Some(total) if total > MAX_UR_PARTS => Err(error_json(
-            "invalid_input",
-            format!("this QR code announces {total} parts, more than Gerfaut reads"),
-        )),
-        _ => Ok(()),
-    }
-}
-
-/// The same for text that is opened as an envelope and whose content
-/// may be one again: the transaction decoder opens a UR, then reads
-/// what it held the same way. Each layer is checked before the core
-/// opens it, and each is shorter than the one around it.
-fn refuse_oversized_nested_ur(text: &str) -> Result<(), String> {
-    let mut text: String = text.split_whitespace().collect();
-    loop {
-        refuse_oversized_ur(&text)?;
-        if !gerfaut_core::input::qr::is_envelope(&text) {
-            return Ok(());
-        }
-        match gerfaut_core::input::qr::assemble(std::slice::from_ref(&text)) {
-            Ok(progress) => match progress.text {
-                Some(inner) => text = inner.split_whitespace().collect(),
-                None => return Ok(()),
-            },
-            // Refused on its own terms: the core says why when it
-            // meets it again.
-            Err(_) => return Ok(()),
-        }
-    }
 }
 
 // --- lifecycle ---------------------------------------------------------
@@ -257,7 +186,6 @@ pub async fn fresh_vault_key() -> String {
 /// `script` is the user's script type choice for a lone extended key
 /// (`legacy`, `nested_segwit`, `segwit`, `taproot`), ignored otherwise.
 pub async fn parse_input(input: String, script: Option<String>) -> String {
-    try_json!(refuse_oversized_ur(&input));
     let script: Option<ScriptKind> = match script {
         None => None,
         Some(id) => match serde_json::from_value(json!(id)) {
@@ -277,7 +205,6 @@ pub async fn parse_input(input: String, script: Option<String>) -> String {
 /// optional. Everything the input fixes by itself ignores the first
 /// two; the network decides the first address shown.
 pub async fn parse_input_with_options(input: String, options_json: String) -> String {
-    try_json!(refuse_oversized_ur(&input));
     let options: ImportOptions = try_json!(from_json(&options_json, "ImportOptions"));
     match gerfaut_core::input::parse_input_with_options(&input, &options) {
         Ok(parsed) => to_json(&parsed),
@@ -306,9 +233,6 @@ pub async fn assemble_qr(frames_json: String) -> String {
         serde_json::from_str(&frames_json)
             .map_err(|e| error_json("bad_json", format!("invalid frames JSON: {e}")))
     );
-    for frame in &frames {
-        try_json!(refuse_oversized_ur(frame));
-    }
     match gerfaut_core::input::qr::assemble(&frames) {
         Ok(progress) => to_json(&progress),
         Err(e) => core_error_json(&e),
@@ -582,11 +506,24 @@ pub async fn forget_certificate(host: String) -> String {
     }
 }
 
-/// Stores one small app preference in the encrypted vault.
+/// Stores one small preference of this app alone in the encrypted
+/// vault. The ones both apps keep go through [`set_preferences`].
 pub async fn set_app_pref(key: String, value: String) -> String {
     let manager = try_json!(manager());
     match manager.set_app_pref(key, value).await {
         Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Changes some of the preferences both apps keep, from a serialized
+/// `PreferencesChange` (the fields left out keep their value), and
+/// returns them all as stored, a serialized `Preferences`.
+pub async fn set_preferences(change_json: String) -> String {
+    let manager = try_json!(manager());
+    let change: PreferencesChange = try_json!(from_json(&change_json, "PreferencesChange"));
+    match manager.set_preferences(change).await {
+        Ok(stored) => to_json(&stored),
         Err(e) => core_error_json(&e),
     }
 }
@@ -598,7 +535,6 @@ pub async fn set_app_pref(key: String, value: String) -> String {
 /// or BBQr envelope) and previews what it does on `network`. Returns a
 /// serialized `TxPreview`; nothing is signed, nothing is sent.
 pub async fn preview_transaction(input: String, network: String) -> String {
-    try_json!(refuse_oversized_nested_ur(&input));
     let manager = try_json!(manager());
     let network = try_json!(parse_network(&network));
     match manager.preview_transaction(&input, network).await {
@@ -626,6 +562,24 @@ pub async fn transaction_status(network: String, hex: String) -> String {
     let network = try_json!(parse_network(&network));
     match manager.transaction_status(network, &hex).await {
         Ok(status) => to_json(&status),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// The last transactions broadcast on `network`, newest first, as the
+/// vault keeps them. Returns a serialized list of `RecentBroadcast`.
+pub async fn recent_broadcasts(network: String) -> String {
+    let manager = try_json!(manager());
+    let network = try_json!(parse_network(&network));
+    to_json(&manager.recent_broadcasts(network).await)
+}
+
+/// Drops the vault's record of a broadcast; the transaction itself is
+/// on the network and untouched.
+pub async fn forget_broadcast(txid: String) -> String {
+    let manager = try_json!(manager());
+    match manager.forget_broadcast(&txid).await {
+        Ok(()) => ok_json(),
         Err(e) => core_error_json(&e),
     }
 }
@@ -837,6 +791,14 @@ pub async fn live_status() -> String {
     to_json(&manager.live_status().await)
 }
 
+/// What the watch takes on any server and on the user's own node, for
+/// the words under "This is my node". Returns the serialized
+/// `WatchLimitsChoice`; needs no manager, the limits are the same for
+/// everyone.
+pub async fn live_limits() -> String {
+    to_json(&gerfaut_core::watch::WatchLimitsChoice::CURRENT)
+}
+
 /// Subscribes this isolate to what the running watch says for the
 /// screens (its status, the wallets it synced, blocks), each a
 /// serialized `LiveEvent`, plus
@@ -884,6 +846,23 @@ pub async fn claim_announcements(wallet_id: String) -> String {
     }
 }
 
+/// What a batch of announced transactions amounts to, as notifications
+/// ready to post: their title, their text, and the payment and wallet
+/// each is about. The core composes the words, the same as the desktop
+/// app's, and counts them against the budget it keeps for the whole
+/// process, twenty a minute: the screens, Live and the periodic task
+/// draw on the same one. `txs_json` is a `Vec<LiveTx>`, as
+/// [`claim_announcements`] and [`live_run`] hand them out; `context_json`
+/// a `notice::Context`: the wallet names, the unit, the mask and the
+/// choice of details. Returns a serialized `Vec<Notice>`. Ask only for
+/// what is about to be posted: what comes back has been counted.
+pub async fn live_notices(txs_json: String, context_json: String) -> String {
+    let txs: Vec<LiveTx> = try_json!(from_json(&txs_json, "announced transactions"));
+    let context: notice::Context = try_json!(from_json(&context_json, "notice context"));
+    let manager = try_json!(manager());
+    to_json(&manager.notices_of(txs, &context))
+}
+
 /// Whether anything this app sends has to go through Tor.
 pub async fn uses_tor() -> String {
     let manager = try_json!(manager());
@@ -901,19 +880,22 @@ fn parse_variant<T: serde::de::DeserializeOwned>(
         .map_err(|_| error_json("bad_json", format!("unknown {kind} `{name}`")))
 }
 
-/// Fetches the current BTC price. `source` is one of `coingecko`,
-/// `kraken`, `mempool_space`; `currency` is one of the `FiatCurrency`
-/// identifiers. The source must quote the currency: only CoinGecko
-/// serves the ones past the first seven. Returns a `PriceQuote`.
+/// The currencies and price sources the settings offer, and how often
+/// the price is asked. Returns a serialized `PriceTable`: a fixed
+/// table, which only changes with the core.
+pub async fn price_table() -> String {
+    to_json(&gerfaut_core::price::price_table())
+}
+
+/// Fetches the current BTC price, in the currency and from the source
+/// of the preferences. Returns a `PriceQuote`.
 ///
 /// Through the manager, so the request takes the route the syncs take:
 /// with a .onion node on any network it goes through Tor, and with Tor
 /// out of reach it does not go at all and comes back as `tor`.
-pub async fn fetch_price(source: String, currency: String) -> String {
-    let source: PriceSource = try_json!(parse_variant(&source, "price source"));
-    let currency: FiatCurrency = try_json!(parse_variant(&currency, "currency"));
+pub async fn fetch_price() -> String {
     let manager = try_json!(manager());
-    match manager.fetch_price(source, currency).await {
+    match manager.fetch_price().await {
         Ok(quote) => to_json(&quote),
         Err(e) => core_error_json(&e),
     }
@@ -922,8 +904,24 @@ pub async fn fetch_price(source: String, currency: String) -> String {
 /// GitHub repository whose releases this build follows.
 const UPDATE_REPO: &str = "gerfaut-wallet/gerfaut-mobile";
 
-/// Checks the latest published release against the running version.
-/// Returns a serialized `UpdateCheck`.
+/// What to say about releases to someone running `current_version`, as
+/// the core decides it from what the vault keeps. Reads only. Returns a
+/// serialized `UpdateStatus`.
+pub async fn update_status(current_version: String) -> String {
+    let manager = try_json!(manager());
+    to_json(&manager.update_status(&current_version).await)
+}
+
+/// The wallets came on screen, unlocked and not disguised: the core
+/// asks for the latest release if a check is due, at most once a day,
+/// and says what to announce. Returns a serialized `UpdateStatus`.
+pub async fn update_session(current_version: String) -> String {
+    let manager = try_json!(manager());
+    to_json(&manager.update_session(UPDATE_REPO, &current_version).await)
+}
+
+/// Checks the latest published release now, due or not. Returns a
+/// serialized `UpdateStatus`.
 ///
 /// Through the manager, so the request takes the route the syncs take:
 /// with an onion backend it goes through Tor, and with Tor out of reach
@@ -931,7 +929,25 @@ const UPDATE_REPO: &str = "gerfaut-wallet/gerfaut-mobile";
 pub async fn check_update(current_version: String) -> String {
     let manager = try_json!(manager());
     match manager.check_update(UPDATE_REPO, &current_version).await {
-        Ok(check) => to_json(&check),
+        Ok(status) => to_json(&status),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Closes the notice on the release it announced.
+pub async fn dismiss_update(version: String) -> String {
+    let manager = try_json!(manager());
+    match manager.dismiss_update(&version).await {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Turns the daily check on or off.
+pub async fn set_update_automatic(automatic: bool) -> String {
+    let manager = try_json!(manager());
+    match manager.set_update_automatic(automatic).await {
+        Ok(()) => ok_json(),
         Err(e) => core_error_json(&e),
     }
 }
@@ -946,81 +962,48 @@ mod tests {
         serde_json::from_str(&core_error_json(error)).expect("the payload is JSON")
     }
 
-    fn frame_of(total: usize) -> String {
+    /// A frame of a multi-part UR announcing `total` parts.
+    fn frame_of(total: u64) -> String {
         format!(
             "ur:bytes/{}-{total}/lpadascfadaxcywenbpljkhdcahkadaemej",
             total + 1
         )
     }
 
-    fn refused(payload: &str) -> bool {
-        serde_json::from_str::<Value>(payload).expect("JSON")["error"]["kind"] == "invalid_input"
+    fn kind_of(payload: &str) -> Value {
+        serde_json::from_str::<Value>(payload).expect("JSON")["error"]["kind"].clone()
     }
 
     /// One frame announcing four billion parts would make the decoder
     /// ask for tens of gigabytes, and the app would die on the spot.
-    /// It is turned away by what it says, before it is decoded.
+    /// The core turns away any count past the 5,000 parts it reads,
+    /// before it decodes a thing, and the refusal reaches the screens
+    /// under a kind of its own, wherever the frame was handed over.
     #[tokio::test]
-    async fn a_frame_announcing_billions_of_parts_is_turned_away() {
-        let hostile = frame_of(4_294_967_295);
-        assert!(refuse_oversized_ur(&hostile).is_err());
-        assert!(refuse_oversized_ur(&hostile.to_uppercase()).is_err());
-        assert!(
-            refuse_oversized_ur(&format!(
-                "  {hostile}
-"
-            ))
-            .is_err()
-        );
-        let frames =
-            serde_json::to_string(&["ur:bytes/1-2/lpadaocfadaxcywenbpljkhdcahkadaemej", &hostile])
-                .unwrap();
-        assert!(refused(&assemble_qr(frames).await));
-        assert!(refused(&parse_input(hostile.clone(), None).await));
-        assert!(refused(
-            &parse_input_with_options(hostile.clone(), "{}".into()).await
-        ));
-    }
-
-    #[test]
-    fn an_ordinary_frame_goes_through() {
-        assert!(refuse_oversized_ur(&frame_of(3)).is_ok());
-        assert!(refuse_oversized_ur(&frame_of(MAX_UR_PARTS)).is_ok());
-        assert!(refuse_oversized_ur(&frame_of(MAX_UR_PARTS + 1)).is_err());
-        // Not a multi-part UR, or not a UR at all: nothing to check.
-        assert!(refuse_oversized_ur("ur:bytes/hdcxlkahssqzwfvslofzoxwkrewngotktbmwjkwdcmnefsaaehrlolkskncnktlbaypkvoonhknt").is_ok());
-        assert!(refuse_oversized_ur("wpkh([73c5da0a/84h/1h/0h]tpub/0/*)").is_ok());
-        assert!(refuse_oversized_ur("ur:bytes/1-x/abc").is_ok());
-    }
-
-    /// A transaction pasted as a UR is opened, and what it held is read
-    /// again: a hostile frame inside a harmless one is found too.
-    #[test]
-    fn a_hostile_frame_inside_a_harmless_one_is_found() {
-        let hostile = frame_of(4_294_967_295);
-        let cbor = {
-            let mut bytes = Vec::new();
-            ciborium_like_bytes(hostile.as_bytes(), &mut bytes);
-            bytes
-        };
-        let outer = ur::ur::encode(&cbor, &ur::ur::Type::Bytes);
-        assert!(refuse_oversized_ur(&outer).is_ok());
-        assert!(refuse_oversized_nested_ur(&outer).is_err());
-        assert!(refuse_oversized_nested_ur("70736274ff01").is_ok());
-    }
-
-    /// A CBOR byte string: the head for its length, then the bytes.
-    fn ciborium_like_bytes(data: &[u8], out: &mut Vec<u8>) {
-        let len = data.len();
-        if len < 24 {
-            out.push(0x40 | len as u8);
-        } else if len < 256 {
-            out.extend([0x58, len as u8]);
-        } else {
-            out.push(0x59);
-            out.extend((len as u16).to_be_bytes());
+    async fn a_frame_announcing_too_many_parts_reaches_the_screens_by_name() {
+        for total in [5_001, 10_001, 4_294_967_294] {
+            let hostile = frame_of(total);
+            let alone = serde_json::to_string(&[&hostile]).unwrap();
+            assert_eq!(kind_of(&assemble_qr(alone).await), "too_many_parts");
+            assert_eq!(
+                kind_of(&parse_input(hostile.clone(), None).await),
+                "too_many_parts"
+            );
+            assert_eq!(
+                kind_of(&parse_input_with_options(hostile.to_uppercase(), "{}".into()).await),
+                "too_many_parts"
+            );
         }
-        out.extend_from_slice(data);
+        // Among the frames of an honest scan it is passed over, and the
+        // scan goes on.
+        let frames = serde_json::to_string(&[
+            "ur:bytes/1-2/lpadaocfadaxcywenbpljkhdcahkadaemej".to_owned(),
+            frame_of(4_294_967_294),
+        ])
+        .unwrap();
+        let progress: Value = serde_json::from_str(&assemble_qr(frames).await).unwrap();
+        assert!(progress.get("error").is_none(), "{progress}");
+        assert_eq!(progress["total"], 2);
     }
 
     /// A release build writes nothing to logcat: what the Electrum
@@ -1032,14 +1015,122 @@ mod tests {
         assert_eq!(console_log_level(true), Some(log::LevelFilter::Trace));
     }
 
-    /// A vault another open holds is its own kind: a healthy vault,
-    /// which no screen may take for one that cannot be opened.
+    /// What the app sends for the words of a notification is read
+    /// strictly, before anything is composed: a context that does not
+    /// say whether the wallet and the amount may show is refused, never
+    /// taken for one that may say everything.
+    #[tokio::test]
+    async fn the_words_of_a_notification_are_asked_with_the_whole_context() {
+        let kind = |payload: String| {
+            serde_json::from_str::<Value>(&payload).expect("JSON")["error"]["kind"].clone()
+        };
+        let txs = r#"[{"wallet_id":"w1","txid":"aa","net_sats":1000,"stage":"mempool"}]"#;
+        let partial = r#"{"names":{},"unit":"btc","masked":false}"#;
+        let whole = r#"{"names":{},"unit":"btc","masked":false,"details":true}"#;
+        assert_eq!(
+            kind(live_notices(txs.into(), partial.into()).await),
+            "bad_json"
+        );
+        assert_eq!(
+            kind(live_notices("[{}]".into(), whole.into()).await),
+            "bad_json"
+        );
+    }
+
+    /// A failure crosses in the form the core writes down for both
+    /// bridges, `CoreError.json` of its reference files in the
+    /// gerfaut-core checkout beside this repository: the code as `kind`
+    /// and the error's words as `message`, nothing else.
     #[test]
-    fn a_vault_held_elsewhere_is_its_own_kind() {
-        let held = CoreError::Vault(VaultError::AlreadyOpen);
-        assert_eq!(payload(&held)["error"]["kind"], "vault_in_use");
-        let broken = CoreError::Vault(VaultError::NotAVault);
-        assert_eq!(payload(&broken)["error"]["kind"], "vault");
+    fn a_failure_crosses_in_the_form_the_core_writes_down() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../gerfaut-core/tests/bridge/CoreError.json"
+        );
+        let text = std::fs::read_to_string(path).expect("gerfaut-core beside this repository");
+        let cases: Value = serde_json::from_str(&text).expect("the reference file is JSON");
+        let keys = |value: &Value| -> Vec<String> {
+            let mut keys: Vec<String> = value
+                .as_object()
+                .expect("an object")
+                .keys()
+                .cloned()
+                .collect();
+            keys.sort();
+            keys
+        };
+        let sent = payload(&CoreError::WalletNotFound("w1".to_owned()));
+        let case = &cases["wallet_not_found"];
+        assert_eq!(keys(&sent), ["error"]);
+        assert_eq!(keys(&sent["error"]), keys(case));
+        assert_eq!(sent["error"]["kind"], case["kind"]);
+    }
+
+    /// What Android posts when the core cannot put a batch into words is
+    /// the core's own line for "more is waiting", word for word. The
+    /// Dart tests read the app's constants against this reference file;
+    /// this test reads the file against the core, so a line the core
+    /// rewords fails here first.
+    #[test]
+    fn the_fallback_notices_are_the_cores_words() {
+        let reference: Value =
+            serde_json::from_str(include_str!("../../../test/fixtures/fallback_notices.json"))
+                .expect("the reference reads as JSON");
+        let line = |body: &str, kind: notice::NoticeKind| notice::Notice {
+            title: notice::APP_TITLE.to_owned(),
+            body: body.to_owned(),
+            kind,
+            id: None,
+            wallet_id: None,
+        };
+        let cores = vec![
+            line(notice::MORE_TRANSACTIONS, notice::NoticeKind::Transaction),
+            line(notice::MORE_DROPPED, notice::NoticeKind::Dropped),
+        ];
+        assert_eq!(reference, serde_json::to_value(cores).unwrap());
+    }
+
+    /// The kind a screen reads is the core's code, unchanged, with the
+    /// core's words beside it. A vault another open holds is its own
+    /// kind, a healthy vault no screen may take for one that cannot be
+    /// opened; a wrong password, a file that is not a backup and one a
+    /// newer Gerfaut wrote are three, so the restore screen says "wrong
+    /// password" for the first and for nothing else.
+    #[test]
+    fn the_core_code_goes_through_as_the_kind() {
+        use gerfaut_core::error::VaultError;
+
+        let relayed = |error: CoreError| {
+            let sent = payload(&error);
+            assert_eq!(sent["error"]["kind"], error.code().as_str());
+            assert_eq!(sent["error"]["message"], error.to_string());
+            sent["error"]["kind"].as_str().unwrap().to_owned()
+        };
+        assert_eq!(
+            relayed(CoreError::Vault(VaultError::AlreadyOpen)),
+            "vault_in_use"
+        );
+        assert_eq!(
+            relayed(CoreError::Vault(VaultError::Kdf("no memory".into()))),
+            "vault"
+        );
+        assert_eq!(
+            relayed(CoreError::Vault(VaultError::WrongKeyOrCorrupted)),
+            "wrong_key"
+        );
+        assert_eq!(
+            relayed(CoreError::UnreadableBackup(
+                "this is not a Gerfaut backup".into()
+            )),
+            "unreadable_backup"
+        );
+        assert_eq!(
+            relayed(CoreError::NewerBackup(
+                "this backup was written by a newer Gerfaut (backup version 2)".into()
+            )),
+            "newer_format"
+        );
+        assert_eq!(relayed(CoreError::TooManyParts(6_000)), "too_many_parts");
     }
 
     /// The isolates of the app call `init_manager` together at a cold

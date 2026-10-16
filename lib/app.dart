@@ -151,20 +151,10 @@ class _Hydrated extends ConsumerWidget {
         ref.read(prefsHydratedProvider.notifier).state = true;
         final prefs = settings.appPrefs;
         ref.read(themeProvider.notifier).hydrate(prefs[Pref.theme]);
-        ref.read(maskedProvider.notifier).hydrate(prefs[Pref.masked]);
-        ref.read(unitProvider.notifier).hydrate(prefs[Pref.unit]);
-        ref.read(fiatEnabledProvider.notifier).hydrate(prefs[Pref.fiat]);
-        // Currency before source: the source only takes if it quotes
-        // the currency that was stored with it.
-        ref
-            .read(fiatCurrencyProvider.notifier)
-            .hydrate(prefs[Pref.fiatCurrency]);
-        ref.read(fiatSourceProvider.notifier).hydrate(prefs[Pref.fiatSource]);
-        ref.read(explorerAckProvider.notifier).hydrate(prefs[Pref.explorerAck]);
-        ref
-            .read(recentBroadcastsProvider.notifier)
-            .hydrate(prefs[Pref.recentBroadcasts]);
-        ref.read(notifyNewTxProvider.notifier).hydrate(prefs[Pref.notifyNewTx]);
+        ref.read(preferencesProvider.notifier).hydrate(settings.preferences);
+        // Asked once, now: the price and the settings read it, and a
+        // settings card drawn before it came would draw empty.
+        ref.read(priceTableProvider);
         ref
             .read(notifyDetailsProvider.notifier)
             .hydrate(prefs[Pref.notifyDetails]);
@@ -177,7 +167,8 @@ class _Hydrated extends ConsumerWidget {
         ref
             .read(widgetBalancesProvider.notifier)
             .hydrate(prefs[Pref.widgetBalances]);
-        ref.read(updateProvider.notifier).hydrate(prefs);
+        // The switch in About reads the core, not the preferences.
+        unawaited(ref.read(updateProvider.notifier).load());
         // The widgets follow from here: everything they show is
         // hydrated now, so the first thing they get is the right thing.
         ref.read(widgetFeedProvider);
