@@ -4,7 +4,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/src/bridge.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge.dart'
     show PanicException;
+import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/models.dart';
+
+/// The preferences a vault that never stored any answers, as the core
+/// sends them.
+const _preferences = {
+  'unit': 'btc',
+  'masked': false,
+  'fiat': false,
+  'fiat_currency': 'eur',
+  'price_source': 'coingecko',
+  'notify_new_tx': false,
+  'explorer_ack': false,
+};
 
 const _descriptors = {
   'type': 'descriptors',
@@ -188,6 +201,75 @@ void main() {
     });
   });
 
+  group('the preferences both apps keep', () {
+    /// What the core sends for them, every field filled.
+    const stored = {
+      'unit': 'sats',
+      'masked': true,
+      'fiat': true,
+      'fiat_currency': 'try',
+      'price_source': 'coingecko',
+      'notify_new_tx': true,
+      'explorer_ack': false,
+    };
+
+    test('read as the core sends them', () {
+      final preferences = Preferences.fromJson(stored);
+      expect(preferences.unit, AmountUnit.sats);
+      expect(preferences.masked, isTrue);
+      expect(preferences.fiat, isTrue);
+      // The Turkish lira keeps the identifier the core stores, whatever
+      // Dart makes of the word `try`.
+      expect(preferences.fiatCurrency, FiatCurrency.tryLira);
+      expect(preferences.fiatCurrency.code, 'TRY');
+      expect(preferences.priceSource, PriceSource.coingecko);
+      expect(preferences.notifyNewTx, isTrue);
+      expect(preferences.explorerAck, isFalse);
+      final settings = Settings.fromJson({
+        'active_network': 'signet',
+        'backends': <String, dynamic>{},
+        'app_prefs': {'mobile.theme': 'dark'},
+        'preferences': stored,
+      });
+      expect(settings.preferences, preferences);
+      expect(settings.appPrefs, {'mobile.theme': 'dark'});
+    });
+
+    test('a change names what it changes, and nothing else', () {
+      expect(const PreferencesChange().toJson(), isEmpty);
+      expect(
+        jsonEncode(
+          const PreferencesChange(
+            fiatCurrency: FiatCurrency.inr,
+            masked: false,
+          ).toJson(),
+        ),
+        '{"masked":false,"fiat_currency":"inr"}',
+      );
+      expect(
+        const PreferencesChange(
+          unit: AmountUnit.btc,
+          priceSource: PriceSource.mempoolSpace,
+          notifyNewTx: false,
+          explorerAck: true,
+          fiat: false,
+        ).toJson(),
+        {
+          'unit': 'btc',
+          'fiat': false,
+          'price_source': 'mempool_space',
+          'notify_new_tx': false,
+          'explorer_ack': true,
+        },
+      );
+      final before = Preferences.fromJson(stored);
+      expect(
+        const PreferencesChange(masked: false).applyTo(before),
+        before.copyWith(masked: false),
+      );
+    });
+  });
+
   group('FiatCurrency', () {
     test('offers thirty currencies, the seven common ones first', () {
       expect(FiatCurrency.values, hasLength(30));
@@ -328,7 +410,8 @@ void main() {
     });
 
     test('settings fall back to the automatic public backend', () {
-      const settings = Settings(
+      final settings = Settings(
+        preferences: Preferences.fromJson(_preferences),
         activeNetwork: Network.mainnet,
         backends: {},
         appPrefs: {},
@@ -565,6 +648,7 @@ void main() {
         'app_prefs': <String, dynamic>{},
         'gap_limit': 20,
         'electrum_certs': {'node.local:50002': 'AB:CD'},
+        'preferences': _preferences,
       });
       expect(settings.electrumCerts, {'node.local:50002': 'AB:CD'});
 
@@ -574,6 +658,7 @@ void main() {
           'active_network': 'mainnet',
           'backends': <String, dynamic>{},
           'app_prefs': <String, dynamic>{},
+          'preferences': _preferences,
         }).electrumCerts,
         isEmpty,
       );

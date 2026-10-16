@@ -36,14 +36,20 @@ void main() {
     expect(find.textContaining('€'), findsNothing);
   });
 
-  testWidgets('a stored "1" turns the fiat display on', (tester) async {
+  // How a vault written before the preferences had a record reads,
+  // and which pair of currency and source can be, is the core's: see
+  // `prefs.rs` in gerfaut-core. The screens show what it answers.
+  testWidgets('the vault\'s fiat preference turns the fiat display on', (
+    tester,
+  ) async {
     final meta = makeMeta(totalSats: 123456);
     final bridge = FakeBridge(
       wallets: [meta],
-      settings: const Settings(
+      settings: Settings(
+        preferences: kPreferences.copyWith(fiat: true),
         activeNetwork: Network.mainnet,
-        backends: {},
-        appPrefs: {'display.fiat': '1'},
+        backends: const {},
+        appPrefs: const {},
       ),
     );
     await tester.pumpWidget(app(bridge));
@@ -52,58 +58,15 @@ void main() {
     expect(find.textContaining('€'), findsWidgets);
   });
 
-  testWidgets(
-    'a stored currency and source that disagree land on one that answers',
-    (tester) async {
-      final bridge = FakeBridge(
-        wallets: [makeMeta(totalSats: 123456)],
-        settings: const Settings(
-          activeNetwork: Network.mainnet,
-          backends: {},
-          appPrefs: {
-            'display.fiat': '1',
-            'display.fiat_currency': 'ngn',
-            'display.fiat_source': 'kraken',
-          },
-        ),
-      );
-      await tester.pumpWidget(app(bridge));
-      await tester.pumpAndSettle();
-
-      final container = ProviderScope.containerOf(
-        tester.element(find.byType(GerfautApp)),
-      );
-      expect(container.read(fiatCurrencyProvider), FiatCurrency.ngn);
-      // Kraken does not quote the naira: CoinGecko answers rather than
-      // no one at all.
-      expect(container.read(fiatSourceProvider), PriceSource.coingecko);
-    },
-  );
-
-  testWidgets('any other stored value keeps fiat off', (tester) async {
-    final meta = makeMeta(totalSats: 123456);
-    final bridge = FakeBridge(
-      wallets: [meta],
-      settings: const Settings(
-        activeNetwork: Network.mainnet,
-        backends: {},
-        appPrefs: {'display.fiat': 'true'},
-      ),
-    );
-    await tester.pumpWidget(app(bridge));
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('€'), findsNothing);
-  });
-
   testWidgets('a hidden amount is said as one, not dot by dot', (tester) async {
     final handle = tester.ensureSemantics();
     final bridge = FakeBridge(
       wallets: [makeMeta(totalSats: 123456)],
-      settings: const Settings(
+      settings: Settings(
+        preferences: kPreferences.copyWith(masked: true),
         activeNetwork: Network.mainnet,
-        backends: {},
-        appPrefs: {'mobile.masked': '1', 'onboarding.seen': '1'},
+        backends: const {},
+        appPrefs: const {'onboarding.seen': '1'},
       ),
     );
     await tester.pumpWidget(app(bridge));
@@ -146,7 +109,7 @@ void main() {
       overrides: [bridgeProvider.overrideWithValue(bridge)],
     );
     addTearDown(container.dispose);
-    container.read(fiatEnabledProvider.notifier).hydrate('1');
+    holdPreferences(container, const PreferencesChange(fiat: true));
     container.listen(priceProvider, (_, _) {});
     await tester.pump();
     expect(asked, 1);
@@ -185,7 +148,7 @@ void main() {
       overrides: [bridgeProvider.overrideWithValue(bridge)],
     );
     addTearDown(container.dispose);
-    container.read(fiatEnabledProvider.notifier).hydrate('1');
+    holdPreferences(container, const PreferencesChange(fiat: true));
     container.listen(priceProvider, (_, _) {});
     await tester.pump();
     answering = false;
@@ -207,10 +170,11 @@ void main() {
     final bridge =
         FakeBridge(
             wallets: [makeMeta(totalSats: 123456)],
-            settings: const Settings(
+            settings: Settings(
+              preferences: kPreferences.copyWith(fiat: true),
               activeNetwork: Network.mainnet,
-              backends: {},
-              appPrefs: {'display.fiat': '1', 'onboarding.seen': '1'},
+              backends: const {},
+              appPrefs: const {'onboarding.seen': '1'},
             ),
           )
           ..onFetchPrice = (source, currency) {
@@ -240,10 +204,11 @@ void main() {
     final bridge =
         FakeBridge(
             wallets: [makeMeta(totalSats: 123456)],
-            settings: const Settings(
+            settings: Settings(
+              preferences: kPreferences.copyWith(fiat: true),
               activeNetwork: Network.mainnet,
-              backends: {},
-              appPrefs: {'display.fiat': '1', 'onboarding.seen': '1'},
+              backends: const {},
+              appPrefs: const {'onboarding.seen': '1'},
             ),
           )
           ..onFetchPrice = (source, currency) => PriceQuote(
@@ -261,7 +226,8 @@ void main() {
     final container = ProviderScope.containerOf(
       tester.element(find.byType(GerfautApp)),
     );
-    container.read(fiatCurrencyProvider.notifier).set(FiatCurrency.usd);
+    // Taken once the vault stored it, as the core prices by it.
+    await container.read(fiatCurrencyProvider.notifier).set(FiatCurrency.usd);
     await tester.pump();
     expect(find.textContaining('€'), findsNothing);
     await tester.pumpAndSettle();
@@ -276,9 +242,10 @@ void main() {
       return FakeBridge(
         wallets: [meta],
         settings: Settings(
+          preferences: kPreferences.copyWith(fiat: true),
           activeNetwork: network,
           backends: const {},
-          appPrefs: const {'display.fiat': '1', 'onboarding.seen': '1'},
+          appPrefs: const {'onboarding.seen': '1'},
         ),
         snapshots: {
           'w1': makeSnapshot(
@@ -365,7 +332,7 @@ void main() {
 
     testWidgets('hidden amounts stay hidden off mainnet', (tester) async {
       final bridge = testCoins(Network.signet);
-      bridge.appPrefs['mobile.masked'] = '1';
+      bridge.preferences = bridge.preferences.copyWith(masked: true);
       await tester.pumpWidget(app(bridge));
       await tester.pumpAndSettle();
 

@@ -18,15 +18,6 @@ import '../../widgets/setting_switch.dart';
 class GeneralSection extends ConsumerWidget {
   const GeneralSection({super.key});
 
-  /// Sets the display currency and keeps the price source able to quote
-  /// it: only CoinGecko serves the currencies past the common seven.
-  void _setCurrency(WidgetRef ref, FiatCurrency currency) {
-    ref.read(fiatCurrencyProvider.notifier).set(currency);
-    if (!ref.read(fiatSourceProvider).supportsCurrency(currency)) {
-      ref.read(fiatSourceProvider.notifier).set(PriceSource.coingecko);
-    }
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
@@ -68,7 +59,10 @@ class GeneralSection extends ConsumerWidget {
               const SizedBox(height: GerfautSpacing.sm),
               _CurrencyField(
                 selected: currency,
-                onChanged: (currency) => _setCurrency(ref, currency),
+                // The core keeps the source able to quote it: only
+                // CoinGecko serves the currencies past the common seven.
+                onChanged: (currency) =>
+                    ref.read(fiatCurrencyProvider.notifier).set(currency),
               ),
               const SizedBox(height: GerfautSpacing.md),
               FieldLabel('Price source', tokens: tokens),

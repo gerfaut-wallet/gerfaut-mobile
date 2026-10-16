@@ -66,6 +66,7 @@ FakeBridge _bridge({List<WalletMeta>? wallets}) {
           ),
         ],
     settings: const Settings(
+      preferences: kPreferences,
       activeNetwork: Network.mainnet,
       backends: {},
       appPrefs: {'onboarding.seen': '1'},
@@ -176,29 +177,6 @@ void main() {
           '${local.minute.toString().padLeft(2, '0')}';
       expect(formatClock(_syncedAt), expected);
       expect(formatClock(_syncedAt), matches(RegExp(r'^\d\d:\d\d$')));
-    });
-
-    test('the source and currency follow the preferences, with the '
-        'same fallback the screens apply', () {
-      expect(priceChoice(const {}), (
-        currency: FiatCurrency.eur,
-        source: PriceSource.coingecko,
-      ));
-      expect(
-        priceChoice(const {
-          'display.fiat_currency': 'usd',
-          'display.fiat_source': 'kraken',
-        }),
-        (currency: FiatCurrency.usd, source: PriceSource.kraken),
-      );
-      // Kraken does not quote the rupee: CoinGecko answers instead.
-      expect(
-        priceChoice(const {
-          'display.fiat_currency': 'inr',
-          'display.fiat_source': 'kraken',
-        }),
-        (currency: FiatCurrency.inr, source: PriceSource.coingecko),
-      );
     });
   });
 
@@ -533,6 +511,7 @@ void main() {
           ),
         ],
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.regtest,
           backends: {},
           appPrefs: {},
@@ -548,9 +527,13 @@ void main() {
 
   group('the background refresh', () {
     /// Preferences as the vault would hand them to the isolate.
-    FakeBridge prefBridge(Map<String, String> prefs) {
+    FakeBridge prefBridge(
+      Map<String, String> prefs, [
+      Preferences preferences = kPreferences,
+    ]) {
       final bridge = _bridge();
       bridge.settings = Settings(
+        preferences: preferences,
         activeNetwork: Network.mainnet,
         backends: const {},
         appPrefs: prefs,
@@ -561,9 +544,8 @@ void main() {
     test('publishes the placed widgets from the vault, without ever '
         'syncing', () async {
       final bridge = prefBridge(const {
-        'display.unit': 'sats',
         'widgets.balances': '1',
-      });
+      }, kPreferences.copyWith(unit: AmountUnit.sats));
       final board = FakeWidgetBoard(
         installed: {
           HomeWidgets.price,
@@ -629,8 +611,7 @@ void main() {
       await refreshWidgets(
         bridge: prefBridge(const {
           'widgets.balances': '1',
-          'mobile.masked': '1',
-        }),
+        }, kPreferences.copyWith(masked: true)),
         board: board,
         bootstrap: () async {},
         now: _now,
@@ -640,11 +621,10 @@ void main() {
 
     test('under an app lock, no name and no figure, whatever the '
         'notifications show', () async {
-      final bridge = prefBridge(const {
-        'widgets.balances': '1',
-        'notify.new_tx': '1',
-        'notify.details': '1',
-      })..lock = const AppLock(kind: LockKind.pin, biometric: false);
+      final bridge = prefBridge(
+        const {'widgets.balances': '1', 'notify.details': '1'},
+        kPreferences.copyWith(notifyNewTx: true),
+      )..lock = const AppLock(kind: LockKind.pin, biometric: false);
       final board = FakeWidgetBoard(installed: {HomeWidgets.balance});
       await refreshWidgets(
         bridge: bridge,

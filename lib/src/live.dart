@@ -799,7 +799,7 @@ class LiveRunner {
       final settings = await bridge.getSettings();
       final prefs = settings.appPrefs;
       final wanted =
-          prefs[Pref.notifyNewTx] == '1' &&
+          settings.preferences.notifyNewTx &&
           prefs[Pref.background] == BackgroundCheck.live.stored;
       if (!wanted || await isDisguised()) {
         await _tell('standDown');

@@ -2,6 +2,8 @@
 // DTOs one to one (snake_case keys); if a field changes there, it
 // changes here.
 
+import 'format.dart' show AmountUnit;
+
 /// Networks Gerfaut can operate on.
 enum Network {
   mainnet('mainnet', 'Mainnet'),
@@ -1474,6 +1476,7 @@ class Settings {
     required this.activeNetwork,
     required this.backends,
     required this.appPrefs,
+    required this.preferences,
     this.gapLimit = 20,
     this.electrumCerts = const {},
     this.appLock,
@@ -1493,6 +1496,9 @@ class Settings {
       appPrefs: (json['app_prefs'] as Map<String, dynamic>? ?? {}).map(
         (key, value) => MapEntry(key, value as String),
       ),
+      preferences: Preferences.fromJson(
+        json['preferences'] as Map<String, dynamic>,
+      ),
       gapLimit: json['gap_limit'] as int? ?? 20,
       electrumCerts: (json['electrum_certs'] as Map<String, dynamic>? ?? {})
           .map((key, value) => MapEntry(key, value as String)),
@@ -1507,7 +1513,12 @@ class Settings {
 
   final Network activeNetwork;
   final Map<Network, BackendConfig> backends;
+
+  /// The preferences of this app alone: the theme, the widgets...
   final Map<String, String> appPrefs;
+
+  /// What both apps keep with the same meaning.
+  final Preferences preferences;
 
   /// Global gap limit applied to every descriptor wallet on sync.
   final int gapLimit;
@@ -1788,6 +1799,138 @@ enum FiatCurrency {
     }
     return null;
   }
+}
+
+/// The preferences both apps keep, as the vault holds them, mirroring
+/// `Preferences` in gerfaut-core. A vault that never stored one answers
+/// its default: the core decides those, and every field comes filled.
+class Preferences {
+  const Preferences({
+    required this.unit,
+    required this.masked,
+    required this.fiat,
+    required this.fiatCurrency,
+    required this.priceSource,
+    required this.notifyNewTx,
+    required this.explorerAck,
+  });
+
+  factory Preferences.fromJson(Map<String, dynamic> json) {
+    return Preferences(
+      unit: AmountUnit.fromId(json['unit'] as String)!,
+      masked: json['masked'] as bool,
+      fiat: json['fiat'] as bool,
+      fiatCurrency: FiatCurrency.fromId(json['fiat_currency'] as String)!,
+      priceSource: PriceSource.fromId(json['price_source'] as String)!,
+      notifyNewTx: json['notify_new_tx'] as bool,
+      explorerAck: json['explorer_ack'] as bool,
+    );
+  }
+
+  /// The unit of every amount.
+  final AmountUnit unit;
+
+  /// Amounts hidden on screen, and in what a notification says.
+  final bool masked;
+
+  /// The fiat value beside every amount.
+  final bool fiat;
+  final FiatCurrency fiatCurrency;
+
+  /// Always one that quotes [fiatCurrency]: the core sees to it.
+  final PriceSource priceSource;
+
+  /// A notice when a sync finds a transaction.
+  final bool notifyNewTx;
+
+  /// The warning before an external explorer was read and accepted.
+  final bool explorerAck;
+
+  Preferences copyWith({
+    AmountUnit? unit,
+    bool? masked,
+    bool? fiat,
+    FiatCurrency? fiatCurrency,
+    PriceSource? priceSource,
+    bool? notifyNewTx,
+    bool? explorerAck,
+  }) {
+    return Preferences(
+      unit: unit ?? this.unit,
+      masked: masked ?? this.masked,
+      fiat: fiat ?? this.fiat,
+      fiatCurrency: fiatCurrency ?? this.fiatCurrency,
+      priceSource: priceSource ?? this.priceSource,
+      notifyNewTx: notifyNewTx ?? this.notifyNewTx,
+      explorerAck: explorerAck ?? this.explorerAck,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is Preferences &&
+      other.unit == unit &&
+      other.masked == masked &&
+      other.fiat == fiat &&
+      other.fiatCurrency == fiatCurrency &&
+      other.priceSource == priceSource &&
+      other.notifyNewTx == notifyNewTx &&
+      other.explorerAck == explorerAck;
+
+  @override
+  int get hashCode => Object.hash(
+    unit,
+    masked,
+    fiat,
+    fiatCurrency,
+    priceSource,
+    notifyNewTx,
+    explorerAck,
+  );
+}
+
+/// A change to some of the [Preferences], mirroring `PreferencesChange`:
+/// what is left out keeps its value.
+class PreferencesChange {
+  const PreferencesChange({
+    this.unit,
+    this.masked,
+    this.fiat,
+    this.fiatCurrency,
+    this.priceSource,
+    this.notifyNewTx,
+    this.explorerAck,
+  });
+
+  final AmountUnit? unit;
+  final bool? masked;
+  final bool? fiat;
+  final FiatCurrency? fiatCurrency;
+  final PriceSource? priceSource;
+  final bool? notifyNewTx;
+  final bool? explorerAck;
+
+  /// These preferences with the change made here: the fields it names,
+  /// and nothing else.
+  Preferences applyTo(Preferences preferences) => preferences.copyWith(
+    unit: unit,
+    masked: masked,
+    fiat: fiat,
+    fiatCurrency: fiatCurrency,
+    priceSource: priceSource,
+    notifyNewTx: notifyNewTx,
+    explorerAck: explorerAck,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'unit': ?unit?.id,
+    'masked': ?masked,
+    'fiat': ?fiat,
+    'fiat_currency': ?fiatCurrency?.id,
+    'price_source': ?priceSource?.id,
+    'notify_new_tx': ?notifyNewTx,
+    'explorer_ack': ?explorerAck,
+  };
 }
 
 /// One BTC priced in a fiat currency, at a point in time.

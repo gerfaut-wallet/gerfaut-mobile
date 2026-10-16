@@ -1085,6 +1085,7 @@ void main() {
   testWidgets('recent broadcasts come back after a restart', (tester) async {
     final bridge = FakeBridge(
       settings: Settings(
+        preferences: kPreferences,
         activeNetwork: Network.mainnet,
         backends: const {},
         appPrefs: {

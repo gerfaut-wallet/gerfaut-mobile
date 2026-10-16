@@ -67,6 +67,7 @@ FakeBridge _bridge() {
       makeMeta(id: 'w2', name: 'Spending', totalSats: 5000),
     ],
     settings: const Settings(
+      preferences: kPreferences,
       activeNetwork: Network.mainnet,
       backends: {},
       appPrefs: {'onboarding.seen': '1'},

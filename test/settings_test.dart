@@ -71,6 +71,7 @@ void main() {
     // A vault opened before: the welcome tour is behind this user.
     final bridge = FakeBridge(
       settings: const Settings(
+        preferences: kPreferences,
         activeNetwork: Network.mainnet,
         backends: {},
         appPrefs: {'onboarding.seen': '1'},
@@ -784,6 +785,7 @@ void main() {
     useTallSurface(tester);
     final bridge = FakeBridge(
       settings: const Settings(
+        preferences: kPreferences,
         activeNetwork: Network.mainnet,
         backends: {},
         appPrefs: {},
@@ -924,7 +926,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(currencyField(tester).value, FiatCurrency.usd);
-      expect(bridge.appPrefs['display.fiat_currency'], 'usd');
+      expect(bridge.preferences.fiatCurrency, FiatCurrency.usd);
     });
 
     testWidgets('a CoinGecko-only currency moves the source over', (
@@ -940,14 +942,17 @@ void main() {
 
       await tester.tap(find.text('Kraken'));
       await tester.pumpAndSettle();
-      expect(bridge.appPrefs['display.fiat_source'], 'kraken');
+      expect(bridge.preferences.priceSource, PriceSource.kraken);
       expect(sourcePill(tester, 'mempool.space').onTap, isNotNull);
 
       currencyField(tester).onChanged!(FiatCurrency.ngn);
       await tester.pumpAndSettle();
 
-      expect(bridge.appPrefs['display.fiat_currency'], 'ngn');
-      expect(bridge.appPrefs['display.fiat_source'], 'coingecko');
+      // Only the currency is asked for: the core moves the source, and
+      // the screen shows the one it kept.
+      expect(bridge.preferencesChanges.last.toJson(), {'fiat_currency': 'ngn'});
+      expect(bridge.preferences.fiatCurrency, FiatCurrency.ngn);
+      expect(bridge.preferences.priceSource, PriceSource.coingecko);
       expect(
         find.text('CoinGecko is the only source that quotes NGN.'),
         findsOneWidget,
@@ -1105,6 +1110,7 @@ void main() {
       useTallSurface(tester);
       final bridge = FakeBridge(
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: {
             Network.mainnet: PublicEsplora(server: 'blockstream.info'),
@@ -1213,6 +1219,7 @@ void main() {
       useTallSurface(tester);
       final bridge = FakeBridge(
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: {
             Network.mainnet: PublicEsplora(server: 'blockstream.info'),
@@ -1250,6 +1257,7 @@ void main() {
       useTallSurface(tester);
       final bridge = FakeBridge(
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.regtest,
           backends: {},
           appPrefs: {},
@@ -1334,6 +1342,7 @@ void main() {
     FakeBridge ownElectrum({Map<String, String> certs = const {}}) {
       return FakeBridge(
         settings: Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: const {
             Network.mainnet: CustomElectrum(url: 'ssl://node.local:50002'),
@@ -1734,6 +1743,7 @@ void main() {
     FakeBridge withBackend(BackendConfig config) {
       return FakeBridge(
         settings: Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: {Network.mainnet: config},
           appPrefs: const {},
@@ -1853,6 +1863,7 @@ void main() {
     FakeBridge withTor(TorMode mode) {
       return FakeBridge(
         settings: Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: const {},
           appPrefs: const {},
@@ -2020,6 +2031,7 @@ void main() {
     FakeBridge ownElectrum() {
       return FakeBridge(
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: {
             Network.mainnet: CustomElectrum(url: 'ssl://node.local:50002'),
@@ -2110,6 +2122,7 @@ void main() {
       useTallSurface(tester);
       FakeBridge declared() => FakeBridge(
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: {
             Network.mainnet: CustomElectrum(
@@ -2158,6 +2171,7 @@ void main() {
       useTallSurface(tester);
       final bridge = FakeBridge(
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: {
             Network.mainnet: CustomElectrum(url: 'ssl://node.local:50002'),
@@ -2325,6 +2339,7 @@ void main() {
     FakeBridge bridge() => FakeBridge(
       wallets: [makeMeta()],
       settings: const Settings(
+        preferences: kPreferences,
         activeNetwork: Network.mainnet,
         backends: {},
         appPrefs: {},
@@ -2401,7 +2416,7 @@ void main() {
       container.read(unitProvider.notifier).set(AmountUnit.sats);
       container.read(fiatEnabledProvider.notifier).set(true);
       container.read(themeProvider.notifier).set(ThemePref.dark);
-      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      holdPreferences(container, const PreferencesChange(notifyNewTx: true));
       container.read(backgroundCheckProvider.notifier).hydrate('900');
       await tester.pumpAndSettle();
       expect(find.text('sats · EUR · Dark theme'), findsOneWidget);

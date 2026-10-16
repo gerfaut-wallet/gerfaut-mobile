@@ -49,6 +49,7 @@ FakeBridge _bridge({
   final bridge = FakeBridge(
     wallets: [makeMeta()],
     settings: Settings(
+      preferences: kPreferences,
       activeNetwork: Network.mainnet,
       backends: backends,
       // An app that has been open before today, unless a test says
