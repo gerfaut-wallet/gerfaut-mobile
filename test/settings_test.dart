@@ -1916,6 +1916,36 @@ void main() {
       expect(find.textContaining('built-in Tor first'), findsNothing);
     });
 
+    testWidgets('the caution follows the core, which says whether the '
+        'local port can be trusted', (tester) async {
+      useTallSurface(tester);
+      final bridge = withTor(TorMode.auto);
+      bridge.onTorStatus = (tor) => TorStatus(
+        mode: tor.mode,
+        socksProxy: '127.0.0.1:9050',
+        via: null,
+        socks: null,
+        running: false,
+        bootstrapped: false,
+        bootstrapPercent: 0,
+        error: null,
+        embeddedAvailable: true,
+        systemSocksTrusted: true,
+      );
+      await tester.pumpWidget(
+        settingsApp(bridge, section: SettingsSection.network),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'The Tor on this device if it answers, the built-in one otherwise.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('pose as Tor'), findsNothing);
+    });
+
     testWidgets('a test of the connection shows Tor starting, as on the '
         'desktop', (tester) async {
       useTallSurface(tester);

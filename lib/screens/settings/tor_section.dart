@@ -147,21 +147,28 @@ class _TorSectionState extends ConsumerState<TorSection> {
         // The system proxy is whatever answers on a local port. On a
         // desktop that is the user's own daemon; on a phone the port is
         // first come, first served, and the app holding it learns every
-        // .onion name and can answer for the server. So on Android
-        // Automatic is the built-in client and nothing else — the core
-        // never falls back to a local port there — and choosing the
-        // system one is said for what it is.
-        Text(switch (tor.mode) {
-          TorMode.auto =>
+        // .onion name and can answer for the server. The core says which
+        // it is: where the port is not trusted, Automatic is the built-in
+        // client and nothing else, and choosing the system one is said
+        // for what it is. Until the status is in, the card assumes the
+        // port is not.
+        Text(switch ((tor.mode, status?.systemSocksTrusted ?? false)) {
+          (TorMode.auto, true) =>
+            'The Tor on this device if it answers, the built-in one '
+                'otherwise.',
+          (TorMode.auto, false) =>
             'The built-in Tor. A Tor app on this device is used only '
                 'when you choose it below.',
-          TorMode.system =>
+          (TorMode.system, true) =>
+            'Only the Tor on this device, at '
+                '${tor.socksProxy ?? status?.socksProxy ?? '127.0.0.1:9050'}.',
+          (TorMode.system, false) =>
             'Only the Tor on this device, at '
                 '${tor.socksProxy ?? status?.socksProxy ?? '127.0.0.1:9050'}. '
                 'On a phone any app can answer on that port and pose as '
                 'Tor, which is why Automatic never falls back to it on '
                 'Android.',
-          TorMode.embedded =>
+          (TorMode.embedded, _) =>
             'Only the built-in Tor. The first connection takes a little '
                 'longer while it starts.',
         }, style: tokens.bodySmall.copyWith(color: tokens.textMuted)),

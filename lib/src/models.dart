@@ -3013,6 +3013,7 @@ class TorStatus {
     required this.bootstrapPercent,
     required this.error,
     required this.embeddedAvailable,
+    this.systemSocksTrusted = false,
   });
 
   factory TorStatus.fromJson(Map<String, dynamic> json) {
@@ -3026,6 +3027,7 @@ class TorStatus {
       bootstrapPercent: json['bootstrap_percent'] as int? ?? 0,
       error: json['error'] as String?,
       embeddedAvailable: json['embedded_available'] as bool? ?? false,
+      systemSocksTrusted: json['system_socks_trusted'] as bool? ?? false,
     );
   }
 
@@ -3044,6 +3046,11 @@ class TorStatus {
 
   /// Whether this build carries the built-in client.
   final bool embeddedAvailable;
+
+  /// Whether Automatic may take a Tor found on this device's local port,
+  /// as the core decides it: not on a phone, where any app can answer
+  /// there and pose as Tor.
+  final bool systemSocksTrusted;
 }
 
 // --- policy --------------------------------------------------------------
