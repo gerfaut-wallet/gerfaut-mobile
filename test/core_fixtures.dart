@@ -7,6 +7,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:gerfaut/src/bridge.dart';
+
 /// Where the files are read from, relative to this package, where
 /// `flutter test` runs.
 const String coreFixturesDir = '../gerfaut-core/tests/bridge';
@@ -51,4 +53,30 @@ String coreCaseJson(String type, String name) {
     throw StateError('$type.json has no case $name');
   }
   return jsonEncode(cases[name]);
+}
+
+/// The failure the core sends under [kind] (`CoreError.json`), read the
+/// way the bridge reads it. The fakes raise these: a code the core no
+/// longer sends fails the test that raises it, instead of standing in
+/// for a failure that can never come. [message] takes the place of the
+/// core's words where a test needs words of its own; the code is the
+/// core's either way.
+BridgeException coreFailure(String kind, [String? message]) {
+  final sent = coreCases('CoreError').values.whereType<Map<String, dynamic>>();
+  final error = sent.where((error) => error['kind'] == kind).firstOrNull;
+  if (error == null) {
+    throw StateError(
+      'the core sends no failure of kind $kind (CoreError.json)',
+    );
+  }
+  try {
+    RustBridge.decode(
+      jsonEncode({
+        'error': {...error, 'message': ?message},
+      }),
+    );
+  } on BridgeException catch (failure) {
+    return failure;
+  }
+  throw StateError('CoreError.json#$kind is not read as a failure');
 }

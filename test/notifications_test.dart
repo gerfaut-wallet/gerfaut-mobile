@@ -17,7 +17,21 @@ import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/select_field.dart';
 import 'package:gerfaut/widgets/setting_switch.dart';
 
+import 'core_fixtures.dart';
 import 'fakes.dart';
+
+/// A vault whose list of wallets cannot be read while [failing].
+class _Unlisted extends FakeBridge {
+  _Unlisted({super.wallets, super.settings});
+
+  bool failing = true;
+
+  @override
+  Future<List<WalletMeta>> listWallets([Network? network]) async {
+    if (failing) throw coreFailure('vault');
+    return super.listWallets(network);
+  }
+}
 
 /// Records what would have been posted, and answers the permission the
 /// way a test asks it to.
@@ -424,6 +438,31 @@ void main() {
       expect(bridge.noticeAsks.single.context.masked, isTrue);
     });
 
+    test('is said under no name when the wallets cannot be read', () async {
+      // Claimed is never handed out again: a list that fails must not
+      // turn into silence. The core titles a notice it has no name for
+      // "Gerfaut".
+      final notices = FakeNotifications();
+      final bridge = _Unlisted(
+        wallets: [makeMeta(id: 'w1', name: 'Savings')],
+        settings: Settings(
+          preferences: on,
+          activeNetwork: Network.mainnet,
+          backends: const {},
+          appPrefs: const {},
+        ),
+      );
+      await announceFromVault(
+        bridge,
+        notices,
+        claimed,
+        isDisguised: () async => false,
+      );
+      expect(bridge.noticeAsks.single.context.names, isEmpty);
+      expect(bridge.noticeAsks.single.txs, claimed);
+      expect(notices.posted, hasLength(1));
+    });
+
     test('is not said while the notice is off or the app disguised', () async {
       final notices = FakeNotifications();
       final off = vault(kPreferences);
@@ -589,6 +628,23 @@ void main() {
       await made.read(syncProvider.notifier).syncWallet('w1');
       expect(service.posted, hasLength(1));
       expect(bridge.noticeAsks.single.context.details, isFalse);
+    });
+
+    test('a list of wallets that fails still says what was claimed', () async {
+      final service = FakeNotifications();
+      final bridge = _Unlisted(wallets: [makeMeta()]);
+      var round = 0;
+      bridge.onSyncWallet = (id) =>
+          report([tx(1000, txid: 'tx${round++}')], id: id);
+      final made = container(bridge, service);
+      await made.read(notifyNewTxProvider.notifier).set(true);
+
+      await made.read(syncProvider.notifier).syncWallet('w1');
+      await made.read(syncProvider.notifier).syncWallet('w1');
+      expect(made.read(walletsProvider).valueOrNull, isNull);
+      expect(service.posted, hasLength(1));
+      expect(service.posted.single.body, 'tx1 · confirmed');
+      expect(bridge.noticeAsks.single.context.names, isEmpty);
     });
 
     test('a sync that found nothing says nothing', () async {

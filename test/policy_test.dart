@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/policy.dart';
-import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/clipboard.dart';
 import 'package:gerfaut/src/descriptor.dart';
 import 'package:gerfaut/src/models.dart';
@@ -17,6 +16,7 @@ import 'package:gerfaut/widgets/address_chip.dart';
 import 'package:gerfaut/widgets/notice.dart';
 import 'package:gerfaut/widgets/status_pill.dart';
 
+import 'core_fixtures.dart';
 import 'fakes.dart';
 import 'policy_fixtures.dart';
 
@@ -794,10 +794,8 @@ void main() {
       );
 
       final failing = _bridgeWith(singleKeyPolicyJson());
-      failing.onWalletPolicy = (_) => throw const BridgeException(
-        'descriptor',
-        'the policy cannot be read: bad',
-      );
+      failing.onWalletPolicy = (_) =>
+          throw coreFailure('descriptor', 'the policy cannot be read: bad');
       await _pumpPolicy(tester, failing);
       await tester.pumpAndSettle();
       expect(find.byType(GerfautNotice), findsOneWidget);

@@ -13,7 +13,6 @@ import 'package:gerfaut/widgets/choice_group.dart';
 import 'package:gerfaut/screens/backup_qr.dart';
 import 'package:gerfaut/screens/backup_restore.dart';
 import 'package:gerfaut/screens/scan.dart';
-import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/documents.dart';
 import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
@@ -25,6 +24,7 @@ import 'package:gerfaut/widgets/buttons.dart';
 import 'package:gerfaut/widgets/notice.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import 'core_fixtures.dart';
 import 'fakes.dart';
 
 /// Records what would have been shared instead of touching the system.
@@ -1085,7 +1085,7 @@ void main() {
     testWidgets('a wrong password says so in plain words', (tester) async {
       useTallSurface(tester);
       final bridge = FakeBridge();
-      bridge.onPreviewBackup = (_, _) => throw const BridgeException(
+      bridge.onPreviewBackup = (_, _) => throw coreFailure(
         'wrong_key',
         'vault decryption failed: wrong key or corrupted file',
       );
@@ -1103,7 +1103,7 @@ void main() {
       // The core refuses the file by its format, whichever layer is
       // newer: reading it as a wrong password would send the person
       // back to retype what they got right.
-      bridge.onPreviewBackup = (_, _) => throw const BridgeException(
+      bridge.onPreviewBackup = (_, _) => throw coreFailure(
         'newer_format',
         'invalid backup: this backup was written by a newer Gerfaut '
             '(backup version 3); update Gerfaut to open it',
@@ -1127,7 +1127,7 @@ void main() {
       final bridge = FakeBridge();
       // Any vault failure used to read as a wrong password here. A
       // picture picked by mistake is not one, and neither is a vault.
-      bridge.onPreviewBackup = (_, _) => throw const BridgeException(
+      bridge.onPreviewBackup = (_, _) => throw coreFailure(
         'unreadable_backup',
         'invalid backup: this is not a Gerfaut backup',
       );
@@ -1160,7 +1160,7 @@ void main() {
       useTallSurface(tester);
       final bridge = FakeBridge();
       bridge.onPreviewBackup = (_, _) => preview();
-      bridge.onImportBackup = (_, _, _) => throw const BridgeException(
+      bridge.onImportBackup = (_, _, _) => throw coreFailure(
         'private_material',
         'input contains private key material and was rejected',
       );

@@ -11,6 +11,7 @@ import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 
+import 'core_fixtures.dart';
 import 'fakes.dart';
 
 void main() {
@@ -76,10 +77,57 @@ void main() {
       container.read(maskedProvider.notifier).toggle();
       expect(container.read(maskedProvider), isTrue);
       await pumpEventQueue();
-      expect(bridge.preferencesChanges.single.toJson(), {'masked': true});
+      // Asked twice, then said: the widget and the notifications read
+      // the vault, which still shows amounts.
+      expect(bridge.preferencesChanges.map((change) => change.toJson()), [
+        {'masked': true},
+        {'masked': true},
+      ]);
       expect(container.read(maskedProvider), isTrue);
+      expect(container.read(maskUnsavedProvider), isTrue);
+      expect(bridge.preferences.masked, isFalse);
+
+      // Shown again, the amounts are where the vault has them: nothing
+      // left to say.
+      container.read(maskedProvider.notifier).toggle();
+      await pumpEventQueue();
+      expect(container.read(maskUnsavedProvider), isFalse);
     },
   );
+
+  test('a mask the vault refuses once is asked again, and kept', () async {
+    var refusals = 1;
+    final bridge = FakeBridge()
+      ..onSetPreferences = (stored, change) {
+        if (refusals-- > 0) throw coreFailure('vault', 'disk full');
+        return coreChange(stored, change);
+      };
+    final container = screens(bridge);
+    container.read(maskedProvider.notifier).toggle();
+    await pumpEventQueue();
+    expect(bridge.preferencesChanges, hasLength(2));
+    expect(bridge.preferences.masked, isTrue);
+    expect(container.read(maskUnsavedProvider), isFalse);
+  });
+
+  test('a mask refused twice is written again from the screen', () async {
+    var refusals = 2;
+    final bridge = FakeBridge()
+      ..onSetPreferences = (stored, change) {
+        if (refusals-- > 0) throw coreFailure('vault', 'disk full');
+        return coreChange(stored, change);
+      };
+    final container = screens(bridge);
+    container.read(maskedProvider.notifier).toggle();
+    await pumpEventQueue();
+    expect(container.read(maskUnsavedProvider), isTrue);
+
+    container.read(maskedProvider.notifier).retry();
+    await pumpEventQueue();
+    expect(bridge.preferences.masked, isTrue);
+    expect(container.read(maskUnsavedProvider), isFalse);
+    expect(container.read(maskedProvider), isTrue);
+  });
 
   test('changes are written one after the other, in order', () async {
     final gate = _GatedBridge();

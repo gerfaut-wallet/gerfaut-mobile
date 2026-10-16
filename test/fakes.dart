@@ -24,6 +24,8 @@ import 'package:gerfaut/src/window.dart';
 import 'package:url_launcher_platform_interface/link.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
+import 'core_fixtures.dart';
+
 /// The preferences of a vault that never stored any: the core's
 /// defaults, as it sends them.
 const kPreferences = Preferences(
@@ -1032,7 +1034,7 @@ class FakeBridge implements GerfautBridge {
       }
     }
     if (ids.toSet().length != ids.length) {
-      throw const BridgeException('invalid_input', 'a wallet is listed twice');
+      throw coreFailure('invalid_input', 'a wallet is listed twice');
     }
     final moving = ids.toSet();
     var next = 0;
@@ -1129,10 +1131,7 @@ class FakeBridge implements GerfautBridge {
   Future<void> setGapLimit(int gapLimit) async {
     // Mirrors the core bound: 1..=500 or CoreError::InvalidInput.
     if (gapLimit < 1 || gapLimit > 500) {
-      throw const BridgeException(
-        'invalid_input',
-        'gap limit must be between 1 and 500',
-      );
+      throw coreFailure('invalid_input', 'gap limit must be between 1 and 500');
     }
     lastGapLimitSet = gapLimit;
     _store(gapLimit: gapLimit);
@@ -1448,9 +1447,9 @@ class FakeBridge implements GerfautBridge {
   @override
   Future<UpdateStatus> checkUpdate(String currentVersion) async {
     if (!updates.ask()) {
-      throw const BridgeException('tor', 'tor: no proxy answers');
+      throw coreFailure('tor', 'tor: no proxy answers');
     }
-    if (updates.offline) throw const BridgeException('sync', 'offline');
+    if (updates.offline) throw coreFailure('sync', 'offline');
     // The answer is on screen: the core counts it as seen.
     updates.dismissed = updates.available;
     return updates.status;
@@ -1478,7 +1477,7 @@ class FakeBridge implements GerfautBridge {
     previewInputs.add(input);
     final preview = onPreview;
     if (preview == null) {
-      throw const BridgeException(
+      throw coreFailure(
         'invalid_input',
         'not a transaction: expected a PSBT (base64, hex or .psbt file) or '
             'a signed transaction (hex or .txn file)',

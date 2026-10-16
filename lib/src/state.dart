@@ -161,12 +161,22 @@ class PreferencesNotifier extends Notifier<Preferences> {
     return next;
   }
 
-  /// Shows [change] at once and writes it through. A refusal only loses
-  /// the preference, never the change on screen: putting it back would
-  /// undo what was asked, amounts shown again under the eye.
-  void show(PreferencesChange change) {
+  /// Shows [change] at once and writes it through, a second time when
+  /// the vault refuses the first. A refusal only loses the preference,
+  /// never the change on screen: putting it back would undo what was
+  /// asked, amounts shown again under the eye. Completes with whether
+  /// the vault took it, for a caller that has to say it did not.
+  Future<bool> show(PreferencesChange change) async {
     state = change.applyTo(state);
-    write(change).ignore();
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        await write(change);
+        return true;
+      } catch (_) {
+        // Asked once more; the second refusal is the caller's to say.
+      }
+    }
+    return false;
   }
 
   /// Changes what the price is asked by, the currency or the source, and
@@ -198,14 +208,42 @@ class MaskedNotifier extends Notifier<bool> {
   @override
   bool build() => ref.watch(preferencesProvider.select((p) => p.masked));
 
-  void toggle() => ref
-      .read(preferencesProvider.notifier)
-      .show(PreferencesChange(masked: !state));
+  void toggle() => _save(!state);
+
+  /// Writes the mask on screen again, after the vault refused it.
+  void retry() => _save(state);
+
+  /// Shows [masked] and writes it. The home screen widget and the
+  /// notifications posted in the background read the mask from the
+  /// vault: balances hidden on screen that the vault refused to keep
+  /// hidden are hidden on this screen only, and the screen says so
+  /// until a write goes through.
+  Future<void> _save(bool masked) async {
+    // Read before the change: shown, it rebuilds this notifier, whose
+    // ref then waits for the rebuild.
+    final unsaved = ref.read(maskUnsavedProvider.notifier);
+    final preferences = ref.read(preferencesProvider.notifier);
+    final saved = await preferences.show(PreferencesChange(masked: masked));
+    unsaved.set(masked && !saved);
+  }
 }
 
 /// Masked balances: the eye toggle.
 final maskedProvider = NotifierProvider<MaskedNotifier, bool>(
   MaskedNotifier.new,
+);
+
+class MaskUnsavedNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void set(bool unsaved) => state = unsaved;
+}
+
+/// Balances are hidden on screen and the vault refused, twice, to keep
+/// them hidden: see [MaskedNotifier].
+final maskUnsavedProvider = NotifierProvider<MaskUnsavedNotifier, bool>(
+  MaskUnsavedNotifier.new,
 );
 
 class UnitNotifier extends Notifier<AmountUnit> {
