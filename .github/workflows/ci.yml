@@ -1,10 +1,10 @@
 name: CI
 
-# Flutter formatting, analysis and widget tests on every push and pull
-# request, and the Rust crate's formatting, Clippy pass and tests on push
-# only: the crate depends on the sibling gerfaut-core checkout, which
-# comes from a deploy key, and a pull request from a fork never gets one.
-# The APKs themselves are built by the release workflow.
+# Flutter formatting, analysis and widget tests, the Rust crate's
+# formatting, Clippy pass and tests, and the checks of the signing
+# script, on every push to main and every pull request. The crate
+# depends on the sibling gerfaut-core checkout, which is public: no key
+# reads it. The APKs themselves are built by the release workflow.
 on:
   push:
     branches: [main]
@@ -17,7 +17,11 @@ jobs:
   flutter:
     runs-on: ubuntu-latest
     steps:
+      # No credentials left in .git/config: nothing after a checkout talks
+      # to GitHub, and the steps below run third-party code.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       # The Flutter the release builds with (reproducible/Dockerfile): a
       # green run on another one says little about the APK.
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
@@ -34,12 +38,12 @@ jobs:
         run: flutter test
 
   rust:
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           path: gerfaut-mobile
+          persist-credentials: false
 
       # The same revision the release builds against, so a green run here
       # means the APK compiles.
@@ -51,8 +55,8 @@ jobs:
         with:
           repository: gerfaut-wallet/gerfaut-core
           ref: ${{ steps.core.outputs.rev }}
-          ssh-key: ${{ secrets.CORE_DEPLOY_KEY }}
           path: gerfaut-core
+          persist-credentials: false
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
@@ -74,3 +78,18 @@ jobs:
       - name: Test
         working-directory: gerfaut-mobile/rust
         run: cargo test
+
+  # What scripts/sign-release.ps1 checks before it signs a release, on
+  # throwaway git repositories: no key, no network. Pester comes with
+  # the runner image.
+  signing-checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Test
+        shell: pwsh
+        run: |
+          Import-Module Pester -MinimumVersion 5.5
+          Invoke-Pester -Path scripts -CI
