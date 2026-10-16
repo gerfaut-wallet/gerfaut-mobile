@@ -101,6 +101,14 @@ jobs:
         working-directory: gerfaut-mobile/rust
         run: cargo test
 
+      # Cargo only warns when a [patch] no longer matches what the
+      # dependencies ask for, and records it in Cargo.lock: the fork of
+      # saturating-time would stop applying, and the Windows hang it
+      # fixes would come back, with every other step green.
+      - name: Check that every patch applies
+        working-directory: gerfaut-mobile/rust
+        run: if grep -n '^\[\[patch.unused\]\]' Cargo.lock; then exit 1; fi
+
   # What scripts/sign-release.ps1 checks before it signs a release, on
   # throwaway git repositories: no key, no network. Pester comes with
   # the runner image.
