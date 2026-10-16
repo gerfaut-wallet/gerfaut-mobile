@@ -19,6 +19,7 @@ import 'package:gerfaut/widgets/notice.dart';
 import 'package:gerfaut/widgets/select_field.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'core_fixtures.dart';
 import 'fakes.dart';
 
 Widget screen(
@@ -433,7 +434,7 @@ void main() {
       final bridge = FakeBridge()
         ..onParseWithOptions = (_, options) {
           if (options.network == Network.testnet4) {
-            throw const BridgeException('descriptor', 'no key for testnet 4');
+            throw coreFailure('descriptor', 'no key for testnet 4');
           }
           return on(options.network ?? Network.signet);
         };
@@ -455,7 +456,7 @@ void main() {
   ) async {
     const message = 'input contains private key material and was rejected';
     final bridge = FakeBridge(
-      onParse: (_) => throw const BridgeException('private_material', message),
+      onParse: (_) => throw coreFailure('private_material', message),
     );
     await tester.pumpWidget(screen(bridge));
     await tester.pumpAndSettle();
@@ -543,7 +544,7 @@ void main() {
     tester,
   ) async {
     final bridge = FakeBridge(onParse: (_) => makeParsedInput())
-      ..addWalletRefusal = const BridgeException(
+      ..addWalletRefusal = coreFailure(
         'descriptor',
         "descriptor error: Key too short (<66 char), doesn't match any format",
       );
@@ -761,8 +762,8 @@ void main() {
         ..onParseWithOptions = (_, _) {
           calls++;
           if (calls == 1) return loneKey();
-          throw const BridgeException(
-            'derivation path',
+          throw coreFailure(
+            'invalid_input',
             'invalid derivation path: a hardened step cannot be derived',
           );
         };

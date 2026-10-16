@@ -23,6 +23,7 @@ import 'package:gerfaut/widgets/notice.dart';
 import 'package:gerfaut/widgets/tx_diagram.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'core_fixtures.dart';
 import 'fakes.dart';
 import 'menu.dart';
 
@@ -169,7 +170,7 @@ void main() {
     tester,
   ) async {
     final bridge = FakeBridge()
-      ..onPreview = (_, _) => throw const BridgeException(
+      ..onPreview = (_, _) => throw coreFailure(
         'too_many_parts',
         'invalid qr: this QR code announces 6000 parts, more than Gerfaut '
             'reads',

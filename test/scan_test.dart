@@ -8,13 +8,13 @@ import 'package:flutter_zxing/flutter_zxing.dart' as zxing;
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/backup_qr.dart' show frameInterval;
 import 'package:gerfaut/screens/scan.dart';
-import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/screen.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/qr_camera.dart';
 
+import 'core_fixtures.dart';
 import 'fakes.dart';
 
 const _caption =
@@ -277,8 +277,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('1 / 3'), findsOneWidget);
 
-    bridge.onAssembleQr = (_) =>
-        throw const BridgeException('invalid_input', _psbt);
+    bridge.onAssembleQr = (_) => throw coreFailure('invalid_input', _psbt);
     state.onFrame('ur:crypto-psbt/1-2/part-one');
     await tester.pumpAndSettle();
 
@@ -305,7 +304,7 @@ void main() {
     // The core turns the count away before it decodes a part; its own
     // words are for logs.
     final bridge = FakeBridge()
-      ..onAssembleQr = (_) => throw const BridgeException(
+      ..onAssembleQr = (_) => throw coreFailure(
         'too_many_parts',
         'invalid qr: this QR code announces 6000 parts, more than Gerfaut '
             'reads',
@@ -343,8 +342,7 @@ void main() {
 
   testWidgets('the same refused code is not handed back again', (tester) async {
     final bridge = FakeBridge()
-      ..onAssembleQr = (_) =>
-          throw const BridgeException('invalid_input', _psbt);
+      ..onAssembleQr = (_) => throw coreFailure('invalid_input', _psbt);
     final outcome = _Outcome();
     final state = await _open(tester, bridge, outcome);
 

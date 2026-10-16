@@ -24,6 +24,7 @@ import 'package:gerfaut/widgets/setting_switch.dart';
 import 'package:gerfaut/widgets/wallet_icon.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'core_fixtures.dart';
 import 'fakes.dart';
 import 'menu.dart';
 
@@ -120,7 +121,7 @@ void main() {
     // to answer.
     useTallSurface(tester);
     final bridge = FakeBridge()
-      ..onFetchPrice = (_, _) => throw const BridgeException(
+      ..onFetchPrice = (_, _) => throw coreFailure(
         'tor',
         'tor: no Tor proxy answers at 127.0.0.1:9050',
       );
@@ -1378,7 +1379,7 @@ void main() {
       bridge.onInspectCertificate = (_) =>
           const UnreachableCertificate(detail: 'not a server name');
       bridge.onSetBackend = (_, _) =>
-          throw const BridgeException('invalid_input', reason);
+          throw coreFailure('invalid_input', reason);
       await tester.pumpWidget(
         settingsApp(bridge, section: SettingsSection.network),
       );

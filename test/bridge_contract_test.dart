@@ -12,6 +12,7 @@
 
 import 'dart:collection';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/src/bridge.dart';
@@ -703,7 +704,108 @@ class _Check {
   }
 }
 
+// --- the failures this app tells apart ------------------------------------
+
+/// The failure codes the code of this app compares, by file: every
+/// `.kind == '…'` and `.kind != '…'` on a [BridgeException], and every
+/// arm of a `switch` on its kind, found under the name each file gives
+/// the exception. A decode passes a code through untouched, so this is
+/// where a code the core renamed or dropped shows: in a comparison that
+/// can no longer be true.
+Map<String, Set<String>> _comparedKinds() {
+  final found = <String, Set<String>>{};
+  final arm = RegExp(
+    r"^\s*(?:case\s+)?'([a-z_]+)'\s*(?:=>|when\b|:|\|\|)",
+    multiLine: true,
+  );
+  final files = Directory('lib')
+      .listSync(recursive: true)
+      .whereType<File>()
+      .where((file) => file.path.endsWith('.dart'));
+  for (final file in files) {
+    final text = file.readAsStringSync();
+    final names = {
+      for (final match in RegExp(
+        r'on BridgeException catch \((\w+)',
+      ).allMatches(text))
+        match[1]!,
+      for (final match in RegExp(r'BridgeException (\w+)').allMatches(text))
+        match[1]!,
+      for (final match in RegExp(r'(\w+) is BridgeException').allMatches(text))
+        match[1]!,
+    };
+    final kinds = <String>{};
+    for (final name in names) {
+      for (final match in RegExp(
+        '\\b$name\\.kind\\s*[!=]=\\s*\'([a-z_]+)\'',
+      ).allMatches(text)) {
+        kinds.add(match[1]!);
+      }
+      for (final match in RegExp(
+        '\\bswitch\\s*\\(\\s*$name\\.kind\\s*\\)\\s*\\{',
+      ).allMatches(text)) {
+        var depth = 1;
+        var end = match.end;
+        while (end < text.length && depth > 0) {
+          final char = text[end++];
+          if (char == '{') depth++;
+          if (char == '}') depth--;
+        }
+        final block = text.substring(match.end, end);
+        kinds.addAll(arm.allMatches(block).map((match) => match[1]!));
+      }
+    }
+    if (kinds.isNotEmpty) found[file.path] = kinds;
+  }
+  return found;
+}
+
+/// The codes this app's own Rust bridge fails with, besides the core's:
+/// a JSON it cannot read, a manager not opened yet…
+Set<String> _bridgeKinds() {
+  final error = RegExp(r'error_json\(\s*"([a-z_]+)"');
+  return {
+    for (final file
+        in Directory('rust/src')
+            .listSync(recursive: true)
+            .whereType<File>()
+            .where((file) => file.path.endsWith('.rs')))
+      ...error.allMatches(file.readAsStringSync()).map((match) => match[1]!),
+  };
+}
+
 void main() {
+  test('tells apart only the failures the core or its bridge sends', () {
+    final codes = {
+      for (final code in coreCases('ErrorCode').values) code as String,
+    };
+    final own = _bridgeKinds();
+    expect(own, contains('bad_json'), reason: 'the bridge is read');
+    final compared = _comparedKinds();
+    // A scan that matched nothing would pass: it finds what is known.
+    for (final (file, kinds) in [
+      ('lib/screens/backup_restore.dart', {'wrong_key', 'newer_format'}),
+      ('lib/screens/broadcast.dart', {'invalid_input', 'too_many_parts'}),
+      ('lib/screens/scan.dart', {'too_many_parts'}),
+      ('lib/screens/settings/about_section.dart', {'tor'}),
+      ('lib/screens/settings/general_section.dart', {'tor'}),
+      ('lib/src/bridge.dart', {'private_material', 'descriptor'}),
+    ]) {
+      expect(compared[file], containsAll(kinds), reason: file);
+    }
+    expect(
+      [
+        for (final MapEntry(key: file, value: kinds) in compared.entries)
+          for (final kind in kinds)
+            if (!codes.contains(kind) && !own.contains(kind)) '$file: $kind',
+      ],
+      isEmpty,
+      reason:
+          'failure codes this app compares, which neither the core '
+          '(ErrorCode.json) nor its bridge sends',
+    );
+  });
+
   test('the stand-ins of fakes.dart hold what the core sends', () {
     final defaults = coreCases('Preferences')['default'];
     expect(
