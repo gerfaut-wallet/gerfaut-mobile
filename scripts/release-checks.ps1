@@ -9,10 +9,10 @@
 # ssh. The URL is git's own, insteadOf rewrites applied, so a rule that
 # sends github.com to a mirror is caught too.
 #
-# $TestOrigin is for tests only: release-checks.Tests.ps1, and the dry
-# run of gerfaut-meta through GERFAUT_SIGN_TEST_ORIGIN. It names one
-# file:// URL that origin may be instead of github.com, and nothing
-# else: set by mistake on a clone of GitHub, it fails the run.
+# $TestOrigin is for tests only: the tests and the dry run set it,
+# through GERFAUT_SIGN_TEST_ORIGIN for the latter. It names one file://
+# URL that origin may be instead of github.com, and nothing else: set by
+# mistake on a clone of GitHub, it fails the run.
 function Assert-OriginUrl {
     param(
         [Parameter(Mandatory)][AllowEmptyString()][string]$Url,
