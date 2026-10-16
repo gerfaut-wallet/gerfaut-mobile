@@ -5,6 +5,7 @@
 
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_rust_bridge/flutter_rust_bridge.dart'
     show PanicException;
 
@@ -320,6 +321,11 @@ class RustBridge implements GerfautBridge {
     }
     return decoded;
   }
+
+  /// The same, for the test that reads the core's failures the way
+  /// the bridge hands them over.
+  @visibleForTesting
+  static dynamic decode(String raw) => _decode(raw);
 
   static Map<String, dynamic> _object(String raw) =>
       _decode(raw) as Map<String, dynamic>;
