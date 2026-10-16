@@ -2,13 +2,15 @@ name: CI
 
 # Flutter formatting, analysis and widget tests, the Rust crate's
 # formatting, Clippy pass and tests, and the checks of the signing
-# script, on every push to main and every pull request. The crate
-# depends on the sibling gerfaut-core checkout, which is public: no key
-# reads it. The APKs themselves are built by the release workflow.
+# script, on every push to main, every pull request, and on demand
+# (Actions, CI, Run workflow). The crate depends on the sibling
+# gerfaut-core checkout, which is public: no key reads it. The APKs
+# themselves are built by the release workflow.
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
