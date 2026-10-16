@@ -164,6 +164,36 @@ void main() {
     expect(find.byType(SnackBar), findsNothing);
   });
 
+  testWidgets('the error goes as the text changes, in the slot of the hint', (
+    tester,
+  ) async {
+    await tester.pumpWidget(broadcastApp(FakeBridge()));
+    await tester.pumpAndSettle();
+    final previewAt = tester.getTopLeft(find.text('Preview'));
+    final importBefore = tester.getTopLeft(find.text('Import a file'));
+    await preview(tester, 'hello world');
+
+    const headline =
+        'This is not a transaction Gerfaut can read. Paste a signed '
+        'transaction in hex, or a PSBT.';
+    final hint = find.ancestor(
+      of: find.textContaining('Gerfaut never signs.'),
+      matching: find.byType(Visibility),
+    );
+    expect(find.text(headline), findsOneWidget);
+    // Kept under the error, hidden: it holds the slot's height.
+    expect(tester.widget<Visibility>(hint).visible, isFalse);
+    expect(tester.getTopLeft(find.text('Preview')), previewAt);
+
+    await tester.enterText(find.byType(TextField), 'hello world!');
+    await tester.pump();
+    expect(find.text(headline), findsNothing);
+    expect(tester.widget<Visibility>(hint).visible, isTrue);
+    // Back where everything was before the error.
+    expect(tester.getTopLeft(find.text('Import a file')), importBefore);
+    expect(tester.getTopLeft(find.text('Preview')), previewAt);
+  });
+
   testWidgets('a ready PSBT previews in full and can be sent', (tester) async {
     useTallSurface(tester);
     final bridge = FakeBridge()..onPreview = (_, _) => makePreview();

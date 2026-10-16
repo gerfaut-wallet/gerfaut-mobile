@@ -310,7 +310,9 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                   enableSuggestions: false,
                   keyboardType: TextInputType.multiline,
                   style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
-                  onChanged: (_) => setState(() {}),
+                  // Typing again answers a refusal: it goes at the first
+                  // keystroke, and the hint comes back in its place.
+                  onChanged: (_) => setState(() => _inputError = null),
                   decoration: InputDecoration(
                     hintText: 'cHNidP8B… (base64) or 02000000… (hex)',
                     hintStyle: tokens.data.copyWith(
@@ -331,16 +333,29 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                   ),
                 ),
               ),
-              if (_inputError case final error?) ...[
-                const SizedBox(height: GerfautSpacing.sm),
-                _InputErrorLine(error: error, tokens: tokens),
-              ],
               const SizedBox(height: GerfautSpacing.sm),
-              Text(
-                'Gerfaut never signs. It reads a finished transaction, shows '
-                'what it does, and hands it to the network on '
-                '${network.label}.',
-                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+              // One slot under the field, for the hint or for what went
+              // wrong in its place: the hint is kept, hidden, under the
+              // error, so the slot never shrinks below the hint's height
+              // and what follows moves only by what the error has over
+              // it. Preview is pinned to the bottom and never moves.
+              Stack(
+                children: [
+                  Visibility(
+                    visible: _inputError == null,
+                    maintainSize: true,
+                    maintainAnimation: true,
+                    maintainState: true,
+                    child: Text(
+                      'Gerfaut never signs. It reads a finished transaction, '
+                      'shows what it does, and hands it to the network on '
+                      '${network.label}.',
+                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                    ),
+                  ),
+                  if (_inputError case final error?)
+                    _InputErrorLine(error: error, tokens: tokens),
+                ],
               ),
               const SizedBox(height: GerfautSpacing.md),
               Row(
