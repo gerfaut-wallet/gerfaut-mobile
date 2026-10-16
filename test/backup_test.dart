@@ -1170,8 +1170,8 @@ void main() {
 
       expect(
         find.text(
-          'This backup holds a private key, and Gerfaut only watches: '
-          'nothing was restored.',
+          'A wallet in this backup holds a private key, and Gerfaut only '
+          'watches: nothing was restored.',
         ),
         findsOneWidget,
       );

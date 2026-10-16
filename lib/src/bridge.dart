@@ -61,8 +61,8 @@ Future<String> guardPanics(Future<String> call) async {
 String materialRefusal(BridgeException error, {bool backup = false}) {
   return switch (error.kind) {
     'private_material' when backup =>
-      'This backup holds a private key, and Gerfaut only watches: nothing '
-          'was restored.',
+      'A wallet in this backup holds a private key, and Gerfaut only '
+          'watches: nothing was restored.',
     'private_material' =>
       'This holds a private key, and Gerfaut only watches: nothing was '
           'saved. Bring the public descriptor or extended public key '
