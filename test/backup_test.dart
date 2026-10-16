@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -571,6 +572,32 @@ void main() {
       expect(find.text('Show QR code'), findsOneWidget);
       await tester.pump(const Duration(seconds: 5));
       await tester.pumpAndSettle();
+    });
+
+    test('a backup shared earlier leaves the cache, folders and all', () async {
+      final cache = await Directory.systemTemp.createTemp('gerfaut-cache');
+      addTearDown(() => cache.delete(recursive: true));
+      final sep = Platform.pathSeparator;
+      // Where share_plus writes the backup it is handed from memory, and
+      // the copy it hands on to the other app.
+      final written = Directory('${cache.path}${sep}0b5f6d2e-uuid')
+        ..createSync();
+      final first = File(
+        '${written.path}${sep}gerfaut-backup-2026-10-16.gerfaut',
+      )..writeAsBytesSync([1, 2, 3]);
+      final handed = Directory('${cache.path}${sep}share_plus')..createSync();
+      final second = File(
+        '${handed.path}${sep}gerfaut-backup-2026-10-16.gerfaut',
+      )..writeAsBytesSync([1, 2, 3]);
+      final other = File('${cache.path}${sep}keep.txt')
+        ..writeAsStringSync('not ours');
+
+      expect(await forgetSharedCopies(cache), 2);
+      expect(first.existsSync(), isFalse);
+      expect(written.existsSync(), isFalse);
+      expect(second.existsSync(), isFalse);
+      expect(handed.existsSync(), isFalse);
+      expect(other.existsSync(), isTrue);
     });
   });
 

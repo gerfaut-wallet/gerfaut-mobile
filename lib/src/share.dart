@@ -14,7 +14,8 @@ import 'package:share_plus/share_plus.dart';
 abstract class CsvSharer {
   Future<void> shareCsv({required String csv, required String filename});
 
-  /// Deletes the histories earlier shares left in the cache.
+  /// Deletes what earlier shares left in the cache: the histories, and
+  /// the backups shared from their own screen.
   Future<void> forgetCopies();
 }
 
@@ -34,7 +35,7 @@ class SystemCsvSharer implements CsvSharer {
   @override
   Future<void> forgetCopies() async {
     try {
-      await forgetCsvCopies();
+      await forgetSharedCopies();
     } catch (_) {
       // No cache to reach, as in a test: nothing to delete.
     }
@@ -42,7 +43,7 @@ class SystemCsvSharer implements CsvSharer {
 
   @override
   Future<void> shareCsv({required String csv, required String filename}) async {
-    await forgetCsvCopies();
+    await forgetSharedCopies();
     await SharePlus.instance.share(
       ShareParams(
         files: [
@@ -58,21 +59,21 @@ class SystemCsvSharer implements CsvSharer {
   }
 }
 
-/// Deletes the histories left in the cache to share them. Only the two
-/// places that hold them are read, not the whole cache, which this runs
-/// over at every start: its top, where earlier builds wrote them, and
-/// the folders right under it, one for each file share_plus is handed
-/// from memory and its own `share_plus` it copies them to. A folder
-/// emptied here goes too. Answers how many histories went.
-Future<int> forgetCsvCopies([Directory? cache]) async {
+/// Deletes the histories and backups left in the cache to share them.
+/// Only the two places that hold them are read, not the whole cache,
+/// which this runs over at every start: its top, where earlier builds
+/// wrote histories, and the folders right under it, one for each file
+/// share_plus is handed from memory and its own `share_plus` it copies
+/// them to. A folder emptied here goes too. Answers how many files went.
+Future<int> forgetSharedCopies([Directory? cache]) async {
   final dir = cache ?? await getTemporaryDirectory();
   var gone = 0;
   try {
     await for (final entry in dir.list(followLinks: false)) {
       if (entry is File) {
-        if (await _forgetCsv(entry)) gone++;
+        if (await _forgetShared(entry)) gone++;
       } else if (entry is Directory) {
-        gone += await _forgetCsvIn(entry);
+        gone += await _forgetSharedIn(entry);
       }
     }
   } on FileSystemException {
@@ -81,13 +82,13 @@ Future<int> forgetCsvCopies([Directory? cache]) async {
   return gone;
 }
 
-/// The histories in one folder, not below it; the folder goes once
+/// The shared files in one folder, not below it; the folder goes once
 /// they have left it empty.
-Future<int> _forgetCsvIn(Directory folder) async {
+Future<int> _forgetSharedIn(Directory folder) async {
   var gone = 0;
   try {
     await for (final entry in folder.list(followLinks: false)) {
-      if (entry is File && await _forgetCsv(entry)) gone++;
+      if (entry is File && await _forgetShared(entry)) gone++;
     }
     if (gone > 0 && await folder.list().isEmpty) await folder.delete();
   } on FileSystemException {
@@ -96,8 +97,13 @@ Future<int> _forgetCsvIn(Directory folder) async {
   return gone;
 }
 
-Future<bool> _forgetCsv(File file) async {
-  if (!file.path.endsWith('-transactions.csv')) return false;
+/// A history is named after its wallet, a backup carries the extension
+/// every Gerfaut backup has: nothing else in the cache ends that way.
+Future<bool> _forgetShared(File file) async {
+  final path = file.path;
+  if (!path.endsWith('-transactions.csv') && !path.endsWith('.gerfaut')) {
+    return false;
+  }
   await file.delete();
   return true;
 }
@@ -116,6 +122,10 @@ abstract class BackupSharer {
 /// The real sharer: the bytes go straight to the share sheet, which
 /// writes them to a temporary file of its own. The name override is
 /// what names that file: an in-memory [XFile] drops its name on Android.
+///
+/// Sealed as it is, that file has no business outliving the share: it
+/// goes the way a history's copy goes, at the next share and each time
+/// the app starts, never while the app it went to may still read it.
 class SystemBackupSharer implements BackupSharer {
   const SystemBackupSharer();
 
@@ -124,6 +134,7 @@ class SystemBackupSharer implements BackupSharer {
     required Uint8List bytes,
     required String filename,
   }) async {
+    await forgetSharedCopies();
     await SharePlus.instance.share(
       ShareParams(
         files: [

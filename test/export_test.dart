@@ -315,7 +315,7 @@ void main() {
     final other = File('${cache.path}${Platform.pathSeparator}keep.txt')
       ..writeAsStringSync('not ours');
 
-    expect(await forgetCsvCopies(cache), 1);
+    expect(await forgetSharedCopies(cache), 1);
     expect(old.existsSync(), isFalse);
     expect(other.existsSync(), isTrue);
   });
@@ -331,11 +331,11 @@ void main() {
         ..createSync();
       final shared = File('${folder.path}${sep}savings-transactions.csv')
         ..writeAsStringSync('txid,amount');
-      final backup = Directory('${cache.path}${sep}other-uuid')..createSync();
-      final kept = File('${backup.path}${sep}wallets.gerfaut')
-        ..writeAsStringSync('sealed');
+      final other = Directory('${cache.path}${sep}other-uuid')..createSync();
+      final kept = File('${other.path}${sep}picture.jpg')
+        ..writeAsStringSync('not ours');
 
-      expect(await forgetCsvCopies(cache), 1);
+      expect(await forgetSharedCopies(cache), 1);
       expect(shared.existsSync(), isFalse);
       expect(folder.existsSync(), isFalse);
       expect(kept.existsSync(), isTrue);
@@ -357,7 +357,7 @@ void main() {
     final elsewhere = File('${deep.path}${sep}other-transactions.csv')
       ..writeAsStringSync('txid,amount');
 
-    expect(await forgetCsvCopies(cache), 1);
+    expect(await forgetSharedCopies(cache), 1);
     expect(copied.existsSync(), isFalse);
     expect(shareFolder.existsSync(), isFalse);
     expect(elsewhere.existsSync(), isTrue);

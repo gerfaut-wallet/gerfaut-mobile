@@ -186,7 +186,8 @@ class _Hydrated extends ConsumerWidget {
         // when Android lets it start. Not before the notices are known
         // to get through: Live is there to say things.
         unawaited(_checkNoticesThenLive(ref));
-        // A history shared last time may still sit in the cache.
+        // A history or a backup shared last time, or by a session the
+        // system ended, may still sit in the cache.
         unawaited(ref.read(csvSharerProvider).forgetCopies());
       }
       // The vault says whether a lock exists, every time it is read:
