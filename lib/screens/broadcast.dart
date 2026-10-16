@@ -570,12 +570,20 @@ class _Hero extends StatelessWidget {
               label: preview.source.label,
               tokens: tokens,
             ),
+            // Amber whenever it cannot go: a status, since Broadcast stays
+            // off. The red is the core's caution below, which says why.
             _Pill(
               tone: preview.ready ? _Tone.confirmed : _Tone.pending,
               icon: preview.ready
                   ? LucideIcons.circleCheck
+                  : preview.refusedOutright
+                  ? LucideIcons.ban
                   : LucideIcons.penOff,
-              label: preview.ready ? 'Ready to broadcast' : 'Not fully signed',
+              label: preview.ready
+                  ? 'Ready to broadcast'
+                  : preview.refusedOutright
+                  ? 'Will be refused'
+                  : 'Not fully signed',
               tokens: tokens,
             ),
             if (preview.network != Network.mainnet)
@@ -1179,16 +1187,9 @@ class _ConfirmDialog extends ConsumerWidget {
     final ending = preview.inputsUnconfirmed
         ? ', $_claimedMark: no backend confirmed what its inputs are worth.'
         : '.';
-    // Every input known and still no fee: the outputs ask for more than
-    // the inputs bring, which no node will relay.
-    final inputsTotal = sideTotal(preview.inputs.map((i) => i.valueSats));
-    final outputsTotal = preview.outputs.fold(0, (sum, o) => sum + o.valueSats);
-    final overspends =
-        fee == null && inputsTotal != null && outputsTotal > inputsTotal;
-    final feeLine = overspends
-        ? 'Its outputs pay more than its inputs bring: the network will '
-              'refuse it.'
-        : fee == null
+    // Outputs over the inputs never get here: the core blocks the send,
+    // so a fee missing is one nobody could establish.
+    final feeLine = fee == null
         ? 'Its fee could not be established.'
         : 'It pays a fee of ${masked ? maskedValue : formatAmount(fee, unit)}'
               '${rate != null ? ' (${rate.toStringAsFixed(1)} sat/vB)' : ''}'

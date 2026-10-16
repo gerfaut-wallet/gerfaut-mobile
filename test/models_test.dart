@@ -356,6 +356,24 @@ void main() {
       expect(info.severity, TxSeverity.info);
     });
 
+    test('reads whether the core blocks the send, and blocks nothing '
+        'when the wire says nothing', () {
+      final refused = TxWarning.fromJson(const {
+        'kind': 'input_spent',
+        'message': 'Input 0 is already spent by another transaction.',
+        'severity': 'alert',
+        'blocking': true,
+      });
+      expect(refused.blocking, isTrue);
+
+      final silent = TxWarning.fromJson(const {
+        'kind': 'input_spent',
+        'message': 'Input 0 is already spent.',
+        'severity': 'alert',
+      });
+      expect(silent.blocking, isFalse);
+    });
+
     test('an input the chain disagrees about is named and loud', () {
       final warning = TxWarning.fromJson(const {
         'kind': 'input_mismatch',

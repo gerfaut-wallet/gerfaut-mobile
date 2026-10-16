@@ -2073,13 +2073,15 @@ enum TxSeverity {
   }
 }
 
-/// A caution to read before broadcasting. Never blocks: the preview
-/// only makes the transaction legible.
+/// A caution to read before broadcasting. The preview only makes the
+/// transaction legible: a caution blocks the send only when the core is
+/// sure the network refuses it ([blocking]).
 class TxWarning {
   const TxWarning({
     required this.kind,
     required this.message,
     required this.severity,
+    this.blocking = false,
   });
 
   factory TxWarning.fromJson(Map<String, dynamic> json) {
@@ -2087,6 +2089,7 @@ class TxWarning {
       kind: TxWarningKind.fromId(json['kind'] as String),
       message: json['message'] as String,
       severity: TxSeverity.fromId(json['severity'] as String?),
+      blocking: json['blocking'] as bool? ?? false,
     );
   }
 
@@ -2095,6 +2098,11 @@ class TxWarning {
 
   /// The tone to read it in, as the core decided it.
   final TxSeverity severity;
+
+  /// The network is sure to refuse the transaction while this holds: a
+  /// signature missing, a coin spent in a block, outputs over the
+  /// inputs. The core sets it, and a preview with one is not ready.
+  final bool blocking;
 }
 
 /// Everything shown before broadcasting a transaction.
@@ -2164,7 +2172,8 @@ class TxPreview {
   final int locktime;
   final bool rbf;
 
-  /// Every input is signed and the transaction can be sent.
+  /// The transaction can be sent: every input is signed, and no
+  /// caution is [TxWarning.blocking].
   final bool ready;
   final List<TxWarning> warnings;
 
@@ -2178,6 +2187,13 @@ class TxPreview {
   /// and the fee resting on it are the file's own word, not the chain's.
   bool get inputsUnconfirmed =>
       warnings.any((w) => w.kind == TxWarningKind.inputUnknown);
+
+  /// Whether the core is sure the network refuses this transaction for
+  /// something other than a missing signature: a coin already spent in
+  /// a block, outputs worth more than the inputs. Signing again changes
+  /// neither, so the readiness pill says it before a missing signature.
+  bool get refusedOutright =>
+      warnings.any((w) => w.blocking && w.kind != TxWarningKind.unsigned);
 }
 
 /// Outcome of a broadcast.

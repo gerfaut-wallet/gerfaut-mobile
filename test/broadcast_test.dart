@@ -310,7 +310,7 @@ void main() {
     expect(find.textContaining('Do not send it as it is.'), findsOneWidget);
   });
 
-  testWidgets('outputs worth more than the inputs are said before the send', (
+  testWidgets('outputs worth more than the inputs will be refused', (
     tester,
   ) async {
     useTallSurface(tester);
@@ -319,6 +319,7 @@ void main() {
         'this transaction.';
     final bridge = FakeBridge()
       ..onPreview = (_, _) => makePreview(
+        ready: false,
         feeSats: null,
         feeRate: null,
         outputs: const [
@@ -333,6 +334,7 @@ void main() {
             kind: TxWarningKind.feeUnknown,
             message: message,
             severity: TxSeverity.info,
+            blocking: true,
           ),
         ],
       );
@@ -340,16 +342,71 @@ void main() {
     await tester.pumpAndSettle();
     await preview(tester);
     expect(find.text(message), findsOneWidget);
+    // No node takes it: the core blocks the send, and the pill says the
+    // same as the caution.
+    expect(find.text('Will be refused'), findsOneWidget);
+    expect(find.text('Ready to broadcast'), findsNothing);
+    expect(primaryButton(tester, 'Broadcast').onPressed, isNull);
+  });
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Broadcast'));
+  // The rehearsal of 0.1.0: a transaction already mined, pasted again,
+  // read "Ready to broadcast" in green beside the red line saying its
+  // coin was spent, and Broadcast was on.
+  testWidgets('a coin spent in a block is never called ready', (tester) async {
+    useTallSurface(tester);
+    const message =
+        'Input 0 is already spent by another transaction, which is in a '
+        'block. The network will refuse this one.';
+    final bridge = FakeBridge()
+      ..onPreview = (_, _) => makePreview(
+        ready: false,
+        source: TxSource.rawTransaction,
+        warnings: const [
+          TxWarning(
+            kind: TxWarningKind.inputSpent,
+            message: message,
+            severity: TxSeverity.alert,
+            blocking: true,
+          ),
+        ],
+      );
+    await tester.pumpWidget(broadcastApp(bridge));
     await tester.pumpAndSettle();
-    expect(
-      find.text(
-        'Its outputs pay more than its inputs bring: the network will '
-        'refuse it.',
-      ),
-      findsOneWidget,
-    );
+    await preview(tester);
+
+    final light = GerfautTokens.light;
+    expect(find.text('Will be refused'), findsOneWidget);
+    expect(find.text('Ready to broadcast'), findsNothing);
+    expect(find.text('Not fully signed'), findsNothing);
+    // A status in amber; the red is the caution, which says why.
+    expect(blockOf(tester, 'Will be refused').color, light.pendingSurface);
+    expect(blockOf(tester, message).color, light.alertSurface);
+    expect(primaryButton(tester, 'Broadcast').onPressed, isNull);
+  });
+
+  // A spend still in the mempool is the node's to judge: this one may
+  // replace it. The caution stays red; the send stays possible.
+  testWidgets('a red caution that blocks nothing leaves the send on', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge()
+      ..onPreview = (_, _) => makePreview(
+        warnings: const [
+          TxWarning(
+            kind: TxWarningKind.inputSpent,
+            message:
+                'Input 0 is already spent by another transaction waiting in '
+                'the mempool.',
+            severity: TxSeverity.alert,
+          ),
+        ],
+      );
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+    await preview(tester);
+    expect(find.text('Ready to broadcast'), findsOneWidget);
+    expect(primaryButton(tester, 'Broadcast').onPressed, isNotNull);
   });
 
   testWidgets("a coin nobody confirmed marks the figures as the file's", (
@@ -433,6 +490,7 @@ void main() {
             kind: TxWarningKind.unsigned,
             message: '1 of 1 inputs carry no signature.',
             severity: TxSeverity.alert,
+            blocking: true,
           ),
           TxWarning(
             kind: TxWarningKind.spendsWatched,
