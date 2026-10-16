@@ -220,7 +220,7 @@ void main() {
       expect(preferences.fiat, isTrue);
       // The Turkish lira keeps the identifier the core stores, whatever
       // Dart makes of the word `try`.
-      expect(preferences.fiatCurrency, FiatCurrency.tryLira);
+      expect(preferences.fiatCurrency, const FiatCurrency('try'));
       expect(preferences.fiatCurrency.code, 'TRY');
       expect(preferences.priceSource, PriceSource.coingecko);
       expect(preferences.notifyNewTx, isTrue);
@@ -240,7 +240,7 @@ void main() {
       expect(
         jsonEncode(
           const PreferencesChange(
-            fiatCurrency: FiatCurrency.inr,
+            fiatCurrency: FiatCurrency('inr'),
             masked: false,
           ).toJson(),
         ),
@@ -270,51 +270,53 @@ void main() {
     });
   });
 
-  group('FiatCurrency', () {
-    test('offers thirty currencies, the seven common ones first', () {
-      expect(FiatCurrency.values, hasLength(30));
-      final common = FiatCurrency.values
-          .where((c) => c.reach == CurrencyReach.every)
-          .toList();
-      expect(common, hasLength(7));
-      expect(FiatCurrency.values.take(7), common);
-      expect(common.map((c) => c.code), [
+  group('PriceTable', () {
+    test('reads the currencies and sources in the core\'s order', () {
+      final table = PriceTable.fromJson({
+        'currencies': [
+          {
+            'currency': 'eur',
+            'code': 'EUR',
+            'name': 'Euro',
+            'reach': 'every',
+            'sources': ['coingecko', 'kraken', 'mempool_space'],
+          },
+          {
+            'currency': 'ngn',
+            'code': 'NGN',
+            'name': 'Nigerian naira',
+            'reach': 'coingecko_only',
+            'sources': ['coingecko'],
+          },
+        ],
+        'sources': [
+          {
+            'source': 'coingecko',
+            'label': 'CoinGecko',
+            'ranges': ['day', 'week', 'month', 'year'],
+          },
+          {
+            'source': 'mempool_space',
+            'label': 'mempool.space',
+            'ranges': ['month', 'year', 'max'],
+          },
+        ],
+        'refresh_secs': 60,
+      });
+      expect(table.refresh, const Duration(seconds: 60));
+      expect(table.currencies.map((entry) => entry.currency.code), [
         'EUR',
-        'USD',
-        'GBP',
-        'CHF',
-        'JPY',
-        'CAD',
-        'AUD',
+        'NGN',
       ]);
-    });
-
-    test('every currency carries a distinct identifier, code and name', () {
-      expect(
-        FiatCurrency.values.map((c) => c.id).toSet(),
-        hasLength(FiatCurrency.values.length),
-      );
-      for (final currency in FiatCurrency.values) {
-        expect(currency.id, currency.code.toLowerCase());
-        expect(currency.label, isNotEmpty);
-        expect(FiatCurrency.fromId(currency.id), currency);
-      }
-      // The Turkish lira keeps the identifier the core stores, whatever
-      // Dart makes of the word `try`.
-      expect(FiatCurrency.fromId('try'), FiatCurrency.tryLira);
-      expect(FiatCurrency.fromId('xxx'), isNull);
-    });
-
-    test('only CoinGecko quotes past the common seven', () {
-      for (final source in PriceSource.values) {
-        expect(source.supportsCurrency(FiatCurrency.jpy), isTrue);
-      }
-      expect(PriceSource.coingecko.supportsCurrency(FiatCurrency.ngn), isTrue);
-      expect(PriceSource.kraken.supportsCurrency(FiatCurrency.ngn), isFalse);
-      expect(
-        PriceSource.mempoolSpace.supportsCurrency(FiatCurrency.ngn),
-        isFalse,
-      );
+      final naira = table.entryOf(const FiatCurrency('ngn'))!;
+      expect(naira.name, 'Nigerian naira');
+      expect(naira.reach, CurrencyReach.coingeckoOnly);
+      expect(naira.sources, [PriceSource.coingecko]);
+      expect(table.entryOf(const FiatCurrency('xxx')), isNull);
+      expect(table.sources.map((entry) => entry.label), [
+        'CoinGecko',
+        'mempool.space',
+      ]);
     });
   });
 

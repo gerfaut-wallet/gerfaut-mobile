@@ -134,7 +134,7 @@ const _untilTheVaultAnswers = Preferences(
   unit: AmountUnit.btc,
   masked: false,
   fiat: false,
-  fiatCurrency: FiatCurrency.eur,
+  fiatCurrency: FiatCurrency('eur'),
   priceSource: PriceSource.coingecko,
   notifyNewTx: false,
   explorerAck: false,
@@ -286,6 +286,12 @@ final explorerAckProvider = NotifierProvider<ExplorerAckNotifier, bool>(
   ExplorerAckNotifier.new,
 );
 
+/// The currencies and price sources the settings offer, and how often
+/// the price is asked. The core's table: it only changes with the app.
+final priceTableProvider = FutureProvider<PriceTable>((ref) {
+  return ref.watch(bridgeProvider).priceTable();
+});
+
 /// Whether the app is on screen. Dart timers go on firing behind the
 /// launcher for as long as Live keeps the process, so what runs on a
 /// clock for the screen's sake watches this and stops while it is
@@ -325,8 +331,8 @@ final relativeClockProvider = NotifierProvider<RelativeClock, int>(
 );
 
 /// Current BTC price, in the currency and from the source of the
-/// preferences, refreshed every minute while fiat display is on and the
-/// app is on screen. Failures surface as an error state:
+/// preferences, asked again at the core's cadence while fiat display is
+/// on and the app is on screen. Failures surface as an error state:
 /// amounts degrade to no fiat and the settings screen shows a quiet
 /// hint.
 class PriceNotifier extends AsyncNotifier<PriceQuote?> {
@@ -357,8 +363,9 @@ class PriceNotifier extends AsyncNotifier<PriceQuote?> {
       return kept.valueOrNull;
     }
     ref.onDispose(() => _timer?.cancel());
+    final every = (await ref.read(priceTableProvider.future)).refresh;
     // Scheduled before the fetch so failures retry on the same cadence.
-    _timer = Timer(const Duration(seconds: 60), () => ref.invalidateSelf());
+    _timer = Timer(every, () => ref.invalidateSelf());
     return ref.read(bridgeProvider).fetchPrice();
   }
 }

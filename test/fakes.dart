@@ -30,10 +30,45 @@ const kPreferences = Preferences(
   unit: AmountUnit.btc,
   masked: false,
   fiat: false,
-  fiatCurrency: FiatCurrency.eur,
+  fiatCurrency: FiatCurrency('eur'),
   priceSource: PriceSource.coingecko,
   notifyNewTx: false,
   explorerAck: false,
+);
+
+const _everySource = [
+  PriceSource.coingecko,
+  PriceSource.kraken,
+  PriceSource.mempoolSpace,
+];
+
+CurrencyEntry _currency(String id, String name, {bool everySource = true}) {
+  return CurrencyEntry(
+    currency: FiatCurrency(id),
+    name: name,
+    reach: everySource ? CurrencyReach.every : CurrencyReach.coingeckoOnly,
+    sources: everySource ? _everySource : const [PriceSource.coingecko],
+  );
+}
+
+/// Part of the core's table, in its order: four currencies every source
+/// quotes, three only CoinGecko does.
+final kPriceTable = PriceTable(
+  currencies: [
+    _currency('eur', 'Euro'),
+    _currency('usd', 'US dollar'),
+    _currency('chf', 'Swiss franc'),
+    _currency('jpy', 'Japanese yen'),
+    _currency('inr', 'Indian rupee', everySource: false),
+    _currency('ngn', 'Nigerian naira', everySource: false),
+    _currency('try', 'Turkish lira', everySource: false),
+  ],
+  sources: const [
+    SourceEntry(source: PriceSource.coingecko, label: 'CoinGecko'),
+    SourceEntry(source: PriceSource.kraken, label: 'Kraken'),
+    SourceEntry(source: PriceSource.mempoolSpace, label: 'mempool.space'),
+  ],
+  refresh: const Duration(seconds: 60),
 );
 
 /// Puts [change] in what the screens hold, as hydration does with the
@@ -45,10 +80,11 @@ void holdPreferences(ProviderContainer container, PreferencesChange change) {
 }
 
 /// The core's answer to a change of the preferences: the change made,
-/// and the currency winning.
+/// and the currency winning, by [kPriceTable].
 Preferences coreChange(Preferences stored, PreferencesChange change) {
   final next = change.applyTo(stored);
-  if (next.priceSource.supportsCurrency(next.fiatCurrency)) return next;
+  final entry = kPriceTable.entryOf(next.fiatCurrency);
+  if (entry == null || entry.sources.contains(next.priceSource)) return next;
   return next.copyWith(priceSource: PriceSource.coingecko);
 }
 
@@ -1191,6 +1227,9 @@ class FakeBridge implements GerfautBridge {
     _store(preferences: stored);
     return stored;
   }
+
+  @override
+  Future<PriceTable> priceTable() async => kPriceTable;
 
   /// Price hook, handed the pair the preferences name; throw a
   /// [BridgeException] to simulate an unreachable source. The default

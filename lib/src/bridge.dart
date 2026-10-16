@@ -162,6 +162,10 @@ abstract class GerfautBridge {
   /// follows.
   Future<Preferences> setPreferences(PreferencesChange change);
 
+  /// The currencies and price sources on offer, and how often the price
+  /// is asked.
+  Future<PriceTable> priceTable();
+
   /// The current BTC price, in the currency and from the source of the
   /// preferences.
   Future<PriceQuote> fetchPrice();
@@ -490,6 +494,11 @@ class RustBridge implements GerfautBridge {
       rust.setPreferences(changeJson: jsonEncode(change.toJson())),
     );
     return Preferences.fromJson(_object(raw));
+  }
+
+  @override
+  Future<PriceTable> priceTable() async {
+    return PriceTable.fromJson(_object(await _guard(rust.priceTable())));
   }
 
   @override

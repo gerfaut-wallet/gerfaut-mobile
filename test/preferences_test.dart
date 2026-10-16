@@ -28,13 +28,13 @@ void main() {
       ..preferences = kPreferences.copyWith(
         unit: AmountUnit.sats,
         masked: true,
-        fiatCurrency: FiatCurrency.usd,
+        fiatCurrency: const FiatCurrency('usd'),
         priceSource: PriceSource.kraken,
       );
     final container = screens(bridge);
     expect(container.read(unitProvider), AmountUnit.sats);
     expect(container.read(maskedProvider), isTrue);
-    expect(container.read(fiatCurrencyProvider), FiatCurrency.usd);
+    expect(container.read(fiatCurrencyProvider), const FiatCurrency('usd'));
     expect(container.read(fiatSourceProvider), PriceSource.kraken);
   });
 
@@ -45,11 +45,11 @@ void main() {
 
     final setting = container
         .read(fiatCurrencyProvider.notifier)
-        .set(FiatCurrency.inr);
+        .set(const FiatCurrency('inr'));
     // Not before the vault answered.
-    expect(container.read(fiatCurrencyProvider), FiatCurrency.eur);
+    expect(container.read(fiatCurrencyProvider), const FiatCurrency('eur'));
     await setting;
-    expect(container.read(fiatCurrencyProvider), FiatCurrency.inr);
+    expect(container.read(fiatCurrencyProvider), const FiatCurrency('inr'));
     // Only the currency was asked for; the core moved the source.
     expect(bridge.preferencesChanges.single.toJson(), {'fiat_currency': 'inr'});
     expect(container.read(fiatSourceProvider), PriceSource.coingecko);

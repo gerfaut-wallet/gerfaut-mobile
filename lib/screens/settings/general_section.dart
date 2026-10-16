@@ -22,6 +22,10 @@ class GeneralSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final currency = ref.watch(fiatCurrencyProvider);
+    // What is on offer, in the core's order: the currencies with the
+    // sources that quote each, and the sources by name.
+    final table = ref.watch(priceTableProvider).valueOrNull;
+    final chosen = table?.entryOf(currency);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -58,6 +62,7 @@ class GeneralSection extends ConsumerWidget {
               FieldLabel('Currency', tokens: tokens),
               const SizedBox(height: GerfautSpacing.sm),
               _CurrencyField(
+                table: table,
                 selected: currency,
                 // The core keeps the source able to quote it: only
                 // CoinGecko serves the currencies past the common seven.
@@ -76,19 +81,19 @@ class GeneralSection extends ConsumerWidget {
                 label: 'Price source',
                 value: ref.watch(fiatSourceProvider),
                 options: [
-                  for (final source in PriceSource.values)
+                  for (final entry in table?.sources ?? const <SourceEntry>[])
                     ChoiceOption(
-                      value: source,
-                      label: source.label,
+                      value: entry.source,
+                      label: entry.label,
                       // A source that does not quote the currency is
                       // shown as unavailable, never silently broken.
-                      enabled: source.supportsCurrency(currency),
+                      enabled: chosen?.sources.contains(entry.source) ?? false,
                     ),
                 ],
                 onChanged: (source) =>
                     ref.read(fiatSourceProvider.notifier).set(source),
               ),
-              if (currency.reach == CurrencyReach.coingeckoOnly) ...[
+              if (chosen?.reach == CurrencyReach.coingeckoOnly) ...[
                 const SizedBox(height: GerfautSpacing.sm),
                 Text(
                   'CoinGecko is the only source that quotes '
@@ -147,11 +152,18 @@ const Map<ThemePref, IconData> _themeIcons = {
   ThemePref.system: LucideIcons.monitor,
 };
 
-/// The display currency, thirty of them: the seven every source quotes
-/// first, then the ones CoinGecko alone serves, each group announced.
+/// The display currency, every one the core lists: the ones every
+/// source quotes first, then the ones CoinGecko alone serves, each group
+/// announced.
 class _CurrencyField extends StatelessWidget {
-  const _CurrencyField({required this.selected, required this.onChanged});
+  const _CurrencyField({
+    required this.table,
+    required this.selected,
+    required this.onChanged,
+  });
 
+  /// Null until the core answered.
+  final PriceTable? table;
   final FiatCurrency selected;
   final ValueChanged<FiatCurrency> onChanged;
 
@@ -167,16 +179,15 @@ class _CurrencyField extends StatelessWidget {
                 ? 'Every source'
                 : 'CoinGecko only',
             items: [
-              for (final currency in FiatCurrency.values.where(
-                (c) => c.reach == reach,
-              ))
-                // The ISO code, then its name so thirty codes stay
-                // readable.
-                GerfautSelectItem(
-                  value: currency,
-                  title: currency.code,
-                  subtitle: currency.label,
-                ),
+              for (final entry in table?.currencies ?? const <CurrencyEntry>[])
+                if (entry.reach == reach)
+                  // The ISO code, then its name so thirty codes stay
+                  // readable.
+                  GerfautSelectItem(
+                    value: entry.currency,
+                    title: entry.currency.code,
+                    subtitle: entry.name,
+                  ),
             ],
           ),
       ],

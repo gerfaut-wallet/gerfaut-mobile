@@ -41,7 +41,7 @@ SyncStamp _stamp(int at, {int tipHeight = 912345}) =>
 
 const PriceQuote _quote = PriceQuote(
   rate: 50000,
-  currency: FiatCurrency.eur,
+  currency: FiatCurrency('eur'),
   source: PriceSource.coingecko,
   at: _syncedAt,
 );
@@ -133,7 +133,7 @@ void main() {
       final data = PricePayload.of(
         PriceQuote(
           rate: 50000,
-          currency: FiatCurrency.eur,
+          currency: FiatCurrency('eur'),
           source: PriceSource.coingecko,
           at: at,
         ),
@@ -158,15 +158,15 @@ void main() {
       // the cents of a five-figure price are noise on both.
       const quote = PriceQuote(
         rate: 66741.37,
-        currency: FiatCurrency.eur,
+        currency: FiatCurrency('eur'),
         source: PriceSource.kraken,
         at: _syncedAt,
       );
       expect(PricePayload.of(quote).figure, '€66 741');
-      expect(formatFiatPrice(66741.37, FiatCurrency.eur), '€66 741');
-      expect(formatFiatPrice(9876543.2, FiatCurrency.jpy), '¥9 876 543');
+      expect(formatFiatPrice(66741.37, FiatCurrency('eur')), '€66 741');
+      expect(formatFiatPrice(9876543.2, FiatCurrency('jpy')), '¥9 876 543');
       // Under a hundred the currency keeps its own decimals.
-      expect(formatFiatPrice(42.5, FiatCurrency.eur), '€42.50');
+      expect(formatFiatPrice(42.5, FiatCurrency('eur')), '€42.50');
     });
 
     test('the clock is the reader\'s, on 24 hours', () {
@@ -437,7 +437,7 @@ void main() {
       final evening = DateTime(2026, 10, 3, 23, 55);
       final quote = PriceQuote(
         rate: 50000,
-        currency: FiatCurrency.eur,
+        currency: FiatCurrency('eur'),
         source: PriceSource.coingecko,
         at: _secs(DateTime(2026, 10, 3, 23, 50)),
       );

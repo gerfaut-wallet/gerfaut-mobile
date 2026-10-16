@@ -914,6 +914,13 @@ fn parse_variant<T: serde::de::DeserializeOwned>(
         .map_err(|_| error_json("bad_json", format!("unknown {kind} `{name}`")))
 }
 
+/// The currencies and price sources the settings offer, and how often
+/// the price is asked. Returns a serialized `PriceTable`: a fixed
+/// table, which only changes with the core.
+pub async fn price_table() -> String {
+    to_json(&gerfaut_core::price::price_table())
+}
+
 /// Fetches the current BTC price, in the currency and from the source
 /// of the preferences. Returns a `PriceQuote`.
 ///

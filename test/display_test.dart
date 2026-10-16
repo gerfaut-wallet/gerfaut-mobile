@@ -227,7 +227,9 @@ void main() {
       tester.element(find.byType(GerfautApp)),
     );
     // Taken once the vault stored it, as the core prices by it.
-    await container.read(fiatCurrencyProvider.notifier).set(FiatCurrency.usd);
+    await container
+        .read(fiatCurrencyProvider.notifier)
+        .set(FiatCurrency('usd'));
     await tester.pump();
     expect(find.textContaining('€'), findsNothing);
     await tester.pumpAndSettle();
@@ -286,9 +288,9 @@ void main() {
     }
 
     test('zero takes the currency\'s own decimals', () {
-      expect(formatFiat(0, 50000, FiatCurrency.eur), '€0.00');
-      expect(formatFiat(0, 50000, FiatCurrency.usd), r'$0.00');
-      expect(formatFiat(0, 7654321, FiatCurrency.jpy), '¥0');
+      expect(formatFiat(0, 50000, FiatCurrency('eur')), '€0.00');
+      expect(formatFiat(0, 50000, FiatCurrency('usd')), r'$0.00');
+      expect(formatFiat(0, 7654321, FiatCurrency('jpy')), '¥0');
     });
 
     for (final network in [Network.signet, Network.testnet4]) {

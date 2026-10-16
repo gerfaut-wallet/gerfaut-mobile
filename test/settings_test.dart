@@ -873,17 +873,18 @@ void main() {
       await enableFiat(tester);
 
       final groups = currencyField(tester).groups;
-      // Thirty currencies, in the core's order, in two named groups.
+      // Every currency the core lists, in its order, in two named groups.
       expect(groups, hasLength(2));
       expect([
         for (final group in groups) ...group.items.map((i) => i.value),
-      ], FiatCurrency.values);
-      // The seven every source quotes come first, then the ones
-      // CoinGecko alone serves.
+      ], kPriceTable.currencies.map((entry) => entry.currency));
+      // The ones every source quotes come first, then the ones
+      // CoinGecko alone serves, each with its name beside the code.
       expect(groups.first.label, 'Every source');
-      expect(groups.first.items, hasLength(7));
+      expect(groups.first.items, hasLength(4));
+      expect(groups.first.items.first.subtitle, 'Euro');
       expect(groups.last.label, 'CoinGecko only');
-      expect(groups.last.items, hasLength(23));
+      expect(groups.last.items, hasLength(3));
     });
 
     testWidgets('the currency list reads group by group', (tester) async {
@@ -925,8 +926,8 @@ void main() {
       await tester.tap(find.text('US dollar'));
       await tester.pumpAndSettle();
 
-      expect(currencyField(tester).value, FiatCurrency.usd);
-      expect(bridge.preferences.fiatCurrency, FiatCurrency.usd);
+      expect(currencyField(tester).value, FiatCurrency('usd'));
+      expect(bridge.preferences.fiatCurrency, FiatCurrency('usd'));
     });
 
     testWidgets('a CoinGecko-only currency moves the source over', (
@@ -945,13 +946,13 @@ void main() {
       expect(bridge.preferences.priceSource, PriceSource.kraken);
       expect(sourcePill(tester, 'mempool.space').onTap, isNotNull);
 
-      currencyField(tester).onChanged!(FiatCurrency.ngn);
+      currencyField(tester).onChanged!(FiatCurrency('ngn'));
       await tester.pumpAndSettle();
 
       // Only the currency is asked for: the core moves the source, and
       // the screen shows the one it kept.
       expect(bridge.preferencesChanges.last.toJson(), {'fiat_currency': 'ngn'});
-      expect(bridge.preferences.fiatCurrency, FiatCurrency.ngn);
+      expect(bridge.preferences.fiatCurrency, FiatCurrency('ngn'));
       expect(bridge.preferences.priceSource, PriceSource.coingecko);
       expect(
         find.text('CoinGecko is the only source that quotes NGN.'),
@@ -968,7 +969,7 @@ void main() {
       );
 
       // Back to a currency everyone quotes: the sources return.
-      currencyField(tester).onChanged!(FiatCurrency.chf);
+      currencyField(tester).onChanged!(FiatCurrency('chf'));
       await tester.pumpAndSettle();
       expect(sourcePill(tester, 'Kraken').onTap, isNotNull);
       expect(find.textContaining('the only source that quotes'), findsNothing);
@@ -1006,7 +1007,7 @@ void main() {
       await tester.pumpAndSettle();
       await enableFiat(tester);
 
-      currencyField(tester).onChanged!(FiatCurrency.krw);
+      currencyField(tester).onChanged!(FiatCurrency('inr'));
       await tester.pumpAndSettle();
 
       final kraken = tester.getSemantics(find.text('Kraken'));

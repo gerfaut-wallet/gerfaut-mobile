@@ -382,6 +382,11 @@ Future<String> claimAnnouncements({required String walletId}) =>
 /// Whether anything this app sends has to go through Tor.
 Future<String> usesTor() => RustLib.instance.api.crateApiUsesTor();
 
+/// The currencies and price sources the settings offer, and how often
+/// the price is asked. Returns a serialized `PriceTable`: a fixed
+/// table, which only changes with the core.
+Future<String> priceTable() => RustLib.instance.api.crateApiPriceTable();
+
 /// Fetches the current BTC price, in the currency and from the source
 /// of the preferences. Returns a `PriceQuote`.
 ///

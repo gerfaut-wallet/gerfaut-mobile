@@ -152,6 +152,9 @@ class _Hydrated extends ConsumerWidget {
         final prefs = settings.appPrefs;
         ref.read(themeProvider.notifier).hydrate(prefs[Pref.theme]);
         ref.read(preferencesProvider.notifier).hydrate(settings.preferences);
+        // Asked once, now: the price and the settings read it, and a
+        // settings card drawn before it came would draw empty.
+        ref.read(priceTableProvider);
         ref
             .read(recentBroadcastsProvider.notifier)
             .hydrate(prefs[Pref.recentBroadcasts]);

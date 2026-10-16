@@ -398,9 +398,10 @@ class WidgetPriceNotifier extends AsyncNotifier<PriceQuote?> {
     // minute clock runs behind the launcher.
     if (!inFront) return state.valueOrNull;
     ref.onDispose(() => _timer?.cancel());
+    final every = (await ref.read(priceTableProvider.future)).refresh;
     // Scheduled before the fetch so failures retry on the same cadence
     // as the app's own quote.
-    _timer = Timer(const Duration(seconds: 60), () => ref.invalidateSelf());
+    _timer = Timer(every, () => ref.invalidateSelf());
     return ref.read(bridgeProvider).fetchPrice();
   }
 }
