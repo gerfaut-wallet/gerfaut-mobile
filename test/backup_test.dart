@@ -596,7 +596,7 @@ void main() {
       second.setLastModifiedSync(longAgo);
       other.setLastModifiedSync(longAgo);
 
-      expect(await forgetSharedCopies(cache), 2);
+      expect((await sweepSharedCopies(cache: cache)).gone, 2);
       expect(first.existsSync(), isFalse);
       expect(written.existsSync(), isFalse);
       expect(second.existsSync(), isFalse);
@@ -619,8 +619,8 @@ void main() {
         ),
       );
 
-      expect(await forgetSharedCopies(cache), 0);
-      expect(await forgetSharedCopies(cache), 0);
+      expect((await sweepSharedCopies(cache: cache)).gone, 0);
+      expect((await sweepSharedCopies(cache: cache)).gone, 0);
       expect(copy.existsSync(), isTrue);
 
       copy.setLastModifiedSync(
@@ -628,7 +628,7 @@ void main() {
           sharedCopyLifetime + const Duration(minutes: 1),
         ),
       );
-      expect(await forgetSharedCopies(cache), 1);
+      expect((await sweepSharedCopies(cache: cache)).gone, 1);
       expect(copy.existsSync(), isFalse);
     });
 
@@ -680,6 +680,96 @@ void main() {
       expect(copy.existsSync(), isFalse);
       expect(handed.existsSync(), isFalse);
     });
+
+    /// A cache two sweeps can collide on: old copies in plenty, at its
+    /// top and in folders, and three young ones made first, which a cache
+    /// held in memory lists last, past where a collision stopped a sweep.
+    Future<({Directory cache, List<File> young})> crowdedCache(
+      List<Duration> youngAges,
+    ) async {
+      final cache = await Directory.systemTemp.createTemp('gerfaut-cache');
+      addTearDown(() => cache.delete(recursive: true));
+      final sep = Platform.pathSeparator;
+      final handed = Directory('${cache.path}${sep}share_plus')..createSync();
+      final young = [
+        File('${handed.path}${sep}gerfaut-backup-2026-10-16.gerfaut')
+          ..writeAsBytesSync([1, 2, 3]),
+        File('${handed.path}${sep}spending-transactions.csv')
+          ..writeAsStringSync('txid,amount'),
+        File('${cache.path}${sep}young-transactions.csv')
+          ..writeAsStringSync('txid,amount'),
+      ];
+      for (var i = 0; i < young.length; i++) {
+        young[i].setLastModifiedSync(DateTime.now().subtract(youngAges[i]));
+      }
+      final longAgo = DateTime.now().subtract(sharedCopyLifetime * 2);
+      for (var i = 0; i < 40; i++) {
+        File('${cache.path}${sep}wallet$i-transactions.csv')
+          ..writeAsStringSync('txid,amount')
+          ..setLastModifiedSync(longAgo);
+        final folder = Directory('${cache.path}${sep}uuid-$i')..createSync();
+        File('${folder.path}${sep}gerfaut-backup-2026-10-16.gerfaut')
+          ..writeAsBytesSync([1, 2, 3])
+          ..setLastModifiedSync(longAgo);
+      }
+      return (cache: cache, young: young);
+    }
+
+    test('two sweeps at once each delete what the other left, and both '
+        'still see the young copies', () async {
+      final (:cache, :young) = await crowdedCache(const [
+        Duration(minutes: 50),
+        Duration(minutes: 40),
+        Duration(minutes: 30),
+      ]);
+
+      final sweeps = await Future.wait([
+        sweepSharedCopies(cache: cache),
+        sweepSharedCopies(cache: cache),
+      ]);
+
+      // Each old copy went once, whichever sweep took it.
+      expect(sweeps[0].gone + sweeps[1].gone, 80);
+      // Both read to the end: each knows the oldest young copy, ten
+      // minutes from its hour.
+      for (final sweep in sweeps) {
+        expect(sweep.next?.inMinutes, inInclusiveRange(9, 10));
+      }
+      for (final copy in young) {
+        expect(copy.existsSync(), isTrue);
+      }
+    });
+
+    test(
+      'two sweeps at once still leave the young copies their hour',
+      () async {
+        final (:cache, :young) = await crowdedCache(const [
+          Duration.zero,
+          Duration.zero,
+          Duration.zero,
+        ]);
+        // The hour, shortened: long enough for both sweeps to finish.
+        final sweeper = SharedCopySweeper(
+          cache: cache,
+          lifetime: const Duration(seconds: 2),
+        );
+        addTearDown(sweeper.cancel);
+
+        await Future.wait([sweeper.sweep(), sweeper.sweep()]);
+        for (final copy in young) {
+          expect(copy.existsSync(), isTrue);
+        }
+
+        final end = DateTime.now().add(const Duration(seconds: 15));
+        while (young.any((copy) => copy.existsSync()) &&
+            DateTime.now().isBefore(end)) {
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+        }
+        for (final copy in young) {
+          expect(copy.existsSync(), isFalse);
+        }
+      },
+    );
   });
 
   group('animated QR', () {

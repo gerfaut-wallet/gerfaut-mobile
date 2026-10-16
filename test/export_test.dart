@@ -316,7 +316,7 @@ void main() {
     final other = File('${cache.path}${Platform.pathSeparator}keep.txt')
       ..writeAsStringSync('not ours');
 
-    expect(await forgetSharedCopies(cache), 1);
+    expect((await sweepSharedCopies(cache: cache)).gone, 1);
     expect(old.existsSync(), isFalse);
     expect(other.existsSync(), isTrue);
   });
@@ -337,7 +337,7 @@ void main() {
       final kept = File('${other.path}${sep}picture.jpg')
         ..writeAsStringSync('not ours');
 
-      expect(await forgetSharedCopies(cache), 1);
+      expect((await sweepSharedCopies(cache: cache)).gone, 1);
       expect(shared.existsSync(), isFalse);
       expect(folder.existsSync(), isFalse);
       expect(kept.existsSync(), isTrue);
@@ -361,7 +361,7 @@ void main() {
       ..writeAsStringSync('txid,amount');
     elsewhere.setLastModifiedSync(longAgo());
 
-    expect(await forgetSharedCopies(cache), 1);
+    expect((await sweepSharedCopies(cache: cache)).gone, 1);
     expect(copied.existsSync(), isFalse);
     expect(shareFolder.existsSync(), isFalse);
     expect(elsewhere.existsSync(), isTrue);
@@ -384,7 +384,7 @@ void main() {
         ..writeAsStringSync('txid,amount');
       old.setLastModifiedSync(longAgo());
 
-      expect(await forgetSharedCopies(cache), 1);
+      expect((await sweepSharedCopies(cache: cache)).gone, 1);
       expect(recent.existsSync(), isTrue);
       expect(old.existsSync(), isFalse);
       expect(shareFolder.existsSync(), isTrue);

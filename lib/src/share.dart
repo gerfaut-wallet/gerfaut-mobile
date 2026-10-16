@@ -67,40 +67,41 @@ class SystemCsvSharer implements CsvSharer {
 /// the hour, a second share still takes the first one's copy from there.
 const sharedCopyLifetime = Duration(hours: 1);
 
-/// Deletes the histories and backups left in the cache to share them,
-/// once older than [sharedCopyLifetime]. Answers how many files went.
-Future<int> forgetSharedCopies([Directory? cache]) async =>
-    (await sweepSharedCopies(cache: cache)).gone;
-
 /// What one sweep did: how many copies went, and how long until the
 /// youngest one it kept is old enough to go; null when it kept none.
 typedef SharedSweep = ({int gone, Duration? next});
 
-/// Deletes the shared copies older than `lifetime`. Only the two places
-/// that hold them are read, not the whole cache, which this runs over at
-/// every start: its top, where earlier builds wrote histories, and the
-/// folders right under it, one for each file share_plus is handed from
-/// memory and its own `share_plus` it copies them to. A folder emptied
-/// here goes too.
+/// Deletes the histories and backups left in the cache to share them,
+/// once older than `lifetime`. Only the two places that hold them are
+/// read, not the whole cache, which this runs over at every start: its
+/// top, where earlier builds wrote histories, and the folders right under
+/// it, one for each file share_plus is handed from memory and its own
+/// `share_plus` it copies them to. A folder emptied here goes too.
+///
+/// Sweeps may overlap (the start, a share, the hour coming): a file or a
+/// folder another one took is skipped, and the rest is still read, so
+/// every younger copy is still counted in [SharedSweep.next].
 Future<SharedSweep> sweepSharedCopies({
   Directory? cache,
   Duration lifetime = sharedCopyLifetime,
 }) async {
   final dir = cache ?? await getTemporaryDirectory();
   final sweep = _Sweep(DateTime.now(), lifetime);
-  try {
-    await for (final entry in dir.list(followLinks: false)) {
-      if (entry is File) {
-        await sweep.file(entry);
-      } else if (entry is Directory) {
-        await sweep.folder(entry);
-      }
+  await for (final entry in _entries(dir)) {
+    if (entry is File) {
+      await sweep.file(entry);
+    } else if (entry is Directory) {
+      await sweep.folder(entry);
     }
-  } on FileSystemException {
-    // A cache that cannot be listed holds nothing to delete here.
   }
   return (gone: sweep.gone, next: sweep.next);
 }
+
+/// What a folder holds, past any entry that cannot be read; nothing when
+/// the folder itself cannot be, or is gone.
+Stream<FileSystemEntity> _entries(Directory dir) => dir
+    .list(followLinks: false)
+    .handleError((_) {}, test: (error) => error is FileSystemException);
 
 class _Sweep {
   _Sweep(this.now, this.lifetime);
@@ -114,13 +115,14 @@ class _Sweep {
   /// they have left it empty.
   Future<void> folder(Directory folder) async {
     final before = gone;
+    await for (final entry in _entries(folder)) {
+      if (entry is File) await file(entry);
+    }
+    if (gone == before) return;
     try {
-      await for (final entry in folder.list(followLinks: false)) {
-        if (entry is File) await file(entry);
-      }
-      if (gone > before && await folder.list().isEmpty) await folder.delete();
+      if (await folder.list().isEmpty) await folder.delete();
     } on FileSystemException {
-      // A folder that cannot be read holds nothing of ours.
+      // Gone already, or filled again meanwhile: left as it is.
     }
   }
 
@@ -132,13 +134,17 @@ class _Sweep {
     if (!path.endsWith('-transactions.csv') && !path.endsWith('.gerfaut')) {
       return;
     }
-    final left = (await file.lastModified()).add(lifetime).difference(now);
-    if (left > Duration.zero) {
-      if (next == null || left < next!) next = left;
-      return;
+    try {
+      final left = (await file.lastModified()).add(lifetime).difference(now);
+      if (left > Duration.zero) {
+        if (next == null || left < next!) next = left;
+        return;
+      }
+      await file.delete();
+      gone++;
+    } on FileSystemException {
+      // Taken by another sweep, or by share_plus: nothing left to do.
     }
-    await file.delete();
-    gone++;
   }
 }
 
