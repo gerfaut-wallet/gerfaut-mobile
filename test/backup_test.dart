@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -103,6 +104,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expectKeyboardKeepsNothing(tester);
       // The eight-character floor is what the core takes, not advice:
       // a file guessed offline needs length, and the screen says so
       // where the password is chosen.
@@ -571,6 +573,203 @@ void main() {
       await tester.pump(const Duration(seconds: 5));
       await tester.pumpAndSettle();
     });
+
+    test('a backup shared earlier leaves the cache, folders and all', () async {
+      final cache = await Directory.systemTemp.createTemp('gerfaut-cache');
+      addTearDown(() => cache.delete(recursive: true));
+      final sep = Platform.pathSeparator;
+      // Where share_plus writes the backup it is handed from memory, and
+      // the copy it hands on to the other app.
+      final written = Directory('${cache.path}${sep}0b5f6d2e-uuid')
+        ..createSync();
+      final first = File(
+        '${written.path}${sep}gerfaut-backup-2026-10-16.gerfaut',
+      )..writeAsBytesSync([1, 2, 3]);
+      final handed = Directory('${cache.path}${sep}share_plus')..createSync();
+      final second = File(
+        '${handed.path}${sep}gerfaut-backup-2026-10-16.gerfaut',
+      )..writeAsBytesSync([1, 2, 3]);
+      final other = File('${cache.path}${sep}keep.txt')
+        ..writeAsStringSync('not ours');
+      final longAgo = DateTime.now().subtract(sharedCopyLifetime * 2);
+      first.setLastModifiedSync(longAgo);
+      second.setLastModifiedSync(longAgo);
+      other.setLastModifiedSync(longAgo);
+
+      expect((await sweepSharedCopies(cache: cache)).gone, 2);
+      expect(first.existsSync(), isFalse);
+      expect(written.existsSync(), isFalse);
+      expect(second.existsSync(), isFalse);
+      expect(handed.existsSync(), isFalse);
+      expect(other.existsSync(), isTrue);
+    });
+
+    test('a backup shared within the hour stays, however often the app '
+        'starts', () async {
+      final cache = await Directory.systemTemp.createTemp('gerfaut-cache');
+      addTearDown(() => cache.delete(recursive: true));
+      final sep = Platform.pathSeparator;
+      // Still being read, perhaps: a mail left in drafts, a slow upload.
+      final handed = Directory('${cache.path}${sep}share_plus')..createSync();
+      final copy = File('${handed.path}${sep}gerfaut-backup-2026-10-16.gerfaut')
+        ..writeAsBytesSync([1, 2, 3]);
+      copy.setLastModifiedSync(
+        DateTime.now().subtract(
+          sharedCopyLifetime - const Duration(minutes: 1),
+        ),
+      );
+
+      expect((await sweepSharedCopies(cache: cache)).gone, 0);
+      expect((await sweepSharedCopies(cache: cache)).gone, 0);
+      expect(copy.existsSync(), isTrue);
+
+      copy.setLastModifiedSync(
+        DateTime.now().subtract(
+          sharedCopyLifetime + const Duration(minutes: 1),
+        ),
+      );
+      expect((await sweepSharedCopies(cache: cache)).gone, 1);
+      expect(copy.existsSync(), isFalse);
+    });
+
+    test('a copy kept for its age says when it may go', () async {
+      final cache = await Directory.systemTemp.createTemp('gerfaut-cache');
+      addTearDown(() => cache.delete(recursive: true));
+      final sep = Platform.pathSeparator;
+      final handed = Directory('${cache.path}${sep}share_plus')..createSync();
+      File('${handed.path}${sep}gerfaut-backup-2026-10-16.gerfaut')
+        ..writeAsBytesSync([1, 2, 3])
+        ..setLastModifiedSync(
+          DateTime.now().subtract(const Duration(minutes: 20)),
+        );
+      File('${handed.path}${sep}savings-transactions.csv')
+        ..writeAsStringSync('txid,amount')
+        ..setLastModifiedSync(
+          DateTime.now().subtract(const Duration(minutes: 50)),
+        );
+
+      final sweep = await sweepSharedCopies(cache: cache);
+      expect(sweep.gone, 0);
+      // The older of the two, ten minutes from its hour.
+      expect(sweep.next!.inMinutes, inInclusiveRange(9, 10));
+    });
+
+    test('a copy kept for its age goes when it comes of age, the app '
+        'still running', () async {
+      final cache = await Directory.systemTemp.createTemp('gerfaut-cache');
+      addTearDown(() => cache.delete(recursive: true));
+      final sep = Platform.pathSeparator;
+      final handed = Directory('${cache.path}${sep}share_plus')..createSync();
+      final copy = File('${handed.path}${sep}gerfaut-backup-2026-10-16.gerfaut')
+        ..writeAsBytesSync([1, 2, 3]);
+      // The hour, shortened: the timer is real, and so is the file.
+      final sweeper = SharedCopySweeper(
+        cache: cache,
+        lifetime: const Duration(milliseconds: 400),
+      );
+      addTearDown(sweeper.cancel);
+
+      expect(await sweeper.sweep(), 0);
+      expect(copy.existsSync(), isTrue);
+
+      // No share and no start after this one: the sweeper wakes alone.
+      final end = DateTime.now().add(const Duration(seconds: 10));
+      while (copy.existsSync() && DateTime.now().isBefore(end)) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+      expect(copy.existsSync(), isFalse);
+      expect(handed.existsSync(), isFalse);
+    });
+
+    /// A cache two sweeps can collide on: old copies in plenty, at its
+    /// top and in folders, and three young ones made first, which a cache
+    /// held in memory lists last, past where a collision stopped a sweep.
+    Future<({Directory cache, List<File> young})> crowdedCache(
+      List<Duration> youngAges,
+    ) async {
+      final cache = await Directory.systemTemp.createTemp('gerfaut-cache');
+      addTearDown(() => cache.delete(recursive: true));
+      final sep = Platform.pathSeparator;
+      final handed = Directory('${cache.path}${sep}share_plus')..createSync();
+      final young = [
+        File('${handed.path}${sep}gerfaut-backup-2026-10-16.gerfaut')
+          ..writeAsBytesSync([1, 2, 3]),
+        File('${handed.path}${sep}spending-transactions.csv')
+          ..writeAsStringSync('txid,amount'),
+        File('${cache.path}${sep}young-transactions.csv')
+          ..writeAsStringSync('txid,amount'),
+      ];
+      for (var i = 0; i < young.length; i++) {
+        young[i].setLastModifiedSync(DateTime.now().subtract(youngAges[i]));
+      }
+      final longAgo = DateTime.now().subtract(sharedCopyLifetime * 2);
+      for (var i = 0; i < 40; i++) {
+        File('${cache.path}${sep}wallet$i-transactions.csv')
+          ..writeAsStringSync('txid,amount')
+          ..setLastModifiedSync(longAgo);
+        final folder = Directory('${cache.path}${sep}uuid-$i')..createSync();
+        File('${folder.path}${sep}gerfaut-backup-2026-10-16.gerfaut')
+          ..writeAsBytesSync([1, 2, 3])
+          ..setLastModifiedSync(longAgo);
+      }
+      return (cache: cache, young: young);
+    }
+
+    test('two sweeps at once each delete what the other left, and both '
+        'still see the young copies', () async {
+      final (:cache, :young) = await crowdedCache(const [
+        Duration(minutes: 50),
+        Duration(minutes: 40),
+        Duration(minutes: 30),
+      ]);
+
+      final sweeps = await Future.wait([
+        sweepSharedCopies(cache: cache),
+        sweepSharedCopies(cache: cache),
+      ]);
+
+      // Each old copy went once, whichever sweep took it.
+      expect(sweeps[0].gone + sweeps[1].gone, 80);
+      // Both read to the end: each knows the oldest young copy, ten
+      // minutes from its hour.
+      for (final sweep in sweeps) {
+        expect(sweep.next?.inMinutes, inInclusiveRange(9, 10));
+      }
+      for (final copy in young) {
+        expect(copy.existsSync(), isTrue);
+      }
+    });
+
+    test(
+      'two sweeps at once still leave the young copies their hour',
+      () async {
+        final (:cache, :young) = await crowdedCache(const [
+          Duration.zero,
+          Duration.zero,
+          Duration.zero,
+        ]);
+        // The hour, shortened: long enough for both sweeps to finish.
+        final sweeper = SharedCopySweeper(
+          cache: cache,
+          lifetime: const Duration(seconds: 2),
+        );
+        addTearDown(sweeper.cancel);
+
+        await Future.wait([sweeper.sweep(), sweeper.sweep()]);
+        for (final copy in young) {
+          expect(copy.existsSync(), isTrue);
+        }
+
+        final end = DateTime.now().add(const Duration(seconds: 15));
+        while (young.any((copy) => copy.existsSync()) &&
+            DateTime.now().isBefore(end)) {
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+        }
+        for (final copy in young) {
+          expect(copy.existsSync(), isFalse);
+        }
+      },
+    );
   });
 
   group('animated QR', () {
@@ -718,6 +917,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('frame'));
       await tester.pumpAndSettle();
+      expectKeyboardKeepsNothing(tester);
       await tester.enterText(find.byType(TextField), 'correct horse');
       await tester.pumpAndSettle();
       await tester.tap(find.text('Open backup'));

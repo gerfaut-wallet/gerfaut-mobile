@@ -42,6 +42,8 @@ class MonoField extends StatelessWidget {
       focusNode: focusNode,
       autocorrect: false,
       enableSuggestions: false,
+      // Often the user's own node: not a word for the keyboard to keep.
+      enableIMEPersonalizedLearning: false,
       keyboardType: numeric ? TextInputType.number : TextInputType.url,
       inputFormatters: numeric
           ? [FilteringTextInputFormatter.digitsOnly]

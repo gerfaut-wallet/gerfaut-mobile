@@ -2,6 +2,7 @@
 // behind small interfaces so widget tests substitute fakes instead of
 // touching the path_provider and share_plus plugins.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -14,7 +15,8 @@ import 'package:share_plus/share_plus.dart';
 abstract class CsvSharer {
   Future<void> shareCsv({required String csv, required String filename});
 
-  /// Deletes the histories earlier shares left in the cache.
+  /// Deletes what earlier shares left in the cache: the histories, and
+  /// the backups shared from their own screen.
   Future<void> forgetCopies();
 }
 
@@ -25,82 +27,182 @@ abstract class CsvSharer {
 ///
 /// The share sheet still needs a file, and share_plus writes one into a
 /// folder of its own under the cache, which it never deletes. That copy
-/// goes at the next share, and each time the app starts: not right
-/// after the sheet closes, when the app it went to may still be reading
-/// it.
+/// goes once [sharedCopyLifetime] has passed, by [sharedCopies]: not
+/// right after the sheet closes, when the app it went to may still be
+/// reading it.
 class SystemCsvSharer implements CsvSharer {
   const SystemCsvSharer();
 
   @override
-  Future<void> forgetCopies() async {
+  Future<void> forgetCopies() => sharedCopies.sweepQuietly();
+
+  @override
+  Future<void> shareCsv({required String csv, required String filename}) async {
+    await sharedCopies.sweep();
     try {
-      await forgetCsvCopies();
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [
+            XFile.fromData(
+              Uint8List.fromList(utf8.encode(csv)),
+              mimeType: 'text/csv',
+              name: filename,
+            ),
+          ],
+          fileNameOverrides: [filename],
+        ),
+      );
+    } finally {
+      // The copy just written is too young to go: this sets the hour.
+      unawaited(sharedCopies.sweepQuietly());
+    }
+  }
+}
+
+/// How long a shared copy stays before it may go. The app a file went
+/// to reads it within minutes, an upload or a mail attachment included;
+/// an hour leaves room for a slow network or a draft left open, and a
+/// file younger than that may still be on its way. share_plus empties
+/// its own `share_plus` folder at every share whatever this says: within
+/// the hour, a second share still takes the first one's copy from there.
+const sharedCopyLifetime = Duration(hours: 1);
+
+/// What one sweep did: how many copies went, and how long until the
+/// youngest one it kept is old enough to go; null when it kept none.
+typedef SharedSweep = ({int gone, Duration? next});
+
+/// Deletes the histories and backups left in the cache to share them,
+/// once older than `lifetime`. Only the two places that hold them are
+/// read, not the whole cache, which this runs over at every start: its
+/// top, where earlier builds wrote histories, and the folders right under
+/// it, one for each file share_plus is handed from memory and its own
+/// `share_plus` it copies them to. A folder emptied here goes too.
+///
+/// Sweeps may overlap (the start, a share, the hour coming): a file or a
+/// folder another one took is skipped, and the rest is still read, so
+/// every younger copy is still counted in [SharedSweep.next].
+Future<SharedSweep> sweepSharedCopies({
+  Directory? cache,
+  Duration lifetime = sharedCopyLifetime,
+}) async {
+  final dir = cache ?? await getTemporaryDirectory();
+  final sweep = _Sweep(DateTime.now(), lifetime);
+  await for (final entry in _entries(dir)) {
+    if (entry is File) {
+      await sweep.file(entry);
+    } else if (entry is Directory) {
+      await sweep.folder(entry);
+    }
+  }
+  return (gone: sweep.gone, next: sweep.next);
+}
+
+/// What a folder holds, past any entry that cannot be read; nothing when
+/// the folder itself cannot be, or is gone.
+Stream<FileSystemEntity> _entries(Directory dir) => dir
+    .list(followLinks: false)
+    .handleError((_) {}, test: (error) => error is FileSystemException);
+
+class _Sweep {
+  _Sweep(this.now, this.lifetime);
+
+  final DateTime now;
+  final Duration lifetime;
+  int gone = 0;
+  Duration? next;
+
+  /// The shared files in one folder, not below it; the folder goes once
+  /// they have left it empty.
+  Future<void> folder(Directory folder) async {
+    final before = gone;
+    await for (final entry in _entries(folder)) {
+      if (entry is File) await file(entry);
+    }
+    if (gone == before) return;
+    try {
+      if (await folder.list().isEmpty) await folder.delete();
+    } on FileSystemException {
+      // Gone already, or filled again meanwhile: left as it is.
+    }
+  }
+
+  /// A history is named after its wallet, a backup carries the extension
+  /// every Gerfaut backup has: nothing else in the cache ends that way.
+  /// Either goes once `lifetime` old; a younger one says when it will be.
+  Future<void> file(File file) async {
+    final path = file.path;
+    if (!path.endsWith('-transactions.csv') && !path.endsWith('.gerfaut')) {
+      return;
+    }
+    try {
+      final left = (await file.lastModified()).add(lifetime).difference(now);
+      if (left > Duration.zero) {
+        if (next == null || left < next!) next = left;
+        return;
+      }
+      await file.delete();
+      gone++;
+    } on FileSystemException {
+      // Taken by another sweep, or by share_plus: nothing left to do.
+    }
+  }
+}
+
+/// Sweeps the shared copies, and again the moment the youngest one kept
+/// comes of age, for as long as the app lives. A process that dies first
+/// leaves it to the sweep of the next start.
+class SharedCopySweeper {
+  SharedCopySweeper({this.cache, this.lifetime = sharedCopyLifetime});
+
+  /// The folder swept; null for the app's cache.
+  final Directory? cache;
+  final Duration lifetime;
+
+  Timer? _timer;
+  DateTime? _due;
+
+  /// One sweep now, and the next one set for the youngest copy kept.
+  /// Answers how many copies went.
+  Future<int> sweep() async {
+    final result = await sweepSharedCopies(cache: cache, lifetime: lifetime);
+    final next = result.next;
+    if (next != null) _wakeIn(next);
+    return result.gone;
+  }
+
+  /// [sweep] where nothing may fail: at start, and once a share is done.
+  Future<void> sweepQuietly() async {
+    try {
+      await sweep();
     } catch (_) {
       // No cache to reach, as in a test: nothing to delete.
     }
   }
 
-  @override
-  Future<void> shareCsv({required String csv, required String filename}) async {
-    await forgetCsvCopies();
-    await SharePlus.instance.share(
-      ShareParams(
-        files: [
-          XFile.fromData(
-            Uint8List.fromList(utf8.encode(csv)),
-            mimeType: 'text/csv',
-            name: filename,
-          ),
-        ],
-        fileNameOverrides: [filename],
-      ),
-    );
+  /// Stops the sweep set for later.
+  void cancel() {
+    _timer?.cancel();
+    _timer = null;
+    _due = null;
+  }
+
+  void _wakeIn(Duration delay) {
+    final due = DateTime.now().add(delay);
+    // A sweep already set sooner sees this copy too, and sets the next.
+    if (_timer?.isActive == true && !_due!.isAfter(due)) return;
+    _timer?.cancel();
+    _due = due;
+    _timer = Timer(delay, () {
+      _timer = null;
+      _due = null;
+      unawaited(sweepQuietly());
+    });
   }
 }
 
-/// Deletes the histories left in the cache to share them. Only the two
-/// places that hold them are read, not the whole cache, which this runs
-/// over at every start: its top, where earlier builds wrote them, and
-/// the folders right under it, one for each file share_plus is handed
-/// from memory and its own `share_plus` it copies them to. A folder
-/// emptied here goes too. Answers how many histories went.
-Future<int> forgetCsvCopies([Directory? cache]) async {
-  final dir = cache ?? await getTemporaryDirectory();
-  var gone = 0;
-  try {
-    await for (final entry in dir.list(followLinks: false)) {
-      if (entry is File) {
-        if (await _forgetCsv(entry)) gone++;
-      } else if (entry is Directory) {
-        gone += await _forgetCsvIn(entry);
-      }
-    }
-  } on FileSystemException {
-    // A cache that cannot be listed holds nothing to delete here.
-  }
-  return gone;
-}
-
-/// The histories in one folder, not below it; the folder goes once
-/// they have left it empty.
-Future<int> _forgetCsvIn(Directory folder) async {
-  var gone = 0;
-  try {
-    await for (final entry in folder.list(followLinks: false)) {
-      if (entry is File && await _forgetCsv(entry)) gone++;
-    }
-    if (gone > 0 && await folder.list().isEmpty) await folder.delete();
-  } on FileSystemException {
-    // A folder that cannot be read holds nothing of ours.
-  }
-  return gone;
-}
-
-Future<bool> _forgetCsv(File file) async {
-  if (!file.path.endsWith('-transactions.csv')) return false;
-  await file.delete();
-  return true;
-}
+/// The sweeper of the app's cache, shared by the real sharers and the
+/// sweep at start, so one copy is never waited for twice.
+final sharedCopies = SharedCopySweeper();
 
 /// The sharer in use. Widget tests override this with a fake.
 final csvSharerProvider = Provider<CsvSharer>((ref) => const SystemCsvSharer());
@@ -116,6 +218,10 @@ abstract class BackupSharer {
 /// The real sharer: the bytes go straight to the share sheet, which
 /// writes them to a temporary file of its own. The name override is
 /// what names that file: an in-memory [XFile] drops its name on Android.
+///
+/// Sealed as it is, that file has no business outliving the share: it
+/// goes the way a history's copy goes, once [sharedCopyLifetime] has
+/// passed, never while the app it went to may still read it.
 class SystemBackupSharer implements BackupSharer {
   const SystemBackupSharer();
 
@@ -124,18 +230,24 @@ class SystemBackupSharer implements BackupSharer {
     required Uint8List bytes,
     required String filename,
   }) async {
-    await SharePlus.instance.share(
-      ShareParams(
-        files: [
-          XFile.fromData(
-            bytes,
-            mimeType: 'application/octet-stream',
-            name: filename,
-          ),
-        ],
-        fileNameOverrides: [filename],
-      ),
-    );
+    await sharedCopies.sweep();
+    try {
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [
+            XFile.fromData(
+              bytes,
+              mimeType: 'application/octet-stream',
+              name: filename,
+            ),
+          ],
+          fileNameOverrides: [filename],
+        ),
+      );
+    } finally {
+      // The copy just written is too young to go: this sets the hour.
+      unawaited(sharedCopies.sweepQuietly());
+    }
   }
 }
 

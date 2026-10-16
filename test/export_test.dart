@@ -312,10 +312,11 @@ void main() {
     final old = File(
       '${cache.path}${Platform.pathSeparator}savings-transactions.csv',
     )..writeAsStringSync('txid,amount');
+    old.setLastModifiedSync(longAgo());
     final other = File('${cache.path}${Platform.pathSeparator}keep.txt')
       ..writeAsStringSync('not ours');
 
-    expect(await forgetCsvCopies(cache), 1);
+    expect((await sweepSharedCopies(cache: cache)).gone, 1);
     expect(old.existsSync(), isFalse);
     expect(other.existsSync(), isTrue);
   });
@@ -331,11 +332,12 @@ void main() {
         ..createSync();
       final shared = File('${folder.path}${sep}savings-transactions.csv')
         ..writeAsStringSync('txid,amount');
-      final backup = Directory('${cache.path}${sep}other-uuid')..createSync();
-      final kept = File('${backup.path}${sep}wallets.gerfaut')
-        ..writeAsStringSync('sealed');
+      shared.setLastModifiedSync(longAgo());
+      final other = Directory('${cache.path}${sep}other-uuid')..createSync();
+      final kept = File('${other.path}${sep}picture.jpg')
+        ..writeAsStringSync('not ours');
 
-      expect(await forgetCsvCopies(cache), 1);
+      expect((await sweepSharedCopies(cache: cache)).gone, 1);
       expect(shared.existsSync(), isFalse);
       expect(folder.existsSync(), isFalse);
       expect(kept.existsSync(), isTrue);
@@ -351,15 +353,44 @@ void main() {
       ..createSync();
     final copied = File('${shareFolder.path}${sep}savings-transactions.csv')
       ..writeAsStringSync('txid,amount');
+    copied.setLastModifiedSync(longAgo());
     // Two levels down is no place a share writes to: left unread.
     final deep = Directory('${cache.path}${sep}some${sep}deeper')
       ..createSync(recursive: true);
     final elsewhere = File('${deep.path}${sep}other-transactions.csv')
       ..writeAsStringSync('txid,amount');
+    elsewhere.setLastModifiedSync(longAgo());
 
-    expect(await forgetCsvCopies(cache), 1);
+    expect((await sweepSharedCopies(cache: cache)).gone, 1);
     expect(copied.existsSync(), isFalse);
     expect(shareFolder.existsSync(), isFalse);
     expect(elsewhere.existsSync(), isTrue);
   });
+
+  test(
+    'a history shared within the hour stays for the app reading it',
+    () async {
+      final cache = await Directory.systemTemp.createTemp('gerfaut-cache');
+      addTearDown(() => cache.delete(recursive: true));
+      final sep = Platform.pathSeparator;
+      final shareFolder = Directory('${cache.path}${sep}share_plus')
+        ..createSync();
+      final recent = File('${shareFolder.path}${sep}savings-transactions.csv')
+        ..writeAsStringSync('txid,amount');
+      recent.setLastModifiedSync(
+        DateTime.now().subtract(sharedCopyLifetime ~/ 2),
+      );
+      final old = File('${shareFolder.path}${sep}spending-transactions.csv')
+        ..writeAsStringSync('txid,amount');
+      old.setLastModifiedSync(longAgo());
+
+      expect((await sweepSharedCopies(cache: cache)).gone, 1);
+      expect(recent.existsSync(), isTrue);
+      expect(old.existsSync(), isFalse);
+      expect(shareFolder.existsSync(), isTrue);
+    },
+  );
 }
+
+/// A time well past the life of a shared copy.
+DateTime longAgo() => DateTime.now().subtract(sharedCopyLifetime * 2);

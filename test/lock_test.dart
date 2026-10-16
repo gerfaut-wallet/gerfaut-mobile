@@ -160,6 +160,7 @@ void main() {
       final bridge = locked();
       await tester.pumpWidget(app(bridge));
       await tester.pumpAndSettle();
+      expectKeyboardKeepsNothing(tester);
 
       await tester.enterText(find.byType(TextField), '9999');
       await tester.tap(find.text('Unlock'));
@@ -290,6 +291,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Turn on the app lock'), findsOneWidget);
+      expectKeyboardKeepsNothing(tester);
       await tester.enterText(find.byKey(const Key('lock.secret')), '1234');
       await tester.enterText(find.byKey(const Key('lock.confirm')), '1234');
       await tester.pumpAndSettle();

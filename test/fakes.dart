@@ -288,6 +288,19 @@ class FakeDocumentSaver implements DocumentSaver {
   }
 }
 
+/// Every field on screen keeps what is typed out of the keyboard's
+/// memory: names, descriptors, addresses, servers and secrets alike are
+/// neither learned, nor suggested, nor corrected.
+void expectKeyboardKeepsNothing(WidgetTester tester) {
+  final fields = tester.widgetList<TextField>(find.byType(TextField));
+  expect(fields, isNotEmpty);
+  for (final field in fields) {
+    expect(field.enableIMEPersonalizedLearning, isFalse);
+    expect(field.autocorrect, isFalse);
+    expect(field.enableSuggestions, isFalse);
+  }
+}
+
 /// Text on screen showing the mask, rich text included. Read as drawn:
 /// a screen reader is told "Hidden amount" in its place.
 Finder findMasked() => find.byWidgetPredicate(

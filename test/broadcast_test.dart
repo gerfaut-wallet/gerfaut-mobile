@@ -126,6 +126,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('SIGNED TRANSACTION OR PSBT'), findsOneWidget);
+    expectKeyboardKeepsNothing(tester);
     expect(primaryButton(tester, 'Preview').onPressed, isNull);
     expect(find.text('Import a file'), findsOneWidget);
     expect(find.text('Scan a QR code'), findsOneWidget);

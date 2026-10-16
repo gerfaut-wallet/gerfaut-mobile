@@ -186,7 +186,8 @@ class _Hydrated extends ConsumerWidget {
         // when Android lets it start. Not before the notices are known
         // to get through: Live is there to say things.
         unawaited(_checkNoticesThenLive(ref));
-        // A history shared last time may still sit in the cache.
+        // A history or a backup shared last time, or by a session the
+        // system ended, may still sit in the cache.
         unawaited(ref.read(csvSharerProvider).forgetCopies());
       }
       // The vault says whether a lock exists, every time it is read:
@@ -460,7 +461,7 @@ ThemeData themeFrom(GerfautTokens tokens, Brightness brightness) {
       ),
     ),
     // Every sheet from the bottom of the screen, whoever opens it: the
-    // card surface and the rounded top edge of DESIGN.md, in place of
+    // card surface and the rounded top edge of the design system, in place of
     // the Material defaults (a tinted surface, 28px corners) that a
     // sheet left to itself would take.
     bottomSheetTheme: BottomSheetThemeData(

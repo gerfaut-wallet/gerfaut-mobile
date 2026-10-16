@@ -165,6 +165,7 @@ class _LockScreenState extends ConsumerState<LockScreen> {
                   enabled: !blocked,
                   autocorrect: false,
                   enableSuggestions: false,
+                  enableIMEPersonalizedLearning: false,
                   keyboardType: pin ? TextInputType.number : TextInputType.text,
                   inputFormatters: pin
                       ? [

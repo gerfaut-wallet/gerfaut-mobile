@@ -46,7 +46,7 @@ class OverflowMenuItem {
 /// the bar is what is used on the way past — the sync — and the rest
 /// comes here, named in words rather than guessed from a glyph.
 ///
-/// The surface is the one DESIGN.md gives every floating thing: card
+/// The surface is the one the design system gives every floating thing: card
 /// colour, hairline, 12px radius, the single overlay shadow, and a fade
 /// with 8px of travel to place it. A device asking for less motion
 /// keeps the fade and loses the travel.

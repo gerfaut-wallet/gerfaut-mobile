@@ -242,6 +242,40 @@ void main() {
     expect(find.byIcon(LucideIcons.mapPin), findsOneWidget);
   });
 
+  testWidgets('a wallet renamed here stays out of the keyboard memory', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge(wallets: [makeMeta(name: 'Cold storage')]);
+    await tester.pumpWidget(
+      settingsApp(bridge, section: SettingsSection.wallets),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Rename'));
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel('Wallet name'), findsOneWidget);
+    expectKeyboardKeepsNothing(tester);
+  });
+
+  testWidgets('the server fields stay out of the keyboard memory', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge();
+    await tester.pumpWidget(
+      settingsApp(bridge, section: SettingsSection.network),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('My own Electrum server'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MonoField), findsWidgets);
+    expectKeyboardKeepsNothing(tester);
+  });
+
   group('wallet icons', () {
     testWidgets('the icon action offers the seven glyphs and stores the pick', (
       tester,

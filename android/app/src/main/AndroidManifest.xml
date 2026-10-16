@@ -86,6 +86,16 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+            <!-- No link opens a screen of Gerfaut. Flutter would otherwise
+                 hand the data of any intent that reaches this exported
+                 activity to the navigator, as a route to push over the
+                 screen in use. Flutter reads this flag from the component
+                 the activity was started through, so each alias below
+                 carries it too: started from the launcher, this one is
+                 never asked. -->
+            <meta-data
+                android:name="flutter_deeplinking_enabled"
+                android:value="false" />
             <!-- Never reaches an installed app: every build type removes
                  this filter again (src/debug, src/profile, src/release),
                  so the launcher shows one entry, the enabled alias below.
@@ -122,6 +132,9 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <meta-data
+                android:name="flutter_deeplinking_enabled"
+                android:value="false" />
         </activity-alias>
         <activity-alias
             android:name=".Calculator"
@@ -135,6 +148,9 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <meta-data
+                android:name="flutter_deeplinking_enabled"
+                android:value="false" />
         </activity-alias>
         <!-- The three home-screen widgets. Exported, as the launcher
              delivers APPWIDGET_UPDATE from outside the app; the data
@@ -184,7 +200,7 @@
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Keeps one connection open to the Bitcoin server the user chose, so the user is told the moment a transaction touching a watched wallet is broadcast or confirmed. The user turns it on in Settings, a notification shows it is running, and it stops when the user turns it off. The app has no vendor server and no Firebase: only the device knows which addresses are watched." />
+                android:value="Keeps one connection open to the Bitcoin server set in the app, a public one or a node the user runs, so the user is told the moment a transaction touching a watched wallet is broadcast or confirmed. The user turns it on in Settings, a notification shows it is running, and it stops when the user turns it off. The app runs no server of its own and uses no Firebase. The Bitcoin server it connects to sees the watched addresses, as it does at every sync." />
         </service>
         <!-- Brings Live watch back after a restart of the phone or an
              update of the app, and receives its heartbeat alarm. Not

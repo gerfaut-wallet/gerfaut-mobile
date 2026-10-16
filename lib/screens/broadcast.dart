@@ -282,6 +282,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                   maxLines: 8,
                   autocorrect: false,
                   enableSuggestions: false,
+                  enableIMEPersonalizedLearning: false,
                   keyboardType: TextInputType.multiline,
                   style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
                   onChanged: (_) => setState(() {}),

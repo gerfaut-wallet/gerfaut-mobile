@@ -78,7 +78,7 @@ void main() {
       await openMenu(tester);
 
       // Card colour, hairline, 12px, and the one shadow of the system:
-      // the surface DESIGN.md gives every floating thing.
+      // the surface the design system gives every floating thing.
       expect(
         find.byWidgetPredicate(
           (widget) =>
