@@ -16,6 +16,8 @@ use gerfaut_core::error::VaultError;
 use gerfaut_core::export::ExportOptions;
 use gerfaut_core::input::{ImportOptions, ParsedInput, ScriptKind};
 use gerfaut_core::live::LiveEvent;
+use gerfaut_core::live::LiveTx;
+use gerfaut_core::live::notice;
 use gerfaut_core::lock::LockKind;
 use gerfaut_core::price::{FiatCurrency, PriceSource};
 use gerfaut_core::store::VaultKey;
@@ -884,6 +886,23 @@ pub async fn claim_announcements(wallet_id: String) -> String {
     }
 }
 
+/// What a batch of announced transactions amounts to, as notifications
+/// ready to post: their title, their text, and the payment and wallet
+/// each is about. The core composes the words, the same as the desktop
+/// app's, and counts them against the budget it keeps for the whole
+/// process, twenty a minute: the screens, Live and the periodic task
+/// draw on the same one. `txs_json` is a `Vec<LiveTx>`, as
+/// [`claim_announcements`] and [`live_run`] hand them out; `context_json`
+/// a `notice::Context`: the wallet names, the unit, the mask and the
+/// choice of details. Returns a serialized `Vec<Notice>`. Ask only for
+/// what is about to be posted: what comes back has been counted.
+pub async fn live_notices(txs_json: String, context_json: String) -> String {
+    let txs: Vec<LiveTx> = try_json!(from_json(&txs_json, "announced transactions"));
+    let context: notice::Context = try_json!(from_json(&context_json, "notice context"));
+    let manager = try_json!(manager());
+    to_json(&manager.notices_of(txs, &context))
+}
+
 /// Whether anything this app sends has to go through Tor.
 pub async fn uses_tor() -> String {
     let manager = try_json!(manager());
@@ -1030,6 +1049,28 @@ mod tests {
     fn a_release_build_logs_nothing() {
         assert_eq!(console_log_level(false), None);
         assert_eq!(console_log_level(true), Some(log::LevelFilter::Trace));
+    }
+
+    /// What the app sends for the words of a notification is read
+    /// strictly, before anything is composed: a context that does not
+    /// say whether the wallet and the amount may show is refused, never
+    /// taken for one that may say everything.
+    #[tokio::test]
+    async fn the_words_of_a_notification_are_asked_with_the_whole_context() {
+        let kind = |payload: String| {
+            serde_json::from_str::<Value>(&payload).expect("JSON")["error"]["kind"].clone()
+        };
+        let txs = r#"[{"wallet_id":"w1","txid":"aa","net_sats":1000,"stage":"mempool"}]"#;
+        let partial = r#"{"names":{},"unit":"btc","masked":false}"#;
+        let whole = r#"{"names":{},"unit":"btc","masked":false,"details":true}"#;
+        assert_eq!(
+            kind(live_notices(txs.into(), partial.into()).await),
+            "bad_json"
+        );
+        assert_eq!(
+            kind(live_notices("[{}]".into(), whole.into()).await),
+            "bad_json"
+        );
     }
 
     /// A vault another open holds is its own kind: a healthy vault,

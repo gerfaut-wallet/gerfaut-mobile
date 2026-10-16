@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -429467647;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -331241958;
 
 // Section: executor
 
@@ -792,6 +792,45 @@ fn wire__crate__api__live_events_impl(
                         let output_ok = Result::<_, ()>::Ok({
                             crate::api::live_events(api_sink).await;
                         })?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__live_notices_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "live_notices",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_txs_json = <String>::sse_decode(&mut deserializer);
+            let api_context_json = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, ()>(
+                    (move || async move {
+                        let output_ok = Result::<_, ()>::Ok(
+                            crate::api::live_notices(api_txs_json, api_context_json).await,
+                        )?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -2313,43 +2352,44 @@ fn pde_ffi_dispatcher_primary_impl(
         18 => wire__crate__api__inspect_certificate_impl(port, ptr, rust_vec_len, data_len),
         19 => wire__crate__api__list_wallets_impl(port, ptr, rust_vec_len, data_len),
         20 => wire__crate__api__live_events_impl(port, ptr, rust_vec_len, data_len),
-        21 => wire__crate__api__live_run_impl(port, ptr, rust_vec_len, data_len),
-        22 => wire__crate__api__live_status_impl(port, ptr, rust_vec_len, data_len),
-        23 => wire__crate__api__live_stop_impl(port, ptr, rust_vec_len, data_len),
-        24 => wire__crate__api__live_tick_impl(port, ptr, rust_vec_len, data_len),
-        25 => wire__crate__api__load_more_history_impl(port, ptr, rust_vec_len, data_len),
-        26 => wire__crate__api__parse_backend_impl(port, ptr, rust_vec_len, data_len),
-        27 => wire__crate__api__parse_input_impl(port, ptr, rust_vec_len, data_len),
-        28 => wire__crate__api__parse_input_with_options_impl(port, ptr, rust_vec_len, data_len),
-        29 => wire__crate__api__preview_backup_impl(port, ptr, rust_vec_len, data_len),
-        30 => wire__crate__api__preview_transaction_impl(port, ptr, rust_vec_len, data_len),
-        31 => wire__crate__api__public_servers_impl(port, ptr, rust_vec_len, data_len),
-        32 => wire__crate__api__receive_addresses_impl(port, ptr, rust_vec_len, data_len),
-        33 => wire__crate__api__remove_wallet_impl(port, ptr, rust_vec_len, data_len),
-        34 => wire__crate__api__rename_wallet_impl(port, ptr, rust_vec_len, data_len),
-        35 => wire__crate__api__reorder_wallets_impl(port, ptr, rust_vec_len, data_len),
-        36 => wire__crate__api__rescan_wallet_impl(port, ptr, rust_vec_len, data_len),
-        37 => wire__crate__api__set_active_network_impl(port, ptr, rust_vec_len, data_len),
-        38 => wire__crate__api__set_app_lock_impl(port, ptr, rust_vec_len, data_len),
-        39 => wire__crate__api__set_app_pref_impl(port, ptr, rust_vec_len, data_len),
-        40 => wire__crate__api__set_backend_impl(port, ptr, rust_vec_len, data_len),
-        41 => wire__crate__api__set_biometric_unlock_impl(port, ptr, rust_vec_len, data_len),
-        42 => wire__crate__api__set_gap_limit_impl(port, ptr, rust_vec_len, data_len),
-        43 => wire__crate__api__set_tor_settings_impl(port, ptr, rust_vec_len, data_len),
-        44 => wire__crate__api__set_wallet_icon_impl(port, ptr, rust_vec_len, data_len),
-        45 => wire__crate__api__set_wallet_live_pinned_impl(port, ptr, rust_vec_len, data_len),
-        46 => wire__crate__api__sync_all_impl(port, ptr, rust_vec_len, data_len),
-        47 => wire__crate__api__sync_wallet_impl(port, ptr, rust_vec_len, data_len),
-        48 => wire__crate__api__tor_connect_impl(port, ptr, rust_vec_len, data_len),
-        49 => wire__crate__api__tor_status_impl(port, ptr, rust_vec_len, data_len),
-        50 => wire__crate__api__transaction_status_impl(port, ptr, rust_vec_len, data_len),
-        51 => wire__crate__api__trust_certificate_impl(port, ptr, rust_vec_len, data_len),
-        52 => wire__crate__api__tx_detail_impl(port, ptr, rust_vec_len, data_len),
-        53 => wire__crate__api__uses_tor_impl(port, ptr, rust_vec_len, data_len),
-        54 => wire__crate__api__utxos_impl(port, ptr, rust_vec_len, data_len),
-        55 => wire__crate__api__verify_app_lock_impl(port, ptr, rust_vec_len, data_len),
-        56 => wire__crate__api__wallet_policy_impl(port, ptr, rust_vec_len, data_len),
-        57 => wire__crate__api__wallet_snapshot_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__live_notices_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__live_run_impl(port, ptr, rust_vec_len, data_len),
+        23 => wire__crate__api__live_status_impl(port, ptr, rust_vec_len, data_len),
+        24 => wire__crate__api__live_stop_impl(port, ptr, rust_vec_len, data_len),
+        25 => wire__crate__api__live_tick_impl(port, ptr, rust_vec_len, data_len),
+        26 => wire__crate__api__load_more_history_impl(port, ptr, rust_vec_len, data_len),
+        27 => wire__crate__api__parse_backend_impl(port, ptr, rust_vec_len, data_len),
+        28 => wire__crate__api__parse_input_impl(port, ptr, rust_vec_len, data_len),
+        29 => wire__crate__api__parse_input_with_options_impl(port, ptr, rust_vec_len, data_len),
+        30 => wire__crate__api__preview_backup_impl(port, ptr, rust_vec_len, data_len),
+        31 => wire__crate__api__preview_transaction_impl(port, ptr, rust_vec_len, data_len),
+        32 => wire__crate__api__public_servers_impl(port, ptr, rust_vec_len, data_len),
+        33 => wire__crate__api__receive_addresses_impl(port, ptr, rust_vec_len, data_len),
+        34 => wire__crate__api__remove_wallet_impl(port, ptr, rust_vec_len, data_len),
+        35 => wire__crate__api__rename_wallet_impl(port, ptr, rust_vec_len, data_len),
+        36 => wire__crate__api__reorder_wallets_impl(port, ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__rescan_wallet_impl(port, ptr, rust_vec_len, data_len),
+        38 => wire__crate__api__set_active_network_impl(port, ptr, rust_vec_len, data_len),
+        39 => wire__crate__api__set_app_lock_impl(port, ptr, rust_vec_len, data_len),
+        40 => wire__crate__api__set_app_pref_impl(port, ptr, rust_vec_len, data_len),
+        41 => wire__crate__api__set_backend_impl(port, ptr, rust_vec_len, data_len),
+        42 => wire__crate__api__set_biometric_unlock_impl(port, ptr, rust_vec_len, data_len),
+        43 => wire__crate__api__set_gap_limit_impl(port, ptr, rust_vec_len, data_len),
+        44 => wire__crate__api__set_tor_settings_impl(port, ptr, rust_vec_len, data_len),
+        45 => wire__crate__api__set_wallet_icon_impl(port, ptr, rust_vec_len, data_len),
+        46 => wire__crate__api__set_wallet_live_pinned_impl(port, ptr, rust_vec_len, data_len),
+        47 => wire__crate__api__sync_all_impl(port, ptr, rust_vec_len, data_len),
+        48 => wire__crate__api__sync_wallet_impl(port, ptr, rust_vec_len, data_len),
+        49 => wire__crate__api__tor_connect_impl(port, ptr, rust_vec_len, data_len),
+        50 => wire__crate__api__tor_status_impl(port, ptr, rust_vec_len, data_len),
+        51 => wire__crate__api__transaction_status_impl(port, ptr, rust_vec_len, data_len),
+        52 => wire__crate__api__trust_certificate_impl(port, ptr, rust_vec_len, data_len),
+        53 => wire__crate__api__tx_detail_impl(port, ptr, rust_vec_len, data_len),
+        54 => wire__crate__api__uses_tor_impl(port, ptr, rust_vec_len, data_len),
+        55 => wire__crate__api__utxos_impl(port, ptr, rust_vec_len, data_len),
+        56 => wire__crate__api__verify_app_lock_impl(port, ptr, rust_vec_len, data_len),
+        57 => wire__crate__api__wallet_policy_impl(port, ptr, rust_vec_len, data_len),
+        58 => wire__crate__api__wallet_snapshot_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

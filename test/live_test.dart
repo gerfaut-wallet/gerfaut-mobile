@@ -227,29 +227,26 @@ void main() {
       await service.settle();
 
       final posted = service.notifications.posted;
-      expect(posted.map((p) => p.body), [
-        'Received ${formatAmount(5000, AmountUnit.btc)} · pending',
-        'Received ${formatAmount(5000, AmountUnit.btc)} · confirmed',
-      ]);
+      expect(posted.map((p) => p.body), ['aa · pending', 'aa · confirmed']);
       expect(posted.map((p) => p.title).toSet(), {'Cold storage'});
       // The confirmation replaces the arrival instead of stacking.
       expect(posted[0].id, posted[1].id);
     });
 
-    test('an exit says so', () async {
+    test('an exit reaches the core as it came', () async {
       final service = _Service(_bridge());
       await service.runner.run();
       service.bridge.liveController
         ..add(LiveTransaction(_live('bb', -7000)))
         ..add(LiveWalletSynced(_report()));
       await service.settle();
-      expect(
-        service.notifications.posted.single.body,
-        '${formatAmount(7000, AmountUnit.btc)} left this wallet · pending',
-      );
+      expect(service.bridge.noticeAsks.single.txs.single.netSats, -7000);
+      expect(service.notifications.posted.single.body, 'bb · pending');
     });
 
-    test('past three in one sync, the rest are counted', () async {
+    test('the transactions of one sync reach the core together', () async {
+      // The core says the first three and counts the rest, per sync: it
+      // has to be handed the sync whole.
       final service = _Service(_bridge());
       await service.runner.run();
       for (var i = 0; i < 5; i++) {
@@ -257,9 +254,14 @@ void main() {
       }
       service.bridge.liveController.add(LiveWalletSynced(_report()));
       await service.settle();
-      final bodies = service.notifications.posted.map((p) => p.body);
-      expect(bodies, hasLength(noticesPerWallet + 1));
-      expect(bodies.last, '2 more new transactions');
+      expect(service.bridge.noticeAsks.single.txs.map((tx) => tx.txid), [
+        'tx0',
+        'tx1',
+        'tx2',
+        'tx3',
+        'tx4',
+      ]);
+      expect(service.notifications.posted, hasLength(5));
     });
 
     test('a batch whose report never comes is said all the same', () async {
@@ -286,10 +288,8 @@ void main() {
         ..add(LiveTransaction(_live('dd', 9000)))
         ..add(LiveWalletSynced(_report()));
       await service.settle();
-      expect(
-        service.notifications.posted.single.body,
-        'New transaction · pending',
-      );
+      expect(service.bridge.noticeAsks.single.context.masked, isTrue);
+      expect(service.notifications.posted, hasLength(1));
     });
 
     test('the wallet and the amount, app lock or not', () async {
@@ -301,12 +301,10 @@ void main() {
         ..add(LiveTransaction(_live('ee', -9000)))
         ..add(LiveWalletSynced(_report()));
       await service.settle();
-      final posted = service.notifications.posted.single;
-      expect(posted.title, 'Cold storage');
-      expect(
-        posted.body,
-        '${formatAmount(9000, AmountUnit.btc)} left this wallet · pending',
-      );
+      final context = service.bridge.noticeAsks.single.context;
+      expect(context.details, isTrue);
+      expect(context.names, {'w1': 'Cold storage'});
+      expect(service.notifications.posted.single.title, 'Cold storage');
     });
 
     test('no wallet and no amount once the details are off', () async {
@@ -318,9 +316,8 @@ void main() {
         ..add(LiveTransaction(_live('ee', -9000)))
         ..add(LiveWalletSynced(_report()));
       await service.settle();
-      final posted = service.notifications.posted.single;
-      expect(posted.title, 'Gerfaut');
-      expect(posted.body, 'New outgoing transaction · pending');
+      expect(service.bridge.noticeAsks.single.context.details, isFalse);
+      expect(service.notifications.posted, hasLength(1));
     });
 
     test('the details turned off under it are off at the next', () async {
@@ -331,9 +328,7 @@ void main() {
         ..add(LiveTransaction(_live('ee', 9000)))
         ..add(LiveWalletSynced(_report()));
       await service.settle();
-      final posted = service.notifications.posted.single;
-      expect(posted.title, 'Gerfaut');
-      expect(posted.body, 'New transaction · pending');
+      expect(service.bridge.noticeAsks.single.context.details, isFalse);
     });
 
     test('the unit is the one on screen', () async {
@@ -345,10 +340,7 @@ void main() {
         ..add(LiveTransaction(_live('ff', 1234)))
         ..add(LiveWalletSynced(_report()));
       await service.settle();
-      expect(
-        service.notifications.posted.single.body,
-        'Received ${formatAmount(1234, AmountUnit.sats)} · pending',
-      );
+      expect(service.bridge.noticeAsks.single.context.unit, AmountUnit.sats);
     });
 
     test('nothing once the notice was turned off under it', () async {
@@ -360,6 +352,7 @@ void main() {
         ..add(LiveWalletSynced(_report()));
       await service.settle();
       expect(service.notifications.posted, isEmpty);
+      expect(service.bridge.noticeAsks, isEmpty);
     });
   });
 
@@ -744,9 +737,8 @@ void main() {
         bootstrap: () async {},
         isDisguised: () async => false,
       );
-      final posted = notifications.posted.single;
-      expect(posted.title, 'Gerfaut');
-      expect(posted.body, 'New transaction · pending');
+      expect(notifications.posted, hasLength(1));
+      expect(bridge.noticeAsks.single.context.details, isFalse);
     });
 
     test('names the wallet under an app lock, details on', () async {
@@ -765,12 +757,8 @@ void main() {
         bootstrap: () async {},
         isDisguised: () async => false,
       );
-      final posted = notifications.posted.single;
-      expect(posted.title, 'Cold storage');
-      expect(
-        posted.body,
-        'Received ${formatAmount(5000, AmountUnit.btc)} · pending',
-      );
+      expect(notifications.posted.single.title, 'Cold storage');
+      expect(bridge.noticeAsks.single.context.details, isTrue);
     });
 
     test('syncs as before at a periodic cadence', () async {
@@ -862,10 +850,7 @@ void main() {
       await check(pending);
       await check(mined);
       await check(mined);
-      expect(net.posted.map((p) => p.body), [
-        'Received ${formatAmount(5000, AmountUnit.btc)} · pending',
-        'Received ${formatAmount(5000, AmountUnit.btc)} · confirmed',
-      ]);
+      expect(net.posted.map((p) => p.body), ['aa · pending', 'aa · confirmed']);
     });
 
     test('by a pull to refresh, then not by the watch', () async {
@@ -996,59 +981,23 @@ void main() {
   });
 
   group('a payment that is no longer coming', () {
-    List<String> said(
-      List<LiveTx> txs, {
-      bool masked = false,
-      bool details = true,
-      AmountUnit unit = AmountUnit.btc,
-    }) => NewTxAnnouncer.compose(
-      txs,
-      walletNames: const {'w1': 'Cold storage'},
-      unit: unit,
-      masked: masked,
-      details: details,
-    ).map((notice) => notice.body).toList();
-
-    test('names the amount, in the unit on screen', () {
-      final gone = _live('gone', 150000, stage: TxStage.dropped);
-      expect(said([gone]), [
-        'A pending payment of ${formatAmount(150000, AmountUnit.btc)} is no '
-            'longer coming',
+    test('is posted in the place of the arrival it takes back', () async {
+      final service = _Service(_bridge());
+      await service.runner.run();
+      service.bridge.liveController
+        ..add(LiveTransaction(_live('aa', 150000)))
+        ..add(LiveWalletSynced(_report()));
+      await service.settle();
+      service.bridge.liveController
+        ..add(LiveTransaction(_live('aa', 150000, stage: TxStage.dropped)))
+        ..add(LiveWalletSynced(_report()));
+      await service.settle();
+      final posted = service.notifications.posted;
+      expect(posted.map((p) => p.body), [
+        'aa · pending',
+        'aa · no longer coming',
       ]);
-      expect(said([gone]).single, contains('0.00150000 BTC'));
-      expect(
-        said([gone], unit: AmountUnit.sats).single,
-        isNot(contains('BTC')),
-      );
-    });
-
-    test('says no amount while hidden', () {
-      expect(
-        said([_live('gone', 150000, stage: TxStage.dropped)], masked: true),
-        ['A pending payment is no longer coming'],
-      );
-    });
-
-    test('takes the place of the arrival it takes back', () {
-      final notices = NewTxAnnouncer.compose(
-        [_live('aa', 150000), _live('aa', 150000, stage: TxStage.dropped)],
-        walletNames: const {'w1': 'Cold storage'},
-        unit: AmountUnit.btc,
-        masked: false,
-        details: true,
-      );
-      expect(notices.map((n) => n.id).toSet(), hasLength(1));
-      expect(notices.map((n) => n.title).toSet(), {'Cold storage'});
-    });
-
-    test('is never folded into the count of the rest', () {
-      final bodies = said([
-        for (var i = 0; i < 6; i++) _live('tx$i', 1000),
-        _live('gone', 150000, stage: TxStage.dropped),
-      ]);
-      expect(bodies, hasLength(noticesPerWallet + 2));
-      expect(bodies[noticesPerWallet], '3 more new transactions');
-      expect(bodies.last, contains('is no longer coming'));
+      expect(posted[0].id, posted[1].id);
     });
 
     test(
@@ -1062,11 +1011,10 @@ void main() {
           ..add(LiveTransaction(_live('gone', 150000, stage: TxStage.dropped)))
           ..add(LiveWalletSynced(_report()));
         await service.settle();
-        expect(
-          service.notifications.posted.single.body,
-          'A pending payment is no longer coming',
-        );
-        expect(service.notifications.posted.single.title, 'Gerfaut');
+        final asked = service.bridge.noticeAsks.single;
+        expect(asked.txs.single.stage, TxStage.dropped);
+        expect(asked.context.details, isFalse);
+        expect(service.notifications.posted, hasLength(1));
       },
     );
   });

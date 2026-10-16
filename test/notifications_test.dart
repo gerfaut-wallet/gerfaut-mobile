@@ -52,19 +52,6 @@ class FakeNotifications implements NotificationService {
 NewTx tx(int sats, {String txid = 'a', bool confirmed = true}) =>
     NewTx(txid: txid, netSats: sats, confirmed: confirmed);
 
-/// What the core hands out for the new transactions of these reports,
-/// with nothing announced before.
-List<LiveTx> claimed(List<SyncReport> reports) => [
-  for (final report in reports)
-    for (final tx in report.newTxs)
-      LiveTx(
-        walletId: report.walletId,
-        txid: tx.txid,
-        netSats: tx.netSats,
-        stage: tx.confirmed ? TxStage.confirmed : TxStage.mempool,
-      ),
-];
-
 SyncReport report(List<NewTx> txs, {String id = 'w1'}) => SyncReport(
   walletId: id,
   newTxCount: txs.length,
@@ -74,22 +61,6 @@ SyncReport report(List<NewTx> txs, {String id = 'w1'}) => SyncReport(
   tookMs: 1,
   backend: 'mempool.space',
 );
-
-List<String> bodies(
-  List<SyncReport> reports, {
-  AmountUnit unit = AmountUnit.btc,
-  bool masked = false,
-  bool details = true,
-  Map<String, String> names = const {'w1': 'Cold storage'},
-}) {
-  return NewTxAnnouncer.compose(
-    claimed(reports),
-    walletNames: names,
-    unit: unit,
-    masked: masked,
-    details: details,
-  ).map((notice) => notice.body).toList();
-}
 
 /// The switch of the new-transaction notice, the card's first.
 final Finder newTransactionsSwitch = find.descendant(
@@ -120,251 +91,164 @@ Widget settingsApp(FakeBridge bridge, FakeNotifications service) {
 }
 
 void main() {
-  group('what a notification says', () {
-    test('a receipt states the amount, an exit states it too', () {
-      expect(
-        bodies([
-          report([tx(1000000)]),
-        ]),
-        ['Received ${formatAmount(1000000, AmountUnit.btc)} · confirmed'],
-      );
-      expect(
-        bodies([
-          report([tx(-200000)]),
-        ]),
-        [
-          '${formatAmount(200000, AmountUnit.btc)} left this wallet · '
-              'confirmed',
-        ],
-      );
-    });
+  group('what the core says is posted', () {
+    const context = NoticeContext(
+      names: {'w1': 'Cold storage'},
+      unit: AmountUnit.btc,
+      masked: false,
+      details: true,
+    );
+    const arrival = LiveTx(
+      walletId: 'w1',
+      txid: 'a',
+      netSats: 5000,
+      stage: TxStage.mempool,
+    );
 
-    test('an unconfirmed transaction says it is pending', () {
-      expect(
-        bodies([
-          report([tx(1000, confirmed: false)]),
-        ]),
-        ['Received ${formatAmount(1000, AmountUnit.btc)} · pending'],
-      );
-    });
-
-    test('the display unit is the one on screen', () {
-      expect(
-        bodies([
-          report([tx(1000000)]),
-        ], unit: AmountUnit.sats),
-        ['Received ${formatAmount(1000000, AmountUnit.sats)} · confirmed'],
-      );
-    });
-
-    test('masked balances keep the amount out of the notification', () {
-      expect(
-        bodies([
-          report([tx(1000000)]),
-        ], masked: true),
-        ['New transaction · confirmed'],
-      );
-      expect(
-        bodies([
-          report([tx(-1000000)]),
-        ], masked: true),
-        ['New outgoing transaction · confirmed'],
-      );
-    });
-
-    test('details off, no wallet and no amount: the desktop words', () {
-      List<TxNotice> said(List<LiveTx> txs) => NewTxAnnouncer.compose(
-        txs,
-        walletNames: const {'w1': 'Cold storage', 'w2': 'Spending'},
-        unit: AmountUnit.btc,
-        masked: false,
-        details: false,
-      );
-      final notices = said(const [
-        LiveTx(
-          walletId: 'w1',
-          txid: 'a',
-          netSats: 5000,
-          stage: TxStage.mempool,
+    test('every notice the core composed, in its order', () async {
+      final bridge = FakeBridge()
+        ..onLiveNotices = (txs, context) => const [
+          TxNotice(
+            title: 'Cold storage',
+            body: 'Received 0.00005000 BTC · pending',
+            kind: NoticeKind.transaction,
+            payment: (walletId: 'w1', txid: 'a'),
+            walletId: 'w1',
+          ),
+          TxNotice(
+            title: 'Cold storage',
+            body: '4 more transactions',
+            kind: NoticeKind.transaction,
+            walletId: 'w1',
+          ),
+          TxNotice(
+            title: 'Cold storage',
+            body: '2 more pending payments are no longer coming',
+            kind: NoticeKind.dropped,
+            walletId: 'w1',
+          ),
+          TxNotice(
+            title: 'Gerfaut',
+            body: 'More transactions are coming in. Open Gerfaut to see them.',
+            kind: NoticeKind.transaction,
+          ),
+        ];
+      final service = FakeNotifications();
+      await NewTxAnnouncer(service, bridge).announce(const [arrival], context);
+      expect(bridge.noticeAsks.single.txs, const [arrival]);
+      expect(bridge.noticeAsks.single.context, same(context));
+      expect(service.posted.map((p) => (p.title, p.body)), [
+        ('Cold storage', 'Received 0.00005000 BTC · pending'),
+        ('Cold storage', '4 more transactions'),
+        ('Cold storage', '2 more pending payments are no longer coming'),
+        (
+          'Gerfaut',
+          'More transactions are coming in. Open Gerfaut to see them.',
         ),
-        LiveTx(
-          walletId: 'w1',
-          txid: 'b',
-          netSats: -700,
-          stage: TxStage.mempool,
-        ),
-        LiveTx(
-          walletId: 'w1',
-          txid: 'c',
-          netSats: 5000,
-          stage: TxStage.confirmed,
-        ),
-        LiveTx(
-          walletId: 'w2',
-          txid: 'd',
-          netSats: -700,
-          stage: TxStage.confirmed,
-        ),
-        LiveTx(walletId: 'w2', txid: 'e', netSats: 900, stage: TxStage.dropped),
       ]);
-      expect(notices.map((n) => n.title).toSet(), {'Gerfaut'});
-      expect(notices.map((n) => n.body), [
-        'New transaction · pending',
-        'New outgoing transaction · pending',
-        'Transaction confirmed',
-        'Outgoing transaction confirmed',
-        'A pending payment is no longer coming',
+      // A payment keeps the id it had before the core wrote the words,
+      // and so does the line that counts the rest of a wallet's sync:
+      // what an earlier version posted is replaced, not stacked under.
+      expect(service.posted.map((p) => p.id), [
+        noticeId('w1:a'),
+        noticeId('more:w1'),
+        noticeId('gone:w1'),
+        noticeId('waiting:transaction'),
       ]);
-      // Masked or not, the details off say the same.
+    });
+
+    test('every notice of one payment takes the place of the last', () {
+      TxNotice about(String walletId, String txid) => TxNotice(
+        title: 't',
+        body: 'b',
+        kind: NoticeKind.transaction,
+        payment: (walletId: walletId, txid: txid),
+        walletId: walletId,
+      );
+      expect(postedId(about('w1', 'first')), postedId(about('w1', 'first')));
+      // A payment between two watched wallets is said in each.
       expect(
-        bodies(
-          [
-            report([tx(-1000000)]),
-          ],
-          masked: true,
-          details: false,
-        ),
-        ['Outgoing transaction confirmed'],
+        postedId(about('w1', 'move')),
+        isNot(postedId(about('w2', 'move'))),
       );
-      // Nothing of a name reaches the notification, not even a stripped
-      // piece of it.
-      for (final notice in notices) {
-        expect(notice.title + notice.body, isNot(contains('Cold')));
-        expect(notice.title + notice.body, isNot(contains('BTC')));
-      }
+      expect(postedId(about('w1', 'a')), isNot(postedId(about('w1', 'b'))));
     });
 
-    test('details on, the name stays and a mask hides the amount', () {
-      final notices = NewTxAnnouncer.compose(
-        claimed([
-          report([tx(1000000, confirmed: false)]),
-        ]),
-        walletNames: const {'w1': 'Cold storage'},
-        unit: AmountUnit.btc,
-        masked: true,
-        details: true,
-      );
-      expect(notices.single.title, 'Cold storage');
-      expect(notices.single.body, 'New transaction · pending');
-    });
-
-    test('past three, the rest are counted in one line', () {
-      final many = [
-        for (var i = 0; i < 5; i++) tx(1000 * (i + 1), txid: 'tx$i'),
-      ];
-      final said = bodies([report(many)]);
-      expect(said, hasLength(noticesPerWallet + 1));
-      expect(said.last, '2 more new transactions');
-    });
-
-    test('the wallet name is the title, its id the fallback', () {
-      final notices = NewTxAnnouncer.compose(
-        claimed([
-          report([tx(1000)]),
-          report([tx(2000, txid: 'b')], id: 'w2'),
-        ]),
-        walletNames: const {'w1': 'Cold storage'},
-        unit: AmountUnit.btc,
-        masked: false,
-        details: true,
-      );
-      expect(notices.map((n) => n.title), ['Cold storage', 'w2']);
-    });
-
-    test('a name that reorders or breaks the text is said plainly', () {
-      final notices = NewTxAnnouncer.compose(
-        claimed([
-          report([tx(1000)]),
-        ]),
-        // An override that shows "gnivas" as "saving", an isolate, a
-        // mark, and two lines.
-        walletNames: const {
-          'w1': '\u202Egnivas\u202C \u2067Cold\u2069\u200F\nstorage\t',
-        },
-        unit: AmountUnit.btc,
-        masked: false,
-        details: true,
-      );
-      expect(notices.single.title, 'gnivas Cold storage');
-    });
-
-    test('a long name is cut, and a name of marks alone says Gerfaut', () {
-      final long = notificationTitle('x' * 200);
-      expect(long.runes.length, notificationTitleMax);
-      expect(long, endsWith('…'));
-      expect(notificationTitle('Cold storage'), 'Cold storage');
-      expect(notificationTitle('\u200E\u202E\u0000 '), 'Gerfaut');
-      // As on the desktop: what hides between letters goes, the joiners
-      // an emoji needs stay.
-      expect(notificationTitle('Cold\u200B\u2060\uFEFFstorage'), 'Coldstorage');
-      const coder = '\u{1F468}\u200D\u{1F4BB}';
-      expect(notificationTitle(coder), coder);
-      // Letters outside the basic plane are counted, and kept, whole.
-      expect(notificationTitle('₿ 🦅 Vault'), '₿ 🦅 Vault');
-    });
-
-    test('a fee bump confirms in the place of its pending notice', () {
-      List<TxNotice> say(LiveTx tx) => NewTxAnnouncer.compose(
-        [tx],
-        walletNames: const {'w1': 'Cold storage'},
-        unit: AmountUnit.btc,
-        masked: false,
-        details: true,
-      );
-      final pending = say(
-        const LiveTx(
+    test('a fee bump is posted under the payment it replaces', () async {
+      final bridge = FakeBridge();
+      final service = FakeNotifications();
+      final announcer = NewTxAnnouncer(service, bridge);
+      await announcer.announce(const [
+        LiveTx(
           walletId: 'w1',
           txid: 'first',
           netSats: 50000,
           stage: TxStage.mempool,
         ),
-      ).single;
-      final bumped = say(
-        const LiveTx(
+      ], context);
+      await announcer.announce(const [
+        LiveTx(
           walletId: 'w1',
           txid: 'bump',
           netSats: 49600,
           stage: TxStage.confirmed,
           replaces: 'first',
         ),
-      ).single;
-      expect(bumped.id, pending.id);
-      expect(bumped.body, endsWith('· confirmed'));
-      // Without a replaced txid, a transaction keeps an id of its own.
-      final other = say(
-        const LiveTx(
-          walletId: 'w1',
-          txid: 'bump',
-          netSats: 49600,
-          stage: TxStage.confirmed,
-        ),
-      ).single;
-      expect(other.id, isNot(pending.id));
+      ], context);
+      expect(service.posted[0].id, service.posted[1].id);
+      // The core is handed the bump as it came, its first txid with it.
+      expect(bridge.noticeAsks.last.txs.single.toJson(), {
+        'wallet_id': 'w1',
+        'txid': 'bump',
+        'net_sats': 49600,
+        'stage': 'confirmed',
+        'replaces': 'first',
+      });
     });
 
-    test('a payment between two watched wallets is said in each', () {
-      final notices = NewTxAnnouncer.compose(
-        const [
-          LiveTx(
-            walletId: 'w1',
-            txid: 'move',
-            netSats: -50000,
-            stage: TxStage.mempool,
-          ),
-          LiveTx(
-            walletId: 'w2',
-            txid: 'move',
-            netSats: 50000,
-            stage: TxStage.mempool,
-          ),
-        ],
-        walletNames: const {'w1': 'Spending', 'w2': 'Cold storage'},
-        unit: AmountUnit.btc,
-        masked: false,
-        details: true,
+    test('nothing to say asks the core nothing', () async {
+      final bridge = FakeBridge();
+      final service = FakeNotifications();
+      await NewTxAnnouncer(service, bridge).announce(const [], context);
+      expect(bridge.noticeAsks, isEmpty);
+      expect(service.posted, isEmpty);
+    });
+
+    test('the notices and the context read as the core writes them', () {
+      final notice = TxNotice.fromJson(const {
+        'title': 'Cold storage',
+        'body': 'A pending payment of 0.00000001 BTC is no longer coming',
+        'kind': 'dropped',
+        'id': {'wallet_id': 'w1', 'txid': 'a'},
+        'wallet_id': 'w1',
+      });
+      expect(notice.title, 'Cold storage');
+      expect(notice.kind, NoticeKind.dropped);
+      expect(notice.payment, (walletId: 'w1', txid: 'a'));
+      expect(notice.walletId, 'w1');
+      final flood = TxNotice.fromJson(const {
+        'title': 'Gerfaut',
+        'body': 'More transactions are coming in. Open Gerfaut to see them.',
+        'kind': 'transaction',
+        'id': null,
+        'wallet_id': null,
+      });
+      expect(flood.payment, isNull);
+      expect(flood.walletId, isNull);
+      expect(
+        const NoticeContext(
+          names: {'w1': 'Cold storage'},
+          unit: AmountUnit.sats,
+          masked: true,
+          details: false,
+        ).toJson(),
+        {
+          'names': {'w1': 'Cold storage'},
+          'unit': 'sats',
+          'masked': true,
+          'details': false,
+        },
       );
-      expect(notices.map((n) => n.title), ['Spending', 'Cold storage']);
-      expect(notices.map((n) => n.id).toSet(), hasLength(2));
     });
 
     test('the replaced txid is read from the core', () {
@@ -384,6 +268,7 @@ void main() {
       });
       expect(plain.replaces, isNull);
       expect(plain.payment, 'plain');
+      expect(plain.toJson().containsKey('replaces'), isFalse);
     });
 
     test('the same transaction always gets the same id', () {
@@ -411,85 +296,93 @@ void main() {
       ),
     ];
 
-    test('is said with the name and the unit the vault holds', () async {
+    test('is said with the names and the unit the vault holds', () async {
       final notices = FakeNotifications();
+      final bridge = vault({Pref.notifyNewTx: '1', Pref.unit: 'sats'});
       await announceFromVault(
-        vault({Pref.notifyNewTx: '1', Pref.unit: 'sats'}),
+        bridge,
         notices,
         claimed,
         isDisguised: () async => false,
       );
-      expect(notices.posted.single.title, contains('Savings'));
-      expect(notices.posted.single.body, contains('150'));
-      expect(notices.posted.single.body, contains('sats'));
+      final asked = bridge.noticeAsks.single;
+      expect(asked.txs, claimed);
+      expect(asked.context.names, {'w1': 'Savings'});
+      expect(asked.context.unit, AmountUnit.sats);
+      expect(asked.context.masked, isFalse);
+      expect(notices.posted.single.title, 'Savings');
+      expect(notices.posted.single.body, 'aa · pending');
     });
 
     test('names the wallet and the amount, app lock or not', () async {
-      final notices = FakeNotifications();
+      final bridge = vault({Pref.notifyNewTx: '1'})
+        ..lock = const AppLock(kind: LockKind.pin, biometric: false);
       await announceFromVault(
-        vault({Pref.notifyNewTx: '1'})
-          ..lock = const AppLock(kind: LockKind.pin, biometric: false),
-        notices,
+        bridge,
+        FakeNotifications(),
         claimed,
         isDisguised: () async => false,
       );
-      expect(notices.posted.single.title, 'Savings');
-      expect(
-        notices.posted.single.body,
-        'Received ${formatAmount(150000, AmountUnit.btc)} · pending',
-      );
+      expect(bridge.noticeAsks.single.context.details, isTrue);
+      expect(bridge.noticeAsks.single.context.unit, AmountUnit.btc);
     });
 
-    test('with the details off, says only what happened', () async {
-      final notices = FakeNotifications();
+    test('with the details off, asks for what happened alone', () async {
+      final bridge = vault({Pref.notifyNewTx: '1', Pref.notifyDetails: '0'});
       await announceFromVault(
-        vault({Pref.notifyNewTx: '1', Pref.notifyDetails: '0'}),
-        notices,
+        bridge,
+        FakeNotifications(),
         claimed,
         isDisguised: () async => false,
       );
-      expect(notices.posted.single.title, 'Gerfaut');
-      expect(notices.posted.single.body, 'New transaction · pending');
+      expect(bridge.noticeAsks.single.context.details, isFalse);
     });
 
     test('with the details on and amounts hidden, the name alone', () async {
-      final notices = FakeNotifications();
+      final bridge = vault({
+        Pref.notifyNewTx: '1',
+        Pref.notifyDetails: '1',
+        Pref.masked: '1',
+      });
       await announceFromVault(
-        vault({
-          Pref.notifyNewTx: '1',
-          Pref.notifyDetails: '1',
-          Pref.masked: '1',
-        }),
-        notices,
+        bridge,
+        FakeNotifications(),
         claimed,
         isDisguised: () async => false,
       );
-      expect(notices.posted.single.title, 'Savings');
-      expect(notices.posted.single.body, 'New transaction · pending');
+      expect(bridge.noticeAsks.single.context.details, isTrue);
+      expect(bridge.noticeAsks.single.context.masked, isTrue);
     });
 
     test('is not said while the notice is off or the app disguised', () async {
       final notices = FakeNotifications();
+      final off = vault({});
       await announceFromVault(
-        vault({}),
+        off,
         notices,
         claimed,
         isDisguised: () async => false,
       );
+      final disguised = vault({Pref.notifyNewTx: '1'});
       await announceFromVault(
-        vault({Pref.notifyNewTx: '1'}),
+        disguised,
         notices,
         claimed,
         isDisguised: () async => true,
       );
       // Disguised, the details off change nothing: still not a word.
+      final generic = vault({Pref.notifyNewTx: '1', Pref.notifyDetails: '0'});
       await announceFromVault(
-        vault({Pref.notifyNewTx: '1', Pref.notifyDetails: '0'}),
+        generic,
         notices,
         claimed,
         isDisguised: () async => true,
       );
       expect(notices.posted, isEmpty);
+      // Nothing is composed either: the budget is not spent on silence.
+      for (final bridge in [off, disguised, generic]) {
+        expect(bridge.noticeAsks, isEmpty);
+      }
     });
   });
 
@@ -546,11 +439,15 @@ void main() {
     test('nothing is posted while the notice is off', () async {
       final service = FakeNotifications();
       final bridge = FakeBridge(wallets: [makeMeta()]);
-      bridge.onSyncWallet = (id) => report([tx(1000)], id: id);
+      var round = 0;
+      bridge.onSyncWallet = (id) =>
+          report([tx(1000, txid: 'tx${round++}')], id: id);
       final made = container(bridge, service);
 
       await made.read(syncProvider.notifier).syncWallet('w1');
+      await made.read(syncProvider.notifier).syncWallet('w1');
       expect(service.posted, isEmpty);
+      expect(bridge.noticeAsks, isEmpty);
     });
 
     test('the first sync of a wallet is not announced', () async {
@@ -583,10 +480,12 @@ void main() {
       await made.read(syncProvider.notifier).syncWallet('w1');
       expect(service.posted, hasLength(1));
       expect(service.posted.single.title, 'Cold storage');
-      expect(
-        service.posted.single.body,
-        'Received ${formatAmount(1000, AmountUnit.btc)} · confirmed',
-      );
+      expect(service.posted.single.body, 'tx1 · confirmed');
+      final context = bridge.noticeAsks.single.context;
+      expect(context.names, {'w1': 'Cold storage'});
+      expect(context.unit, AmountUnit.btc);
+      expect(context.masked, isFalse);
+      expect(context.details, isTrue);
     });
 
     test('under an app lock, the open app still names the wallet', () async {
@@ -603,10 +502,7 @@ void main() {
       await made.read(syncProvider.notifier).syncWallet('w1');
       await made.read(syncProvider.notifier).syncWallet('w1');
       expect(service.posted.single.title, 'Cold storage');
-      expect(
-        service.posted.single.body,
-        'Received ${formatAmount(1000, AmountUnit.btc)} · confirmed',
-      );
+      expect(bridge.noticeAsks.single.context.details, isTrue);
     });
 
     test('with the details off, the open app names no wallet', () async {
@@ -621,8 +517,8 @@ void main() {
 
       await made.read(syncProvider.notifier).syncWallet('w1');
       await made.read(syncProvider.notifier).syncWallet('w1');
-      expect(service.posted.single.title, 'Gerfaut');
-      expect(service.posted.single.body, 'Transaction confirmed');
+      expect(service.posted, hasLength(1));
+      expect(bridge.noticeAsks.single.context.details, isFalse);
     });
 
     test('a sync that found nothing says nothing', () async {

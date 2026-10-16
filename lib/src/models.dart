@@ -2,6 +2,8 @@
 // DTOs one to one (snake_case keys); if a field changes there, it
 // changes here.
 
+import 'format.dart';
+
 /// Networks Gerfaut can operate on.
 enum Network {
   mainnet('mainnet', 'Mainnet'),
@@ -1018,6 +1020,100 @@ class LiveTx {
   /// one announced. A fee bump confirms under a txid of its own, and its
   /// confirmation takes the place of the pending notice this way.
   String get payment => replaces ?? txid;
+
+  /// As the core reads it back, to compose what is said about it.
+  Map<String, dynamic> toJson() => {
+    'wallet_id': walletId,
+    'txid': txid,
+    'net_sats': netSats,
+    'stage': stage.id,
+    if (replaces != null) 'replaces': replaces,
+  };
+}
+
+/// What the app lets a notification say, read at the moment of posting.
+/// The core composes the words from it (`notice::Context`).
+class NoticeContext {
+  const NoticeContext({
+    required this.names,
+    required this.unit,
+    required this.masked,
+    required this.details,
+  });
+
+  /// The name of each wallet, by id.
+  final Map<String, String> names;
+  final AmountUnit unit;
+
+  /// Balances are hidden: no amount.
+  final bool masked;
+
+  /// "Show wallet and amount": off, no wallet name and no amount, app
+  /// lock or not.
+  final bool details;
+
+  Map<String, dynamic> toJson() => {
+    'names': names,
+    'unit': unit.id,
+    'masked': masked,
+    'details': details,
+  };
+}
+
+/// Which budget of the core a notification drew on.
+enum NoticeKind {
+  transaction('transaction'),
+
+  /// A pending payment that is no longer coming.
+  dropped('dropped');
+
+  const NoticeKind(this.id);
+
+  final String id;
+
+  static NoticeKind fromId(String? id) {
+    for (final kind in NoticeKind.values) {
+      if (kind.id == id) return kind;
+    }
+    return NoticeKind.transaction;
+  }
+}
+
+/// One notification as the core composed it, ready to post.
+class TxNotice {
+  const TxNotice({
+    required this.title,
+    required this.body,
+    required this.kind,
+    this.payment,
+    this.walletId,
+  });
+
+  factory TxNotice.fromJson(Map<String, dynamic> json) {
+    final id = json['id'] as Map<String, dynamic>?;
+    return TxNotice(
+      title: json['title'] as String,
+      body: json['body'] as String,
+      kind: NoticeKind.fromId(json['kind'] as String?),
+      payment: id == null
+          ? null
+          : (walletId: id['wallet_id'] as String, txid: id['txid'] as String),
+      walletId: json['wallet_id'] as String?,
+    );
+  }
+
+  final String title;
+  final String body;
+  final NoticeKind kind;
+
+  /// The payment it is about, in the wallet it is posted for: every
+  /// notice of one payment takes the place of the one before. Null for
+  /// a line that counts the rest or sums up.
+  final ({String walletId, String txid})? payment;
+
+  /// The wallet it is about, a line that counts the rest of a sync
+  /// included; null for the line that says more is waiting.
+  final String? walletId;
 }
 
 /// Where the live watch stands.

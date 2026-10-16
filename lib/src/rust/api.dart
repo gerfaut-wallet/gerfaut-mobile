@@ -372,6 +372,24 @@ Stream<String> liveEvents() => RustLib.instance.api.crateApiLiveEvents();
 Future<String> claimAnnouncements({required String walletId}) =>
     RustLib.instance.api.crateApiClaimAnnouncements(walletId: walletId);
 
+/// What a batch of announced transactions amounts to, as notifications
+/// ready to post: their title, their text, and the payment and wallet
+/// each is about. The core composes the words, the same as the desktop
+/// app's, and counts them against the budget it keeps for the whole
+/// process, twenty a minute: the screens, Live and the periodic task
+/// draw on the same one. `txs_json` is a `Vec<LiveTx>`, as
+/// [`claim_announcements`] and [`live_run`] hand them out; `context_json`
+/// a `notice::Context`: the wallet names, the unit, the mask and the
+/// choice of details. Returns a serialized `Vec<Notice>`. Ask only for
+/// what is about to be posted: what comes back has been counted.
+Future<String> liveNotices({
+  required String txsJson,
+  required String contextJson,
+}) => RustLib.instance.api.crateApiLiveNotices(
+  txsJson: txsJson,
+  contextJson: contextJson,
+);
+
 /// Whether anything this app sends has to go through Tor.
 Future<String> usesTor() => RustLib.instance.api.crateApiUsesTor();
 
