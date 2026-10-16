@@ -26,7 +26,7 @@ Gerfaut watches bitcoin wallets it cannot spend from. There is no key generation
 #### Broadcasting a signed transaction
 
 - Broadcast a signed transaction or a PSBT, read back in plain language before it goes anywhere. When no backend could confirm a coin it spends, Gerfaut marks the amounts and the fee "as the PSBT claims" and says what to check before sending.
-- A signature that leaves the outputs open (SIGHASH_NONE or SIGHASH_SINGLE) gets a red warning: whoever relays such a transaction can send that money elsewhere. When the outputs pay more than the inputs bring, the last check before sending says the network would refuse it.
+- A signature that leaves the outputs open (SIGHASH_NONE or SIGHASH_SINGLE) gets a red warning: whoever relays such a transaction can send that money elsewhere. A transaction the network is sure to refuse, such as one that spends a coin already spent in a block, reads "Will be refused" and cannot be sent.
 
 #### Talking to the chain
 
