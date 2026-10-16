@@ -493,7 +493,9 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                         label: _sending ? 'Sending…' : 'Broadcast',
                         icon: LucideIcons.radio,
                         expand: true,
-                        onPressed: preview.ready && !_sending
+                        // The state the pill reads, not a second one.
+                        onPressed:
+                            preview.readiness == TxReadiness.ready && !_sending
                             ? () => _confirmAndSend(preview)
                             : null,
                       ),

@@ -448,6 +448,19 @@ void main() {
     expect(primaryButton(tester, 'Broadcast').onPressed, isNull);
   });
 
+  // The pill and the Broadcast button read one thing: a wire whose two
+  // fields disagree cannot leave a refused transaction sendable.
+  testWidgets('the pill and the button read one state', (tester) async {
+    final bridge = FakeBridge()
+      ..onPreview = (_, _) =>
+          makePreview(ready: true, readiness: TxReadiness.refused);
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+    await preview(tester);
+    expect(find.text('Will be refused'), findsOneWidget);
+    expect(primaryButton(tester, 'Broadcast').onPressed, isNull);
+  });
+
   // A spend still in the mempool is the node's to judge: this one may
   // replace it. The caution stays red; the send stays possible.
   testWidgets('a red caution that blocks nothing leaves the send on', (
