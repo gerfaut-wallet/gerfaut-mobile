@@ -1,8 +1,12 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/settings.dart';
+import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/live.dart';
 import 'package:gerfaut/src/models.dart';
@@ -204,6 +208,68 @@ void main() {
         'stage': 'confirmed',
         'replaces': 'first',
       });
+    });
+
+    test('a batch the core cannot word is said without any detail', () async {
+      const gone = LiveTx(
+        walletId: 'w1',
+        txid: 'b',
+        netSats: 7000,
+        stage: TxStage.dropped,
+      );
+      const confirmed = LiveTx(
+        walletId: 'w1',
+        txid: 'c',
+        netSats: 5000,
+        stage: TxStage.confirmed,
+      );
+      for (final failure in <Object>[
+        const BridgeException('not_initialized', 'the vault is not open'),
+        const BridgeException('bad_json', 'notice context: missing field'),
+        const BridgeException('internal', internalFailure),
+        StateError('a panic the bridge let through'),
+      ]) {
+        final bridge = FakeBridge()
+          ..onLiveNotices = (txs, context) => throw failure;
+        final service = FakeNotifications();
+        final announcer = NewTxAnnouncer(service, bridge);
+        await announcer.announce(const [arrival, gone], context);
+        expect(service.posted.map((p) => (p.id, p.title, p.body)), [
+          (noticeId('waiting:transaction'), 'Gerfaut', fallbackTransactions),
+          (noticeId('waiting:dropped'), 'Gerfaut', fallbackDropped),
+        ], reason: '$failure');
+        await announcer.announce(const [confirmed], context);
+        expect(service.posted.last.body, fallbackTransactions);
+        expect(service.posted, hasLength(3));
+        for (final posted in service.posted) {
+          expect(posted.title, isNot(contains('Cold')));
+          expect(posted.body, isNot(contains('BTC')));
+        }
+      }
+    });
+
+    test('what is said without the core is the core\'s own words', () {
+      final reference = jsonDecode(
+        File('test/fixtures/fallback_notices.json').readAsStringSync(),
+      ) as List<dynamic>;
+      final cores = [
+        for (final json in reference)
+          TxNotice.fromJson(json as Map<String, dynamic>),
+      ];
+      final ours = fallbackNotices(const [
+        arrival,
+        LiveTx(walletId: 'w1', txid: 'b', netSats: 1, stage: TxStage.dropped),
+      ]);
+      expect(ours, hasLength(cores.length));
+      for (var i = 0; i < cores.length; i++) {
+        expect(ours[i].title, cores[i].title);
+        expect(ours[i].body, cores[i].body);
+        expect(ours[i].kind, cores[i].kind);
+        expect(ours[i].payment, isNull);
+        expect(ours[i].walletId, isNull);
+        expect(cores[i].payment, isNull);
+        expect(cores[i].walletId, isNull);
+      }
     });
 
     test('nothing to say asks the core nothing', () async {
