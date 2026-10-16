@@ -144,7 +144,8 @@ if (-not (Test-Path -LiteralPath $storeFile -PathType Leaf)) {
 }
 
 Write-Output "checking what $Tag names..."
-$commit = Get-ReleaseCommit -RepoDir $repo -Tag $Tag -Slug $slug
+# GERFAUT_SIGN_TEST_ORIGIN is for tests only: see Assert-OriginUrl.
+$commit = Get-ReleaseCommit -RepoDir $repo -Tag $Tag -Slug $slug -TestOrigin $env:GERFAUT_SIGN_TEST_ORIGIN
 Write-Output "  $Tag is $commit here and on GitHub, a commit of main"
 
 $dir = Join-Path ([System.IO.Path]::GetTempPath()) "gerfaut-mobile-sign-$Tag"
