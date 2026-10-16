@@ -2100,8 +2100,10 @@ class TxWarning {
   final TxSeverity severity;
 
   /// The network is sure to refuse the transaction while this holds: a
-  /// signature missing, a coin spent in a block, outputs over the
-  /// inputs. The core sets it, and a preview with one is not ready.
+  /// signature missing, a coin spent in a block, outputs past all the
+  /// bitcoin there will ever be, or outputs over inputs whose every
+  /// amount is proven. The core sets it, and a preview with one is not
+  /// ready.
   final bool blocking;
 }
 
