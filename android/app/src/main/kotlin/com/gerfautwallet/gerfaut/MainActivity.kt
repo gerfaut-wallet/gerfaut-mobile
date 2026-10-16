@@ -138,6 +138,13 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Another app's window drawn over this one could hide what a
+        // button does and let the tap through to it. From Android 12 the
+        // system hides every such window while this one is in front; its
+        // own windows still show.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            window.setHideOverlayWindows(true)
+        }
         // The task switcher must show the calculator from the first frame
         // of a disguised app, before the Dart side has asked anything.
         applyTaskDescription(isDisguised())

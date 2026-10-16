@@ -28,6 +28,10 @@
     <!-- The app lock may be opened by the phone's own prompt when the
          user turns that on; Gerfaut never sees the biometric itself. -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <!-- Lets the app hide the windows other apps draw over it, from
+         Android 12: none can lie over a button and pass a tap on to it.
+         Granted at install, nothing is asked. -->
+    <uses-permission android:name="android.permission.HIDE_OVERLAY_WINDOWS" />
     <!-- The camera is used for one thing: scanning a descriptor, xpub,
          or address QR code on the add-wallet screen. Nothing is
          recorded and no image leaves the device. -->
