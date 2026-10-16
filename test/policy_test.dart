@@ -102,6 +102,7 @@ void main() {
       expect(primary.timelocks, isEmpty);
       expect(primary.state, isA<SpendableNow>());
       expect(primary.spendableNow, isTrue);
+      expect(primary.tone, BranchTone.confirmed);
 
       expect(recovery.role, BranchRole.recovery);
       expect(recovery.summary, 'Key B, once a coin has waited 52,560 blocks');
@@ -128,6 +129,7 @@ void main() {
       expect(state.next?.remainingSeconds, 20440 * 600);
       expect(state.next?.unlocksAtUnix, fixtureNow + 20440 * 600);
       expect(recovery.spendableNow, isFalse);
+      expect(recovery.tone, BranchTone.neutral);
     });
 
     test('reads an absolute lock and its countdown', () {
@@ -231,6 +233,7 @@ void main() {
         throwsFormatException,
       );
       expect(() => BranchRole.fromId('backup'), throwsStateError);
+      expect(() => BranchTone.fromId('alert'), throwsStateError);
       expect(() => PolicyKind.fromId('taproot_tree'), throwsStateError);
     });
   });
@@ -304,34 +307,6 @@ void main() {
       expect(
         describePolicy(_snapshot(unsyncedHeightLockedPolicyJson())),
         'Key A signs after block 900\u00A0000.',
-      );
-    });
-  });
-
-  group('orderBranches', () {
-    test('reads by role, then from the nearest lock to the farthest', () {
-      final json = lianaPolicyJson();
-      final branches = json['branches'] as List;
-      final primary = branches[0] as Map<String, dynamic>;
-      final yearLong = branches[1] as Map<String, dynamic>;
-      // A second recovery path, sooner than the first, and a path of
-      // another kind, listed ahead of them all.
-      final monthLong = jsonDecode(jsonEncode(yearLong)) as Map<String, dynamic>
-        ..['id'] = 'b2'
-        ..['label'] = 'Recovery 2';
-      ((monthLong['timelocks'] as List).single as Map)['lock'] = {
-        'kind': 'relative',
-        'lock': {'kind': 'blocks', 'blocks': 4320},
-      };
-      final other = jsonDecode(jsonEncode(primary)) as Map<String, dynamic>
-        ..['id'] = 'b3'
-        ..['role'] = 'other'
-        ..['label'] = 'Other';
-      json['branches'] = [other, yearLong, monthLong, primary];
-
-      expect(
-        [for (final b in orderBranches(_snapshot(json))) b.id],
-        ['b0', 'b2', 'b1', 'b3'],
       );
     });
   });
@@ -496,13 +471,15 @@ void main() {
       expect(far.progress, closeTo((52560 - 20440) / 52560, 0.001));
 
       final soon = describeBranchState(
-        recovery(lianaPolicyJson(remainingBlocks: 1432)),
+        recovery(lianaPolicyJson(remainingBlocks: 1432, tone: 'pending')),
       );
       expect(soon.tone, StateTone.soon);
       expect(soon.label, '0 of 1 coin unlocked · next in 10 days');
 
       expect(
-        describeBranchState(recovery(lianaPolicyJson(locked: 0, unlocked: 1))),
+        describeBranchState(
+          recovery(lianaPolicyJson(locked: 0, unlocked: 1, tone: 'confirmed')),
+        ),
         isA<BranchStatus>()
             .having((s) => s.tone, 'tone', StateTone.open)
             .having((s) => s.label, 'label', '1 of 1 coin unlocked')
@@ -528,6 +505,7 @@ void main() {
             locked: 1,
             waiting: 2,
             remainingBlocks: 1728,
+            tone: 'pending',
           ),
         ),
       );
@@ -539,14 +517,14 @@ void main() {
       expect(status.progress, closeTo((52560 - 1728) / 52560, 0.001));
 
       final open = describeBranchState(
-        recovery(lianaPolicyJson(unlocked: 2, locked: 0)),
+        recovery(lianaPolicyJson(unlocked: 2, locked: 0, tone: 'confirmed')),
       );
       expect(open.tone, StateTone.open);
       expect(open.label, '2 of 2 coins unlocked');
       expect(open.progress, isNull);
     });
 
-    test('an absolute lock colours only within thirty days', () {
+    test('an absolute lock takes the tone the core gives it', () {
       final soon = describeBranchState(
         _snapshot(heightLockedPolicyJson()).branches.single,
       );
@@ -555,7 +533,9 @@ void main() {
       expect(soon.progress, isNull, reason: 'no coin to count from');
 
       final far = describeBranchState(
-        _snapshot(heightLockedPolicyJson(remaining: 20000)).branches.single,
+        _snapshot(heightLockedPolicyJson(remaining: 20000, tone: 'neutral'))
+            .branches
+            .single,
       );
       expect(far.tone, StateTone.far);
       expect(far.label, 'In 20 000 blocks ≈ 139 days');
@@ -569,15 +549,6 @@ void main() {
       expect(unknown.label, 'Locked');
       expect(unknown.date, isNull);
       expect(unknown.progress, isNull);
-    });
-
-    test('amber starts under thirty days, as on the desktop', () {
-      StateTone toneAt(int blocks) => describeBranchState(
-        _snapshot(heightLockedPolicyJson(remaining: blocks)).branches.single,
-      ).tone;
-      // 4 320 blocks are thirty days exactly: not yet under them.
-      expect(toneAt(4320), StateTone.far);
-      expect(toneAt(4319), StateTone.soon);
     });
 
     test('a coin whose count is unknown is known after the first sync', () {
@@ -605,27 +576,42 @@ void main() {
     });
 
     test('states without a countdown have their own words', () {
-      PolicyBranch withState(BranchState state) => PolicyBranch(
-        id: 'b1',
-        role: BranchRole.recovery,
-        label: 'Recovery',
-        summary: '',
-        condition: const KeyCondition(keyId: 'k1'),
-        timelocks: const [],
-        state: state,
-        spendableNow: state is SpendableNow,
+      PolicyBranch withState(BranchState state, BranchTone tone) =>
+          PolicyBranch(
+            id: 'b1',
+            role: BranchRole.recovery,
+            label: 'Recovery',
+            summary: '',
+            condition: const KeyCondition(keyId: 'k1'),
+            timelocks: const [],
+            state: state,
+            spendableNow: state is SpendableNow,
+            tone: tone,
+          );
+      expect(
+        describeBranchState(
+          withState(const SpendableNow(), BranchTone.confirmed),
+        ),
+        isA<BranchStatus>()
+            .having((s) => s.tone, 'tone', StateTone.open)
+            .having((s) => s.label, 'label', 'Spendable now'),
+      );
+      // A neutral tone says what the branch waits for in its glyph.
+      expect(
+        describeBranchState(
+          withState(const NoCoinsBranch(), BranchTone.neutral),
+        ),
+        isA<BranchStatus>()
+            .having((s) => s.tone, 'tone', StateTone.idle)
+            .having((s) => s.label, 'label', 'No coins yet'),
       );
       expect(
-        describeBranchState(withState(const SpendableNow())).label,
-        'Spendable now',
-      );
-      expect(
-        describeBranchState(withState(const NoCoinsBranch())).label,
-        'No coins yet',
-      );
-      expect(
-        describeBranchState(withState(const NeedsPreimage())).tone,
-        StateTone.secret,
+        describeBranchState(
+          withState(const NeedsPreimage(), BranchTone.neutral),
+        ),
+        isA<BranchStatus>()
+            .having((s) => s.tone, 'tone', StateTone.secret)
+            .having((s) => s.label, 'label', 'Needs a secret'),
       );
     });
   });
@@ -674,9 +660,11 @@ void main() {
       expect(find.textContaining("device's clock"), findsNothing);
     });
 
-    testWidgets('puts the primary path first, whatever the policy order', (
+    testWidgets('lays the cards out in the order the core gives', (
       tester,
     ) async {
+      // The core lists the primary path first; listed the other way
+      // round, the cards follow, and the sentence reads the same.
       final json = lianaPolicyJson();
       final branches = json['branches'] as List;
       json['branches'] = branches.reversed.toList();
@@ -685,7 +673,7 @@ void main() {
 
       final primary = tester.getTopLeft(find.text('PRIMARY')).dy;
       final recovery = tester.getTopLeft(find.text('RECOVERY')).dy;
-      expect(primary, lessThan(recovery));
+      expect(recovery, lessThan(primary));
       expect(
         find.text(
           'Key A signs. '
@@ -695,10 +683,10 @@ void main() {
       );
     });
 
-    testWidgets('colours a lock only within thirty days', (tester) async {
+    testWidgets('draws a lock in the tone the core gives it', (tester) async {
       await _pumpPolicy(
         tester,
-        _bridgeWith(lianaPolicyJson(remainingBlocks: 1432)),
+        _bridgeWith(lianaPolicyJson(remainingBlocks: 1432, tone: 'pending')),
       );
       await tester.pumpAndSettle();
       final soon = tester.widget<Text>(
@@ -708,7 +696,7 @@ void main() {
 
       await _pumpPolicy(
         tester,
-        _bridgeWith(heightLockedPolicyJson(remaining: 20000)),
+        _bridgeWith(heightLockedPolicyJson(remaining: 20000, tone: 'neutral')),
       );
       await tester.pumpAndSettle();
       final far = tester.widget<Text>(find.text('In 20 000 blocks ≈ 139 days'));
@@ -744,6 +732,7 @@ void main() {
             locked: 1,
             waiting: 2,
             remainingBlocks: 1728,
+            tone: 'pending',
           ),
         ),
       );
@@ -837,7 +826,9 @@ void main() {
         findsOneWidget,
       );
 
-      completer.complete(_snapshot(lianaPolicyJson(remainingBlocks: 1432)));
+      completer.complete(
+        _snapshot(lianaPolicyJson(remainingBlocks: 1432, tone: 'pending')),
+      );
       await tester.pumpAndSettle();
       expect(
         find.text('0 of 1 coin unlocked · next in 10 days'),

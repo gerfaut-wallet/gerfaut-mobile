@@ -414,6 +414,7 @@ PolicySnapshot makePolicy({
             timelocks: [],
             state: SpendableNow(),
             spendableNow: true,
+            tone: BranchTone.confirmed,
           ),
         ],
     tipHeight: tipHeight,

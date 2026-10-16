@@ -30,12 +30,16 @@ Map<String, dynamic> _remaining(int blocks) => {
 };
 
 /// A Liana-style wallet: Key A spends any time, Key B once a coin has
-/// waited a year. One coin, [remainingBlocks] short of its unlock.
+/// waited a year. One coin, [remainingBlocks] short of its unlock. The
+/// recovery path is in the [tone] the core gives it: neutral for the
+/// default coin, pending for one under thirty days, confirmed once
+/// every coin is open.
 Map<String, dynamic> lianaPolicyJson({
   int remainingBlocks = 20440,
   int unlocked = 0,
   int waiting = 0,
   int locked = 1,
+  String tone = 'neutral',
 }) {
   final next = locked > 0 ? _remaining(remainingBlocks) : null;
   final perCoin = {
@@ -67,6 +71,7 @@ Map<String, dynamic> lianaPolicyJson({
         'timelocks': <Map<String, dynamic>>[],
         'state': {'kind': 'spendable_now'},
         'spendable_now': true,
+        'tone': 'confirmed',
       },
       {
         'id': 'b1',
@@ -97,6 +102,7 @@ Map<String, dynamic> lianaPolicyJson({
         ],
         'state': perCoin,
         'spendable_now': false,
+        'tone': tone,
       },
     ],
     'tip_height': fixtureTip,
@@ -108,8 +114,12 @@ Map<String, dynamic> lianaPolicyJson({
 }
 
 /// A wallet whose only path opens at an absolute height, [remaining]
-/// blocks ahead of the tip.
-Map<String, dynamic> heightLockedPolicyJson({int remaining = 1432}) {
+/// blocks ahead of the tip, in the [tone] the core gives it: pending
+/// for the default ten days, neutral past thirty.
+Map<String, dynamic> heightLockedPolicyJson({
+  int remaining = 1432,
+  String tone = 'pending',
+}) {
   final until = _remaining(remaining);
   return {
     'kind': 'miniscript',
@@ -147,6 +157,7 @@ Map<String, dynamic> heightLockedPolicyJson({int remaining = 1432}) {
         ],
         'state': {'kind': 'locked', 'until': until},
         'spendable_now': false,
+        'tone': tone,
       },
     ],
     'tip_height': fixtureTip,
@@ -202,6 +213,7 @@ Map<String, dynamic> unsyncedHeightLockedPolicyJson() {
         ],
         'state': {'kind': 'locked', 'until': until},
         'spendable_now': false,
+        'tone': 'neutral',
       },
     ],
     'tip_height': null,
@@ -243,6 +255,7 @@ Map<String, dynamic> oneOfThreePolicyJson() => {
       'timelocks': <Map<String, dynamic>>[],
       'state': {'kind': 'spendable_now'},
       'spendable_now': true,
+      'tone': 'confirmed',
     },
   ],
   'tip_height': fixtureTip,
@@ -283,6 +296,7 @@ Map<String, dynamic> multisigPolicyJson() => {
       'timelocks': <Map<String, dynamic>>[],
       'state': {'kind': 'spendable_now'},
       'spendable_now': true,
+      'tone': 'confirmed',
     },
   ],
   'tip_height': fixtureTip,
@@ -317,6 +331,7 @@ Map<String, dynamic> singleKeyPolicyJson() => {
       'timelocks': <Map<String, dynamic>>[],
       'state': {'kind': 'spendable_now'},
       'spendable_now': true,
+      'tone': 'confirmed',
     },
   ],
   'tip_height': fixtureTip,

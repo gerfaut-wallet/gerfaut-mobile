@@ -3021,6 +3021,21 @@ class NeedsPreimage extends BranchState {
   const NeedsPreimage();
 }
 
+/// The tone the core shows a branch's state in: confirmed when it is
+/// open, pending when it opens in under thirty days, neutral otherwise.
+enum BranchTone {
+  confirmed('confirmed'),
+  pending('pending'),
+  neutral('neutral');
+
+  const BranchTone(this.id);
+
+  final String id;
+
+  static BranchTone fromId(String id) =>
+      BranchTone.values.firstWhere((t) => t.id == id);
+}
+
 /// One way to spend: a top-level alternative of the policy.
 class PolicyBranch {
   const PolicyBranch({
@@ -3032,6 +3047,7 @@ class PolicyBranch {
     required this.timelocks,
     required this.state,
     required this.spendableNow,
+    required this.tone,
   });
 
   factory PolicyBranch.fromJson(Map<String, dynamic> json) {
@@ -3048,6 +3064,7 @@ class PolicyBranch {
           .toList(),
       state: BranchState.fromJson(json['state'] as Map<String, dynamic>),
       spendableNow: json['spendable_now'] as bool,
+      tone: BranchTone.fromId(json['tone'] as String),
     );
   }
 
@@ -3067,6 +3084,9 @@ class PolicyBranch {
   final List<PolicyTimelock> timelocks;
   final BranchState state;
   final bool spendableNow;
+
+  /// The colour [state] is shown in, the core's call.
+  final BranchTone tone;
 }
 
 /// A wallet's policy read against the chain.
@@ -3116,6 +3136,9 @@ class PolicySnapshot {
   /// `or(pk(Key A),and(pk(Key B),older(52560)))`.
   final String policy;
   final List<PolicyKey> keys;
+
+  /// In reading order: the primary paths, then recovery, emergency and
+  /// the rest, each from the nearest lock to the farthest.
   final List<PolicyBranch> branches;
 
   /// The chain tip the absolute locks were read against; null for a
