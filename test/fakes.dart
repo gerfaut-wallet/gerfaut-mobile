@@ -1586,6 +1586,7 @@ TxPreview makePreview({
   int? feeSats = 1000,
   double? feeRate = 7.1,
   bool amountsDeclared = false,
+  String? feeUnknownReason,
   List<TxInputPreview>? inputs,
   List<TxOutputPreview>? outputs,
 }) {
@@ -1624,6 +1625,7 @@ TxPreview makePreview({
     feeSats: feeSats,
     feeRateSatVb: feeRate,
     amountsDeclared: amountsDeclared,
+    feeUnknownReason: feeUnknownReason,
     vsize: 141,
     weight: 561,
     size: 222,

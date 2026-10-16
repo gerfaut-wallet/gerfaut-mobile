@@ -352,6 +352,7 @@ void main() {
       'locktime': 0,
       'rbf': true,
       'amounts_declared': false,
+      'fee_unknown_reason': null,
       'ready': ready,
       'readiness': ?readiness,
     };

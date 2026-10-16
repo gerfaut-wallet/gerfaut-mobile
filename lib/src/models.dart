@@ -2140,6 +2140,7 @@ class TxPreview {
     required this.readiness,
     this.feeSats,
     this.feeRateSatVb,
+    this.feeUnknownReason,
     this.amountsDeclared = false,
     this.warnings = const [],
     this.hex,
@@ -2165,6 +2166,7 @@ class TxPreview {
       locktime: json['locktime'] as int,
       rbf: json['rbf'] as bool,
       readiness: TxReadiness.fromId(json['readiness'] as String),
+      feeUnknownReason: json['fee_unknown_reason'] as String?,
       amountsDeclared: json['amounts_declared'] as bool,
       warnings: ((json['warnings'] as List?) ?? const [])
           .map((w) => TxWarning.fromJson(w as Map<String, dynamic>))
@@ -2184,6 +2186,10 @@ class TxPreview {
   /// the inputs bring.
   final int? feeSats;
   final double? feeRateSatVb;
+
+  /// Why there is no fee, in the words of the core's caution: what the
+  /// confirmation repeats. Null when there is a fee.
+  final String? feeUnknownReason;
 
   /// A value shown for an input is only what the file declares: no
   /// watched wallet, no backend and no previous transaction proves it.

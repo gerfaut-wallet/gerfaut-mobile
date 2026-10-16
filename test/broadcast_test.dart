@@ -549,21 +549,17 @@ void main() {
   ) async {
     useTallSurface(tester);
     const line =
-        'The outputs pay more than the inputs bring, by the amounts this '
-        'transaction declares for its coins: if those are right, the network '
-        'will refuse it.';
+        'The outputs pay more than the inputs bring, by amounts nothing '
+        'proves: if those amounts are right, the network will refuse this '
+        'transaction.';
+    // The reason is the core's field, read as it comes: the cautions are
+    // not searched for it.
     final bridge = FakeBridge()
       ..onPreview = (_, _) => makePreview(
         feeSats: null,
         feeRate: null,
         amountsDeclared: true,
-        warnings: const [
-          TxWarning(
-            kind: TxWarningKind.feeUnknown,
-            message: line,
-            severity: TxSeverity.info,
-          ),
-        ],
+        feeUnknownReason: line,
       );
     await tester.pumpWidget(broadcastApp(bridge));
     await tester.pumpAndSettle();
