@@ -122,6 +122,8 @@ $python = (Get-Command python, python3 -ErrorAction SilentlyContinue | Select-Ob
 if (-not $python) { throw "python not found - reproducible/compare.py needs Python 3" }
 $java = Find-Java
 $apksigner = Find-ApkSigner
+# -I: isolated mode, so no module beside compare.py, no PYTHON* variable
+# and no user site directory can stand in for the standard library.
 $compare = Join-Path $repo "reproducible/compare.py"
 if (-not (Test-Path -LiteralPath $compare)) { throw "missing $compare" }
 
@@ -184,7 +186,7 @@ foreach ($name in $unsigned) {
     if ($earlier -cin $attached) {
         $path = Join-Path $draftDir $earlier
         Assert-ReleaseCertificate $path
-        Invoke-Native $python @($compare, "--signed", $path, $built)
+        Invoke-Native $python @("-I", $compare, "--signed", $path, $built)
         Write-Output "  ok  $earlier, from an earlier run, is the file run $run built, signed"
     }
 }
@@ -217,7 +219,7 @@ try {
         Assert-ReleaseCertificate $out
         # This asserts that signing left the payload alone, entry for
         # entry: what goes up is what CI built, plus a signature.
-        Invoke-Native $python @($compare, "--signed", $out, $in)
+        Invoke-Native $python @("-I", $compare, "--signed", $out, $in)
     }
 }
 finally {
