@@ -1131,7 +1131,7 @@ class LiveWatchStatus {
 
   /// The watch runs and cannot follow every address: the one case where
   /// coverage is worth a word on screen.
-  bool get leavesSomeOut => state != WatchState.off && leftOutScripts > 0;
+  bool get leavesSomeOut => leftOut != null;
 
   /// The coverage of one wallet, or null when the watch does not list
   /// it.

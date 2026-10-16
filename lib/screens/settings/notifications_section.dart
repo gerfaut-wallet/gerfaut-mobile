@@ -7,7 +7,6 @@ import '../../src/live.dart';
 import '../../src/lock.dart';
 import '../../src/models.dart';
 import '../../src/notifications.dart';
-import '../../src/state.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/facts.dart';
@@ -191,17 +190,7 @@ class _LiveStatusState extends ConsumerState<_LiveStatus> {
     // No wallet to watch: off, said in grey, and no tap restarts it.
     final idle = live.noWallet;
     final stopped = !idle && !live.serviceRunning;
-    final settings = ref.watch(settingsProvider).valueOrNull;
-    final note = idle || stopped
-        ? null
-        : liveCoverageNote(
-            live.status,
-            ownNode: switch (settings?.backendFor(settings.activeNetwork)) {
-              CustomEsplora(:final ownNode) ||
-              CustomElectrum(:final ownNode) => ownNode,
-              _ => false,
-            },
-          );
+    final note = idle || stopped ? null : liveCoverageNote(live.status);
     final connected =
         !idle &&
         !stopped &&

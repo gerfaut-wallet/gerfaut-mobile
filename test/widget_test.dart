@@ -547,6 +547,11 @@ void main() {
               leftOutScripts: 200,
             ),
           ],
+          leftOut: LiveLeftOut(
+            reason: LeftOutReason.liveLimit,
+            limits: WatchLimits(perWallet: 200, total: 2000),
+            remedy: OwnNodeRemedy(WatchLimits(perWallet: 20000, total: 20000)),
+          ),
         ),
       );
       await tester.pumpWidget(liveApp(bridge));
@@ -586,6 +591,11 @@ void main() {
           leftOutScripts: 200,
         ),
       ],
+      leftOut: LiveLeftOut(
+        reason: LeftOutReason.liveLimit,
+        limits: WatchLimits(perWallet: 200, total: 2000),
+        remedy: OwnNodeRemedy(WatchLimits(perWallet: 20000, total: 20000)),
+      ),
     );
 
     testWidgets('the page of a wallet says how many of its addresses wait', (

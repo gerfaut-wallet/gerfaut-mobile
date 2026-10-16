@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../src/bridge.dart';
 import '../../src/electrum.dart';
+import '../../src/format.dart';
 import '../../src/live.dart';
 import '../../src/models.dart';
 import '../../src/state.dart';
@@ -590,11 +591,7 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
               // hand looks exactly like a node of one's own.
               SettingSwitch(
                 title: 'This is my node',
-                hint:
-                    'Live then follows up to $ownNodeLiveLimit addresses '
-                    'instead of $liveLimit. Leave it off for a server you do '
-                    'not run: it would refuse most of them, and learn every '
-                    'one.',
+                hint: _ownNodeHint(ref.watch(liveLimitsProvider).valueOrNull),
                 value: _ownNode,
                 onChanged: (on) => setState(() {
                   _ownNode = on;
@@ -663,6 +660,17 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
       ],
     );
   }
+}
+
+/// What "This is my node" does and when to leave it off, in the limits
+/// the core keeps; the first sentence waits for them.
+String _ownNodeHint(WatchLimitsChoice? limits) {
+  const leaveOff =
+      'Leave it off for a server you do not run: it would refuse most of '
+      'them, and learn every one.';
+  if (limits == null) return leaveOff;
+  return 'Live then follows up to ${groupThousands('${limits.ownNode.total}')} '
+      'addresses instead of ${groupThousands('${limits.any.total}')}. $leaveOff';
 }
 
 class _NetworkCard extends StatelessWidget {
