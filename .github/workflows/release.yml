@@ -101,18 +101,26 @@ jobs:
       # not look like one somebody has. `--verify-tag` refuses to invent a
       # tag. A draft that already exists (a re-run) gets its assets
       # replaced; a published release is never touched, `gh release
-      # create` fails on it.
+      # create` fails on it. Every 0.x release is a beta and says so in
+      # its title; GitHub's pre-release box stays unticked, since it
+      # would hide the release from /releases/latest, which the site and
+      # the apps' update check read.
       - name: Draft the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::not a release tag: $GITHUB_REF_NAME"; exit 1; }
+          version="${GITHUB_REF_NAME#v}"
+          title="Gerfaut $version"
+          [ "${version%%.*}" != 0 ] || title="$title (beta)"
           ls -l unsigned
           if [ "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null)" = true ]; then
             gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber unsigned/*-unsigned.apk
           else
             gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
               --draft --verify-tag \
-              --title "Gerfaut $GITHUB_REF_NAME" \
+              --title "$title" \
               --notes-file .github/release-notes.md \
               unsigned/*-unsigned.apk
           fi
