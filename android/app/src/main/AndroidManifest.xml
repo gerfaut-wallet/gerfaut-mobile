@@ -86,6 +86,16 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+            <!-- No link opens a screen of Gerfaut. Flutter would otherwise
+                 hand the data of any intent that reaches this exported
+                 activity to the navigator, as a route to push over the
+                 screen in use. Flutter reads this flag from the component
+                 the activity was started through, so each alias below
+                 carries it too: started from the launcher, this one is
+                 never asked. -->
+            <meta-data
+                android:name="flutter_deeplinking_enabled"
+                android:value="false" />
             <!-- Never reaches an installed app: every build type removes
                  this filter again (src/debug, src/profile, src/release),
                  so the launcher shows one entry, the enabled alias below.
@@ -122,6 +132,9 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <meta-data
+                android:name="flutter_deeplinking_enabled"
+                android:value="false" />
         </activity-alias>
         <activity-alias
             android:name=".Calculator"
@@ -135,6 +148,9 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <meta-data
+                android:name="flutter_deeplinking_enabled"
+                android:value="false" />
         </activity-alias>
         <!-- The three home-screen widgets. Exported, as the launcher
              delivers APPWIDGET_UPDATE from outside the app; the data
