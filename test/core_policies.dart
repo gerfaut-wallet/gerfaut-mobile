@@ -65,101 +65,8 @@ const String recoveryPathsPolicy = r'''{
       },
       "timelocks": [],
       "state": {"kind": "spendable_now"},
-      "spendable_now": true
-    },
-    {
-      "id": "b1",
-      "role": "other",
-      "label": "Recovery 3",
-      "summary": "Key C, once a coin has waited 52,560 blocks",
-      "condition": {
-        "kind": "thresh",
-        "k": 2,
-        "n": 2,
-        "items": [
-          {"kind": "key", "key_id": "k2"},
-          {"kind": "older", "lock": {"kind": "blocks", "blocks": 52560}}
-        ]
-      },
-      "timelocks": [
-        {
-          "lock": {
-            "kind": "relative",
-            "lock": {"kind": "blocks", "blocks": 52560}
-          },
-          "required": true,
-          "state": {
-            "kind": "per_coin",
-            "unlocked": 1,
-            "waiting": 1,
-            "locked": 1,
-            "next": {
-              "remaining_blocks": 48559,
-              "remaining_seconds": 29135400,
-              "unlocks_at_unix": 1779135400
-            }
-          }
-        }
-      ],
-      "state": {
-        "kind": "per_coin",
-        "unlocked": 1,
-        "waiting": 1,
-        "locked": 1,
-        "next": {
-          "remaining_blocks": 48559,
-          "remaining_seconds": 29135400,
-          "unlocks_at_unix": 1779135400
-        }
-      },
-      "spendable_now": false
-    },
-    {
-      "id": "b2",
-      "role": "emergency",
-      "label": "Emergency",
-      "summary": "Key D, once a coin has waited 26,280 blocks",
-      "condition": {
-        "kind": "thresh",
-        "k": 2,
-        "n": 2,
-        "items": [
-          {"kind": "key", "key_id": "k3"},
-          {"kind": "older", "lock": {"kind": "blocks", "blocks": 26280}}
-        ]
-      },
-      "timelocks": [
-        {
-          "lock": {
-            "kind": "relative",
-            "lock": {"kind": "blocks", "blocks": 26280}
-          },
-          "required": true,
-          "state": {
-            "kind": "per_coin",
-            "unlocked": 1,
-            "waiting": 1,
-            "locked": 1,
-            "next": {
-              "remaining_blocks": 22279,
-              "remaining_seconds": 13367400,
-              "unlocks_at_unix": 1763367400
-            }
-          }
-        }
-      ],
-      "state": {
-        "kind": "per_coin",
-        "unlocked": 1,
-        "waiting": 1,
-        "locked": 1,
-        "next": {
-          "remaining_blocks": 22279,
-          "remaining_seconds": 13367400,
-          "unlocks_at_unix": 1763367400
-        }
-      },
-      "spendable_now": false
+      "spendable_now": true,
+      "tone": "confirmed"
     },
     {
       "id": "b3",
@@ -207,7 +114,104 @@ const String recoveryPathsPolicy = r'''{
           "unlocks_at_unix": 1750191400
         }
       },
-      "spendable_now": false
+      "spendable_now": false,
+      "tone": "pending"
+    },
+    {
+      "id": "b2",
+      "role": "emergency",
+      "label": "Emergency",
+      "summary": "Key D, once a coin has waited 26,280 blocks",
+      "condition": {
+        "kind": "thresh",
+        "k": 2,
+        "n": 2,
+        "items": [
+          {"kind": "key", "key_id": "k3"},
+          {"kind": "older", "lock": {"kind": "blocks", "blocks": 26280}}
+        ]
+      },
+      "timelocks": [
+        {
+          "lock": {
+            "kind": "relative",
+            "lock": {"kind": "blocks", "blocks": 26280}
+          },
+          "required": true,
+          "state": {
+            "kind": "per_coin",
+            "unlocked": 1,
+            "waiting": 1,
+            "locked": 1,
+            "next": {
+              "remaining_blocks": 22279,
+              "remaining_seconds": 13367400,
+              "unlocks_at_unix": 1763367400
+            }
+          }
+        }
+      ],
+      "state": {
+        "kind": "per_coin",
+        "unlocked": 1,
+        "waiting": 1,
+        "locked": 1,
+        "next": {
+          "remaining_blocks": 22279,
+          "remaining_seconds": 13367400,
+          "unlocks_at_unix": 1763367400
+        }
+      },
+      "spendable_now": false,
+      "tone": "neutral"
+    },
+    {
+      "id": "b1",
+      "role": "other",
+      "label": "Recovery 3",
+      "summary": "Key C, once a coin has waited 52,560 blocks",
+      "condition": {
+        "kind": "thresh",
+        "k": 2,
+        "n": 2,
+        "items": [
+          {"kind": "key", "key_id": "k2"},
+          {"kind": "older", "lock": {"kind": "blocks", "blocks": 52560}}
+        ]
+      },
+      "timelocks": [
+        {
+          "lock": {
+            "kind": "relative",
+            "lock": {"kind": "blocks", "blocks": 52560}
+          },
+          "required": true,
+          "state": {
+            "kind": "per_coin",
+            "unlocked": 1,
+            "waiting": 1,
+            "locked": 1,
+            "next": {
+              "remaining_blocks": 48559,
+              "remaining_seconds": 29135400,
+              "unlocks_at_unix": 1779135400
+            }
+          }
+        }
+      ],
+      "state": {
+        "kind": "per_coin",
+        "unlocked": 1,
+        "waiting": 1,
+        "locked": 1,
+        "next": {
+          "remaining_blocks": 48559,
+          "remaining_seconds": 29135400,
+          "unlocks_at_unix": 1779135400
+        }
+      },
+      "spendable_now": false,
+      "tone": "neutral"
     }
   ],
   "tip_height": 800000,
@@ -250,7 +254,8 @@ const String relativePolicy = r'''{
       "condition": {"kind": "key", "key_id": "k0"},
       "timelocks": [],
       "state": {"kind": "spendable_now"},
-      "spendable_now": true
+      "spendable_now": true,
+      "tone": "confirmed"
     },
     {
       "id": "b1",
@@ -297,7 +302,8 @@ const String relativePolicy = r'''{
           "unlocks_at_unix": 1775535400
         }
       },
-      "spendable_now": false
+      "spendable_now": false,
+      "tone": "neutral"
     }
   ],
   "tip_height": 800000,
@@ -338,7 +344,8 @@ const String relativeOpenPolicy = r'''{
       "condition": {"kind": "key", "key_id": "k0"},
       "timelocks": [],
       "state": {"kind": "spendable_now"},
-      "spendable_now": true
+      "spendable_now": true,
+      "tone": "confirmed"
     },
     {
       "id": "b1",
@@ -377,7 +384,8 @@ const String relativeOpenPolicy = r'''{
         "locked": 0,
         "next": null
       },
-      "spendable_now": false
+      "spendable_now": false,
+      "tone": "confirmed"
     }
   ],
   "tip_height": 800000,
@@ -426,48 +434,8 @@ const String absolutePolicy = r'''{
       "condition": {"kind": "key", "key_id": "k0"},
       "timelocks": [],
       "state": {"kind": "spendable_now"},
-      "spendable_now": true
-    },
-    {
-      "id": "b1",
-      "role": "emergency",
-      "label": "Emergency",
-      "summary": "Key B after 2030-03-17",
-      "condition": {
-        "kind": "thresh",
-        "k": 2,
-        "n": 2,
-        "items": [
-          {"kind": "key", "key_id": "k1"},
-          {"kind": "after", "lock": {"kind": "time", "unix": 1899979200}}
-        ]
-      },
-      "timelocks": [
-        {
-          "lock": {
-            "kind": "absolute",
-            "lock": {"kind": "time", "unix": 1899979200}
-          },
-          "required": true,
-          "state": {
-            "kind": "locked",
-            "until": {
-              "remaining_blocks": null,
-              "remaining_seconds": 149979200,
-              "unlocks_at_unix": 1899979200
-            }
-          }
-        }
-      ],
-      "state": {
-        "kind": "locked",
-        "until": {
-          "remaining_blocks": null,
-          "remaining_seconds": 149979200,
-          "unlocks_at_unix": 1899979200
-        }
-      },
-      "spendable_now": false
+      "spendable_now": true,
+      "tone": "confirmed"
     },
     {
       "id": "b2",
@@ -508,7 +476,50 @@ const String absolutePolicy = r'''{
           "unlocks_at_unix": 1750859200
         }
       },
-      "spendable_now": false
+      "spendable_now": false,
+      "tone": "pending"
+    },
+    {
+      "id": "b1",
+      "role": "emergency",
+      "label": "Emergency",
+      "summary": "Key B after 2030-03-17",
+      "condition": {
+        "kind": "thresh",
+        "k": 2,
+        "n": 2,
+        "items": [
+          {"kind": "key", "key_id": "k1"},
+          {"kind": "after", "lock": {"kind": "time", "unix": 1899979200}}
+        ]
+      },
+      "timelocks": [
+        {
+          "lock": {
+            "kind": "absolute",
+            "lock": {"kind": "time", "unix": 1899979200}
+          },
+          "required": true,
+          "state": {
+            "kind": "locked",
+            "until": {
+              "remaining_blocks": null,
+              "remaining_seconds": 149979200,
+              "unlocks_at_unix": 1899979200
+            }
+          }
+        }
+      ],
+      "state": {
+        "kind": "locked",
+        "until": {
+          "remaining_blocks": null,
+          "remaining_seconds": 149979200,
+          "unlocks_at_unix": 1899979200
+        }
+      },
+      "spendable_now": false,
+      "tone": "neutral"
     }
   ],
   "tip_height": 800000,
@@ -565,7 +576,8 @@ const String multisigPolicy = r'''{
       },
       "timelocks": [],
       "state": {"kind": "spendable_now"},
-      "spendable_now": true
+      "spendable_now": true,
+      "tone": "confirmed"
     }
   ],
   "tip_height": 800000,
