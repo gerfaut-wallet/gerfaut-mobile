@@ -214,6 +214,13 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+        <!-- The image picker comes with the QR decoder and is never called:
+             the camera is driven by Gerfaut itself. Its file provider would
+             still open the whole cache folder to any app it is ever granted
+             to, histories and backups shared from there included. -->
+        <provider
+            android:name="io.flutter.plugins.imagepicker.ImagePickerFileProvider"
+            tools:node="remove" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
