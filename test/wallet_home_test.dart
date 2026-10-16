@@ -309,6 +309,7 @@ void main() {
       matching: find.byType(TextField),
     );
     expect(tester.widget<TextField>(field).controller?.text, 'Cold storage');
+    expectKeyboardKeepsNothing(tester);
 
     await tester.enterText(field, 'Vault');
     await tester.tap(find.text('Save'));

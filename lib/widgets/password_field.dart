@@ -71,6 +71,9 @@ class _PasswordFieldState extends State<PasswordField> {
             autofocus: widget.autofocus,
             autocorrect: false,
             enableSuggestions: false,
+            // Shown by the eye, the secret is plain text to the keyboard:
+            // it must not learn it and offer it again elsewhere.
+            enableIMEPersonalizedLearning: false,
             keyboardType: widget.pin ? TextInputType.number : null,
             inputFormatters: widget.pin
                 ? [

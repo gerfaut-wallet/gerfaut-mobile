@@ -615,6 +615,9 @@ class _WalletRow extends StatelessWidget {
                               child: TextField(
                                 controller: renameController,
                                 autofocus: true,
+                                autocorrect: false,
+                                enableSuggestions: false,
+                                enableIMEPersonalizedLearning: false,
                                 style: tokens.body,
                                 onSubmitted: (_) => onRenameSubmit(),
                                 decoration: InputDecoration(

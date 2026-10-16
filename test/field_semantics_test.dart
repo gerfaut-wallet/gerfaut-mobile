@@ -34,6 +34,27 @@ void main() {
     handle.dispose();
   });
 
+  testWidgets('a secret shown by the eye is still nothing to learn', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      host(PasswordField(label: 'Backup password', controller: controller)),
+    );
+    // Revealed, the secret is plain text to the keyboard: what reaches
+    // it must still say to learn nothing.
+    await tester.tap(find.byTooltip('Show Backup password'));
+    await tester.pump();
+    await tester.showKeyboard(find.byType(TextField));
+
+    final config = tester.testTextInput.setClientArgs!;
+    expect(config['obscureText'], isFalse);
+    expect(config['enableIMEPersonalizedLearning'], isFalse);
+    expect(config['enableSuggestions'], isFalse);
+    expect(config['autocorrect'], isFalse);
+  });
+
   testWidgets('an identifier field is named, not read as its example', (
     tester,
   ) async {

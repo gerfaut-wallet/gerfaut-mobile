@@ -51,6 +51,7 @@ void main() {
     final bridge = FakeBridge(onParse: (_) => makeParsedInput());
     await tester.pumpWidget(screen(bridge));
     await tester.pumpAndSettle();
+    expectKeyboardKeepsNothing(tester);
 
     await tester.enterText(
       find.byType(TextField),
@@ -61,6 +62,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Confirmation step: recognized card, name field, network candidates.
+    expectKeyboardKeepsNothing(tester);
     expect(find.text('NAME'), findsOneWidget);
     expect(find.text('NETWORK'), findsOneWidget);
     expect(find.text('Signet'), findsOneWidget);
@@ -726,6 +728,7 @@ void main() {
       expect(pathIn(tester, 'receive'), '0/*');
       expect(pathIn(tester, 'change'), '1/*');
       expect(pathIn(tester, 'origin'), "[deadbeef/84'/0'/0']");
+      expectKeyboardKeepsNothing(tester);
     });
 
     testWidgets('applying sends the typed paths, an empty change as null', (

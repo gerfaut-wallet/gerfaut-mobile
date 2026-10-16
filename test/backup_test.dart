@@ -103,6 +103,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expectKeyboardKeepsNothing(tester);
       // The eight-character floor is what the core takes, not advice:
       // a file guessed offline needs length, and the screen says so
       // where the password is chosen.
@@ -718,6 +719,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('frame'));
       await tester.pumpAndSettle();
+      expectKeyboardKeepsNothing(tester);
       await tester.enterText(find.byType(TextField), 'correct horse');
       await tester.pumpAndSettle();
       await tester.tap(find.text('Open backup'));

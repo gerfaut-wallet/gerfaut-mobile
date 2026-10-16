@@ -411,6 +411,7 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
             maxLines: 5,
             autocorrect: false,
             enableSuggestions: false,
+            enableIMEPersonalizedLearning: false,
             style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
@@ -635,6 +636,11 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
           child: TextField(
             controller: _nameController,
             autofocus: true,
+            // A name may say what the wallet holds: the keyboard neither
+            // learns it nor offers it again in another app.
+            autocorrect: false,
+            enableSuggestions: false,
+            enableIMEPersonalizedLearning: false,
             style: tokens.body,
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
@@ -741,6 +747,7 @@ class _PathField extends StatelessWidget {
             controller: controller,
             autocorrect: false,
             enableSuggestions: false,
+            enableIMEPersonalizedLearning: false,
             style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
             decoration: InputDecoration(
               hintText: hint,
