@@ -1037,6 +1037,35 @@ mod tests {
         );
     }
 
+    /// A failure crosses in the form the core writes down for both
+    /// bridges, `CoreError.json` of its reference files in the
+    /// gerfaut-core checkout beside this repository: the code as `kind`
+    /// and the error's words as `message`, nothing else.
+    #[test]
+    fn a_failure_crosses_in_the_form_the_core_writes_down() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../gerfaut-core/tests/bridge/CoreError.json"
+        );
+        let text = std::fs::read_to_string(path).expect("gerfaut-core beside this repository");
+        let cases: Value = serde_json::from_str(&text).expect("the reference file is JSON");
+        let keys = |value: &Value| -> Vec<String> {
+            let mut keys: Vec<String> = value
+                .as_object()
+                .expect("an object")
+                .keys()
+                .cloned()
+                .collect();
+            keys.sort();
+            keys
+        };
+        let sent = payload(&CoreError::WalletNotFound("w1".to_owned()));
+        let case = &cases["wallet_not_found"];
+        assert_eq!(keys(&sent), ["error"]);
+        assert_eq!(keys(&sent["error"]), keys(case));
+        assert_eq!(sent["error"]["kind"], case["kind"]);
+    }
+
     /// The kind a screen reads is the core's code, unchanged, with the
     /// core's words beside it. A vault another open holds is its own
     /// kind, a healthy vault no screen may take for one that cannot be
