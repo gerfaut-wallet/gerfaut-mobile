@@ -1283,22 +1283,42 @@ class FakeBridge implements GerfautBridge {
   @override
   Future<bool> usesTor() async => usesTorValue;
 
-  /// Update hook; the default reports the running version as current.
-  UpdateCheck Function(String currentVersion)? onCheckUpdate;
-
-  /// How many times a release check was asked for.
-  int checkUpdateCalls = 0;
+  /// The core's side of the update check; by default nothing is due
+  /// and nothing newer is out.
+  final FakeUpdates updates = FakeUpdates();
 
   @override
-  Future<UpdateCheck> checkUpdate(String currentVersion) async {
-    checkUpdateCalls++;
-    final check = onCheckUpdate;
-    if (check != null) return check(currentVersion);
-    return UpdateCheck(
-      latest: 'v$currentVersion',
-      url: 'https://github.com/gerfaut-wallet/gerfaut-mobile/releases/latest',
-      updateAvailable: false,
-    );
+  Future<UpdateStatus> updateStatus(String currentVersion) async =>
+      updates.status;
+
+  @override
+  Future<UpdateStatus> updateSession(String currentVersion) async {
+    updates.sessions++;
+    if (updates.automatic && updates.due && updates.ask()) {
+      updates.due = false;
+    }
+    return updates.status;
+  }
+
+  @override
+  Future<UpdateStatus> checkUpdate(String currentVersion) async {
+    if (!updates.ask()) {
+      throw const BridgeException('tor', 'tor: no proxy answers');
+    }
+    if (updates.offline) throw const BridgeException('sync', 'offline');
+    // The answer is on screen: the core counts it as seen.
+    updates.dismissed = updates.available;
+    return updates.status;
+  }
+
+  @override
+  Future<void> dismissUpdate(String version) async {
+    updates.dismissed = version;
+  }
+
+  @override
+  Future<void> setUpdateAutomatic(bool automatic) async {
+    updates.automatic = automatic;
   }
 
   /// Preview hook; throw a [BridgeException] to simulate input the core
@@ -1649,4 +1669,59 @@ TxPreview makePreview({
     warnings: warnings,
     hex: ready ? '0200000001deadbeef' : null,
   );
+}
+
+/// The core's side of the update check, as a test sets it. Which
+/// release is newer, when a check is due and what counts as closed are
+/// the core's to decide, and tested there: this one does what the test
+/// tells it, so that the screens can be held to what it says.
+class FakeUpdates {
+  /// What a check finds: a release newer than the running one, or null
+  /// for nothing newer.
+  String? finds;
+
+  /// Checks get no answer.
+  bool offline = false;
+
+  /// Tor is needed and cannot be had: nothing goes out.
+  bool torDown = false;
+
+  /// The next session asks GitHub.
+  bool due = false;
+
+  bool automatic = true;
+
+  /// The newer release known.
+  String? available;
+
+  /// The release the notice was closed on.
+  String? dismissed;
+
+  bool torUnavailable = false;
+
+  /// How many sessions the app opened.
+  int sessions = 0;
+
+  /// How many times GitHub was asked.
+  int checks = 0;
+
+  UpdateStatus get status => UpdateStatus(
+    automatic: automatic,
+    announce: available != null && available != dismissed ? available : null,
+    available: available,
+    torUnavailable: torUnavailable,
+  );
+
+  /// One request to GitHub, as the core would make it; false when Tor
+  /// kept it from going.
+  bool ask() {
+    if (torDown) {
+      torUnavailable = true;
+      return false;
+    }
+    checks++;
+    torUnavailable = false;
+    if (!offline) available = finds;
+    return true;
+  }
 }

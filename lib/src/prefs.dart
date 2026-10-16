@@ -21,10 +21,6 @@ abstract final class Pref {
   static const background = 'notify.background';
   static const onboardingSeen = 'onboarding.seen';
   static const widgetBalances = 'widgets.balances';
-  static const updatesAuto = 'updates.auto';
-  static const updatesCheckedAt = 'updates.checked_at';
-  static const updatesLatest = 'updates.latest';
-  static const updatesDismissed = 'updates.dismissed';
 }
 
 /// The preferences a background isolate acts on, read the way the

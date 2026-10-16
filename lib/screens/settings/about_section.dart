@@ -6,7 +6,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../src/bridge.dart';
 import '../../src/models.dart';
 import '../../src/onboarding.dart';
-import '../../src/state.dart';
 import '../../src/updates.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/buttons.dart';
@@ -32,29 +31,31 @@ class AboutSection extends ConsumerStatefulWidget {
 
 class _AboutSectionState extends ConsumerState<AboutSection> {
   bool _checkingUpdate = false;
-  UpdateCheck? _updateResult;
+  UpdateStatus? _updateResult;
   bool _updateFailed = false;
-  bool _torDown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // The switch and the Tor line say what the core holds now.
+    ref.read(updateProvider.notifier).load();
+  }
 
   Future<void> _checkForUpdates() async {
     setState(() {
       _checkingUpdate = true;
       _updateFailed = false;
-      _torDown = false;
       _updateResult = null;
     });
     try {
-      final result = await ref.read(bridgeProvider).checkUpdate(appVersion);
+      final result = await ref.read(updateProvider.notifier).checkNow();
       if (!mounted) return;
-      ref.read(updateProvider.notifier).record(result);
       setState(() => _updateResult = result);
     } on BridgeException catch (error) {
       if (!mounted) return;
-      // With a .onion node the request only ever leaves through Tor.
-      setState(() {
-        _torDown = error.kind == 'tor';
-        _updateFailed = !_torDown;
-      });
+      // With a .onion node the request only ever leaves through Tor, and
+      // the core says so itself when Tor stood in the way.
+      setState(() => _updateFailed = error.kind != 'tor');
     } catch (_) {
       if (mounted) setState(() => _updateFailed = true);
     } finally {
@@ -66,10 +67,12 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final result = _updateResult;
-    // The tag is the network's word: only a version that parses is
-    // named, and the page it opens is ours to choose, not the answer's.
-    final newer = announcedVersion(result?.latest);
-    final automatic = ref.watch(updateProvider).automatic;
+    // The core names the release, and the page it opens is ours to
+    // choose, not the answer's.
+    final newer = result?.available;
+    final updates = ref.watch(updateProvider);
+    final automatic = updates.automatic;
+    final torDown = updates.status.torUnavailable;
     final beta = isBetaVersion(appVersion);
     return SectionCard(
       icon: LucideIcons.info,
@@ -121,7 +124,7 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
               style: tokens.bodySmall.copyWith(color: tokens.textMuted),
             ),
           ),
-        if (_torDown)
+        if (torDown)
           Padding(
             padding: const EdgeInsets.only(bottom: GerfautSpacing.sm),
             child: Text(

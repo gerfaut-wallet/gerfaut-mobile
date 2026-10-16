@@ -386,11 +386,31 @@ Future<String> usesTor() => RustLib.instance.api.crateApiUsesTor();
 Future<String> fetchPrice({required String source, required String currency}) =>
     RustLib.instance.api.crateApiFetchPrice(source: source, currency: currency);
 
-/// Checks the latest published release against the running version.
-/// Returns a serialized `UpdateCheck`.
+/// What to say about releases to someone running `current_version`, as
+/// the core decides it from what the vault keeps. Reads only. Returns a
+/// serialized `UpdateStatus`.
+Future<String> updateStatus({required String currentVersion}) =>
+    RustLib.instance.api.crateApiUpdateStatus(currentVersion: currentVersion);
+
+/// The wallets came on screen, unlocked and not disguised: the core
+/// asks for the latest release if a check is due, at most once a day,
+/// and says what to announce. Returns a serialized `UpdateStatus`.
+Future<String> updateSession({required String currentVersion}) =>
+    RustLib.instance.api.crateApiUpdateSession(currentVersion: currentVersion);
+
+/// Checks the latest published release now, due or not. Returns a
+/// serialized `UpdateStatus`.
 ///
 /// Through the manager, so the request takes the route the syncs take:
 /// with an onion backend it goes through Tor, and with Tor out of reach
 /// it does not go at all and comes back as `tor`.
 Future<String> checkUpdate({required String currentVersion}) =>
     RustLib.instance.api.crateApiCheckUpdate(currentVersion: currentVersion);
+
+/// Closes the notice on the release it announced.
+Future<String> dismissUpdate({required String version}) =>
+    RustLib.instance.api.crateApiDismissUpdate(version: version);
+
+/// Turns the daily check on or off.
+Future<String> setUpdateAutomatic({required bool automatic}) =>
+    RustLib.instance.api.crateApiSetUpdateAutomatic(automatic: automatic);

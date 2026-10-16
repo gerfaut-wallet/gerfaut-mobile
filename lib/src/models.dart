@@ -1817,30 +1817,38 @@ class PriceQuote {
   final int at;
 }
 
-/// Outcome of a release check.
-class UpdateCheck {
-  const UpdateCheck({
-    required this.latest,
-    required this.url,
-    required this.updateAvailable,
+/// What to say about releases: all of it decided by the core, which
+/// keeps the state of the check in the vault.
+class UpdateStatus {
+  const UpdateStatus({
+    this.automatic = true,
+    this.announce,
+    this.available,
+    this.torUnavailable = false,
   });
 
-  factory UpdateCheck.fromJson(Map<String, dynamic> json) {
-    return UpdateCheck(
-      latest: json['latest'] as String,
-      url: json['url'] as String,
-      updateAvailable: json['update_available'] as bool,
+  factory UpdateStatus.fromJson(Map<String, dynamic> json) {
+    return UpdateStatus(
+      automatic: json['automatic'] as bool,
+      announce: json['announce'] as String?,
+      available: json['available'] as String?,
+      torUnavailable: json['tor_unavailable'] as bool,
     );
   }
 
-  /// Latest published tag, for example `v0.2.0`.
-  final String latest;
+  /// The daily check is on.
+  final bool automatic;
 
-  /// Web page of the latest release.
-  final String url;
+  /// The release the home card announces; null when it has nothing to
+  /// say.
+  final String? announce;
 
-  /// True when the latest tag is newer than the running version.
-  final bool updateAvailable;
+  /// The newer release known, closed or not: what About offers.
+  final String? available;
+
+  /// The last check that was to go out did not: Tor is needed and could
+  /// not be had.
+  final bool torUnavailable;
 }
 
 /// Envelope recognized around a scanned QR frame.

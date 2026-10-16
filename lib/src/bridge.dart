@@ -155,7 +155,23 @@ abstract class GerfautBridge {
   Future<void> forgetCertificate(String host);
   Future<void> setAppPref(String key, String value);
   Future<PriceQuote> fetchPrice(PriceSource source, FiatCurrency currency);
-  Future<UpdateCheck> checkUpdate(String currentVersion);
+
+  /// What to say about releases to someone running [currentVersion].
+  /// Reads only.
+  Future<UpdateStatus> updateStatus(String currentVersion);
+
+  /// The wallets came on screen, unlocked and not disguised: the core
+  /// asks for the latest release if a check is due.
+  Future<UpdateStatus> updateSession(String currentVersion);
+
+  /// The button in About: asks for the latest release now, due or not.
+  Future<UpdateStatus> checkUpdate(String currentVersion);
+
+  /// Closes the notice on the release it announced.
+  Future<void> dismissUpdate(String version);
+
+  /// Turns the daily check on or off.
+  Future<void> setUpdateAutomatic(bool automatic);
 
   /// Decodes a transaction somebody else signed (PSBT as base64, hex or
   /// a binary file passed as hex; raw transaction as hex; a UR or BBQr
@@ -486,9 +502,33 @@ class RustBridge implements GerfautBridge {
   }
 
   @override
-  Future<UpdateCheck> checkUpdate(String currentVersion) async {
+  Future<UpdateStatus> updateStatus(String currentVersion) async {
+    final raw = await _guard(rust.updateStatus(currentVersion: currentVersion));
+    return UpdateStatus.fromJson(_object(raw));
+  }
+
+  @override
+  Future<UpdateStatus> updateSession(String currentVersion) async {
+    final raw = await _guard(
+      rust.updateSession(currentVersion: currentVersion),
+    );
+    return UpdateStatus.fromJson(_object(raw));
+  }
+
+  @override
+  Future<UpdateStatus> checkUpdate(String currentVersion) async {
     final raw = await _guard(rust.checkUpdate(currentVersion: currentVersion));
-    return UpdateCheck.fromJson(_object(raw));
+    return UpdateStatus.fromJson(_object(raw));
+  }
+
+  @override
+  Future<void> dismissUpdate(String version) async {
+    _ok(await _guard(rust.dismissUpdate(version: version)));
+  }
+
+  @override
+  Future<void> setUpdateAutomatic(bool automatic) async {
+    _ok(await _guard(rust.setUpdateAutomatic(automatic: automatic)));
   }
 
   @override
