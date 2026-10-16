@@ -3,7 +3,9 @@
 # machine by scripts/sign-release.ps1, which swaps the signed files into
 # the draft and adds the signed SHA256SUMS; then publish.
 # Manual runs, even from a tag, build the same APKs and upload them as
-# workflow artifacts only.
+# workflow artifacts only, and so does the weekly run on main: a build
+# broken between two tags shows within the week rather than on release
+# day.
 #
 # The APKs come out of the pinned container of `reproducible/`. The
 # signing key never comes near CI: a runner executes code this repository
@@ -18,6 +20,9 @@ name: Release
 on:
   push:
     tags: ['v*']
+  # Mondays at 04:17 UTC, on main.
+  schedule:
+    - cron: '17 4 * * 1'
   workflow_dispatch:
 
 permissions:
@@ -75,8 +80,8 @@ jobs:
 
   # The only job that can write to the repository. It runs `gh` on what
   # the build handed over, plus a checkout narrowed to the release notes.
-  # Only on a pushed tag: a manual run, even from a tag, stops at the
-  # artifact.
+  # Only on a pushed tag: a manual run, even from a tag, and the weekly
+  # run stop at the artifact.
   draft:
     if: github.event_name == 'push' && github.ref_type == 'tag'
     needs: apk
