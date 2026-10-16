@@ -237,6 +237,10 @@ abstract class GerfautBridge {
   /// Where the watch stands; off when none runs.
   Future<LiveWatchStatus> liveStatus();
 
+  /// What the watch takes on any server and on the user's own node, for
+  /// the words under "This is my node".
+  Future<WatchLimitsChoice> liveLimits();
+
   /// What the running watch says for the screens: its status, the
   /// wallets it synced, blocks, its end. Never a transaction to
   /// announce: those go to the caller of [liveRun] alone. Any number of
@@ -669,6 +673,11 @@ class RustBridge implements GerfautBridge {
   @override
   Future<LiveWatchStatus> liveStatus() async {
     return LiveWatchStatus.fromJson(_object(await _guard(rust.liveStatus())));
+  }
+
+  @override
+  Future<WatchLimitsChoice> liveLimits() async {
+    return WatchLimitsChoice.fromJson(_object(await _guard(rust.liveLimits())));
   }
 
   @override

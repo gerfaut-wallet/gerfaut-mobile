@@ -1272,6 +1272,15 @@ class FakeBridge implements GerfautBridge {
   @override
   Future<LiveWatchStatus> liveStatus() async => watchStatus;
 
+  /// What the core's watch takes, for the words under "This is my node".
+  WatchLimitsChoice liveLimitsChoice = const WatchLimitsChoice(
+    any: WatchLimits(perWallet: 200, total: 2000),
+    ownNode: WatchLimits(perWallet: 20000, total: 20000),
+  );
+
+  @override
+  Future<WatchLimitsChoice> liveLimits() async => liveLimitsChoice;
+
   @override
   Stream<LiveEvent> liveEvents() => liveController.stream;
 

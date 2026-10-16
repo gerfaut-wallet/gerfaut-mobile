@@ -355,6 +355,12 @@ Future<String> liveTick() => RustLib.instance.api.crateApiLiveTick();
 /// state is `off` when none runs.
 Future<String> liveStatus() => RustLib.instance.api.crateApiLiveStatus();
 
+/// What the watch takes on any server and on the user's own node, for
+/// the words under "This is my node". Returns the serialized
+/// `WatchLimitsChoice`; needs no manager, the limits are the same for
+/// everyone.
+Future<String> liveLimits() => RustLib.instance.api.crateApiLiveLimits();
+
 /// Subscribes this isolate to what the running watch says for the
 /// screens (its status, the wallets it synced, blocks), each a
 /// serialized `LiveEvent`, plus

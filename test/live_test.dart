@@ -1160,16 +1160,30 @@ void main() {
   });
 
   group('what Live leaves to the syncs', () {
+    const any = WatchLimits(perWallet: 200, total: 2000);
+    const own = WatchLimits(perWallet: 20000, total: 20000);
+    const capped = LiveLeftOut(
+      reason: LeftOutReason.liveLimit,
+      limits: any,
+      remedy: OwnNodeRemedy(own),
+    );
     const short = LiveWatchStatus(
       state: WatchState.connected,
       watchedScripts: 2000,
       pushedScripts: 2000,
       leftOutScripts: 1240,
       leftOutWallets: 2,
+      leftOut: capped,
+    );
+    LiveWatchStatus judged(LiveLeftOut leftOut) => LiveWatchStatus(
+      state: WatchState.connected,
+      leftOutScripts: 1240,
+      leftOutWallets: 2,
+      leftOut: leftOut,
     );
 
-    test('a public server: how many wait, and what lifts the limit', () {
-      final note = liveCoverageNote(short, ownNode: false)!;
+    test('the limits of Live: how many wait, and what lifts them', () {
+      final note = liveCoverageNote(short)!;
       expect(
         note.fact,
         'Live follows at most 200 addresses per wallet and 2 000 in all. '
@@ -1182,16 +1196,15 @@ void main() {
       );
     });
 
-    test('a node already declared, its list full: the limit alone', () {
+    test('at the limits of a declared node: the limit alone', () {
       final note = liveCoverageNote(
-        const LiveWatchStatus(
-          state: WatchState.connected,
-          watchedScripts: 20000,
-          pushedScripts: 20000,
-          leftOutScripts: 1240,
-          leftOutWallets: 2,
+        judged(
+          const LiveLeftOut(
+            reason: LeftOutReason.liveLimit,
+            limits: own,
+            ownNode: true,
+          ),
         ),
-        ownNode: true,
       )!;
       expect(
         note.fact,
@@ -1201,107 +1214,64 @@ void main() {
       expect(note.remedy, isNull);
     });
 
-    test('a node that refused some: the setting of its software', () {
-      LiveWatchStatus refusedBy(String? software) => LiveWatchStatus(
-        state: WatchState.connected,
-        watchedScripts: 12000,
-        pushedScripts: 10000,
-        leftOutScripts: 2000,
-        leftOutWallets: 1,
-        serverSoftware: software,
-      );
-      final fulcrum = liveCoverageNote(
-        refusedBy('Fulcrum 1.12.0'),
-        ownNode: true,
+    test('a server that refused some is blamed, not the limits', () {
+      final public = liveCoverageNote(
+        judged(
+          const LiveLeftOut(
+            reason: LeftOutReason.serverRefused,
+            limits: any,
+            remedy: OwnNodeRemedy(own),
+          ),
+        ),
       )!;
       expect(
-        fulcrum.fact,
-        'Your node refuses some of the addresses Live asks it to follow. '
-        '2 000 addresses of 1 wallet are checked at the next sync instead.',
+        public.fact,
+        'The server refuses some of the addresses Live asks it to follow. '
+        '1 240 addresses of 2 wallets are checked at the next sync instead.',
       );
-      expect(fulcrum.remedy, contains('max_subs_per_ip'));
+      expect(public.remedy, contains('"This is my node"'));
+      final node = liveCoverageNote(
+        judged(
+          const LiveLeftOut(
+            reason: LeftOutReason.serverRefused,
+            limits: own,
+            ownNode: true,
+            remedy: RaiseServerLimit(
+              server: ServerSoftware.fulcrum,
+              settings: ['max_subs_per_ip'],
+            ),
+          ),
+        ),
+      )!;
+      expect(node.fact, startsWith('Your node refuses some of the addresses'));
       expect(
-        liveCoverageNote(refusedBy('ElectrumX 1.18.0'), ownNode: true)!.remedy,
-        contains('COST_SOFT_LIMIT and COST_HARD_LIMIT'),
-      );
-      expect(
-        liveCoverageNote(
-          refusedBy('electrs-esplora 0.4.1'),
-          ownNode: true,
-        )!.remedy,
-        contains('--electrum-subscription-limit'),
-      );
-      expect(
-        liveCoverageNote(
-          refusedBy('mempool-electrs 3.1.0'),
-          ownNode: true,
-        )!.remedy,
-        contains('--electrum-max-subscriptions'),
-      );
-      // electrs as its author publishes it has no limit to raise.
-      expect(
-        liveCoverageNote(refusedBy('electrs/0.10.9'), ownNode: true)!.remedy,
-        isNull,
-      );
-      expect(
-        liveCoverageNote(refusedBy(null), ownNode: true)!.remedy,
-        'Raise the subscription limit of your server to follow them all.',
+        node.remedy,
+        'Raise max_subs_per_ip in the Fulcrum configuration to follow them '
+        'all.',
       );
     });
 
-    test('a public server that refuses is blamed, not the limits', () {
-      // mempool.space's Electrum takes 100 subscriptions a connection: a
-      // list of 150, far under the limits, leaves 50 out.
-      const refusing = LiveWatchStatus(
-        state: WatchState.connected,
-        watchedScripts: 150,
-        pushedScripts: 100,
-        leftOutScripts: 50,
-        leftOutWallets: 1,
-        wallets: [
-          WalletCoverage(
-            walletId: 'w-1',
-            coverage: Coverage.partial,
-            watchedScripts: 100,
-            leftOutScripts: 50,
-          ),
-        ],
-      );
-      expect(serverRefused(refusing), isTrue);
-      final note = liveCoverageNote(refusing, ownNode: false)!;
+    test('the setting the core names, the way its software calls it', () {
+      String raise(ServerSoftware? server, List<String> settings) =>
+          liveRemedyWords(RaiseServerLimit(server: server, settings: settings));
       expect(
-        note.fact,
-        'The server refuses some of the addresses Live asks it to follow. '
-        '50 addresses of 1 wallet are checked at the next sync instead.',
+        raise(ServerSoftware.electrumx, ['COST_SOFT_LIMIT', 'COST_HARD_LIMIT']),
+        'Raise COST_SOFT_LIMIT and COST_HARD_LIMIT in the ElectrumX settings '
+        'to follow them all.',
       );
-      expect(note.remedy, contains('"This is my node"'));
-
-      // Every address heard, one of them by two wallets: past the caps,
-      // not refused.
-      const capped = LiveWatchStatus(
-        state: WatchState.connected,
-        watchedScripts: 3,
-        leftOutScripts: 50,
-        leftOutWallets: 1,
-        wallets: [
-          WalletCoverage(
-            walletId: 'w-1',
-            coverage: Coverage.partial,
-            watchedScripts: 2,
-            leftOutScripts: 50,
-          ),
-          WalletCoverage(
-            walletId: 'w-2',
-            coverage: Coverage.live,
-            watchedScripts: 2,
-            leftOutScripts: 0,
-          ),
-        ],
-      );
-      expect(serverRefused(capped), isFalse);
       expect(
-        liveCoverageNote(capped, ownNode: false)!.fact,
-        startsWith('Live follows at most'),
+        raise(ServerSoftware.electrsEsplora, ['--electrum-subscription-limit']),
+        'Raise --electrum-subscription-limit on this electrs to follow them '
+        'all.',
+      );
+      expect(
+        raise(ServerSoftware.mempoolElectrs, ['--electrum-max-subscriptions']),
+        'Raise --electrum-max-subscriptions on this electrs to follow them '
+        'all.',
+      );
+      expect(
+        raise(null, const []),
+        'Raise the subscription limit of your server to follow them all.',
       );
     });
 
@@ -1311,8 +1281,8 @@ void main() {
           state: WatchState.polling,
           leftOutScripts: 1,
           leftOutWallets: 1,
+          leftOut: capped,
         ),
-        ownNode: false,
       )!;
       expect(
         note.fact,
@@ -1320,19 +1290,15 @@ void main() {
       );
     });
 
-    test('nothing to say while every address is followed or Live is off', () {
+    test('nothing to say without a verdict of the core', () {
       expect(
-        liveCoverageNote(
-          const LiveWatchStatus(state: WatchState.connected),
-          ownNode: false,
-        ),
+        liveCoverageNote(const LiveWatchStatus(state: WatchState.connected)),
         isNull,
       );
-      // Off, the counts are zero; a stale one is not believed either.
+      // Counts without a verdict are not believed either.
       expect(
         liveCoverageNote(
           const LiveWatchStatus(leftOutScripts: 10, leftOutWallets: 1),
-          ownNode: false,
         ),
         isNull,
       );
@@ -1368,25 +1334,15 @@ void main() {
       expect(find.textContaining('"This is my node"'), findsOneWidget);
     });
 
-    testWidgets('on a declared node with its list full, no remedy', (
-      tester,
-    ) async {
-      final bridge =
-          _bridge(
-              backends: const {
-                Network.signet: CustomElectrum(
-                  url: 'ssl://node.local:50002',
-                  ownNode: true,
-                ),
-              },
-            )
-            ..watchStatus = const LiveWatchStatus(
-              state: WatchState.connected,
-              watchedScripts: 20000,
-              pushedScripts: 20000,
-              leftOutScripts: 1240,
-              leftOutWallets: 2,
-            );
+    testWidgets('at the limits of a declared node, no remedy', (tester) async {
+      final bridge = _bridge()
+        ..watchStatus = judged(
+          const LiveLeftOut(
+            reason: LeftOutReason.liveLimit,
+            limits: own,
+            ownNode: true,
+          ),
+        );
       final platform = FakeLivePlatform(
         running: true,
         wanted: true,
@@ -2437,14 +2393,30 @@ void main() {
                     'coverage': 'sync_only',
                     'watched_scripts': 0,
                     'left_out_scripts': 200,
+                    'refused_scripts': 200,
                   },
                 ],
+                'left_out': {
+                  'reason': 'server_refused',
+                  'limits': {'per_wallet': 200, 'total': 2000},
+                  'own_node': false,
+                  'remedy': {
+                    'type': 'own_node',
+                    'limits': {'per_wallet': 20000, 'total': 20000},
+                  },
+                },
               })!
               as LiveStatusChanged;
       final status = event.status;
       expect(status.leftOutScripts, 1240);
       expect(status.leftOutWallets, 2);
       expect(status.leavesSomeOut, isTrue);
+      expect(status.leftOut!.reason, LeftOutReason.serverRefused);
+      expect(status.leftOut!.limits.perWallet, 200);
+      expect(status.leftOut!.ownNode, isFalse);
+      expect((status.leftOut!.remedy! as OwnNodeRemedy).limits.total, 20000);
+      expect(status.coverageOf('w3')!.refusedScripts, 200);
+      expect(status.coverageOf('w1')!.refusedScripts, 0);
       expect(status.coverageOf('w1')!.coverage, Coverage.partial);
       expect(status.coverageOf('w1')!.leftOutScripts, 1040);
       expect(status.coverageOf('w2')!.coverage, Coverage.live);
@@ -2463,6 +2435,36 @@ void main() {
       expect(status.leavesSomeOut, isFalse);
       // A coverage a newer core names is never taken for live.
       expect(Coverage.fromId('something_newer'), Coverage.syncOnly);
+    });
+
+    test('the verdict names the setting of a node, or none it knows', () {
+      LiveLeftOut verdict(Map<String, dynamic> remedy) => LiveLeftOut.fromJson({
+        'reason': 'server_refused',
+        'limits': {'per_wallet': 20000, 'total': 20000},
+        'own_node': true,
+        'remedy': remedy,
+      })!;
+      final electrumx =
+          verdict({
+                'type': 'raise_server_limit',
+                'server': 'electrumx',
+                'settings': ['COST_SOFT_LIMIT', 'COST_HARD_LIMIT'],
+              }).remedy!
+              as RaiseServerLimit;
+      expect(electrumx.server, ServerSoftware.electrumx);
+      expect(electrumx.settings, ['COST_SOFT_LIMIT', 'COST_HARD_LIMIT']);
+      final unknown =
+          verdict({
+                'type': 'raise_server_limit',
+                'server': null,
+                'settings': <String>[],
+              }).remedy!
+              as RaiseServerLimit;
+      expect(unknown.server, isNull);
+      expect(unknown.settings, isEmpty);
+      // A way out a newer core names is not offered.
+      expect(verdict({'type': 'something_newer'}).remedy, isNull);
+      expect(LiveLeftOut.fromJson(null), isNull);
     });
   });
 }

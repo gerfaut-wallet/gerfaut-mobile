@@ -758,6 +758,14 @@ pub async fn live_status() -> String {
     to_json(&manager.live_status().await)
 }
 
+/// What the watch takes on any server and on the user's own node, for
+/// the words under "This is my node". Returns the serialized
+/// `WatchLimitsChoice`; needs no manager, the limits are the same for
+/// everyone.
+pub async fn live_limits() -> String {
+    to_json(&gerfaut_core::watch::WatchLimitsChoice::CURRENT)
+}
+
 /// Subscribes this isolate to what the running watch says for the
 /// screens (its status, the wallets it synced, blocks), each a
 /// serialized `LiveEvent`, plus
