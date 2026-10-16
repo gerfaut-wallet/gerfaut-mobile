@@ -17,7 +17,11 @@ jobs:
   flutter:
     runs-on: ubuntu-latest
     steps:
+      # No credentials left in .git/config: nothing after a checkout talks
+      # to GitHub, and the steps below run third-party code.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       # The Flutter the release builds with (reproducible/Dockerfile): a
       # green run on another one says little about the APK.
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
@@ -40,6 +44,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           path: gerfaut-mobile
+          persist-credentials: false
 
       # The same revision the release builds against, so a green run here
       # means the APK compiles.
@@ -53,6 +58,7 @@ jobs:
           ref: ${{ steps.core.outputs.rev }}
           ssh-key: ${{ secrets.CORE_DEPLOY_KEY }}
           path: gerfaut-core
+          persist-credentials: false
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
