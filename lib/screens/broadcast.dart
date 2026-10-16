@@ -529,8 +529,8 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
 }
 
 /// What went wrong with the input, under the field: in the text colour
-/// with its glyph, never the grey of a hint, and never red, which
-/// belongs to the chain (DESIGN.md). Said aloud as it appears.
+/// with its glyph, never the grey of a hint, and never red, which is
+/// kept for what happens on chain. Said aloud as it appears.
 class _InputErrorLine extends StatelessWidget {
   const _InputErrorLine({required this.error, required this.tokens});
 
