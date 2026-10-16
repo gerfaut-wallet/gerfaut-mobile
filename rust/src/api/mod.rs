@@ -3,7 +3,9 @@
 //! Every function takes and returns strings carrying JSON, keeping the
 //! Dart side decoupled from the core types: success payloads mirror the
 //! core structures serialized with serde, failures serialize to
-//! `{"error": {"kind": "...", "message": "..."}}`. A panic is not one of
+//! `{"error": {"kind": "...", "message": "..."}}`, where a failure of
+//! the core has the core's own code (`ErrorCode`) as its kind and the
+//! few kinds this bridge adds are its own. A panic is not one of
 //! those: flutter_rust_bridge catches it at the boundary and raises it on
 //! the Dart side as an error of its own, outside this shape, so the Dart
 //! code must be ready for a failure that carries no `kind`.
@@ -12,7 +14,6 @@ use crate::frb_generated::StreamSink;
 use gerfaut_core::backup::{BackupOptions, ImportChoices};
 use gerfaut_core::chain::BackendConfig;
 use gerfaut_core::chain::tor::TorSettings;
-use gerfaut_core::error::VaultError;
 use gerfaut_core::export::ExportOptions;
 use gerfaut_core::input::{ImportOptions, ParsedInput, ScriptKind};
 use gerfaut_core::live::LiveEvent;
@@ -63,36 +64,16 @@ fn error_json(kind: &str, message: impl std::fmt::Display) -> String {
     json!({ "error": { "kind": kind, "message": message.to_string() } }).to_string()
 }
 
-fn core_error_kind(error: &CoreError) -> &'static str {
-    match error {
-        CoreError::UnrecognizedInput(_) => "unrecognized_input",
-        CoreError::PrivateMaterialRejected => "private_material",
-        CoreError::InvalidInput { .. } => "invalid_input",
-        CoreError::NetworkMismatch { .. } => "network_mismatch",
-        CoreError::WalletNotFound(_) => "wallet_not_found",
-        CoreError::DuplicateWallet(_) => "duplicate_wallet",
-        // Another open holds the vault, and nothing was read: the vault
-        // is healthy. A kind of its own, so no screen ever takes it for
-        // one that cannot be opened and offers to set it aside.
-        CoreError::Vault(VaultError::AlreadyOpen) => "vault_in_use",
-        CoreError::Vault(_) => "vault",
-        CoreError::Sync { .. } => "sync",
-        CoreError::BackendUnavailable(_) => "backend_unavailable",
-        CoreError::Broadcast { .. } => "broadcast",
-        CoreError::Descriptor(_) => "descriptor",
-        CoreError::Tor(_) => "tor",
-        CoreError::Internal(_) => "internal",
-    }
-}
-
 /// Deserializes one JSON argument, naming what it should have been.
 fn from_json<T: serde::de::DeserializeOwned>(raw: &str, what: &str) -> Result<T, String> {
     serde_json::from_str(raw)
         .map_err(|e| error_json("bad_json", format!("invalid {what} JSON: {e}")))
 }
 
+/// A failure of the core, under the core's own code: the Dart side
+/// decides on it, the way the desktop app does on the same name.
 fn core_error_json(error: &CoreError) -> String {
-    error_json(core_error_kind(error), error)
+    error_json(error.code().as_str(), error)
 }
 
 fn ok_json() -> String {
@@ -1032,14 +1013,47 @@ mod tests {
         assert_eq!(console_log_level(true), Some(log::LevelFilter::Trace));
     }
 
-    /// A vault another open holds is its own kind: a healthy vault,
-    /// which no screen may take for one that cannot be opened.
+    /// The kind a screen reads is the core's code, unchanged, with the
+    /// core's words beside it. A vault another open holds is its own
+    /// kind, a healthy vault no screen may take for one that cannot be
+    /// opened; a wrong password, a file that is not a backup and one a
+    /// newer Gerfaut wrote are three, so the restore screen says "wrong
+    /// password" for the first and for nothing else.
     #[test]
-    fn a_vault_held_elsewhere_is_its_own_kind() {
-        let held = CoreError::Vault(VaultError::AlreadyOpen);
-        assert_eq!(payload(&held)["error"]["kind"], "vault_in_use");
-        let broken = CoreError::Vault(VaultError::NotAVault);
-        assert_eq!(payload(&broken)["error"]["kind"], "vault");
+    fn the_core_code_goes_through_as_the_kind() {
+        use gerfaut_core::error::VaultError;
+
+        let relayed = |error: CoreError| {
+            let sent = payload(&error);
+            assert_eq!(sent["error"]["kind"], error.code().as_str());
+            assert_eq!(sent["error"]["message"], error.to_string());
+            sent["error"]["kind"].as_str().unwrap().to_owned()
+        };
+        assert_eq!(
+            relayed(CoreError::Vault(VaultError::AlreadyOpen)),
+            "vault_in_use"
+        );
+        assert_eq!(
+            relayed(CoreError::Vault(VaultError::Kdf("no memory".into()))),
+            "vault"
+        );
+        assert_eq!(
+            relayed(CoreError::Vault(VaultError::WrongKeyOrCorrupted)),
+            "wrong_key"
+        );
+        assert_eq!(
+            relayed(CoreError::UnreadableBackup(
+                "this is not a Gerfaut backup".into()
+            )),
+            "unreadable_backup"
+        );
+        assert_eq!(
+            relayed(CoreError::NewerBackup(
+                "this backup was written by a newer Gerfaut (backup version 2)".into()
+            )),
+            "newer_format"
+        );
+        assert_eq!(relayed(CoreError::TooManyParts(6_000)), "too_many_parts");
     }
 
     /// The isolates of the app call `init_manager` together at a cold

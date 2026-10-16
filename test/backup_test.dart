@@ -1083,8 +1083,10 @@ void main() {
     testWidgets('a wrong password says so in plain words', (tester) async {
       useTallSurface(tester);
       final bridge = FakeBridge();
-      bridge.onPreviewBackup = (_, _) =>
-          throw const BridgeException('vault', 'vault decryption failed');
+      bridge.onPreviewBackup = (_, _) => throw const BridgeException(
+        'wrong_key',
+        'vault decryption failed: wrong key or corrupted file',
+      );
       await openBackup(tester, bridge);
 
       expect(

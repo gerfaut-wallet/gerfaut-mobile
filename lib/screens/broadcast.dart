@@ -119,7 +119,8 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     } on BridgeException catch (error) {
       if (!mounted) return;
       setState(
-        () => _inputError = error.kind == 'invalid_input'
+        () => _inputError =
+            error.kind == 'invalid_input' || error.kind == 'too_many_parts'
             ? (headline: _unreadableTransaction, detail: error.message)
             : (headline: error.message, detail: null),
       );
