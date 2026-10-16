@@ -2105,6 +2105,28 @@ class TxWarning {
   final bool blocking;
 }
 
+/// Where a transaction stands before it is sent, decided by the core: the
+/// words of the readiness pill. [refused] comes before [unsigned] when
+/// both hold, since a signature does not bring back a spent coin.
+enum TxReadiness {
+  ready('ready'),
+  refused('refused'),
+  unsigned('unsigned');
+
+  const TxReadiness(this.id);
+
+  final String id;
+
+  /// A wire that names none reads as what [TxPreview.ready] says: ready,
+  /// or not fully signed, the two states every core knew.
+  static TxReadiness fromId(String? id, {required bool ready}) {
+    for (final readiness in TxReadiness.values) {
+      if (readiness.id == id) return readiness;
+    }
+    return ready ? TxReadiness.ready : TxReadiness.unsigned;
+  }
+}
+
 /// Everything shown before broadcasting a transaction.
 class TxPreview {
   const TxPreview({
@@ -2120,6 +2142,7 @@ class TxPreview {
     required this.locktime,
     required this.rbf,
     required this.ready,
+    required this.readiness,
     this.feeSats,
     this.feeRateSatVb,
     this.warnings = const [],
@@ -2146,6 +2169,10 @@ class TxPreview {
       locktime: json['locktime'] as int,
       rbf: json['rbf'] as bool,
       ready: json['ready'] as bool,
+      readiness: TxReadiness.fromId(
+        json['readiness'] as String?,
+        ready: json['ready'] as bool,
+      ),
       warnings: ((json['warnings'] as List?) ?? const [])
           .map((w) => TxWarning.fromJson(w as Map<String, dynamic>))
           .toList(),
@@ -2173,8 +2200,12 @@ class TxPreview {
   final bool rbf;
 
   /// The transaction can be sent: every input is signed, and no
-  /// caution is [TxWarning.blocking].
+  /// caution is [TxWarning.blocking]. The same as [readiness] being
+  /// [TxReadiness.ready].
   final bool ready;
+
+  /// Where it stands, in the words of the readiness pill.
+  final TxReadiness readiness;
   final List<TxWarning> warnings;
 
   /// The transaction as the network takes it, present only when ready.
@@ -2187,13 +2218,6 @@ class TxPreview {
   /// and the fee resting on it are the file's own word, not the chain's.
   bool get inputsUnconfirmed =>
       warnings.any((w) => w.kind == TxWarningKind.inputUnknown);
-
-  /// Whether the core is sure the network refuses this transaction for
-  /// something other than a missing signature: a coin already spent in
-  /// a block, outputs worth more than the inputs. Signing again changes
-  /// neither, so the readiness pill says it before a missing signature.
-  bool get refusedOutright =>
-      warnings.any((w) => w.blocking && w.kind != TxWarningKind.unsigned);
 }
 
 /// Outcome of a broadcast.

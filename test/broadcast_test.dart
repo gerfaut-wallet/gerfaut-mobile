@@ -368,6 +368,7 @@ void main() {
     final bridge = FakeBridge()
       ..onPreview = (_, _) => makePreview(
         ready: false,
+        readiness: TxReadiness.refused,
         feeSats: null,
         feeRate: null,
         outputs: const [
@@ -397,9 +398,9 @@ void main() {
     expect(primaryButton(tester, 'Broadcast').onPressed, isNull);
   });
 
-  // The rehearsal of 0.1.0: a transaction already mined, pasted again,
-  // read "Ready to broadcast" in green beside the red line saying its
-  // coin was spent, and Broadcast was on.
+  // A transaction already mined, pasted again, used to read "Ready to
+  // broadcast" in green beside the red line saying its coin was spent,
+  // with Broadcast on.
   testWidgets('a coin spent in a block is never called ready', (tester) async {
     useTallSurface(tester);
     const message =
@@ -408,6 +409,7 @@ void main() {
     final bridge = FakeBridge()
       ..onPreview = (_, _) => makePreview(
         ready: false,
+        readiness: TxReadiness.refused,
         source: TxSource.rawTransaction,
         warnings: const [
           TxWarning(
@@ -429,6 +431,20 @@ void main() {
     // A status in amber; the red is the caution, which says why.
     expect(blockOf(tester, 'Will be refused').color, light.pendingSurface);
     expect(blockOf(tester, message).color, light.alertSurface);
+    expect(primaryButton(tester, 'Broadcast').onPressed, isNull);
+  });
+
+  // The pill says what the core says, as it says it: the screen works
+  // nothing out of the cautions, which may say more or less.
+  testWidgets('the readiness pill is the core\'s word', (tester) async {
+    final bridge = FakeBridge()
+      ..onPreview = (_, _) =>
+          makePreview(ready: false, readiness: TxReadiness.refused);
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+    await preview(tester);
+    expect(find.text('Will be refused'), findsOneWidget);
+    expect(find.text('Not fully signed'), findsNothing);
     expect(primaryButton(tester, 'Broadcast').onPressed, isNull);
   });
 

@@ -338,6 +338,44 @@ void main() {
     });
   });
 
+  group('TxPreview.fromJson', () {
+    Map<String, dynamic> wire(bool ready, [String? readiness]) => {
+      'txid': 'ab' * 32,
+      'source': 'raw_transaction',
+      'network': 'signet',
+      'inputs': const [],
+      'outputs': const [],
+      'vsize': 141,
+      'weight': 561,
+      'size': 222,
+      'version': 2,
+      'locktime': 0,
+      'rbf': true,
+      'ready': ready,
+      'readiness': ?readiness,
+    };
+
+    test('takes where the transaction stands from the core', () {
+      expect(
+        TxPreview.fromJson(wire(false, 'refused')).readiness,
+        TxReadiness.refused,
+      );
+      expect(
+        TxPreview.fromJson(wire(false, 'unsigned')).readiness,
+        TxReadiness.unsigned,
+      );
+      expect(
+        TxPreview.fromJson(wire(true, 'ready')).readiness,
+        TxReadiness.ready,
+      );
+    });
+
+    test('a wire that names none reads as ready says', () {
+      expect(TxPreview.fromJson(wire(true)).readiness, TxReadiness.ready);
+      expect(TxPreview.fromJson(wire(false)).readiness, TxReadiness.unsigned);
+    });
+  });
+
   group('TxWarning.fromJson', () {
     test('reads the tone the core sent rather than deriving one', () {
       final alert = TxWarning.fromJson(const {

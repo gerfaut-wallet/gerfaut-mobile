@@ -657,20 +657,23 @@ class _Hero extends StatelessWidget {
               label: preview.source.label,
               tokens: tokens,
             ),
-            // Amber whenever it cannot go: a status, since Broadcast stays
-            // off. The red is the core's caution below, which says why.
+            // Where it stands is the core's word, read as it comes. Amber
+            // whenever it cannot go: a status, since Broadcast stays off.
+            // The red is the core's caution below, which says why.
             _Pill(
-              tone: preview.ready ? _Tone.confirmed : _Tone.pending,
-              icon: preview.ready
-                  ? LucideIcons.circleCheck
-                  : preview.refusedOutright
-                  ? LucideIcons.ban
-                  : LucideIcons.penOff,
-              label: preview.ready
-                  ? 'Ready to broadcast'
-                  : preview.refusedOutright
-                  ? 'Will be refused'
-                  : 'Not fully signed',
+              tone: preview.readiness == TxReadiness.ready
+                  ? _Tone.confirmed
+                  : _Tone.pending,
+              icon: switch (preview.readiness) {
+                TxReadiness.ready => LucideIcons.circleCheck,
+                TxReadiness.refused => LucideIcons.ban,
+                TxReadiness.unsigned => LucideIcons.penOff,
+              },
+              label: switch (preview.readiness) {
+                TxReadiness.ready => 'Ready to broadcast',
+                TxReadiness.refused => 'Will be refused',
+                TxReadiness.unsigned => 'Not fully signed',
+              },
               tokens: tokens,
             ),
             if (preview.network != Network.mainnet)

@@ -1579,6 +1579,7 @@ const String fakeTxid =
 /// payment, one change output, a modest fee.
 TxPreview makePreview({
   bool ready = true,
+  TxReadiness? readiness,
   TxSource source = TxSource.psbt,
   Network network = Network.mainnet,
   List<TxWarning> warnings = const [],
@@ -1628,6 +1629,7 @@ TxPreview makePreview({
     locktime: 0,
     rbf: true,
     ready: ready,
+    readiness: readiness ?? (ready ? TxReadiness.ready : TxReadiness.unsigned),
     warnings: warnings,
     hex: ready ? '0200000001deadbeef' : null,
   );
