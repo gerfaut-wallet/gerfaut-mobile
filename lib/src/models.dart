@@ -1073,6 +1073,7 @@ class LiveWatchStatus {
     this.leftOutWallets = 0,
     this.wallets = const [],
     this.serverSoftware,
+    this.leftOut,
   });
 
   /// A core from before the coverage was reported leaves its three
@@ -1093,6 +1094,7 @@ class LiveWatchStatus {
           WalletCoverage.fromJson(wallet as Map<String, dynamic>),
       ],
       serverSoftware: json['server_software'] as String?,
+      leftOut: LiveLeftOut.fromJson(json['left_out'] as Map<String, dynamic>?),
     );
   }
 
@@ -1122,6 +1124,10 @@ class LiveWatchStatus {
   /// What an Electrum server says it runs, `Fulcrum 1.12.0` and the
   /// like; null over the other transports and from an older core.
   final String? serverSoftware;
+
+  /// Why the watch leaves addresses to the syncs and the way out, as the
+  /// core decides it: present exactly while it runs and leaves some out.
+  final LiveLeftOut? leftOut;
 
   /// The watch runs and cannot follow every address: the one case where
   /// coverage is worth a word on screen.
@@ -1170,6 +1176,7 @@ class WalletCoverage {
     required this.coverage,
     this.watchedScripts = 0,
     this.leftOutScripts = 0,
+    this.refusedScripts = 0,
   });
 
   factory WalletCoverage.fromJson(Map<String, dynamic> json) {
@@ -1178,6 +1185,7 @@ class WalletCoverage {
       coverage: Coverage.fromId(json['coverage'] as String?),
       watchedScripts: json['watched_scripts'] as int? ?? 0,
       leftOutScripts: json['left_out_scripts'] as int? ?? 0,
+      refusedScripts: json['refused_scripts'] as int? ?? 0,
     );
   }
 
@@ -1190,6 +1198,155 @@ class WalletCoverage {
 
   /// Scripts of the wallet it leaves to the regular syncs.
   final int leftOutScripts;
+
+  /// Of those, the ones the server refused; the rest are past the limits
+  /// of the watch.
+  final int refusedScripts;
+}
+
+/// What the live watch takes of one wallet and in all.
+class WatchLimits {
+  const WatchLimits({required this.perWallet, required this.total});
+
+  factory WatchLimits.fromJson(Map<String, dynamic>? json) {
+    return WatchLimits(
+      perWallet: json?['per_wallet'] as int? ?? 0,
+      total: json?['total'] as int? ?? 0,
+    );
+  }
+
+  final int perWallet;
+  final int total;
+}
+
+/// The two sets of limits "This is my node" chooses between, as the core
+/// keeps them.
+class WatchLimitsChoice {
+  const WatchLimitsChoice({required this.any, required this.ownNode});
+
+  factory WatchLimitsChoice.fromJson(Map<String, dynamic> json) {
+    return WatchLimitsChoice(
+      any: WatchLimits.fromJson(json['any'] as Map<String, dynamic>?),
+      ownNode: WatchLimits.fromJson(json['own_node'] as Map<String, dynamic>?),
+    );
+  }
+
+  final WatchLimits any;
+  final WatchLimits ownNode;
+}
+
+/// What leaves addresses to the syncs: the server, as soon as it refused
+/// any, or the limits of the watch.
+enum LeftOutReason {
+  liveLimit('live_limit'),
+  serverRefused('server_refused');
+
+  const LeftOutReason(this.id);
+
+  final String id;
+
+  /// A reason a newer core may add reads as the limits of the watch:
+  /// never a refusal the server did not make.
+  static LeftOutReason fromId(String? id) {
+    for (final reason in LeftOutReason.values) {
+      if (reason.id == id) return reason;
+    }
+    return LeftOutReason.liveLimit;
+  }
+}
+
+/// The core's verdict on what the live watch leaves to the syncs.
+class LiveLeftOut {
+  const LiveLeftOut({
+    required this.reason,
+    required this.limits,
+    this.ownNode = false,
+    this.remedy,
+  });
+
+  /// Null for a status that carries no verdict: one from an older core,
+  /// or one that leaves nothing out.
+  static LiveLeftOut? fromJson(Map<String, dynamic>? json) {
+    if (json == null) return null;
+    return LiveLeftOut(
+      reason: LeftOutReason.fromId(json['reason'] as String?),
+      limits: WatchLimits.fromJson(json['limits'] as Map<String, dynamic>?),
+      ownNode: json['own_node'] as bool? ?? false,
+      remedy: LiveRemedy.fromJson(json['remedy'] as Map<String, dynamic>?),
+    );
+  }
+
+  final LeftOutReason reason;
+
+  /// What the watch takes under the backend in use.
+  final WatchLimits limits;
+
+  /// The backend is the user's own node.
+  final bool ownNode;
+
+  /// Null when nothing the user can do takes more.
+  final LiveRemedy? remedy;
+}
+
+/// What lets the live watch hear the addresses it leaves out.
+sealed class LiveRemedy {
+  const LiveRemedy();
+
+  /// Null for none, and for a way out a newer core may add.
+  static LiveRemedy? fromJson(Map<String, dynamic>? json) {
+    switch (json?['type']) {
+      case 'own_node':
+        return OwnNodeRemedy(
+          WatchLimits.fromJson(json!['limits'] as Map<String, dynamic>?),
+        );
+      case 'raise_server_limit':
+        return RaiseServerLimit(
+          server: ServerSoftware.fromId(json!['server'] as String?),
+          settings: [
+            for (final setting in json['settings'] as List? ?? const [])
+              if (setting is String) setting,
+          ],
+        );
+      default:
+        return null;
+    }
+  }
+}
+
+/// A node of one's own, marked "This is my node": the watch then takes
+/// [limits].
+final class OwnNodeRemedy extends LiveRemedy {
+  const OwnNodeRemedy(this.limits);
+
+  final WatchLimits limits;
+}
+
+/// The setting of the user's node to raise, as its software calls it;
+/// none named when the core does not know that software.
+final class RaiseServerLimit extends LiveRemedy {
+  const RaiseServerLimit({this.server, this.settings = const []});
+
+  final ServerSoftware? server;
+  final List<String> settings;
+}
+
+/// An Electrum server whose subscription limit the core can name.
+enum ServerSoftware {
+  fulcrum('fulcrum'),
+  electrumx('electrumx'),
+  electrsEsplora('electrs_esplora'),
+  mempoolElectrs('mempool_electrs');
+
+  const ServerSoftware(this.id);
+
+  final String id;
+
+  static ServerSoftware? fromId(String? id) {
+    for (final software in ServerSoftware.values) {
+      if (software.id == id) return software;
+    }
+    return null;
+  }
 }
 
 /// What a running live watch says.
