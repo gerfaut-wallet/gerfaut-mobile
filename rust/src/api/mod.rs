@@ -630,6 +630,24 @@ pub async fn transaction_status(network: String, hex: String) -> String {
     }
 }
 
+/// The last transactions broadcast on `network`, newest first, as the
+/// vault keeps them. Returns a serialized list of `RecentBroadcast`.
+pub async fn recent_broadcasts(network: String) -> String {
+    let manager = try_json!(manager());
+    let network = try_json!(parse_network(&network));
+    to_json(&manager.recent_broadcasts(network).await)
+}
+
+/// Drops the vault's record of a broadcast; the transaction itself is
+/// on the network and untouched.
+pub async fn forget_broadcast(txid: String) -> String {
+    let manager = try_json!(manager());
+    match manager.forget_broadcast(&txid).await {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
 // --- tor ---------------------------------------------------------------
 
 /// Where Tor stands for `.onion` backends. Returns a serialized

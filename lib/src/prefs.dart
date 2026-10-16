@@ -15,7 +15,6 @@ abstract final class Pref {
   static const fiatCurrency = 'display.fiat_currency';
   static const fiatSource = 'display.fiat_source';
   static const explorerAck = 'privacy.explorer_ack';
-  static const recentBroadcasts = 'broadcast.recent';
   static const notifyNewTx = 'notify.new_tx';
   static const notifyDetails = 'notify.details';
   static const background = 'notify.background';

@@ -248,6 +248,16 @@ Future<String> transactionStatus({
 }) =>
     RustLib.instance.api.crateApiTransactionStatus(network: network, hex: hex);
 
+/// The last transactions broadcast on `network`, newest first, as the
+/// vault keeps them. Returns a serialized list of `RecentBroadcast`.
+Future<String> recentBroadcasts({required String network}) =>
+    RustLib.instance.api.crateApiRecentBroadcasts(network: network);
+
+/// Drops the vault's record of a broadcast; the transaction itself is
+/// on the network and untouched.
+Future<String> forgetBroadcast({required String txid}) =>
+    RustLib.instance.api.crateApiForgetBroadcast(txid: txid);
+
 /// Where Tor stands for `.onion` backends. Returns a serialized
 /// `TorStatus`: the mode, the route in use, and how far the built-in
 /// client has bootstrapped.

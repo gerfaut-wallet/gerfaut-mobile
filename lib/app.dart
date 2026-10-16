@@ -161,9 +161,6 @@ class _Hydrated extends ConsumerWidget {
             .hydrate(prefs[Pref.fiatCurrency]);
         ref.read(fiatSourceProvider.notifier).hydrate(prefs[Pref.fiatSource]);
         ref.read(explorerAckProvider.notifier).hydrate(prefs[Pref.explorerAck]);
-        ref
-            .read(recentBroadcastsProvider.notifier)
-            .hydrate(prefs[Pref.recentBroadcasts]);
         ref.read(notifyNewTxProvider.notifier).hydrate(prefs[Pref.notifyNewTx]);
         ref
             .read(notifyDetailsProvider.notifier)
