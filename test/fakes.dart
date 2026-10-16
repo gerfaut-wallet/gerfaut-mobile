@@ -1779,6 +1779,29 @@ class FakeBridge implements GerfautBridge {
   }
 }
 
+/// A bridge whose preference writes wait for the test to answer each
+/// one, in the order they were asked.
+class GatedBridge extends FakeBridge {
+  final List<PreferencesChange> asked = [];
+  final List<Completer<void>> _gates = [];
+
+  /// Lets the oldest write waiting through.
+  void release() => _gates.removeAt(0).complete();
+
+  /// Has the vault refuse the oldest write waiting.
+  void refuse() =>
+      _gates.removeAt(0).completeError(coreFailure('vault', 'disk full'));
+
+  @override
+  Future<Preferences> setPreferences(PreferencesChange change) async {
+    asked.add(change);
+    final gate = Completer<void>();
+    _gates.add(gate);
+    await gate.future;
+    return super.setPreferences(change);
+  }
+}
+
 /// A well-formed txid for previews and reports.
 const String fakeTxid =
     'f1e2d3c4b5a60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';

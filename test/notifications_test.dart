@@ -668,6 +668,29 @@ void main() {
       expect(made.read(notificationsRefusedProvider), isTrue);
       expect(service.permissionAsks, 1);
     });
+
+    test('a notice turned off at once stays off in the vault', () async {
+      final gate = GatedBridge();
+      final made = container(gate, FakeNotifications());
+
+      final on = made.read(notifyNewTxProvider.notifier).set(true);
+      await pumpEventQueue();
+      // Turned off before the vault answered, which refuses the "on".
+      final off = made.read(notifyNewTxProvider.notifier).set(false);
+      gate.refuse();
+      await pumpEventQueue();
+      gate.release();
+      await Future.wait([on, off]);
+      await pumpEventQueue();
+      // Asked again after the "off", the "on" would undo it in the
+      // vault, which a background check reads.
+      expect(gate.asked.map((change) => change.toJson()), [
+        {'notify_new_tx': true},
+        {'notify_new_tx': false},
+      ]);
+      expect(gate.preferences.notifyNewTx, isFalse);
+      expect(made.read(notifyNewTxProvider), isFalse);
+    });
   });
 
   group('the settings card', () {

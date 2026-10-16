@@ -1,8 +1,6 @@
 // The preferences both apps keep, as the screens hold them: the core
 // stores them and decides what can be, the screens show it.
 
-import 'dart:async';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -129,8 +127,39 @@ void main() {
     expect(container.read(maskedProvider), isTrue);
   });
 
+  test('a mask refused once is not asked again over a newer one', () async {
+    final gate = GatedBridge();
+    final container = screens(gate);
+    // Hidden, and refused twice: the note is up.
+    container.read(maskedProvider.notifier).toggle();
+    await pumpEventQueue();
+    gate.refuse();
+    await pumpEventQueue();
+    gate.refuse();
+    await pumpEventQueue();
+    expect(container.read(maskUnsavedProvider), isTrue);
+
+    // Shown, and refused once; hidden again before the vault answered.
+    container.read(maskedProvider.notifier).toggle();
+    await pumpEventQueue();
+    container.read(maskedProvider.notifier).toggle();
+    gate.refuse();
+    await pumpEventQueue();
+    gate.release();
+    await pumpEventQueue();
+    // Asked again after the mask, the shown balances would undo it in
+    // the vault, which the widget and the notifications read.
+    expect(gate.asked.skip(2).map((change) => change.toJson()), [
+      {'masked': false},
+      {'masked': true},
+    ]);
+    expect(gate.preferences.masked, isTrue);
+    expect(container.read(maskedProvider), isTrue);
+    expect(container.read(maskUnsavedProvider), isFalse);
+  });
+
   test('changes are written one after the other, in order', () async {
-    final gate = _GatedBridge();
+    final gate = GatedBridge();
     final container = screens(gate);
 
     container.read(unitProvider.notifier).set(AmountUnit.sats);
@@ -154,23 +183,4 @@ void main() {
     expect(container.read(unitProvider), AmountUnit.sats);
     expect(gate.preferences.unit, AmountUnit.sats);
   });
-}
-
-/// A bridge whose preference writes wait for the test to let each one
-/// through.
-class _GatedBridge extends FakeBridge {
-  final List<PreferencesChange> asked = [];
-  final List<Completer<void>> _gates = [];
-
-  /// Lets the oldest write waiting through.
-  void release() => _gates.removeAt(0).complete();
-
-  @override
-  Future<Preferences> setPreferences(PreferencesChange change) async {
-    asked.add(change);
-    final gate = Completer<void>();
-    _gates.add(gate);
-    await gate.future;
-    return super.setPreferences(change);
-  }
 }

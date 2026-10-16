@@ -139,6 +139,20 @@ const _untilTheVaultAnswers = Preferences(
   explorerAck: false,
 );
 
+/// What became of a change shown on screen ([PreferencesNotifier.show]).
+enum Shown {
+  /// The vault took it.
+  kept,
+
+  /// The vault refused it twice.
+  refused,
+
+  /// A newer change of the same preference was asked before this one
+  /// settled. That one says what the vault holds; this one has nothing
+  /// left to say.
+  overtaken,
+}
+
 /// The preferences both apps keep, as the screens show them. The core
 /// holds them, with their defaults and their rules; this holds what is
 /// on screen, and writes each change through, after the ones before it.
@@ -146,6 +160,11 @@ class PreferencesNotifier extends Notifier<Preferences> {
   /// The writes in flight, one after the other in the order they were
   /// made, so that each answer is the vault after the change before it.
   Future<void> _written = Future.value();
+
+  /// How many changes were shown, and the number of the last one asked
+  /// of each preference, by its name on the bridge.
+  int _changes = 0;
+  final Map<String, int> _lastAsked = {};
 
   @override
   Preferences build() => _untilTheVaultAnswers;
@@ -164,19 +183,33 @@ class PreferencesNotifier extends Notifier<Preferences> {
   /// Shows [change] at once and writes it through, a second time when
   /// the vault refuses the first. A refusal only loses the preference,
   /// never the change on screen: putting it back would undo what was
-  /// asked, amounts shown again under the eye. Completes with whether
-  /// the vault took it, for a caller that has to say it did not.
-  Future<bool> show(PreferencesChange change) async {
+  /// asked, amounts shown again under the eye. Completes with what
+  /// became of it, for a caller that has to say the vault did not take
+  /// it.
+  ///
+  /// A change a newer one of the same preference overtook is never
+  /// asked again: written after the newer one, it would undo it in the
+  /// vault while the screen shows the newer. Every change shown names
+  /// one preference; one that named more would be overtaken by a newer
+  /// change of any of them.
+  Future<Shown> show(PreferencesChange change) async {
     state = change.applyTo(state);
+    final number = ++_changes;
+    final names = change.toJson().keys;
+    for (final name in names) {
+      _lastAsked[name] = number;
+    }
+    bool overtaken() => names.any((name) => _lastAsked[name] != number);
     for (var attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0 && overtaken()) return Shown.overtaken;
       try {
         await write(change);
-        return true;
+        return overtaken() ? Shown.overtaken : Shown.kept;
       } catch (_) {
         // Asked once more; the second refusal is the caller's to say.
       }
     }
-    return false;
+    return overtaken() ? Shown.overtaken : Shown.refused;
   }
 
   /// Changes what the price is asked by, the currency or the source, and
@@ -217,14 +250,17 @@ class MaskedNotifier extends Notifier<bool> {
   /// notifications posted in the background read the mask from the
   /// vault: balances hidden on screen that the vault refused to keep
   /// hidden are hidden on this screen only, and the screen says so
-  /// until a write goes through.
+  /// until a write goes through. Only the last change asked says it: an
+  /// older one that settles after it would say what the vault no longer
+  /// holds.
   Future<void> _save(bool masked) async {
     // Read before the change: shown, it rebuilds this notifier, whose
     // ref then waits for the rebuild.
     final unsaved = ref.read(maskUnsavedProvider.notifier);
     final preferences = ref.read(preferencesProvider.notifier);
-    final saved = await preferences.show(PreferencesChange(masked: masked));
-    unsaved.set(masked && !saved);
+    final shown = await preferences.show(PreferencesChange(masked: masked));
+    if (shown == Shown.overtaken) return;
+    unsaved.set(masked && shown == Shown.refused);
   }
 }
 
