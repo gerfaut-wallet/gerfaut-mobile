@@ -201,6 +201,7 @@ void main() {
           makeMeta(id: 'w2', name: 'Other', network: Network.mainnet),
         ],
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.signet,
           backends: {},
           appPrefs: {},
@@ -227,6 +228,7 @@ void main() {
           makeMeta(id: 'w2', name: 'Other', network: Network.mainnet),
         ],
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.signet,
           backends: {},
           appPrefs: {},

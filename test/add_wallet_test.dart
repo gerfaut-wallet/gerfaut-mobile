@@ -300,6 +300,7 @@ void main() {
     final bridge =
         FakeBridge(
             settings: const Settings(
+              preferences: kPreferences,
               activeNetwork: Network.regtest,
               backends: {},
               appPrefs: {},

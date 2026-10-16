@@ -20,7 +20,7 @@ use gerfaut_core::live::LiveEvent;
 use gerfaut_core::live::LiveTx;
 use gerfaut_core::live::notice;
 use gerfaut_core::lock::LockKind;
-use gerfaut_core::price::{FiatCurrency, PriceSource};
+use gerfaut_core::prefs::PreferencesChange;
 use gerfaut_core::store::VaultKey;
 use gerfaut_core::wallet::meta::WalletIcon;
 use gerfaut_core::wallet::snapshot::SyncReport;
@@ -506,11 +506,24 @@ pub async fn forget_certificate(host: String) -> String {
     }
 }
 
-/// Stores one small app preference in the encrypted vault.
+/// Stores one small preference of this app alone in the encrypted
+/// vault. The ones both apps keep go through [`set_preferences`].
 pub async fn set_app_pref(key: String, value: String) -> String {
     let manager = try_json!(manager());
     match manager.set_app_pref(key, value).await {
         Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Changes some of the preferences both apps keep, from a serialized
+/// `PreferencesChange` (the fields left out keep their value), and
+/// returns them all as stored, a serialized `Preferences`.
+pub async fn set_preferences(change_json: String) -> String {
+    let manager = try_json!(manager());
+    let change: PreferencesChange = try_json!(from_json(&change_json, "PreferencesChange"));
+    match manager.set_preferences(change).await {
+        Ok(stored) => to_json(&stored),
         Err(e) => core_error_json(&e),
     }
 }
@@ -867,19 +880,22 @@ fn parse_variant<T: serde::de::DeserializeOwned>(
         .map_err(|_| error_json("bad_json", format!("unknown {kind} `{name}`")))
 }
 
-/// Fetches the current BTC price. `source` is one of `coingecko`,
-/// `kraken`, `mempool_space`; `currency` is one of the `FiatCurrency`
-/// identifiers. The source must quote the currency: only CoinGecko
-/// serves the ones past the first seven. Returns a `PriceQuote`.
+/// The currencies and price sources the settings offer, and how often
+/// the price is asked. Returns a serialized `PriceTable`: a fixed
+/// table, which only changes with the core.
+pub async fn price_table() -> String {
+    to_json(&gerfaut_core::price::price_table())
+}
+
+/// Fetches the current BTC price, in the currency and from the source
+/// of the preferences. Returns a `PriceQuote`.
 ///
 /// Through the manager, so the request takes the route the syncs take:
 /// with a .onion node on any network it goes through Tor, and with Tor
 /// out of reach it does not go at all and comes back as `tor`.
-pub async fn fetch_price(source: String, currency: String) -> String {
-    let source: PriceSource = try_json!(parse_variant(&source, "price source"));
-    let currency: FiatCurrency = try_json!(parse_variant(&currency, "currency"));
+pub async fn fetch_price() -> String {
     let manager = try_json!(manager());
-    match manager.fetch_price(source, currency).await {
+    match manager.fetch_price().await {
         Ok(quote) => to_json(&quote),
         Err(e) => core_error_json(&e),
     }

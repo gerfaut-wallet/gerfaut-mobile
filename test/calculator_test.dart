@@ -45,6 +45,7 @@ FakeBridge locked({
   return FakeBridge(
       wallets: wallets,
       settings: const Settings(
+        preferences: kPreferences,
         activeNetwork: Network.mainnet,
         backends: {},
         appPrefs: {'onboarding.seen': '1'},

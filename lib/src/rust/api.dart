@@ -213,9 +213,16 @@ Future<String> trustCertificate({
 Future<String> forgetCertificate({required String host}) =>
     RustLib.instance.api.crateApiForgetCertificate(host: host);
 
-/// Stores one small app preference in the encrypted vault.
+/// Stores one small preference of this app alone in the encrypted
+/// vault. The ones both apps keep go through [`set_preferences`].
 Future<String> setAppPref({required String key, required String value}) =>
     RustLib.instance.api.crateApiSetAppPref(key: key, value: value);
+
+/// Changes some of the preferences both apps keep, from a serialized
+/// `PreferencesChange` (the fields left out keep their value), and
+/// returns them all as stored, a serialized `Preferences`.
+Future<String> setPreferences({required String changeJson}) =>
+    RustLib.instance.api.crateApiSetPreferences(changeJson: changeJson);
 
 /// Decodes a transaction somebody else signed (PSBT as base64, hex or a
 /// binary file passed as hex; raw transaction as hex; a `ur:crypto-psbt`
@@ -409,16 +416,18 @@ Future<String> liveNotices({
 /// Whether anything this app sends has to go through Tor.
 Future<String> usesTor() => RustLib.instance.api.crateApiUsesTor();
 
-/// Fetches the current BTC price. `source` is one of `coingecko`,
-/// `kraken`, `mempool_space`; `currency` is one of the `FiatCurrency`
-/// identifiers. The source must quote the currency: only CoinGecko
-/// serves the ones past the first seven. Returns a `PriceQuote`.
+/// The currencies and price sources the settings offer, and how often
+/// the price is asked. Returns a serialized `PriceTable`: a fixed
+/// table, which only changes with the core.
+Future<String> priceTable() => RustLib.instance.api.crateApiPriceTable();
+
+/// Fetches the current BTC price, in the currency and from the source
+/// of the preferences. Returns a `PriceQuote`.
 ///
 /// Through the manager, so the request takes the route the syncs take:
 /// with a .onion node on any network it goes through Tor, and with Tor
 /// out of reach it does not go at all and comes back as `tor`.
-Future<String> fetchPrice({required String source, required String currency}) =>
-    RustLib.instance.api.crateApiFetchPrice(source: source, currency: currency);
+Future<String> fetchPrice() => RustLib.instance.api.crateApiFetchPrice();
 
 /// What to say about releases to someone running `current_version`, as
 /// the core decides it from what the vault keeps. Reads only. Returns a

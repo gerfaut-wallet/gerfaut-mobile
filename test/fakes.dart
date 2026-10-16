@@ -6,6 +6,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:gerfaut/src/bridge.dart';
@@ -18,9 +19,74 @@ import 'package:gerfaut/src/home_widgets.dart';
 import 'package:gerfaut/src/live.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/screen.dart';
+import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/window.dart';
 import 'package:url_launcher_platform_interface/link.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
+
+/// The preferences of a vault that never stored any: the core's
+/// defaults, as it sends them.
+const kPreferences = Preferences(
+  unit: AmountUnit.btc,
+  masked: false,
+  fiat: false,
+  fiatCurrency: FiatCurrency('eur'),
+  priceSource: PriceSource.coingecko,
+  notifyNewTx: false,
+  explorerAck: false,
+);
+
+const _everySource = [
+  PriceSource.coingecko,
+  PriceSource.kraken,
+  PriceSource.mempoolSpace,
+];
+
+CurrencyEntry _currency(String id, String name, {bool everySource = true}) {
+  return CurrencyEntry(
+    currency: FiatCurrency(id),
+    name: name,
+    reach: everySource ? CurrencyReach.every : CurrencyReach.coingeckoOnly,
+    sources: everySource ? _everySource : const [PriceSource.coingecko],
+  );
+}
+
+/// Part of the core's table, in its order: four currencies every source
+/// quotes, three only CoinGecko does.
+final kPriceTable = PriceTable(
+  currencies: [
+    _currency('eur', 'Euro'),
+    _currency('usd', 'US dollar'),
+    _currency('chf', 'Swiss franc'),
+    _currency('jpy', 'Japanese yen'),
+    _currency('inr', 'Indian rupee', everySource: false),
+    _currency('ngn', 'Nigerian naira', everySource: false),
+    _currency('try', 'Turkish lira', everySource: false),
+  ],
+  sources: const [
+    SourceEntry(source: PriceSource.coingecko, label: 'CoinGecko'),
+    SourceEntry(source: PriceSource.kraken, label: 'Kraken'),
+    SourceEntry(source: PriceSource.mempoolSpace, label: 'mempool.space'),
+  ],
+  refresh: const Duration(seconds: 60),
+);
+
+/// Puts [change] in what the screens hold, as hydration does with the
+/// preferences a vault stored.
+void holdPreferences(ProviderContainer container, PreferencesChange change) {
+  container
+      .read(preferencesProvider.notifier)
+      .hydrate(change.applyTo(container.read(preferencesProvider)));
+}
+
+/// The core's answer to a change of the preferences: the change made,
+/// and the currency winning, by [kPriceTable].
+Preferences coreChange(Preferences stored, PreferencesChange change) {
+  final next = change.applyTo(stored);
+  final entry = kPriceTable.entryOf(next.fiatCurrency);
+  if (entry == null || entry.sources.contains(next.priceSource)) return next;
+  return next.copyWith(priceSource: PriceSource.coingecko);
+}
 
 /// Captures external launches instead of touching the platform.
 /// Install with `UrlLauncherPlatform.instance = FakeUrlLauncher()`.
@@ -568,6 +634,7 @@ class FakeBridge implements GerfautBridge {
       activeNetwork: Network.mainnet,
       backends: {},
       appPrefs: {},
+      preferences: kPreferences,
     ),
     Map<String, WalletSnapshot>? snapshots,
     Map<String, List<UtxoInfo>>? utxos,
@@ -1015,6 +1082,7 @@ class FakeBridge implements GerfautBridge {
       activeNetwork: settings.activeNetwork,
       backends: settings.backends,
       appPrefs: {...settings.appPrefs, ...appPrefs},
+      preferences: settings.preferences,
       gapLimit: settings.gapLimit,
       electrumCerts: settings.electrumCerts,
       appLock: lock,
@@ -1030,11 +1098,13 @@ class FakeBridge implements GerfautBridge {
     int? gapLimit,
     Map<String, String>? electrumCerts,
     TorSettings? tor,
+    Preferences? preferences,
   }) {
     settings = Settings(
       activeNetwork: activeNetwork ?? settings.activeNetwork,
       backends: backends ?? settings.backends,
       appPrefs: settings.appPrefs,
+      preferences: preferences ?? settings.preferences,
       gapLimit: gapLimit ?? settings.gapLimit,
       electrumCerts: electrumCerts ?? settings.electrumCerts,
       appLock: settings.appLock,
@@ -1136,15 +1206,41 @@ class FakeBridge implements GerfautBridge {
     appPrefs[key] = value;
   }
 
-  /// Price hook; throw a [BridgeException] to simulate an unreachable
-  /// source. The default rate keeps fiat lines deterministic in tests.
+  /// The preferences both apps keep, as the vault holds them.
+  Preferences get preferences => settings.preferences;
+
+  /// Puts preferences in the vault, the way another isolate's write
+  /// would land.
+  set preferences(Preferences stored) => _store(preferences: stored);
+
+  /// Every change asked of the preferences, for assertions.
+  final List<PreferencesChange> preferencesChanges = [];
+
+  /// Preferences hook; throw a [BridgeException] to have the vault
+  /// refuse the change. The default is the core's answer.
+  Preferences Function(Preferences stored, PreferencesChange change)
+  onSetPreferences = coreChange;
+
+  @override
+  Future<Preferences> setPreferences(PreferencesChange change) async {
+    preferencesChanges.add(change);
+    final stored = onSetPreferences(settings.preferences, change);
+    _store(preferences: stored);
+    return stored;
+  }
+
+  @override
+  Future<PriceTable> priceTable() async => kPriceTable;
+
+  /// Price hook, handed the pair the preferences name; throw a
+  /// [BridgeException] to simulate an unreachable source. The default
+  /// rate keeps fiat lines deterministic in tests.
   PriceQuote Function(PriceSource source, FiatCurrency currency)? onFetchPrice;
 
   @override
-  Future<PriceQuote> fetchPrice(
-    PriceSource source,
-    FiatCurrency currency,
-  ) async {
+  Future<PriceQuote> fetchPrice() async {
+    final source = settings.preferences.priceSource;
+    final currency = settings.preferences.fiatCurrency;
     final fetch = onFetchPrice;
     if (fetch != null) return fetch(source, currency);
     return PriceQuote(
@@ -1668,6 +1764,7 @@ class FakeBridge implements GerfautBridge {
       activeNetwork: settings.activeNetwork,
       backends: settings.backends,
       appPrefs: settings.appPrefs,
+      preferences: settings.preferences,
       gapLimit: settings.gapLimit,
       electrumCerts: settings.electrumCerts,
       appLock: settings.appLock,

@@ -145,7 +145,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('sats'));
     await tester.pumpAndSettle();
-    expect(bridge.appPrefs['display.unit'], 'sats');
+    expect(bridge.preferences.unit, AmountUnit.sats);
 
     // Back through the root list to the wallets.
     await tester.pageBack();
@@ -222,10 +222,11 @@ void main() {
         'w1': makeSnapshot(meta: meta, txs: [detail.summary]),
       },
       txDetails: {'w1:$txid': detail},
-      settings: const Settings(
+      settings: Settings(
+        preferences: kPreferences.copyWith(explorerAck: true),
         activeNetwork: Network.mainnet,
-        backends: {},
-        appPrefs: {'privacy.explorer_ack': '1'},
+        backends: const {},
+        appPrefs: const {},
       ),
     );
     await tester.pumpWidget(app(bridge));
@@ -275,7 +276,7 @@ void main() {
     await tester.tap(find.text('Open explorer'));
     await tester.pumpAndSettle();
 
-    expect(bridge.appPrefs['privacy.explorer_ack'], '1');
+    expect(bridge.preferences.explorerAck, isTrue);
     expect(launcher.launched.length, 1);
 
     // The next visit skips the dialog entirely.
@@ -314,7 +315,7 @@ void main() {
       find.text(formatAmountSigned(5000, AmountUnit.sats)),
       findsOneWidget,
     );
-    expect(bridge.appPrefs['display.unit'], 'sats');
+    expect(bridge.preferences.unit, AmountUnit.sats);
   });
 
   testWidgets('feature badges render from extras', (tester) async {

@@ -2,7 +2,7 @@
 // DTOs one to one (snake_case keys); if a field changes there, it
 // changes here.
 
-import 'format.dart';
+import 'format.dart' show AmountUnit;
 
 /// Networks Gerfaut can operate on.
 enum Network {
@@ -1727,6 +1727,7 @@ class Settings {
     required this.activeNetwork,
     required this.backends,
     required this.appPrefs,
+    required this.preferences,
     this.gapLimit = 20,
     this.electrumCerts = const {},
     this.appLock,
@@ -1746,6 +1747,9 @@ class Settings {
       appPrefs: (json['app_prefs'] as Map<String, dynamic>? ?? {}).map(
         (key, value) => MapEntry(key, value as String),
       ),
+      preferences: Preferences.fromJson(
+        json['preferences'] as Map<String, dynamic>,
+      ),
       gapLimit: json['gap_limit'] as int? ?? 20,
       electrumCerts: (json['electrum_certs'] as Map<String, dynamic>? ?? {})
           .map((key, value) => MapEntry(key, value as String)),
@@ -1760,7 +1764,12 @@ class Settings {
 
   final Network activeNetwork;
   final Map<Network, BackendConfig> backends;
+
+  /// The preferences of this app alone: the theme, the widgets...
   final Map<String, String> appPrefs;
+
+  /// What both apps keep with the same meaning.
+  final Preferences preferences;
 
   /// Global gap limit applied to every descriptor wallet on sync.
   final int gapLimit;
@@ -1948,21 +1957,16 @@ class UnreachableCertificate extends CertificateStatus {
 }
 
 /// Where a fiat quote comes from. All endpoints are public and keyless.
+/// Which currencies each quotes, and its name, are the core's: see
+/// [PriceTable].
 enum PriceSource {
-  coingecko('coingecko', 'CoinGecko'),
-  kraken('kraken', 'Kraken'),
-  mempoolSpace('mempool_space', 'mempool.space');
+  coingecko('coingecko'),
+  kraken('kraken'),
+  mempoolSpace('mempool_space');
 
-  const PriceSource(this.id, this.label);
+  const PriceSource(this.id);
 
   final String id;
-  final String label;
-
-  /// Whether this source quotes a currency without an API key. Kraken
-  /// lists seven fiat pairs against XBT and the mempool projects
-  /// publish the same seven; CoinGecko publishes them all.
-  bool supportsCurrency(FiatCurrency currency) =>
-      this == PriceSource.coingecko || currency.reach == CurrencyReach.every;
 
   static PriceSource? fromId(String? id) {
     for (final source in PriceSource.values) {
@@ -1974,73 +1978,260 @@ enum PriceSource {
 
 /// How many price sources quote a currency.
 enum CurrencyReach {
-  /// Every source quotes it: the seven Kraken and the mempool projects
-  /// publish.
-  every,
+  /// Every source quotes it.
+  every('every'),
 
   /// CoinGecko alone quotes it.
-  coingeckoOnly,
-}
+  coingeckoOnly('coingecko_only');
 
-/// Display currencies offered in the settings, in display order.
-///
-/// The first seven are quoted by every source. The rest are the
-/// currencies of the most populous countries and of the places where
-/// Bitcoin is most used; CoinGecko is the only keyless source that
-/// publishes them.
-enum FiatCurrency {
-  eur('eur', 'EUR', 'Euro', CurrencyReach.every),
-  usd('usd', 'USD', 'US dollar', CurrencyReach.every),
-  gbp('gbp', 'GBP', 'Pound sterling', CurrencyReach.every),
-  chf('chf', 'CHF', 'Swiss franc', CurrencyReach.every),
-  jpy('jpy', 'JPY', 'Japanese yen', CurrencyReach.every),
-  cad('cad', 'CAD', 'Canadian dollar', CurrencyReach.every),
-  aud('aud', 'AUD', 'Australian dollar', CurrencyReach.every),
-  inr('inr', 'INR', 'Indian rupee', CurrencyReach.coingeckoOnly),
-  cny('cny', 'CNY', 'Chinese yuan', CurrencyReach.coingeckoOnly),
-  brl('brl', 'BRL', 'Brazilian real', CurrencyReach.coingeckoOnly),
-  ngn('ngn', 'NGN', 'Nigerian naira', CurrencyReach.coingeckoOnly),
-  idr('idr', 'IDR', 'Indonesian rupiah', CurrencyReach.coingeckoOnly),
-  pkr('pkr', 'PKR', 'Pakistani rupee', CurrencyReach.coingeckoOnly),
-  bdt('bdt', 'BDT', 'Bangladeshi taka', CurrencyReach.coingeckoOnly),
-  rub('rub', 'RUB', 'Russian ruble', CurrencyReach.coingeckoOnly),
-  mxn('mxn', 'MXN', 'Mexican peso', CurrencyReach.coingeckoOnly),
-  php('php', 'PHP', 'Philippine peso', CurrencyReach.coingeckoOnly),
-  vnd('vnd', 'VND', 'Vietnamese dong', CurrencyReach.coingeckoOnly),
-  // `try` is a Dart keyword, so only the constant is spelled out; the
-  // identifier the core stores stays `try`.
-  tryLira('try', 'TRY', 'Turkish lira', CurrencyReach.coingeckoOnly),
-  ars('ars', 'ARS', 'Argentine peso', CurrencyReach.coingeckoOnly),
-  krw('krw', 'KRW', 'South Korean won', CurrencyReach.coingeckoOnly),
-  zar('zar', 'ZAR', 'South African rand', CurrencyReach.coingeckoOnly),
-  thb('thb', 'THB', 'Thai baht', CurrencyReach.coingeckoOnly),
-  uah('uah', 'UAH', 'Ukrainian hryvnia', CurrencyReach.coingeckoOnly),
-  pln('pln', 'PLN', 'Polish zloty', CurrencyReach.coingeckoOnly),
-  sek('sek', 'SEK', 'Swedish krona', CurrencyReach.coingeckoOnly),
-  sgd('sgd', 'SGD', 'Singapore dollar', CurrencyReach.coingeckoOnly),
-  hkd('hkd', 'HKD', 'Hong Kong dollar', CurrencyReach.coingeckoOnly),
-  aed('aed', 'AED', 'UAE dirham', CurrencyReach.coingeckoOnly),
-  nzd('nzd', 'NZD', 'New Zealand dollar', CurrencyReach.coingeckoOnly);
-
-  const FiatCurrency(this.id, this.code, this.label, this.reach);
+  const CurrencyReach(this.id);
 
   final String id;
 
-  /// ISO 4217 code, uppercase.
-  final String code;
+  static CurrencyReach fromId(String id) =>
+      CurrencyReach.values.firstWhere((reach) => reach.id == id);
+}
 
-  /// English name, so a list of thirty codes stays readable.
-  final String label;
+/// A display currency, by the identifier the core names it with (`eur`,
+/// `try`...). The list on offer, its order, the names and which source
+/// quotes what are the core's: see [PriceTable].
+class FiatCurrency {
+  const FiatCurrency(this.id);
 
-  /// Which sources quote this currency.
+  final String id;
+
+  /// ISO 4217 code: the identifier, in capitals.
+  String get code => id.toUpperCase();
+
+  @override
+  bool operator ==(Object other) => other is FiatCurrency && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
+
+  @override
+  String toString() => id;
+}
+
+/// One currency of the [PriceTable].
+class CurrencyEntry {
+  const CurrencyEntry({
+    required this.currency,
+    required this.name,
+    required this.reach,
+    required this.sources,
+  });
+
+  factory CurrencyEntry.fromJson(Map<String, dynamic> json) {
+    return CurrencyEntry(
+      currency: FiatCurrency(json['currency'] as String),
+      name: json['name'] as String,
+      reach: CurrencyReach.fromId(json['reach'] as String),
+      sources: [
+        for (final id in json['sources'] as List)
+          ?PriceSource.fromId(id as String),
+      ],
+    );
+  }
+
+  final FiatCurrency currency;
+
+  /// Its English name, read beside the code.
+  final String name;
+
+  /// How many sources quote it, which is how the settings group it.
   final CurrencyReach reach;
 
-  static FiatCurrency? fromId(String? id) {
-    for (final currency in FiatCurrency.values) {
-      if (currency.id == id) return currency;
+  /// The sources that quote it, in display order.
+  final List<PriceSource> sources;
+}
+
+/// One price source of the [PriceTable].
+class SourceEntry {
+  const SourceEntry({required this.source, required this.label});
+
+  final PriceSource source;
+
+  /// Its name, as it writes it.
+  final String label;
+}
+
+/// What the settings offer for the fiat value, and how often its price
+/// is asked: the core's table, which both apps offer in its order.
+class PriceTable {
+  const PriceTable({
+    required this.currencies,
+    required this.sources,
+    required this.refresh,
+  });
+
+  factory PriceTable.fromJson(Map<String, dynamic> json) {
+    return PriceTable(
+      currencies: [
+        for (final entry in json['currencies'] as List)
+          CurrencyEntry.fromJson(entry as Map<String, dynamic>),
+      ],
+      sources: [
+        for (final entry in json['sources'] as List)
+          if (PriceSource.fromId(
+                (entry as Map<String, dynamic>)['source'] as String,
+              )
+              case final source?)
+            SourceEntry(source: source, label: entry['label'] as String),
+      ],
+      refresh: Duration(seconds: json['refresh_secs'] as int),
+    );
+  }
+
+  /// Every currency on offer, in display order.
+  final List<CurrencyEntry> currencies;
+
+  /// Every source, in display order.
+  final List<SourceEntry> sources;
+
+  /// From one price to the next while it is shown, and from a failure
+  /// to the next try.
+  final Duration refresh;
+
+  /// The entry of a currency, if the table lists it.
+  CurrencyEntry? entryOf(FiatCurrency currency) {
+    for (final entry in currencies) {
+      if (entry.currency == currency) return entry;
     }
     return null;
   }
+}
+
+/// The preferences both apps keep, as the vault holds them, mirroring
+/// `Preferences` in gerfaut-core. A vault that never stored one answers
+/// its default: the core decides those, and every field comes filled.
+class Preferences {
+  const Preferences({
+    required this.unit,
+    required this.masked,
+    required this.fiat,
+    required this.fiatCurrency,
+    required this.priceSource,
+    required this.notifyNewTx,
+    required this.explorerAck,
+  });
+
+  factory Preferences.fromJson(Map<String, dynamic> json) {
+    return Preferences(
+      unit: AmountUnit.fromId(json['unit'] as String)!,
+      masked: json['masked'] as bool,
+      fiat: json['fiat'] as bool,
+      fiatCurrency: FiatCurrency(json['fiat_currency'] as String),
+      priceSource: PriceSource.fromId(json['price_source'] as String)!,
+      notifyNewTx: json['notify_new_tx'] as bool,
+      explorerAck: json['explorer_ack'] as bool,
+    );
+  }
+
+  /// The unit of every amount.
+  final AmountUnit unit;
+
+  /// Amounts hidden on screen, and in what a notification says.
+  final bool masked;
+
+  /// The fiat value beside every amount.
+  final bool fiat;
+  final FiatCurrency fiatCurrency;
+
+  /// Always one that quotes [fiatCurrency]: the core sees to it.
+  final PriceSource priceSource;
+
+  /// A notice when a sync finds a transaction.
+  final bool notifyNewTx;
+
+  /// The warning before an external explorer was read and accepted.
+  final bool explorerAck;
+
+  Preferences copyWith({
+    AmountUnit? unit,
+    bool? masked,
+    bool? fiat,
+    FiatCurrency? fiatCurrency,
+    PriceSource? priceSource,
+    bool? notifyNewTx,
+    bool? explorerAck,
+  }) {
+    return Preferences(
+      unit: unit ?? this.unit,
+      masked: masked ?? this.masked,
+      fiat: fiat ?? this.fiat,
+      fiatCurrency: fiatCurrency ?? this.fiatCurrency,
+      priceSource: priceSource ?? this.priceSource,
+      notifyNewTx: notifyNewTx ?? this.notifyNewTx,
+      explorerAck: explorerAck ?? this.explorerAck,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is Preferences &&
+      other.unit == unit &&
+      other.masked == masked &&
+      other.fiat == fiat &&
+      other.fiatCurrency == fiatCurrency &&
+      other.priceSource == priceSource &&
+      other.notifyNewTx == notifyNewTx &&
+      other.explorerAck == explorerAck;
+
+  @override
+  int get hashCode => Object.hash(
+    unit,
+    masked,
+    fiat,
+    fiatCurrency,
+    priceSource,
+    notifyNewTx,
+    explorerAck,
+  );
+}
+
+/// A change to some of the [Preferences], mirroring `PreferencesChange`:
+/// what is left out keeps its value.
+class PreferencesChange {
+  const PreferencesChange({
+    this.unit,
+    this.masked,
+    this.fiat,
+    this.fiatCurrency,
+    this.priceSource,
+    this.notifyNewTx,
+    this.explorerAck,
+  });
+
+  final AmountUnit? unit;
+  final bool? masked;
+  final bool? fiat;
+  final FiatCurrency? fiatCurrency;
+  final PriceSource? priceSource;
+  final bool? notifyNewTx;
+  final bool? explorerAck;
+
+  /// These preferences with the change made here: the fields it names,
+  /// and nothing else.
+  Preferences applyTo(Preferences preferences) => preferences.copyWith(
+    unit: unit,
+    masked: masked,
+    fiat: fiat,
+    fiatCurrency: fiatCurrency,
+    priceSource: priceSource,
+    notifyNewTx: notifyNewTx,
+    explorerAck: explorerAck,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'unit': ?unit?.id,
+    'masked': ?masked,
+    'fiat': ?fiat,
+    'fiat_currency': ?fiatCurrency?.id,
+    'price_source': ?priceSource?.id,
+    'notify_new_tx': ?notifyNewTx,
+    'explorer_ack': ?explorerAck,
+  };
 }
 
 /// One BTC priced in a fiat currency, at a point in time.
@@ -2055,7 +2246,7 @@ class PriceQuote {
   factory PriceQuote.fromJson(Map<String, dynamic> json) {
     return PriceQuote(
       rate: (json['rate'] as num).toDouble(),
-      currency: FiatCurrency.fromId(json['currency'] as String)!,
+      currency: FiatCurrency(json['currency'] as String),
       source: PriceSource.fromId(json['source'] as String)!,
       at: json['at'] as int,
     );

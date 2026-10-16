@@ -46,6 +46,7 @@ FakeBridge locked({
   return FakeBridge(
       wallets: wallets,
       settings: const Settings(
+        preferences: kPreferences,
         activeNetwork: Network.mainnet,
         backends: {},
         appPrefs: {'onboarding.seen': '1'},
@@ -621,6 +622,7 @@ void main() {
     testWidgets('it is not shown again once seen', (tester) async {
       final bridge = FakeBridge(
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: {},
           appPrefs: {'onboarding.seen': '1'},
@@ -710,6 +712,7 @@ void main() {
       useTallSurface(tester);
       final bridge = FakeBridge(
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: {},
           appPrefs: {'onboarding.seen': '1'},

@@ -24,13 +24,14 @@ import 'notifications_test.dart' show FakeNotifications;
 
 const _serviceChannel = MethodChannel('gerfaut/live_service');
 
-const Map<String, String> _livePrefs = {
-  'notify.new_tx': '1',
-  'notify.background': 'live',
-};
+const Map<String, String> _livePrefs = {'notify.background': 'live'};
+
+/// The notice on, which Live is there to say.
+final _alertsOn = kPreferences.copyWith(notifyNewTx: true);
 
 FakeBridge _bridge({
   Map<String, String> prefs = _livePrefs,
+  Preferences? preferences,
   AppLock? lock,
   Network network = Network.signet,
   Map<Network, BackendConfig> backends = const {},
@@ -39,6 +40,7 @@ FakeBridge _bridge({
     // On the network in use: the one whose wallets Live watches.
     wallets: [makeMeta(network: network)],
     settings: Settings(
+      preferences: preferences ?? _alertsOn,
       activeNetwork: network,
       backends: backends,
       appPrefs: {...prefs},
@@ -171,7 +173,7 @@ class _HydratedSettingsState extends ConsumerState<_HydratedSettings> {
     Future.microtask(() async {
       final settings = await ref.read(settingsProvider.future);
       final prefs = settings.appPrefs;
-      ref.read(notifyNewTxProvider.notifier).hydrate(prefs['notify.new_tx']);
+      ref.read(preferencesProvider.notifier).hydrate(settings.preferences);
       ref.read(notifyDetailsProvider.notifier).hydrate(prefs['notify.details']);
       ref
           .read(backgroundCheckProvider.notifier)
@@ -281,7 +283,7 @@ void main() {
 
     test('no amount while balances are masked', () async {
       final service = _Service(
-        _bridge(prefs: {..._livePrefs, 'mobile.masked': '1'}),
+        _bridge(preferences: _alertsOn.copyWith(masked: true)),
       );
       await service.runner.run();
       service.bridge.liveController
@@ -333,7 +335,7 @@ void main() {
 
     test('the unit is the one on screen', () async {
       final service = _Service(
-        _bridge(prefs: {..._livePrefs, 'display.unit': 'sats'}),
+        _bridge(preferences: _alertsOn.copyWith(unit: AmountUnit.sats)),
       );
       await service.runner.run();
       service.bridge.liveController
@@ -346,7 +348,7 @@ void main() {
     test('nothing once the notice was turned off under it', () async {
       final service = _Service(_bridge());
       await service.runner.run();
-      service.bridge.appPrefs['notify.new_tx'] = '0';
+      service.bridge.preferences = kPreferences;
       service.bridge.liveController
         ..add(LiveTransaction(_live('gg', 1)))
         ..add(LiveWalletSynced(_report()));
@@ -365,9 +367,7 @@ void main() {
         tester.pump(const Duration(minutes: 1));
 
     test('stands down when Live is not what the settings ask for', () async {
-      final service = _Service(
-        _bridge(prefs: {'notify.new_tx': '1', 'notify.background': '900'}),
-      );
+      final service = _Service(_bridge(prefs: {'notify.background': '900'}));
       await service.runner.run();
       expect(service.bridge.liveStartCalls, 0);
       expect(service.told.single.$1, 'standDown');
@@ -719,11 +719,7 @@ void main() {
 
     test('says nothing of the wallet with the details off', () async {
       final bridge = _bridge(
-        prefs: {
-          'notify.new_tx': '1',
-          'notify.background': '900',
-          'notify.details': '0',
-        },
+        prefs: {'notify.background': '900', 'notify.details': '0'},
         lock: const AppLock(kind: LockKind.pin, biometric: false),
       )..syncedIds.add('w1');
       final pending = _report(
@@ -743,7 +739,7 @@ void main() {
 
     test('names the wallet under an app lock, details on', () async {
       final bridge = _bridge(
-        prefs: {'notify.new_tx': '1', 'notify.background': '900'},
+        prefs: {'notify.background': '900'},
         lock: const AppLock(kind: LockKind.pin, biometric: false),
       )..syncedIds.add('w1');
       final pending = _report(
@@ -762,9 +758,8 @@ void main() {
     });
 
     test('syncs as before at a periodic cadence', () async {
-      final bridge = _bridge(
-        prefs: {'notify.new_tx': '1', 'notify.background': '900'},
-      )..watchStatus = const LiveWatchStatus(state: WatchState.connected);
+      final bridge = _bridge(prefs: {'notify.background': '900'})
+        ..watchStatus = const LiveWatchStatus(state: WatchState.connected);
       await check(bridge);
       expect(bridge.syncAllCalls, 1);
     });
@@ -789,7 +784,7 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
-      container.read(notifyNewTxProvider.notifier).hydrate(notify ? '1' : '0');
+      holdPreferences(container, PreferencesChange(notifyNewTx: notify));
       return container;
     }
 
@@ -894,6 +889,7 @@ void main() {
           makeMeta(id: 'w2', name: 'Spending'),
         ],
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: {},
           appPrefs: {},
@@ -1322,7 +1318,7 @@ void main() {
   });
 
   group('choosing Live', () {
-    const onPrefs = {'notify.new_tx': '1', 'notify.background': '900'};
+    const onPrefs = {'notify.background': '900'};
 
     testWidgets('explains first, and "Not now" changes nothing', (
       tester,
@@ -1669,11 +1665,7 @@ void main() {
       tester,
     ) async {
       final bridge = _bridge(
-        prefs: {
-          'notify.new_tx': '1',
-          'notify.background': '900',
-          'notify.details': '0',
-        },
+        prefs: {'notify.background': '900', 'notify.details': '0'},
       );
       final platform = FakeLivePlatform();
       await _open(
@@ -1721,9 +1713,7 @@ void main() {
     testWidgets('the switch reads off, and the choice is back after', (
       tester,
     ) async {
-      final bridge = _bridge(
-        prefs: {'notify.new_tx': '1', 'notify.background': '900'},
-      );
+      final bridge = _bridge(prefs: {'notify.background': '900'});
       await _open(
         tester,
         _settings(
@@ -1744,7 +1734,7 @@ void main() {
       );
       // Only drawn off: the choice the user made is still the one held.
       expect(container.read(notifyNewTxProvider), isTrue);
-      expect(bridge.appPrefs.containsKey('notify.new_tx'), isFalse);
+      expect(bridge.preferencesChanges, isEmpty);
 
       await container.read(disguiseProvider.notifier).set(false);
       await tester.pumpAndSettle();
@@ -1754,9 +1744,7 @@ void main() {
     });
 
     testWidgets('without the disguise, nothing says it', (tester) async {
-      final bridge = _bridge(
-        prefs: {'notify.new_tx': '1', 'notify.background': '900'},
-      );
+      final bridge = _bridge(prefs: {'notify.background': '900'});
       await _open(tester, _settings(bridge, platform: FakeLivePlatform()));
       expect(find.textContaining('while the app is disguised'), findsNothing);
       final notify = tester.widget<SettingSwitch>(
@@ -1781,7 +1769,7 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
-      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      holdPreferences(container, const PreferencesChange(notifyNewTx: true));
       container.read(backgroundCheckProvider.notifier).hydrate('live');
 
       await container.read(disguiseProvider.notifier).set(true);
@@ -1903,7 +1891,7 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
-      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      holdPreferences(container, const PreferencesChange(notifyNewTx: true));
       container.read(backgroundCheckProvider.notifier).hydrate('live');
       return container;
     }
@@ -2004,9 +1992,7 @@ void main() {
     });
 
     test('a hold left behind is ended where Live is not chosen', () async {
-      final bridge = _bridge(
-        prefs: {'notify.new_tx': '1', 'notify.background': '3600'},
-      );
+      final bridge = _bridge(prefs: {'notify.background': '3600'});
       final platform = FakeLivePlatform(held: true);
       final notices = FakeNotifications();
       final container = withNotices(bridge, platform, notices);
@@ -2023,7 +2009,7 @@ void main() {
       final platform = FakeLivePlatform(running: true, wanted: true);
       final notices = FakeNotifications()..deliverableNow = false;
       final container = withNotices(bridge, platform, notices);
-      container.read(notifyNewTxProvider.notifier).hydrate('0');
+      holdPreferences(container, const PreferencesChange(notifyNewTx: false));
 
       await container.read(notifyNewTxProvider.notifier).checkSystem();
       expect(container.read(notificationsRefusedProvider), isFalse);
@@ -2033,9 +2019,7 @@ void main() {
     testWidgets('the settings say it, with a way to the system page', (
       tester,
     ) async {
-      final bridge = _bridge(
-        prefs: {'notify.new_tx': '1', 'notify.background': '900'},
-      );
+      final bridge = _bridge(prefs: {'notify.background': '900'});
       final platform = FakeLivePlatform();
       await _open(tester, _settings(bridge, platform: platform));
       ProviderScope.containerOf(tester.element(find.byType(SettingsScreen)))
@@ -2066,7 +2050,7 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
-      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      holdPreferences(container, const PreferencesChange(notifyNewTx: true));
       container.read(backgroundCheckProvider.notifier).hydrate('live');
       return container;
     }
@@ -2164,7 +2148,7 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
-      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      holdPreferences(container, const PreferencesChange(notifyNewTx: true));
       container.read(backgroundCheckProvider.notifier).hydrate('live');
       return container;
     }
@@ -2252,7 +2236,7 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
-      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      holdPreferences(container, const PreferencesChange(notifyNewTx: true));
       container.read(backgroundCheckProvider.notifier).hydrate('live');
       await container.read(notifyNewTxProvider.notifier).set(false);
       expect(platform.calls, ['stop']);

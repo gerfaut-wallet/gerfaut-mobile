@@ -279,9 +279,15 @@ void main() {
   });
 
   group('what a background isolate claimed', () {
-    FakeBridge vault(Map<String, String> prefs) => FakeBridge(
+    /// The notice on unless said otherwise.
+    final on = kPreferences.copyWith(notifyNewTx: true);
+    FakeBridge vault(
+      Preferences preferences, [
+      Map<String, String> prefs = const {},
+    ]) => FakeBridge(
       wallets: [makeMeta(id: 'w1', name: 'Savings')],
       settings: Settings(
+        preferences: preferences,
         activeNetwork: Network.mainnet,
         backends: const {},
         appPrefs: prefs,
@@ -298,7 +304,7 @@ void main() {
 
     test('is said with the names and the unit the vault holds', () async {
       final notices = FakeNotifications();
-      final bridge = vault({Pref.notifyNewTx: '1', Pref.unit: 'sats'});
+      final bridge = vault(on.copyWith(unit: AmountUnit.sats));
       await announceFromVault(
         bridge,
         notices,
@@ -315,7 +321,7 @@ void main() {
     });
 
     test('names the wallet and the amount, app lock or not', () async {
-      final bridge = vault({Pref.notifyNewTx: '1'})
+      final bridge = vault(on)
         ..lock = const AppLock(kind: LockKind.pin, biometric: false);
       await announceFromVault(
         bridge,
@@ -328,7 +334,7 @@ void main() {
     });
 
     test('with the details off, asks for what happened alone', () async {
-      final bridge = vault({Pref.notifyNewTx: '1', Pref.notifyDetails: '0'});
+      final bridge = vault(on, {Pref.notifyDetails: '0'});
       await announceFromVault(
         bridge,
         FakeNotifications(),
@@ -339,10 +345,8 @@ void main() {
     });
 
     test('with the details on and amounts hidden, the name alone', () async {
-      final bridge = vault({
-        Pref.notifyNewTx: '1',
+      final bridge = vault(on.copyWith(masked: true), {
         Pref.notifyDetails: '1',
-        Pref.masked: '1',
       });
       await announceFromVault(
         bridge,
@@ -356,14 +360,14 @@ void main() {
 
     test('is not said while the notice is off or the app disguised', () async {
       final notices = FakeNotifications();
-      final off = vault({});
+      final off = vault(kPreferences);
       await announceFromVault(
         off,
         notices,
         claimed,
         isDisguised: () async => false,
       );
-      final disguised = vault({Pref.notifyNewTx: '1'});
+      final disguised = vault(on);
       await announceFromVault(
         disguised,
         notices,
@@ -371,7 +375,7 @@ void main() {
         isDisguised: () async => true,
       );
       // Disguised, the details off change nothing: still not a word.
-      final generic = vault({Pref.notifyNewTx: '1', Pref.notifyDetails: '0'});
+      final generic = vault(on, {Pref.notifyDetails: '0'});
       await announceFromVault(
         generic,
         notices,
@@ -574,7 +578,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(service.permissionAsks, 1);
-      expect(bridge.appPrefs['notify.new_tx'], '1');
+      expect(bridge.preferences.notifyNewTx, isTrue);
 
       await pickQuarterHour();
       expect(bridge.appPrefs['notify.background'], '900');

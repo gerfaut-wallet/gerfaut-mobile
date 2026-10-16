@@ -205,16 +205,16 @@ Future<void> announceFromVault(
 }) async {
   if (claimed.isEmpty) return;
   final settings = await bridge.getSettings();
-  final prefs = AppPrefs(settings.appPrefs);
-  if (!prefs.notifyNewTx || await isDisguised()) return;
+  final shared = settings.preferences;
+  if (!shared.notifyNewTx || await isDisguised()) return;
   final wallets = await bridge.listWallets();
   await NewTxAnnouncer(service, bridge).announce(
     claimed,
     NoticeContext(
       names: {for (final wallet in wallets) wallet.id: wallet.name},
-      unit: prefs.unit,
-      masked: prefs.masked,
-      details: prefs.notifyDetails,
+      unit: shared.unit,
+      masked: shared.masked,
+      details: AppPrefs(settings.appPrefs).notifyDetails,
     ),
   );
 }
@@ -303,12 +303,7 @@ final syncAnnouncerProvider = Provider<SyncAnnouncer>(
 
 class NotifyNewTxNotifier extends Notifier<bool> {
   @override
-  bool build() => false;
-
-  void hydrate(String? stored) {
-    // Only an explicit "1" turns it on: notifications are opt-in.
-    state = stored == '1';
-  }
+  bool build() => ref.watch(preferencesProvider.select((p) => p.notifyNewTx));
 
   /// Turning it on asks the system first; a refusal leaves it off and
   /// is said on screen rather than pretended away.
@@ -320,22 +315,22 @@ class NotifyNewTxNotifier extends Notifier<bool> {
       ref.read(notificationsRefusedProvider.notifier).state = !granted;
       if (!granted) return;
     }
-    state = on;
-    ref
-        .read(bridgeProvider)
-        .setAppPref(Pref.notifyNewTx, on ? '1' : '0')
-        .catchError((_) {});
+    // Read before the change: it rebuilds this notifier, whose ref
+    // answers nothing until then.
     final cadence = ref.read(backgroundCheckProvider);
+    final scheduler = ref.read(backgroundSchedulerProvider);
+    final live = ref.read(liveProvider.notifier);
+    ref
+        .read(preferencesProvider.notifier)
+        .show(PreferencesChange(notifyNewTx: on));
     await rescheduleBackgroundCheck(
-      ref,
+      scheduler,
       notifying: on,
       seconds: cadence.seconds,
     );
     // With nothing to say there is nothing to watch for: Live follows
     // the notice off, and back on.
-    await ref
-        .read(liveProvider.notifier)
-        .apply(wanted: on && cadence == BackgroundCheck.live);
+    await live.apply(wanted: on && cadence == BackgroundCheck.live);
   }
 
   /// Reads again whether Android lets the notices through, each time the
@@ -361,8 +356,7 @@ class NotifyNewTxNotifier extends Notifier<bool> {
   }
 }
 
-/// The new-transaction notice, off by default, persisted as
-/// "notify.new_tx".
+/// The new-transaction notice, one of the preferences both apps keep.
 final notifyNewTxProvider = NotifierProvider<NotifyNewTxNotifier, bool>(
   NotifyNewTxNotifier.new,
 );
@@ -449,7 +443,7 @@ class BackgroundCheckNotifier extends Notifier<BackgroundCheck> {
         .catchError((_) {});
     final notifying = ref.read(notifyNewTxProvider);
     await rescheduleBackgroundCheck(
-      ref,
+      ref.read(backgroundSchedulerProvider),
       notifying: notifying,
       seconds: check.seconds,
     );
@@ -476,13 +470,14 @@ final backgroundSchedulerProvider = Provider<BackgroundScheduler>(
 
 /// Brings the task in line with both preferences: it runs at the chosen
 /// cadence only while the notice is on, so nothing is fetched for
-/// nothing. Both values are passed in — a notifier that read them back
-/// through its own provider would be reading itself.
+/// nothing. Both values are passed in, and the scheduler with them — a
+/// notifier that read them back through its own provider would be
+/// reading itself.
 Future<void> rescheduleBackgroundCheck(
-  Ref ref, {
+  BackgroundScheduler scheduler, {
   required bool notifying,
   required int seconds,
 }) {
   final wanted = notifying ? seconds : 0;
-  return ref.read(backgroundSchedulerProvider)(wanted).catchError((_) {});
+  return scheduler(wanted).catchError((_) {});
 }

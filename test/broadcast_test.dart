@@ -310,7 +310,7 @@ void main() {
     expect(await container.read(priceProvider.future), isNotNull);
     await tester.pumpAndSettle();
     expect(container.read(priceProvider).valueOrNull?.rate, 50000);
-    expect(container.read(fiatCurrencyProvider), FiatCurrency.eur);
+    expect(container.read(fiatCurrencyProvider), FiatCurrency('eur'));
 
     // The preview and the transaction detail are one page with two
     // entries: a row that carries euros here and only bitcoin there
@@ -1108,6 +1108,7 @@ void main() {
     final bridge =
         FakeBridge(
             settings: Settings(
+              preferences: kPreferences,
               activeNetwork: Network.mainnet,
               backends: const {},
               appPrefs: const {'onboarding.seen': '1'},

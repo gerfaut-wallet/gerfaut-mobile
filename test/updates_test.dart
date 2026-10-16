@@ -43,6 +43,7 @@ FakeBridge _bridge({
   final bridge = FakeBridge(
     wallets: [makeMeta()],
     settings: Settings(
+      preferences: kPreferences,
       activeNetwork: Network.mainnet,
       backends: const {},
       appPrefs: {'onboarding.seen': '1', ...prefs},

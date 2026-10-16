@@ -156,8 +156,22 @@ abstract class GerfautBridge {
   /// Drops an accepted certificate, keyed by `host:port`: the next
   /// connection to that host asks again.
   Future<void> forgetCertificate(String host);
+
+  /// Stores one preference of this app alone.
   Future<void> setAppPref(String key, String value);
-  Future<PriceQuote> fetchPrice(PriceSource source, FiatCurrency currency);
+
+  /// Changes some of the preferences both apps keep, and answers them
+  /// all as the vault stored them: the currency wins, the source
+  /// follows.
+  Future<Preferences> setPreferences(PreferencesChange change);
+
+  /// The currencies and price sources on offer, and how often the price
+  /// is asked.
+  Future<PriceTable> priceTable();
+
+  /// The current BTC price, in the currency and from the source of the
+  /// preferences.
+  Future<PriceQuote> fetchPrice();
 
   /// What to say about releases to someone running [currentVersion].
   /// Reads only.
@@ -513,14 +527,21 @@ class RustBridge implements GerfautBridge {
   }
 
   @override
-  Future<PriceQuote> fetchPrice(
-    PriceSource source,
-    FiatCurrency currency,
-  ) async {
+  Future<Preferences> setPreferences(PreferencesChange change) async {
     final raw = await _guard(
-      rust.fetchPrice(source: source.id, currency: currency.id),
+      rust.setPreferences(changeJson: jsonEncode(change.toJson())),
     );
-    return PriceQuote.fromJson(_object(raw));
+    return Preferences.fromJson(_object(raw));
+  }
+
+  @override
+  Future<PriceTable> priceTable() async {
+    return PriceTable.fromJson(_object(await _guard(rust.priceTable())));
+  }
+
+  @override
+  Future<PriceQuote> fetchPrice() async {
+    return PriceQuote.fromJson(_object(await _guard(rust.fetchPrice())));
   }
 
   @override

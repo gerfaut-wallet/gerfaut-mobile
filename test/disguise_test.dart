@@ -60,6 +60,7 @@ const AppLock _passwordLock = AppLock(
 FakeBridge _locked({AppLock lock = _pinLock, String secret = '1234'}) {
   return FakeBridge(
       settings: const Settings(
+        preferences: kPreferences,
         activeNetwork: Network.mainnet,
         backends: {},
         appPrefs: {'onboarding.seen': '1'},
@@ -181,7 +182,7 @@ void main() {
       final container = ProviderScope.containerOf(
         tester.element(find.byType(SecuritySection)),
       );
-      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      holdPreferences(container, const PreferencesChange(notifyNewTx: true));
       container.read(backgroundCheckProvider.notifier).hydrate('live');
       await tester.pumpAndSettle();
 
@@ -392,6 +393,7 @@ void main() {
       final bridge = FakeBridge(
         wallets: [makeMeta()],
         settings: const Settings(
+          preferences: kPreferences,
           activeNetwork: Network.mainnet,
           backends: {},
           appPrefs: {'onboarding.seen': '1'},
@@ -452,7 +454,7 @@ void main() {
       );
       addTearDown(container.dispose);
       // Notifications turned on, and the disguise hydrated to true.
-      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      holdPreferences(container, const PreferencesChange(notifyNewTx: true));
       container.read(disguiseProvider);
       await Future<void>.delayed(Duration.zero);
       expect(container.read(disguiseProvider).disguised, isTrue);
@@ -484,7 +486,7 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
-      container.read(notifyNewTxProvider.notifier).hydrate('1');
+      holdPreferences(container, const PreferencesChange(notifyNewTx: true));
       container.read(disguiseProvider);
       await Future<void>.delayed(Duration.zero);
 
@@ -522,10 +524,11 @@ void main() {
       final service = _RecordingNotifications();
       final bridge = FakeBridge(
         wallets: [makeMeta()],
-        settings: const Settings(
+        settings: Settings(
+          preferences: kPreferences.copyWith(notifyNewTx: true),
           activeNetwork: Network.mainnet,
-          backends: {},
-          appPrefs: {'notify.new_tx': '1'},
+          backends: const {},
+          appPrefs: const {},
         ),
       );
       final ran = await runBackgroundCheck(

@@ -58,7 +58,7 @@ void main() {
 
     expect(find.textContaining('0.00123456', findRichText: true), findsNothing);
     expect(findMasked(), findsWidgets);
-    expect(bridge.appPrefs['mobile.masked'], '1');
+    expect(bridge.preferences.masked, isTrue);
   });
 
   testWidgets('a failed sync stays visible on the wallet screen', (
