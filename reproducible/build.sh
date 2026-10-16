@@ -1,89 +1,119 @@
 #!/usr/bin/env bash
-# Builds the unsigned Gerfaut APKs inside the pinned container.
+# Builds the unsigned Gerfaut APKs in the pinned container, the way the
+# Release workflow builds them.
 #
-# Sources arrive read-only under /src, are copied to a fixed path under
-# /build so nothing outside the container can influence the artifacts,
-# and the three per-ABI APKs land in /out next to a SHA256SUMS manifest.
+#   reproducible/build.sh                  into reproducible/out
 #
-# Run it through reproducible/verify.sh rather than by hand.
+# The script exports both source trees from git at a fixed path, so the
+# working tree, the checkout location and the host toolchain have no say
+# in the result. It needs git and docker, nothing else.
 set -euo pipefail
 
-SRC=/src
-WORK=/build
-OUT=/out
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo="$(cd "$here/.." && pwd)"
 
-for dir in "$SRC/gerfaut-mobile" "$SRC/gerfaut-core"; do
-    [ -d "$dir" ] || { echo "missing source tree: $dir" >&2; exit 1; }
+image=gerfaut-mobile-rb:latest
+core="${GERFAUT_CORE_DIR:-$repo/../gerfaut-core}"
+out="$here/out"
+ref=HEAD
+version=""
+build_image=1
+use_cache=1
+any_core=0
+
+usage() {
+    sed -n '2,9p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    cat <<'USAGE'
+
+Options:
+  --core DIR      gerfaut-core checkout (default: ../gerfaut-core)
+  --image NAME    tag to build and run (default: gerfaut-mobile-rb:latest)
+  --out DIR       output directory (default: reproducible/out)
+  --ref REF       commit to build (default: HEAD)
+  --version TAG   version used in the artifact names (default: from pubspec.yaml)
+  --skip-image    reuse the image already built
+  --no-cache      do not reuse the downloaded-dependency volume
+  --any-core      accept a gerfaut-core checkout other than the pinned one
+USAGE
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --core) core="$2"; shift 2 ;;
+        --out) out="$2"; shift 2 ;;
+        --ref) ref="$2"; shift 2 ;;
+        --version) version="$2"; shift 2 ;;
+        --image) image="$2"; shift 2 ;;
+        --skip-image) build_image=0; shift ;;
+        --no-cache) use_cache=0; shift ;;
+        --any-core) any_core=1; shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "unknown option: $1" >&2; usage >&2; exit 2 ;;
+    esac
 done
-mkdir -p "$OUT"
 
-# A fixed build path, identical on every machine: the Rust core resolves
-# its sibling through ../../gerfaut-core, and no absolute path from the
-# host can reach a compiler.
-rm -rf "$WORK"
-mkdir -p "$WORK"
-cp -a "$SRC/gerfaut-mobile" "$WORK/gerfaut-mobile"
-cp -a "$SRC/gerfaut-core" "$WORK/gerfaut-core"
+# Docker Desktop wants a Windows path even when the shell hands it a
+# POSIX one.
+hostpath() {
+    if command -v cygpath > /dev/null 2>&1; then cygpath -m "$1"; else echo "$1"; fi
+}
+docker() { MSYS_NO_PATHCONV=1 command docker "$@"; }
 
-# The tagged commit's date, so nothing picks up the wall clock. Android
-# Gradle Plugin already writes a constant timestamp on every zip entry,
-# so this mostly matters to the toolchains underneath it.
-export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-0}"
-export TZ=UTC
-export LC_ALL=C.UTF-8
-
-# Rust: no incremental artifacts, and no path from this container in the
-# shared objects. Cargokit appends its own -L flag to this variable, so
-# the separator has to be the one Cargo expects.
-US=$'\x1f'
-export CARGO_INCREMENTAL=0
-export CARGO_ENCODED_RUSTFLAGS="--remap-path-prefix=${WORK}=/gerfaut${US}--remap-path-prefix=${CARGO_HOME}=/cargo${US}--remap-path-prefix=${RUSTUP_HOME}=/rustup"
-
-# Gradle: no daemon, so a build never inherits state from the one before
-# it, and no SDK auto-download, so a component missing from the image
-# stops the build instead of arriving unpinned from the network. These
-# are properties of the container, not of the project, which is why they
-# are written here and not in the repository.
-mkdir -p "$GRADLE_USER_HOME"
-cat > "$GRADLE_USER_HOME/gradle.properties" <<'PROPS'
-org.gradle.daemon=false
-org.gradle.parallel=false
-org.gradle.caching=false
-android.builder.sdkDownload=false
-# The project asks for an 8 GB heap, which is more than a container
-# usually gets; these two caps keep both JVMs inside 8 GB of RAM and
-# change nothing in the output.
-org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g
-kotlin.daemon.jvmargs=-Xmx1g
-PROPS
-
-cd "$WORK/gerfaut-mobile"
-
-VERSION="${GERFAUT_VERSION:-}"
-if [ -z "$VERSION" ]; then
-    VERSION="v$(sed -n 's/^version: *\([0-9][^+]*\).*/\1/p' pubspec.yaml)"
+pinned="$(tr -d ' \t\r\n' < "$here/gerfaut-core.rev")"
+[ -d "$core/.git" ] || [ -f "$core/.git" ] || {
+    echo "not a gerfaut-core checkout: $core" >&2
+    echo "clone https://github.com/gerfaut-wallet/gerfaut-core at $pinned" >&2
+    exit 1
+}
+core_rev="$(git -C "$core" rev-parse HEAD)"
+if [ "$core_rev" != "$pinned" ] && [ "$any_core" -eq 0 ]; then
+    echo "gerfaut-core is at $core_rev, this release pins $pinned" >&2
+    echo "check it out, or pass --any-core to build anyway" >&2
+    exit 1
 fi
 
-echo "==> flutter $(flutter --version | head -1)"
-echo "==> rust $(rustup run stable rustc --version)"
-echo "==> version $VERSION, SOURCE_DATE_EPOCH $SOURCE_DATE_EPOCH"
+# The commit date of what is being built, not the wall clock.
+epoch="$(git -C "$repo" log -1 --format=%ct "$ref")"
+[ -z "$(git -C "$repo" status --porcelain)" ] || \
+    echo "warning: uncommitted changes are not part of the build ($ref is)" >&2
 
-flutter pub get
-# The same flags the release workflow uses, minus the keystore: the
-# artifacts have to differ only by the signature.
-flutter build apk --release --split-per-abi --android-project-arg=gerfaut.unsigned=true
+if [ "$build_image" -eq 1 ]; then
+    echo "==> building $image"
+    docker build -t "$image" "$(hostpath "$here")"
+fi
 
-for abi in armeabi-v7a arm64-v8a x86_64; do
-    src="build/app/outputs/flutter-apk/app-${abi}-release.apk"
-    [ -f "$src" ] || { echo "missing build output: $src" >&2; exit 1; }
-    cp "$src" "$OUT/gerfaut-${VERSION}-android-${abi}-unsigned.apk"
-done
+stage="$(mktemp -d)"
+trap 'rm -rf "$stage"' EXIT
+mkdir -p "$stage/gerfaut-mobile" "$stage/gerfaut-core"
+# Blob bytes, never the working-tree representation: a Windows checkout
+# with core.autocrlf on would otherwise hand the container CRLF sources
+# and a different APK.
+archive() { git -C "$1" -c core.autocrlf=false -c core.eol=lf archive --format=tar "$2"; }
+archive "$repo" "$ref" | tar -x -C "$stage/gerfaut-mobile"
+archive "$core" "$core_rev" | tar -x -C "$stage/gerfaut-core"
 
-cd "$OUT"
-rm -f SHA256SUMS
-sha256sum gerfaut-*.apk | sort -k2 > SHA256SUMS
-cat SHA256SUMS
+# Downloaded dependencies only; the artifacts do not depend on it. Keyed
+# on the image so a rebuilt image never reuses an older toolchain's cache.
+cache_mount=""
+if [ "$use_cache" -eq 1 ]; then
+    image_id="$(docker image inspect --format '{{.Id}}' "$image" | sed 's/^sha256://' | cut -c1-12)"
+    cache_mount="gerfaut-rb-cache-$image_id:/cache"
+fi
 
-# Leave the output owned by whoever owns the mount, not by root.
-owner="$(stat -c '%u:%g' "$OUT")"
-[ "$owner" = "0:0" ] || chown -R "$owner" "$OUT"
+run_build() {
+    local dest="$1"
+    rm -rf "$dest"
+    mkdir -p "$dest"
+    docker run --rm \
+        -e SOURCE_DATE_EPOCH="$epoch" \
+        -e GERFAUT_VERSION="$version" \
+        ${cache_mount:+-v "$cache_mount"} \
+        -v "$(hostpath "$stage"):/src:ro" \
+        -v "$(hostpath "$dest"):/out" \
+        "$image"
+}
+
+mkdir -p "$out"
+run_build "$out"
+echo
+echo "==> artifacts in $out"

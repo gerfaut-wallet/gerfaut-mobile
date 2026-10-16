@@ -1,17 +1,15 @@
-# Pinned toolchain for reproducible Gerfaut Android builds.
+# Pinned toolchain the Gerfaut Android releases are built with.
 #
 # Everything that shapes the APK is pinned here: the base image by
 # digest, the JDK by the base image, the Android SDK components by exact
 # revision, Flutter by tag and commit, Rust by version. What is not
-# pinned is the image's own build — apt pulls the live jammy pocket and
-# platform-tools has no revision — which changes the image without
-# changing the APKs it produces; the caveats are spelled out in
-# docs/REPRODUCIBLE-BUILDS.md.
+# pinned is the image's own build: apt pulls the live jammy pocket and
+# platform-tools has no revision.
 #
-# The image builds *unsigned* APKs; signing happens later, in the release
-# workflow, with a key this image never sees.
+# The image builds *unsigned* APKs; signing happens later, on the release
+# machine, with a key this image never sees.
 #
-# Build and run it through reproducible/verify.sh, which also exports the
+# Build and run it through reproducible/build.sh, which also exports the
 # sources at a fixed path so no host path reaches the artifacts.
 
 # eclipse-temurin 17.0.20+8 on Ubuntu 22.04.5.
@@ -82,7 +80,7 @@ RUN git clone --depth 1 --branch "$FLUTTER_VERSION" \
 # Rust. Cargokit invokes `rustup run stable cargo`, which sets
 # RUSTUP_TOOLCHAIN and therefore ignores rust/rust-toolchain.toml; the
 # symlink below makes `stable` resolve to the pinned toolchain so the
-# two agree. See docs/REPRODUCIBLE-BUILDS.md.
+# two agree.
 RUN CARGO_HOME=/opt/cargo curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
       | CARGO_HOME=/opt/cargo sh -s -- -y \
           --no-modify-path --profile minimal --default-toolchain "$RUST_VERSION" \
@@ -103,7 +101,8 @@ ENV CARGO_HOME=/cache/cargo \
     FLUTTER_SUPPRESS_ANALYTICS=true
 
 # The recipe travels with the sources rather than with the image: what
-# runs below is reproducible/build.sh of the very commit being built,
-# mounted read-only under /src. The image is nothing but the toolchain.
+# runs below is reproducible/entrypoint.sh of the very commit being
+# built, mounted read-only under /src. The image is nothing but the
+# toolchain.
 WORKDIR /build
-ENTRYPOINT ["bash", "/src/gerfaut-mobile/reproducible/build.sh"]
+ENTRYPOINT ["bash", "/src/gerfaut-mobile/reproducible/entrypoint.sh"]

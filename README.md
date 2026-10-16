@@ -47,11 +47,13 @@ Each release ships a `SHA256SUMS` manifest signed with the author's [minisign](h
 RWTz3c4gUmglCX5Uvjthigz1ts3TS3ZSdhRNpFgOJRW/Wr4XjGlqTR3O
 ```
 
-Verify a download in two steps: `minisign -Vm SHA256SUMS -P <key>` proves the manifest comes from the author, then `sha256sum --check SHA256SUMS --ignore-missing` proves your file matches it. Android checks the APK signature on its own; the certificate's SHA-256 fingerprint is listed in [docs/REPRODUCIBLE-BUILDS.md](docs/REPRODUCIBLE-BUILDS.md) if you want to compare it with `apksigner verify --print-certs`.
+Verify a download in two steps: `minisign -Vm SHA256SUMS -P <key>` proves the manifest comes from the author, then `sha256sum --check SHA256SUMS --ignore-missing` proves your file matches it. [Verify a download](https://gerfaut-wallet.com/docs/getting-started/verify-your-download) walks through both steps on Linux, macOS and Windows.
 
-## Reproducible builds
+Android checks the APK signature on its own. To check the signer yourself, `apksigner verify --print-certs` must print this SHA-256 certificate digest:
 
-The APKs are built in a container where every tool version is pinned, so the same commit always produces the same bytes. You can rebuild a release yourself and check that only the signature differs from the published file. See [docs/REPRODUCIBLE-BUILDS.md](docs/REPRODUCIBLE-BUILDS.md).
+```
+de91a0e0c151290a0c9b34507e58d0bd0e99cdd7db41adc65b60a7c68e0ff0a7
+```
 
 ## License
 

@@ -19,9 +19,9 @@ fun signingValue(propertyName: String, envName: String): String? =
 
 val releaseStorePath = signingValue("storeFile", "ANDROID_KEYSTORE_PATH")
 
-// A reproducible build leaves the release APK unsigned so a verifier can
-// compare it with the published one and ignore the signature; see
-// docs/REPRODUCIBLE-BUILDS.md. Passed as -Pgerfaut.unsigned=true.
+// The release build leaves the APK unsigned: the release key never comes
+// near CI, and scripts/sign-release.ps1 signs the APKs on the release
+// machine. Passed as -Pgerfaut.unsigned=true.
 val unsignedRelease = (project.findProperty("gerfaut.unsigned") as String?).toBoolean()
 
 android {
