@@ -26,9 +26,9 @@ abstract class CsvSharer {
 ///
 /// The share sheet still needs a file, and share_plus writes one into a
 /// folder of its own under the cache, which it never deletes. That copy
-/// goes at the next share, and each time the app starts: not right
-/// after the sheet closes, when the app it went to may still be reading
-/// it.
+/// goes at a later share or start, once [sharedCopyLifetime] has passed:
+/// not right after the sheet closes, when the app it went to may still
+/// be reading it.
 class SystemCsvSharer implements CsvSharer {
   const SystemCsvSharer();
 
@@ -59,21 +59,31 @@ class SystemCsvSharer implements CsvSharer {
   }
 }
 
-/// Deletes the histories and backups left in the cache to share them.
-/// Only the two places that hold them are read, not the whole cache,
-/// which this runs over at every start: its top, where earlier builds
-/// wrote histories, and the folders right under it, one for each file
-/// share_plus is handed from memory and its own `share_plus` it copies
-/// them to. A folder emptied here goes too. Answers how many files went.
+/// How long a shared copy stays before it may go. The app a file went
+/// to reads it within minutes, an upload or a mail attachment included;
+/// an hour leaves room for a slow network or a draft left open, and a
+/// file younger than that may still be on its way. share_plus empties
+/// its own `share_plus` folder at every share whatever this says: within
+/// the hour, a second share still takes the first one's copy from there.
+const sharedCopyLifetime = Duration(hours: 1);
+
+/// Deletes the histories and backups left in the cache to share them,
+/// once older than [sharedCopyLifetime]. Only the two places that hold
+/// them are read, not the whole cache, which this runs over at every
+/// start: its top, where earlier builds wrote histories, and the folders
+/// right under it, one for each file share_plus is handed from memory
+/// and its own `share_plus` it copies them to. A folder emptied here goes
+/// too. Answers how many files went.
 Future<int> forgetSharedCopies([Directory? cache]) async {
   final dir = cache ?? await getTemporaryDirectory();
+  final before = DateTime.now().subtract(sharedCopyLifetime);
   var gone = 0;
   try {
     await for (final entry in dir.list(followLinks: false)) {
       if (entry is File) {
-        if (await _forgetShared(entry)) gone++;
+        if (await _forgetShared(entry, before)) gone++;
       } else if (entry is Directory) {
-        gone += await _forgetSharedIn(entry);
+        gone += await _forgetSharedIn(entry, before);
       }
     }
   } on FileSystemException {
@@ -84,11 +94,11 @@ Future<int> forgetSharedCopies([Directory? cache]) async {
 
 /// The shared files in one folder, not below it; the folder goes once
 /// they have left it empty.
-Future<int> _forgetSharedIn(Directory folder) async {
+Future<int> _forgetSharedIn(Directory folder, DateTime before) async {
   var gone = 0;
   try {
     await for (final entry in folder.list(followLinks: false)) {
-      if (entry is File && await _forgetShared(entry)) gone++;
+      if (entry is File && await _forgetShared(entry, before)) gone++;
     }
     if (gone > 0 && await folder.list().isEmpty) await folder.delete();
   } on FileSystemException {
@@ -99,11 +109,13 @@ Future<int> _forgetSharedIn(Directory folder) async {
 
 /// A history is named after its wallet, a backup carries the extension
 /// every Gerfaut backup has: nothing else in the cache ends that way.
-Future<bool> _forgetShared(File file) async {
+/// Either goes only once last written before `before`.
+Future<bool> _forgetShared(File file, DateTime before) async {
   final path = file.path;
   if (!path.endsWith('-transactions.csv') && !path.endsWith('.gerfaut')) {
     return false;
   }
+  if (!(await file.lastModified()).isBefore(before)) return false;
   await file.delete();
   return true;
 }
@@ -124,8 +136,9 @@ abstract class BackupSharer {
 /// what names that file: an in-memory [XFile] drops its name on Android.
 ///
 /// Sealed as it is, that file has no business outliving the share: it
-/// goes the way a history's copy goes, at the next share and each time
-/// the app starts, never while the app it went to may still read it.
+/// goes the way a history's copy goes, at a later share or start once
+/// [sharedCopyLifetime] has passed, never while the app it went to may
+/// still read it.
 class SystemBackupSharer implements BackupSharer {
   const SystemBackupSharer();
 

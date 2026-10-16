@@ -591,6 +591,10 @@ void main() {
       )..writeAsBytesSync([1, 2, 3]);
       final other = File('${cache.path}${sep}keep.txt')
         ..writeAsStringSync('not ours');
+      final longAgo = DateTime.now().subtract(sharedCopyLifetime * 2);
+      first.setLastModifiedSync(longAgo);
+      second.setLastModifiedSync(longAgo);
+      other.setLastModifiedSync(longAgo);
 
       expect(await forgetSharedCopies(cache), 2);
       expect(first.existsSync(), isFalse);
@@ -598,6 +602,34 @@ void main() {
       expect(second.existsSync(), isFalse);
       expect(handed.existsSync(), isFalse);
       expect(other.existsSync(), isTrue);
+    });
+
+    test('a backup shared within the hour stays, however often the app '
+        'starts', () async {
+      final cache = await Directory.systemTemp.createTemp('gerfaut-cache');
+      addTearDown(() => cache.delete(recursive: true));
+      final sep = Platform.pathSeparator;
+      // Still being read, perhaps: a mail left in drafts, a slow upload.
+      final handed = Directory('${cache.path}${sep}share_plus')..createSync();
+      final copy = File('${handed.path}${sep}gerfaut-backup-2026-10-16.gerfaut')
+        ..writeAsBytesSync([1, 2, 3]);
+      copy.setLastModifiedSync(
+        DateTime.now().subtract(
+          sharedCopyLifetime - const Duration(minutes: 1),
+        ),
+      );
+
+      expect(await forgetSharedCopies(cache), 0);
+      expect(await forgetSharedCopies(cache), 0);
+      expect(copy.existsSync(), isTrue);
+
+      copy.setLastModifiedSync(
+        DateTime.now().subtract(
+          sharedCopyLifetime + const Duration(minutes: 1),
+        ),
+      );
+      expect(await forgetSharedCopies(cache), 1);
+      expect(copy.existsSync(), isFalse);
     });
   });
 
