@@ -631,6 +631,55 @@ void main() {
       expect(await forgetSharedCopies(cache), 1);
       expect(copy.existsSync(), isFalse);
     });
+
+    test('a copy kept for its age says when it may go', () async {
+      final cache = await Directory.systemTemp.createTemp('gerfaut-cache');
+      addTearDown(() => cache.delete(recursive: true));
+      final sep = Platform.pathSeparator;
+      final handed = Directory('${cache.path}${sep}share_plus')..createSync();
+      File('${handed.path}${sep}gerfaut-backup-2026-10-16.gerfaut')
+        ..writeAsBytesSync([1, 2, 3])
+        ..setLastModifiedSync(
+          DateTime.now().subtract(const Duration(minutes: 20)),
+        );
+      File('${handed.path}${sep}savings-transactions.csv')
+        ..writeAsStringSync('txid,amount')
+        ..setLastModifiedSync(
+          DateTime.now().subtract(const Duration(minutes: 50)),
+        );
+
+      final sweep = await sweepSharedCopies(cache: cache);
+      expect(sweep.gone, 0);
+      // The older of the two, ten minutes from its hour.
+      expect(sweep.next!.inMinutes, inInclusiveRange(9, 10));
+    });
+
+    test('a copy kept for its age goes when it comes of age, the app '
+        'still running', () async {
+      final cache = await Directory.systemTemp.createTemp('gerfaut-cache');
+      addTearDown(() => cache.delete(recursive: true));
+      final sep = Platform.pathSeparator;
+      final handed = Directory('${cache.path}${sep}share_plus')..createSync();
+      final copy = File('${handed.path}${sep}gerfaut-backup-2026-10-16.gerfaut')
+        ..writeAsBytesSync([1, 2, 3]);
+      // The hour, shortened: the timer is real, and so is the file.
+      final sweeper = SharedCopySweeper(
+        cache: cache,
+        lifetime: const Duration(milliseconds: 400),
+      );
+      addTearDown(sweeper.cancel);
+
+      expect(await sweeper.sweep(), 0);
+      expect(copy.existsSync(), isTrue);
+
+      // No share and no start after this one: the sweeper wakes alone.
+      final end = DateTime.now().add(const Duration(seconds: 10));
+      while (copy.existsSync() && DateTime.now().isBefore(end)) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+      expect(copy.existsSync(), isFalse);
+      expect(handed.existsSync(), isFalse);
+    });
   });
 
   group('animated QR', () {
