@@ -338,6 +338,45 @@ void main() {
     });
   });
 
+  group('TxPreview.fromJson', () {
+    Map<String, dynamic> wire(bool ready, [String? readiness]) => {
+      'txid': 'ab' * 32,
+      'source': 'raw_transaction',
+      'network': 'signet',
+      'inputs': const [],
+      'outputs': const [],
+      'vsize': 141,
+      'weight': 561,
+      'size': 222,
+      'version': 2,
+      'locktime': 0,
+      'rbf': true,
+      'amounts_declared': false,
+      'fee_unknown_reason': null,
+      'ready': ready,
+      'readiness': ?readiness,
+    };
+
+    test('takes where the transaction stands from the core', () {
+      expect(
+        TxPreview.fromJson(wire(false, 'refused')).readiness,
+        TxReadiness.refused,
+      );
+      expect(
+        TxPreview.fromJson(wire(false, 'unsigned')).readiness,
+        TxReadiness.unsigned,
+      );
+      expect(
+        TxPreview.fromJson(wire(true, 'ready')).readiness,
+        TxReadiness.ready,
+      );
+    });
+
+    test('a state this build does not know is refused', () {
+      expect(() => TxPreview.fromJson(wire(true, 'maybe')), throwsStateError);
+    });
+  });
+
   group('TxWarning.fromJson', () {
     test('reads the tone the core sent rather than deriving one', () {
       final alert = TxWarning.fromJson(const {
@@ -354,6 +393,24 @@ void main() {
         'severity': 'info',
       });
       expect(info.severity, TxSeverity.info);
+    });
+
+    test('reads whether the core blocks the send, and blocks nothing '
+        'when the wire says nothing', () {
+      final refused = TxWarning.fromJson(const {
+        'kind': 'input_spent',
+        'message': 'Input 0 is already spent by another transaction.',
+        'severity': 'alert',
+        'blocking': true,
+      });
+      expect(refused.blocking, isTrue);
+
+      final silent = TxWarning.fromJson(const {
+        'kind': 'input_spent',
+        'message': 'Input 0 is already spent.',
+        'severity': 'alert',
+      });
+      expect(silent.blocking, isFalse);
     });
 
     test('an input the chain disagrees about is named and loud', () {

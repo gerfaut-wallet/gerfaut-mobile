@@ -55,6 +55,17 @@ const String _uncommittedHint =
     "told otherwise: check the signer's settings, then have it signed "
     'again.';
 
+/// What the screen says when the core cannot read the input as a
+/// transaction: what to paste instead. The core's own words follow,
+/// smaller, for the case it names. The desktop's words.
+const String _unreadableTransaction =
+    'This is not a transaction Gerfaut can read. Paste a signed '
+    'transaction in hex, or a PSBT.';
+
+/// A refusal to read the input, said under the field: what to do, and
+/// the core's words when it had any.
+typedef _InputError = ({String headline, String? detail});
+
 /// Broadcast a transaction somebody else signed: paste, import or scan
 /// it, read what it does, then hand it to the network of the workspace.
 /// Gerfaut never signs and never edits the transaction; the preview
@@ -73,7 +84,7 @@ class BroadcastScreen extends ConsumerStatefulWidget {
 class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
   final _inputController = TextEditingController();
   bool _decoding = false;
-  String? _inputError;
+  _InputError? _inputError;
   TxPreview? _preview;
   bool _sending = false;
 
@@ -106,9 +117,16 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
         _sent = null;
       });
     } on BridgeException catch (error) {
-      if (mounted) setState(() => _inputError = error.message);
+      if (!mounted) return;
+      setState(
+        () => _inputError = error.kind == 'invalid_input'
+            ? (headline: _unreadableTransaction, detail: error.message)
+            : (headline: error.message, detail: null),
+      );
     } catch (error) {
-      if (mounted) setState(() => _inputError = '$error');
+      if (mounted) {
+        setState(() => _inputError = (headline: '$error', detail: null));
+      }
     } finally {
       if (mounted) setState(() => _decoding = false);
     }
@@ -134,13 +152,18 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
         cameUp: (error) => error is FileReadException,
       );
     } on FileReadException catch (error) {
-      if (mounted) setState(() => _inputError = error.message);
+      if (mounted) {
+        setState(() => _inputError = (headline: error.message, detail: null));
+      }
       return;
     } catch (_) {
       // No picker came up.
       if (mounted) {
         setState(
-          () => _inputError = 'No app on this phone can open a file to read.',
+          () => _inputError = (
+            headline: 'No app on this phone can open a file to read.',
+            detail: null,
+          ),
         );
       }
       return;
@@ -152,7 +175,10 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     if (await file.length() > _maxTransactionBytes) {
       if (mounted) {
         setState(
-          () => _inputError = 'This file is too large to be a transaction.',
+          () => _inputError = (
+            headline: 'This file is too large to be a transaction.',
+            detail: null,
+          ),
         );
       }
       return;
@@ -285,7 +311,9 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                   enableIMEPersonalizedLearning: false,
                   keyboardType: TextInputType.multiline,
                   style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
-                  onChanged: (_) => setState(() {}),
+                  // Typing again answers a refusal: it goes at the first
+                  // keystroke, and the hint comes back in its place.
+                  onChanged: (_) => setState(() => _inputError = null),
                   decoration: InputDecoration(
                     hintText: 'cHNidP8B… (base64) or 02000000… (hex)',
                     hintStyle: tokens.data.copyWith(
@@ -306,23 +334,29 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                   ),
                 ),
               ),
-              if (_inputError != null) ...[
-                const SizedBox(height: GerfautSpacing.sm),
-                // Said aloud as it appears.
-                Semantics(
-                  liveRegion: true,
-                  child: Text(
-                    _inputError!,
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  ),
-                ),
-              ],
               const SizedBox(height: GerfautSpacing.sm),
-              Text(
-                'Gerfaut never signs. It reads a finished transaction, shows '
-                'what it does, and hands it to the network on '
-                '${network.label}.',
-                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+              // One slot under the field, for the hint or for what went
+              // wrong in its place: the hint is kept, hidden, under the
+              // error, so the slot never shrinks below the hint's height
+              // and what follows moves only by what the error has over
+              // it. Preview is pinned to the bottom and never moves.
+              Stack(
+                children: [
+                  Visibility(
+                    visible: _inputError == null,
+                    maintainSize: true,
+                    maintainAnimation: true,
+                    maintainState: true,
+                    child: Text(
+                      'Gerfaut never signs. It reads a finished transaction, '
+                      'shows what it does, and hands it to the network on '
+                      '${network.label}.',
+                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                    ),
+                  ),
+                  if (_inputError case final error?)
+                    _InputErrorLine(error: error, tokens: tokens),
+                ],
               ),
               const SizedBox(height: GerfautSpacing.md),
               Row(
@@ -375,7 +409,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     // A coin nobody confirmed leaves every figure resting on it the
     // PSBT's word: the inputs total and the fee wear the mark, so the
     // number is never read as the chain's.
-    final claimed = preview.inputsUnconfirmed;
+    final claimed = preview.amountsDeclared;
     final inputsTotal = sideTotal(preview.inputs.map((i) => i.valueSats));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -406,7 +440,11 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                 const SizedBox(height: GerfautSpacing.sm),
                 for (final (index, warning) in preview.warnings.indexed) ...[
                   if (index > 0) const SizedBox(height: GerfautSpacing.sm),
-                  _WarningRow(warning: warning, tokens: tokens),
+                  _WarningRow(
+                    warning: warning,
+                    amountsDeclared: preview.amountsDeclared,
+                    tokens: tokens,
+                  ),
                 ],
               ],
               const SizedBox(height: GerfautSpacing.lg),
@@ -460,7 +498,9 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                         label: _sending ? 'Sending…' : 'Broadcast',
                         icon: LucideIcons.radio,
                         expand: true,
-                        onPressed: preview.ready && !_sending
+                        // The state the pill reads, not a second one.
+                        onPressed:
+                            preview.readiness == TxReadiness.ready && !_sending
                             ? () => _confirmAndSend(preview)
                             : null,
                       ),
@@ -491,6 +531,59 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// What went wrong with the input, under the field: in the text colour
+/// with its glyph, never the grey of a hint, and never red, which is
+/// kept for what happens on chain. Said aloud as it appears.
+class _InputErrorLine extends StatelessWidget {
+  const _InputErrorLine({required this.error, required this.tokens});
+
+  final _InputError error;
+  final GerfautTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    final detail = error.detail;
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(LucideIcons.circleAlert, size: 16, color: tokens.text),
+          ),
+          const SizedBox(width: GerfautSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  error.headline,
+                  style: tokens.bodySmall.copyWith(
+                    color: tokens.text,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                if (detail != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    detail,
+                    style: tokens.bodySmall.copyWith(
+                      fontSize: 12,
+                      color: tokens.textMuted,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -571,12 +664,23 @@ class _Hero extends StatelessWidget {
               label: preview.source.label,
               tokens: tokens,
             ),
+            // Where it stands is the core's word, read as it comes. Amber
+            // whenever it cannot go: a status, since Broadcast stays off.
+            // The red is the core's caution below, which says why.
             _Pill(
-              tone: preview.ready ? _Tone.confirmed : _Tone.pending,
-              icon: preview.ready
-                  ? LucideIcons.circleCheck
-                  : LucideIcons.penOff,
-              label: preview.ready ? 'Ready to broadcast' : 'Not fully signed',
+              tone: preview.readiness == TxReadiness.ready
+                  ? _Tone.confirmed
+                  : _Tone.pending,
+              icon: switch (preview.readiness) {
+                TxReadiness.ready => LucideIcons.circleCheck,
+                TxReadiness.refused => LucideIcons.ban,
+                TxReadiness.unsigned => LucideIcons.penOff,
+              },
+              label: switch (preview.readiness) {
+                TxReadiness.ready => 'Ready to broadcast',
+                TxReadiness.refused => 'Will be refused',
+                TxReadiness.unsigned => 'Not fully signed',
+              },
               tokens: tokens,
             ),
             if (preview.network != Network.mainnet)
@@ -680,9 +784,17 @@ IconData _warningIcon(TxWarningKind kind) => switch (kind) {
 
 /// One caution, in the tone the core gave it.
 class _WarningRow extends StatelessWidget {
-  const _WarningRow({required this.warning, required this.tokens});
+  const _WarningRow({
+    required this.warning,
+    required this.amountsDeclared,
+    required this.tokens,
+  });
 
   final TxWarning warning;
+
+  /// Whether a value shown is one nothing proves: only then is checking
+  /// the amounts advice worth giving.
+  final bool amountsDeclared;
   final GerfautTokens tokens;
 
   @override
@@ -701,7 +813,8 @@ class _WarningRow extends StatelessWidget {
       // The core says which coin went unconfirmed; what the page shows
       // in its place, and what to do about it, is the page's to say.
       hint: switch (warning.kind) {
-        TxWarningKind.inputUnknown => _unconfirmedHint,
+        // A coin the previous transaction proves needs no comparing.
+        TxWarningKind.inputUnknown => amountsDeclared ? _unconfirmedHint : null,
         TxWarningKind.uncommittedOutputs => _uncommittedHint,
         _ => null,
       },
@@ -1094,7 +1207,7 @@ class _TechnicalCard extends StatelessWidget {
           tokens: tokens,
           child: preview.feeSats != null
               ? _Claimed(
-                  claimed: preview.inputsUnconfirmed,
+                  claimed: preview.amountsDeclared,
                   tokens: tokens,
                   child: _FeeValue(sats: preview.feeSats!),
                 )
@@ -1105,7 +1218,7 @@ class _TechnicalCard extends StatelessWidget {
           tokens: tokens,
           child: preview.feeRateSatVb != null
               ? _Claimed(
-                  claimed: preview.inputsUnconfirmed,
+                  claimed: preview.amountsDeclared,
                   tokens: tokens,
                   child: FactValue(
                     '${preview.feeRateSatVb!.toStringAsFixed(1)} sat/vB',
@@ -1177,19 +1290,16 @@ class _ConfirmDialog extends ConsumerWidget {
     final rate = preview.feeRateSatVb;
     // A fee resting on a coin nobody confirmed is said as such here
     // too: this is the last line read before the send.
-    final ending = preview.inputsUnconfirmed
+    final ending = preview.amountsDeclared
         ? ', $_claimedMark: no backend confirmed what its inputs are worth.'
         : '.';
-    // Every input known and still no fee: the outputs ask for more than
-    // the inputs bring, which no node will relay.
-    final inputsTotal = sideTotal(preview.inputs.map((i) => i.valueSats));
-    final outputsTotal = preview.outputs.fold(0, (sum, o) => sum + o.valueSats);
-    final overspends =
-        fee == null && inputsTotal != null && outputsTotal > inputsTotal;
-    final feeLine = overspends
-        ? 'Its outputs pay more than its inputs bring: the network will '
-              'refuse it.'
-        : fee == null
+    // Outputs over proven amounts, or past all the bitcoin there will
+    // ever be, never get here: the core blocks the send. Over amounts
+    // nothing proves, the fee is as unknown as they are, and the core's
+    // own line on why is said again under it, the one that says the
+    // network will refuse them if those amounts are right.
+    final whyNoFee = preview.feeUnknownReason;
+    final feeLine = fee == null
         ? 'Its fee could not be established.'
         : 'It pays a fee of ${masked ? maskedValue : formatAmount(fee, unit)}'
               '${rate != null ? ' (${rate.toStringAsFixed(1)} sat/vB)' : ''}'
@@ -1209,6 +1319,13 @@ class _ConfirmDialog extends ConsumerWidget {
             semanticsLabel: spokenIfMasked(feeLine),
             style: tokens.bodySmall,
           ),
+          if (whyNoFee != null) ...[
+            const SizedBox(height: GerfautSpacing.sm),
+            Text(
+              whyNoFee,
+              style: tokens.bodySmall.copyWith(color: tokens.pending),
+            ),
+          ],
           const SizedBox(height: GerfautSpacing.sm),
           Text(
             'Once the network has it, this cannot be undone.',

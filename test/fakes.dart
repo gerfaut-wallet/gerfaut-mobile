@@ -1592,11 +1592,14 @@ const String fakeTxid =
 /// payment, one change output, a modest fee.
 TxPreview makePreview({
   bool ready = true,
+  TxReadiness? readiness,
   TxSource source = TxSource.psbt,
   Network network = Network.mainnet,
   List<TxWarning> warnings = const [],
   int? feeSats = 1000,
   double? feeRate = 7.1,
+  bool amountsDeclared = false,
+  String? feeUnknownReason,
   List<TxInputPreview>? inputs,
   List<TxOutputPreview>? outputs,
 }) {
@@ -1634,13 +1637,15 @@ TxPreview makePreview({
         ],
     feeSats: feeSats,
     feeRateSatVb: feeRate,
+    amountsDeclared: amountsDeclared,
+    feeUnknownReason: feeUnknownReason,
     vsize: 141,
     weight: 561,
     size: 222,
     version: 2,
     locktime: 0,
     rbf: true,
-    ready: ready,
+    readiness: readiness ?? (ready ? TxReadiness.ready : TxReadiness.unsigned),
     warnings: warnings,
     hex: ready ? '0200000001deadbeef' : null,
   );

@@ -2073,13 +2073,15 @@ enum TxSeverity {
   }
 }
 
-/// A caution to read before broadcasting. Never blocks: the preview
-/// only makes the transaction legible.
+/// A caution to read before broadcasting. The preview only makes the
+/// transaction legible: a caution blocks the send only when the core is
+/// sure the network refuses it ([blocking]).
 class TxWarning {
   const TxWarning({
     required this.kind,
     required this.message,
     required this.severity,
+    this.blocking = false,
   });
 
   factory TxWarning.fromJson(Map<String, dynamic> json) {
@@ -2087,6 +2089,7 @@ class TxWarning {
       kind: TxWarningKind.fromId(json['kind'] as String),
       message: json['message'] as String,
       severity: TxSeverity.fromId(json['severity'] as String?),
+      blocking: json['blocking'] as bool? ?? false,
     );
   }
 
@@ -2095,6 +2098,29 @@ class TxWarning {
 
   /// The tone to read it in, as the core decided it.
   final TxSeverity severity;
+
+  /// The network is sure to refuse the transaction while this holds: a
+  /// signature missing, a coin spent in a block, outputs past all the
+  /// bitcoin there will ever be, or outputs over inputs whose every
+  /// amount is proven. The core sets it, and a preview with one is not
+  /// ready.
+  final bool blocking;
+}
+
+/// Where a transaction stands before it is sent, decided by the core: the
+/// words of the readiness pill. [refused] comes before [unsigned] when
+/// both hold, since a signature does not bring back a spent coin.
+enum TxReadiness {
+  ready('ready'),
+  refused('refused'),
+  unsigned('unsigned');
+
+  const TxReadiness(this.id);
+
+  final String id;
+
+  static TxReadiness fromId(String id) =>
+      TxReadiness.values.firstWhere((r) => r.id == id);
 }
 
 /// Everything shown before broadcasting a transaction.
@@ -2111,9 +2137,11 @@ class TxPreview {
     required this.version,
     required this.locktime,
     required this.rbf,
-    required this.ready,
+    required this.readiness,
     this.feeSats,
     this.feeRateSatVb,
+    this.feeUnknownReason,
+    this.amountsDeclared = false,
     this.warnings = const [],
     this.hex,
   });
@@ -2137,7 +2165,9 @@ class TxPreview {
       version: json['version'] as int,
       locktime: json['locktime'] as int,
       rbf: json['rbf'] as bool,
-      ready: json['ready'] as bool,
+      readiness: TxReadiness.fromId(json['readiness'] as String),
+      feeUnknownReason: json['fee_unknown_reason'] as String?,
+      amountsDeclared: json['amounts_declared'] as bool,
       warnings: ((json['warnings'] as List?) ?? const [])
           .map((w) => TxWarning.fromJson(w as Map<String, dynamic>))
           .toList(),
@@ -2151,9 +2181,21 @@ class TxPreview {
   final List<TxInputPreview> inputs;
   final List<TxOutputPreview> outputs;
 
-  /// Fee in sats, when every input's value is known.
+  /// Fee in sats, when every input's value is known, no amount is past
+  /// all the bitcoin there will ever be, and the outputs pay no more than
+  /// the inputs bring.
   final int? feeSats;
   final double? feeRateSatVb;
+
+  /// Why there is no fee, in the words of the core's caution: what the
+  /// confirmation repeats. Null when there is a fee.
+  final String? feeUnknownReason;
+
+  /// A value shown for an input is only what the file declares: no
+  /// watched wallet, no backend and no previous transaction proves it.
+  /// The inputs total and the fee rest on that word then, and wear the
+  /// mark that says so.
+  final bool amountsDeclared;
   final int vsize;
   final int weight;
   final int size;
@@ -2164,20 +2206,14 @@ class TxPreview {
   final int locktime;
   final bool rbf;
 
-  /// Every input is signed and the transaction can be sent.
-  final bool ready;
+  /// Where it stands: the one thing the readiness pill and the Broadcast
+  /// button both read. The core also sends `ready`, derived from it,
+  /// which the app leaves alone.
+  final TxReadiness readiness;
   final List<TxWarning> warnings;
 
   /// The transaction as the network takes it, present only when ready.
   final String? hex;
-
-  /// Whether a coin this transaction spends went unconfirmed. The core
-  /// says so with an `input_unknown` caution, which covers a backend
-  /// that does not know the coin as well as no backend answering at
-  /// all; either way the value shown for it, when the file carries one,
-  /// and the fee resting on it are the file's own word, not the chain's.
-  bool get inputsUnconfirmed =>
-      warnings.any((w) => w.kind == TxWarningKind.inputUnknown);
 }
 
 /// Outcome of a broadcast.

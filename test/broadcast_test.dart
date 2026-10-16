@@ -142,9 +142,57 @@ void main() {
 
     await preview(tester, 'hello world');
 
-    expect(find.textContaining('not a transaction'), findsOneWidget);
+    // What to paste, then the core's own words, smaller.
+    const headline =
+        'This is not a transaction Gerfaut can read. Paste a signed '
+        'transaction in hex, or a PSBT.';
+    expect(find.text(headline), findsOneWidget);
+    expect(find.textContaining('expected a PSBT'), findsOneWidget);
+    // An error, not a hint: the text colour with its glyph, never the
+    // grey of the hint and never red, which belongs to the chain.
+    final light = GerfautTokens.light;
+    expect(tester.widget<Text>(find.text(headline)).style?.color, light.text);
+    expect(find.byIcon(LucideIcons.circleAlert), findsOneWidget);
+    // Said aloud as it appears.
+    final announced = find.ancestor(
+      of: find.text(headline),
+      matching: find.byWidgetPredicate(
+        (w) => w is Semantics && w.properties.liveRegion == true,
+      ),
+    );
+    expect(announced, findsOneWidget);
     expect(find.text('Preview'), findsOneWidget);
     expect(find.byType(SnackBar), findsNothing);
+  });
+
+  testWidgets('the error goes as the text changes, in the slot of the hint', (
+    tester,
+  ) async {
+    await tester.pumpWidget(broadcastApp(FakeBridge()));
+    await tester.pumpAndSettle();
+    final previewAt = tester.getTopLeft(find.text('Preview'));
+    final importBefore = tester.getTopLeft(find.text('Import a file'));
+    await preview(tester, 'hello world');
+
+    const headline =
+        'This is not a transaction Gerfaut can read. Paste a signed '
+        'transaction in hex, or a PSBT.';
+    final hint = find.ancestor(
+      of: find.textContaining('Gerfaut never signs.'),
+      matching: find.byType(Visibility),
+    );
+    expect(find.text(headline), findsOneWidget);
+    // Kept under the error, hidden: it holds the slot's height.
+    expect(tester.widget<Visibility>(hint).visible, isFalse);
+    expect(tester.getTopLeft(find.text('Preview')), previewAt);
+
+    await tester.enterText(find.byType(TextField), 'hello world!');
+    await tester.pump();
+    expect(find.text(headline), findsNothing);
+    expect(tester.widget<Visibility>(hint).visible, isTrue);
+    // Back where everything was before the error.
+    expect(tester.getTopLeft(find.text('Import a file')), importBefore);
+    expect(tester.getTopLeft(find.text('Preview')), previewAt);
   });
 
   testWidgets('a ready PSBT previews in full and can be sent', (tester) async {
@@ -311,7 +359,7 @@ void main() {
     expect(find.textContaining('Do not send it as it is.'), findsOneWidget);
   });
 
-  testWidgets('outputs worth more than the inputs are said before the send', (
+  testWidgets('outputs worth more than the inputs will be refused', (
     tester,
   ) async {
     useTallSurface(tester);
@@ -320,6 +368,8 @@ void main() {
         'this transaction.';
     final bridge = FakeBridge()
       ..onPreview = (_, _) => makePreview(
+        ready: false,
+        readiness: TxReadiness.refused,
         feeSats: null,
         feeRate: null,
         outputs: const [
@@ -334,6 +384,7 @@ void main() {
             kind: TxWarningKind.feeUnknown,
             message: message,
             severity: TxSeverity.info,
+            blocking: true,
           ),
         ],
       );
@@ -341,16 +392,99 @@ void main() {
     await tester.pumpAndSettle();
     await preview(tester);
     expect(find.text(message), findsOneWidget);
+    // No node takes it: the core blocks the send, and the pill says the
+    // same as the caution.
+    expect(find.text('Will be refused'), findsOneWidget);
+    expect(find.text('Ready to broadcast'), findsNothing);
+    expect(primaryButton(tester, 'Broadcast').onPressed, isNull);
+  });
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Broadcast'));
+  // A transaction already mined, pasted again, used to read "Ready to
+  // broadcast" in green beside the red line saying its coin was spent,
+  // with Broadcast on.
+  testWidgets('a coin spent in a block is never called ready', (tester) async {
+    useTallSurface(tester);
+    const message =
+        'Input 0 is already spent by another transaction, which is in a '
+        'block. The network will refuse this one.';
+    final bridge = FakeBridge()
+      ..onPreview = (_, _) => makePreview(
+        ready: false,
+        readiness: TxReadiness.refused,
+        source: TxSource.rawTransaction,
+        warnings: const [
+          TxWarning(
+            kind: TxWarningKind.inputSpent,
+            message: message,
+            severity: TxSeverity.alert,
+            blocking: true,
+          ),
+        ],
+      );
+    await tester.pumpWidget(broadcastApp(bridge));
     await tester.pumpAndSettle();
-    expect(
-      find.text(
-        'Its outputs pay more than its inputs bring: the network will '
-        'refuse it.',
-      ),
-      findsOneWidget,
-    );
+    await preview(tester);
+
+    final light = GerfautTokens.light;
+    expect(find.text('Will be refused'), findsOneWidget);
+    expect(find.text('Ready to broadcast'), findsNothing);
+    expect(find.text('Not fully signed'), findsNothing);
+    // A status in amber; the red is the caution, which says why.
+    expect(blockOf(tester, 'Will be refused').color, light.pendingSurface);
+    expect(blockOf(tester, message).color, light.alertSurface);
+    expect(primaryButton(tester, 'Broadcast').onPressed, isNull);
+  });
+
+  // The pill says what the core says, as it says it: the screen works
+  // nothing out of the cautions, which may say more or less.
+  testWidgets('the readiness pill is the core\'s word', (tester) async {
+    final bridge = FakeBridge()
+      ..onPreview = (_, _) =>
+          makePreview(ready: false, readiness: TxReadiness.refused);
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+    await preview(tester);
+    expect(find.text('Will be refused'), findsOneWidget);
+    expect(find.text('Not fully signed'), findsNothing);
+    expect(primaryButton(tester, 'Broadcast').onPressed, isNull);
+  });
+
+  // The pill and the Broadcast button read one thing: a wire whose two
+  // fields disagree cannot leave a refused transaction sendable.
+  testWidgets('the pill and the button read one state', (tester) async {
+    final bridge = FakeBridge()
+      ..onPreview = (_, _) =>
+          makePreview(ready: true, readiness: TxReadiness.refused);
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+    await preview(tester);
+    expect(find.text('Will be refused'), findsOneWidget);
+    expect(primaryButton(tester, 'Broadcast').onPressed, isNull);
+  });
+
+  // A spend still in the mempool is the node's to judge: this one may
+  // replace it. The caution stays red; the send stays possible.
+  testWidgets('a red caution that blocks nothing leaves the send on', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge()
+      ..onPreview = (_, _) => makePreview(
+        warnings: const [
+          TxWarning(
+            kind: TxWarningKind.inputSpent,
+            message:
+                'Input 0 is already spent by another transaction waiting in '
+                'the mempool.',
+            severity: TxSeverity.alert,
+          ),
+        ],
+      );
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+    await preview(tester);
+    expect(find.text('Ready to broadcast'), findsOneWidget);
+    expect(primaryButton(tester, 'Broadcast').onPressed, isNotNull);
   });
 
   testWidgets("a coin nobody confirmed marks the figures as the file's", (
@@ -366,6 +500,7 @@ void main() {
         'something confirmed.';
     final bridge = FakeBridge()
       ..onPreview = (_, _) => makePreview(
+        amountsDeclared: true,
         warnings: const [
           TxWarning(
             kind: TxWarningKind.inputUnknown,
@@ -407,6 +542,81 @@ void main() {
     );
   });
 
+  // Outputs over amounts only the file declares stay sendable: the node
+  // goes by the real coins. The last look before the send says what
+  // happens if the declared amounts are right.
+  testWidgets('the confirmation says when declared amounts would be refused', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    const line =
+        'The outputs pay more than the inputs bring, by amounts nothing '
+        'proves: if those amounts are right, the network will refuse this '
+        'transaction.';
+    // The reason is the core's field, read as it comes: the cautions are
+    // not searched for it.
+    final bridge = FakeBridge()
+      ..onPreview = (_, _) => makePreview(
+        feeSats: null,
+        feeRate: null,
+        amountsDeclared: true,
+        feeUnknownReason: line,
+      );
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+    await preview(tester);
+    expect(find.text('Ready to broadcast'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Broadcast'));
+    await tester.pumpAndSettle();
+    final dialog = find.byType(AlertDialog);
+    expect(
+      find.descendant(
+        of: dialog,
+        matching: find.text('Its fee could not be established.'),
+      ),
+      findsOneWidget,
+    );
+    final said = find.descendant(of: dialog, matching: find.text(line));
+    expect(said, findsOneWidget);
+    expect(tester.widget<Text>(said).style?.color, GerfautTokens.light.pending);
+  });
+
+  // No backend answered, but the file carries the previous transaction,
+  // which proves the value: the coin is unchecked, its amount is not a
+  // claim, and no figure says it is.
+  testWidgets('a value the previous transaction proves carries no mark', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge()
+      ..onPreview = (_, _) => makePreview(
+        warnings: const [
+          TxWarning(
+            kind: TxWarningKind.inputUnknown,
+            message:
+                'Input 0 could not be checked: no backend answered about this '
+                'coin. Its value is proven by the previous transaction the PSBT '
+                'carries, the one this input spends; whether the coin is still '
+                'there to spend is not.',
+            severity: TxSeverity.info,
+          ),
+        ],
+      );
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+    await preview(tester);
+    expect(find.text('as the PSBT claims'), findsNothing);
+    // Nor the advice to compare the amounts: they are proven.
+    expect(
+      find.textContaining('Compare them with what your signer shows'),
+      findsNothing,
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Broadcast'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('as the PSBT claims'), findsNothing);
+  });
+
   testWidgets('figures the chain confirmed carry no such mark', (tester) async {
     useTallSurface(tester);
     final bridge = FakeBridge()..onPreview = (_, _) => makePreview();
@@ -434,6 +644,7 @@ void main() {
             kind: TxWarningKind.unsigned,
             message: '1 of 1 inputs carry no signature.',
             severity: TxSeverity.alert,
+            blocking: true,
           ),
           TxWarning(
             kind: TxWarningKind.spendsWatched,
