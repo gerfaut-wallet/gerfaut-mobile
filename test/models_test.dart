@@ -351,6 +351,7 @@ void main() {
       'version': 2,
       'locktime': 0,
       'rbf': true,
+      'amounts_declared': false,
       'ready': ready,
       'readiness': ?readiness,
     };

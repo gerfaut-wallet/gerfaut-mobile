@@ -408,7 +408,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     // A coin nobody confirmed leaves every figure resting on it the
     // PSBT's word: the inputs total and the fee wear the mark, so the
     // number is never read as the chain's.
-    final claimed = preview.inputsUnconfirmed;
+    final claimed = preview.amountsDeclared;
     final inputsTotal = sideTotal(preview.inputs.map((i) => i.valueSats));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1193,7 +1193,7 @@ class _TechnicalCard extends StatelessWidget {
           tokens: tokens,
           child: preview.feeSats != null
               ? _Claimed(
-                  claimed: preview.inputsUnconfirmed,
+                  claimed: preview.amountsDeclared,
                   tokens: tokens,
                   child: _FeeValue(sats: preview.feeSats!),
                 )
@@ -1204,7 +1204,7 @@ class _TechnicalCard extends StatelessWidget {
           tokens: tokens,
           child: preview.feeRateSatVb != null
               ? _Claimed(
-                  claimed: preview.inputsUnconfirmed,
+                  claimed: preview.amountsDeclared,
                   tokens: tokens,
                   child: FactValue(
                     '${preview.feeRateSatVb!.toStringAsFixed(1)} sat/vB',
@@ -1276,7 +1276,7 @@ class _ConfirmDialog extends ConsumerWidget {
     final rate = preview.feeRateSatVb;
     // A fee resting on a coin nobody confirmed is said as such here
     // too: this is the last line read before the send.
-    final ending = preview.inputsUnconfirmed
+    final ending = preview.amountsDeclared
         ? ', $_claimedMark: no backend confirmed what its inputs are worth.'
         : '.';
     // Outputs over the inputs never get here: the core blocks the send,

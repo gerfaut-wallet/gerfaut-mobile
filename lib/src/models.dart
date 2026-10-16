@@ -2140,6 +2140,7 @@ class TxPreview {
     required this.readiness,
     this.feeSats,
     this.feeRateSatVb,
+    this.amountsDeclared = false,
     this.warnings = const [],
     this.hex,
   });
@@ -2164,6 +2165,7 @@ class TxPreview {
       locktime: json['locktime'] as int,
       rbf: json['rbf'] as bool,
       readiness: TxReadiness.fromId(json['readiness'] as String),
+      amountsDeclared: json['amounts_declared'] as bool,
       warnings: ((json['warnings'] as List?) ?? const [])
           .map((w) => TxWarning.fromJson(w as Map<String, dynamic>))
           .toList(),
@@ -2177,9 +2179,17 @@ class TxPreview {
   final List<TxInputPreview> inputs;
   final List<TxOutputPreview> outputs;
 
-  /// Fee in sats, when every input's value is known.
+  /// Fee in sats, when every input's value is known, no amount is past
+  /// all the bitcoin there will ever be, and the outputs pay no more than
+  /// the inputs bring.
   final int? feeSats;
   final double? feeRateSatVb;
+
+  /// A value shown for an input is only what the file declares: no
+  /// watched wallet, no backend and no previous transaction proves it.
+  /// The inputs total and the fee rest on that word then, and wear the
+  /// mark that says so.
+  final bool amountsDeclared;
   final int vsize;
   final int weight;
   final int size;
@@ -2198,14 +2208,6 @@ class TxPreview {
 
   /// The transaction as the network takes it, present only when ready.
   final String? hex;
-
-  /// Whether a coin this transaction spends went unconfirmed. The core
-  /// says so with an `input_unknown` caution, which covers a backend
-  /// that does not know the coin as well as no backend answering at
-  /// all; either way the value shown for it, when the file carries one,
-  /// and the fee resting on it are the file's own word, not the chain's.
-  bool get inputsUnconfirmed =>
-      warnings.any((w) => w.kind == TxWarningKind.inputUnknown);
 }
 
 /// Outcome of a broadcast.

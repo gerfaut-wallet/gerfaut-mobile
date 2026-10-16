@@ -1585,6 +1585,7 @@ TxPreview makePreview({
   List<TxWarning> warnings = const [],
   int? feeSats = 1000,
   double? feeRate = 7.1,
+  bool amountsDeclared = false,
   List<TxInputPreview>? inputs,
   List<TxOutputPreview>? outputs,
 }) {
@@ -1622,6 +1623,7 @@ TxPreview makePreview({
         ],
     feeSats: feeSats,
     feeRateSatVb: feeRate,
+    amountsDeclared: amountsDeclared,
     vsize: 141,
     weight: 561,
     size: 222,

@@ -499,6 +499,7 @@ void main() {
         'something confirmed.';
     final bridge = FakeBridge()
       ..onPreview = (_, _) => makePreview(
+        amountsDeclared: true,
         warnings: const [
           TxWarning(
             kind: TxWarningKind.inputUnknown,
@@ -538,6 +539,36 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  // No backend answered, but the file carries the previous transaction,
+  // which proves the value: the coin is unchecked, its amount is not a
+  // claim, and no figure says it is.
+  testWidgets('a value the previous transaction proves carries no mark', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge()
+      ..onPreview = (_, _) => makePreview(
+        warnings: const [
+          TxWarning(
+            kind: TxWarningKind.inputUnknown,
+            message:
+                'Input 0 could not be checked: no backend answered about this '
+                'coin. Its value is proven by the previous transaction the PSBT '
+                'carries, the one this input spends; whether the coin is still '
+                'there to spend is not.',
+            severity: TxSeverity.info,
+          ),
+        ],
+      );
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+    await preview(tester);
+    expect(find.text('as the PSBT claims'), findsNothing);
+    await tester.tap(find.widgetWithText(FilledButton, 'Broadcast'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('as the PSBT claims'), findsNothing);
   });
 
   testWidgets('figures the chain confirmed carry no such mark', (tester) async {
