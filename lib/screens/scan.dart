@@ -43,6 +43,12 @@ class ScanScreen extends ConsumerStatefulWidget {
   ConsumerState<ScanScreen> createState() => ScanScreenState();
 }
 
+/// What the scanner says of a code with more parts than Gerfaut reads:
+/// one the core turns away by the count it announces, or a scan that
+/// collected more frames than any code needs. The desktop app says the
+/// same.
+const String _tooManyParts = 'This code has more parts than Gerfaut can read.';
+
 /// The most distinct frames one scan collects before the code says how
 /// many parts it has. Every new frame sends the whole collection to the
 /// core again, so an endless stream of distinct frames would cost more
@@ -114,7 +120,7 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
       return;
     }
     if (_frames.length >= scanFrameLimit(_progress?.total)) {
-      _startOver('This code has more parts than Gerfaut can read.');
+      _startOver(_tooManyParts);
       return;
     }
     _frames.add(text);
@@ -143,8 +149,8 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
           // Or to a collection already dropped meanwhile.
           if (collection != _collection) continue;
           // The core refused what was collected: a PSBT, an envelope it
-          // cannot open.
-          _startOver(e.message);
+          // cannot open, a count of parts past what Gerfaut reads.
+          _startOver(e.kind == 'too_many_parts' ? _tooManyParts : e.message);
           return;
         }
         if (!mounted || _done) return;

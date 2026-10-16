@@ -299,6 +299,32 @@ void main() {
     expect(find.text(_psbt), findsNothing);
   });
 
+  testWidgets('a code announcing more parts than Gerfaut reads says so', (
+    tester,
+  ) async {
+    // The core turns the count away before it decodes a part; its own
+    // words are for logs.
+    final bridge = FakeBridge()
+      ..onAssembleQr = (_) => throw const BridgeException(
+        'too_many_parts',
+        'invalid qr: this QR code announces 6000 parts, more than Gerfaut '
+            'reads',
+      );
+    final outcome = _Outcome();
+    final state = await _open(tester, bridge, outcome);
+
+    state.onFrame('ur:crypto-psbt/1-6000/part-one');
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('This code has more parts than Gerfaut can read.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('invalid qr'), findsNothing);
+    expect(outcome.pops, 0);
+    expect(find.byType(ScanScreen), findsOneWidget);
+  });
+
   testWidgets('frames decoded after the pop are ignored', (tester) async {
     final bridge = FakeBridge();
     final outcome = _Outcome();

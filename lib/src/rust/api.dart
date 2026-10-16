@@ -7,7 +7,7 @@ import 'frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `console_log_level`, `core_error_json`, `core_error_kind`, `decode_key`, `error_json`, `from_json`, `manager`, `ok_json`, `parse_network_opt`, `parse_network`, `parse_variant`, `refuse_oversized_nested_ur`, `refuse_oversized_ur`, `to_json`
+// These functions are ignored because they are not marked as `pub`: `console_log_level`, `core_error_json`, `decode_key`, `error_json`, `from_json`, `manager`, `ok_json`, `parse_network_opt`, `parse_network`, `parse_variant`, `to_json`
 
 /// Opens (or creates) the vault under `data_dir` with a 32-byte key given
 /// as 64 hex characters. Idempotent: once initialized, later calls (hot

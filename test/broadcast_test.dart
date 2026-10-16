@@ -165,6 +165,30 @@ void main() {
     expect(find.byType(SnackBar), findsNothing);
   });
 
+  testWidgets('a pasted qr code with too many parts is unreadable input', (
+    tester,
+  ) async {
+    final bridge = FakeBridge()
+      ..onPreview = (_, _) => throw const BridgeException(
+        'too_many_parts',
+        'invalid qr: this QR code announces 6000 parts, more than Gerfaut '
+            'reads',
+      );
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+
+    await preview(tester, 'ur:crypto-psbt/1-6000/aaaa');
+
+    expect(
+      find.text(
+        'This is not a transaction Gerfaut can read. Paste a signed '
+        'transaction in hex, or a PSBT.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('announces 6000 parts'), findsOneWidget);
+  });
+
   testWidgets('the error goes as the text changes, in the slot of the hint', (
     tester,
   ) async {

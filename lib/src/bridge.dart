@@ -13,11 +13,14 @@ import 'rust/api.dart' as rust;
 
 /// Error surfaced by the core, with a stable machine-readable kind.
 ///
-/// Kinds match the desktop app: unrecognized_input, private_material,
-/// invalid_input, network_mismatch, wallet_not_found, duplicate_wallet,
-/// vault, vault_in_use, sync, backend_unavailable, broadcast, descriptor,
-/// tor, internal — plus the bridge-level not_initialized, bad_key and
-/// bad_json.
+/// A failure of the core comes under the core's own code (`ErrorCode`
+/// in gerfaut-core), the one the desktop app reads too:
+/// unrecognized_input, private_material, invalid_input, too_many_parts,
+/// network_mismatch, wallet_not_found, duplicate_wallet, wrong_key,
+/// vault_in_use, vault, unreadable_backup, newer_format, sync,
+/// broadcast, backend_unavailable, tor, descriptor, internal. The
+/// bridge adds its own: not_initialized, bad_key, bad_json, random and
+/// live_running.
 class BridgeException implements Exception {
   const BridgeException(this.kind, this.message);
 

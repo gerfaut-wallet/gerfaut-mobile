@@ -24,9 +24,21 @@ import '../widgets/toast.dart';
 /// Opens the system file picker; tests hand back a file of their own.
 typedef BackupFilePicker = Future<XFile?> Function();
 
-/// Said when the core cannot open the backup: the two causes are one
-/// and the same to the cipher, so they are stated together.
+/// Said when the password does not open the backup: a wrong password
+/// and a file altered under its seal are one and the same to the
+/// cipher, so they are stated together.
 const String wrongPasswordMessage = 'Wrong password, or the file is damaged.';
+
+/// Said when what was handed over cannot be read as a backup: another
+/// file, a QR code of something else, a backup damaged outside what the
+/// password guards. The password is not in question.
+const String notABackupMessage =
+    'This is not a Gerfaut backup, or it is damaged.';
+
+/// Said when a newer Gerfaut made the backup: an update opens it.
+const String newerBackupMessage =
+    'This backup was made with a newer version of Gerfaut. Update Gerfaut '
+    'to open it.';
 
 /// Where the backup being restored was read from.
 ///
@@ -174,15 +186,18 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
     _landed(text.trim(), const _BackupSource.qr());
   }
 
-  /// What a refused file says. The vault kind is the seal not opening,
-  /// which the core cannot tell from a wrong password, so it gets the
-  /// plain sentence; a private key in it gets its own, and everything
-  /// else is the core's own words, verbatim.
-  /// A file from a newer Gerfaut is one of those: the seal opened, the
-  /// schema is refused by name, and that name is the whole answer.
-  String _messageOf(BridgeException error) => error.kind == 'vault'
-      ? wrongPasswordMessage
-      : materialRefusal(error, backup: true);
+  /// What a refused file says, chosen on the core's code, in the words
+  /// the desktop app uses. Only a wrong key is blamed on the password:
+  /// saying it of a file that is not a backup, or one a newer Gerfaut
+  /// made, would send someone retyping a password that was right. A
+  /// private key in it gets its own sentence, and everything else is
+  /// the core's own words, verbatim.
+  String _messageOf(BridgeException error) => switch (error.kind) {
+    'wrong_key' => wrongPasswordMessage,
+    'unreadable_backup' => notABackupMessage,
+    'newer_format' => newerBackupMessage,
+    _ => materialRefusal(error, backup: true),
+  };
 
   Future<void> _open() async {
     final source = _source;

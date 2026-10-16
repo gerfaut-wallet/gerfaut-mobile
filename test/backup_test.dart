@@ -1083,8 +1083,10 @@ void main() {
     testWidgets('a wrong password says so in plain words', (tester) async {
       useTallSurface(tester);
       final bridge = FakeBridge();
-      bridge.onPreviewBackup = (_, _) =>
-          throw const BridgeException('vault', 'vault decryption failed');
+      bridge.onPreviewBackup = (_, _) => throw const BridgeException(
+        'wrong_key',
+        'vault decryption failed: wrong key or corrupted file',
+      );
       await openBackup(tester, bridge);
 
       expect(
@@ -1093,23 +1095,58 @@ void main() {
       );
     });
 
-    testWidgets('a file from a newer Gerfaut is refused in the core words', (
-      tester,
-    ) async {
+    testWidgets('a file from a newer Gerfaut says to update', (tester) async {
       useTallSurface(tester);
       final bridge = FakeBridge();
-      // The core opens the file — so the password was right — and
-      // refuses the schema by name. That sentence is the whole answer,
-      // and reading it as a wrong password would send the person back
-      // to retype what they got right.
+      // The core refuses the file by its format, whichever layer is
+      // newer: reading it as a wrong password would send the person
+      // back to retype what they got right.
       bridge.onPreviewBackup = (_, _) => throw const BridgeException(
-        'invalid_input',
-        'invalid backup: backup version 3 needs a newer Gerfaut',
+        'newer_format',
+        'invalid backup: this backup was written by a newer Gerfaut '
+            '(backup version 3); update Gerfaut to open it',
       );
       await openBackup(tester, bridge);
 
       expect(
-        find.text('invalid backup: backup version 3 needs a newer Gerfaut'),
+        find.text(
+          'This backup was made with a newer version of Gerfaut. Update '
+          'Gerfaut to open it.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Wrong password'), findsNothing);
+    });
+
+    testWidgets('a file that is not a backup is not blamed on the password', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge();
+      // Any vault failure used to read as a wrong password here. A
+      // picture picked by mistake is not one, and neither is a vault.
+      bridge.onPreviewBackup = (_, _) => throw const BridgeException(
+        'unreadable_backup',
+        'invalid backup: this is not a Gerfaut backup',
+      );
+      await pushRestore(
+        tester,
+        bridge,
+        filePicker: () async => XFile.fromData(
+          utf8.encode('a holiday photo, as far as anyone knows'),
+          path: 'IMG_2041.jpg',
+        ),
+      );
+      await tester.tap(find.text('Open a file'));
+      await tester.pumpAndSettle();
+      expect(find.text('Backup read from IMG_2041.jpg'), findsOneWidget);
+      await tester.enterText(find.byType(TextField), 'correct horse');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Open backup'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('This is not a Gerfaut backup, or it is damaged.'),
         findsOneWidget,
       );
       expect(find.textContaining('Wrong password'), findsNothing);
