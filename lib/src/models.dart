@@ -2119,14 +2119,8 @@ enum TxReadiness {
 
   final String id;
 
-  /// A wire that names none reads as what [TxPreview.ready] says: ready,
-  /// or not fully signed, the two states every core knew.
-  static TxReadiness fromId(String? id, {required bool ready}) {
-    for (final readiness in TxReadiness.values) {
-      if (readiness.id == id) return readiness;
-    }
-    return ready ? TxReadiness.ready : TxReadiness.unsigned;
-  }
+  static TxReadiness fromId(String id) =>
+      TxReadiness.values.firstWhere((r) => r.id == id);
 }
 
 /// Everything shown before broadcasting a transaction.
@@ -2143,7 +2137,6 @@ class TxPreview {
     required this.version,
     required this.locktime,
     required this.rbf,
-    required this.ready,
     required this.readiness,
     this.feeSats,
     this.feeRateSatVb,
@@ -2170,11 +2163,7 @@ class TxPreview {
       version: json['version'] as int,
       locktime: json['locktime'] as int,
       rbf: json['rbf'] as bool,
-      ready: json['ready'] as bool,
-      readiness: TxReadiness.fromId(
-        json['readiness'] as String?,
-        ready: json['ready'] as bool,
-      ),
+      readiness: TxReadiness.fromId(json['readiness'] as String),
       warnings: ((json['warnings'] as List?) ?? const [])
           .map((w) => TxWarning.fromJson(w as Map<String, dynamic>))
           .toList(),
@@ -2201,12 +2190,9 @@ class TxPreview {
   final int locktime;
   final bool rbf;
 
-  /// The transaction can be sent: every input is signed, and no
-  /// caution is [TxWarning.blocking]. The same as [readiness] being
-  /// [TxReadiness.ready].
-  final bool ready;
-
-  /// Where it stands, in the words of the readiness pill.
+  /// Where it stands: the one thing the readiness pill and the Broadcast
+  /// button both read. The core also sends `ready`, derived from it,
+  /// which the app leaves alone.
   final TxReadiness readiness;
   final List<TxWarning> warnings;
 

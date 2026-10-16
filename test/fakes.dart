@@ -1628,7 +1628,6 @@ TxPreview makePreview({
     version: 2,
     locktime: 0,
     rbf: true,
-    ready: ready,
     readiness: readiness ?? (ready ? TxReadiness.ready : TxReadiness.unsigned),
     warnings: warnings,
     hex: ready ? '0200000001deadbeef' : null,

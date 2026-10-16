@@ -370,9 +370,8 @@ void main() {
       );
     });
 
-    test('a wire that names none reads as ready says', () {
-      expect(TxPreview.fromJson(wire(true)).readiness, TxReadiness.ready);
-      expect(TxPreview.fromJson(wire(false)).readiness, TxReadiness.unsigned);
+    test('a state this build does not know is refused', () {
+      expect(() => TxPreview.fromJson(wire(true, 'maybe')), throwsStateError);
     });
   });
 
