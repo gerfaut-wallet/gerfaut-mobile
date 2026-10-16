@@ -12,6 +12,7 @@ import '../widgets/brand.dart';
 import '../widgets/buttons.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/load_failure.dart';
+import '../widgets/mask_unsaved_notice.dart';
 import '../widgets/notice.dart';
 import '../widgets/overflow_menu.dart';
 import '../widgets/reorder.dart';
@@ -138,6 +139,7 @@ class HomeScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const UpdateNotice(),
+            const MaskUnsavedNotice(),
             Expanded(
               child: switch ((settings, wallets)) {
                 // The wallets alone failed: the vault is open, and the
