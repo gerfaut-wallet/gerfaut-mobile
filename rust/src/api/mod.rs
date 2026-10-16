@@ -1066,6 +1066,30 @@ mod tests {
         assert_eq!(sent["error"]["kind"], case["kind"]);
     }
 
+    /// What Android posts when the core cannot put a batch into words is
+    /// the core's own line for "more is waiting", word for word. The
+    /// Dart tests read the app's constants against this reference file;
+    /// this test reads the file against the core, so a line the core
+    /// rewords fails here first.
+    #[test]
+    fn the_fallback_notices_are_the_cores_words() {
+        let reference: Value =
+            serde_json::from_str(include_str!("../../../test/fixtures/fallback_notices.json"))
+                .expect("the reference reads as JSON");
+        let line = |body: &str, kind: notice::NoticeKind| notice::Notice {
+            title: notice::APP_TITLE.to_owned(),
+            body: body.to_owned(),
+            kind,
+            id: None,
+            wallet_id: None,
+        };
+        let cores = vec![
+            line(notice::MORE_TRANSACTIONS, notice::NoticeKind::Transaction),
+            line(notice::MORE_DROPPED, notice::NoticeKind::Dropped),
+        ];
+        assert_eq!(reference, serde_json::to_value(cores).unwrap());
+    }
+
     /// The kind a screen reads is the core's code, unchanged, with the
     /// core's words beside it. A vault another open holds is its own
     /// kind, a healthy vault no screen may take for one that cannot be

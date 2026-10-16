@@ -3,13 +3,16 @@
 //
 // The core decides all of it and keeps it in the vault: when it asks
 // GitHub on its own (at most once a day, never within a day of the
-// first session, and a day Tor is needed and cannot be had does not
+// first session, and a day Tor is needed and not running does not
 // count), which release is worth announcing (never a pre-release) and
 // which one the user closed. The request takes the route the syncs
 // take: with a .onion node configured it goes through Tor, and with Tor
-// out of reach it does not go at all. The app says when the wallets
-// come on screen, never while it is locked or disguised, and shows
-// what comes back. The About card can still ask on demand.
+// out of reach it does not go at all. The check of a session never
+// starts the built-in Tor for itself, as the price widget does not: it
+// waits for the one a sync or Live brought up, and the next return to
+// the screen asks again. The app says when the wallets come on screen,
+// never while it is locked or disguised, and shows what comes back.
+// The About card can still ask on demand, and that one starts Tor.
 //
 // The page the notice opens is a constant of this file: nothing the
 // network says can choose where the browser goes.

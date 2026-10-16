@@ -162,6 +162,44 @@ int postedId(TxNotice notice) {
   );
 }
 
+/// The title of a notice said without the core: the app's name.
+const String fallbackTitle = 'Gerfaut';
+
+/// What is said of the transactions of a batch the core could not put
+/// into words. The core's own line for "more is waiting", word for
+/// word: no wallet, no amount, only that there is something to open
+/// the app for. test/fixtures/fallback_notices.json holds the core's
+/// words, and the bridge's tests check them against the core.
+const String fallbackTransactions =
+    'More transactions are coming in. Open Gerfaut to see them.';
+
+/// [fallbackTransactions] for the payments no longer coming.
+const String fallbackDropped =
+    'More pending payments are no longer coming. Open Gerfaut to see them.';
+
+/// What is posted when the core cannot say what [txs] amount to: the
+/// vault closed under a background isolate, an answer that does not
+/// read, a panic. The batch is claimed already, and nothing claimed is
+/// handed out twice: left unsaid here, its payments would never be
+/// said. One notice for the transactions and one for the payments no
+/// longer coming, as the core's budget says them, posted under the id
+/// of the core's own line, so a second failure takes the place of the
+/// first rather than piling up.
+List<TxNotice> fallbackNotices(List<LiveTx> txs) => [
+  if (txs.any((tx) => tx.stage != TxStage.dropped))
+    const TxNotice(
+      title: fallbackTitle,
+      body: fallbackTransactions,
+      kind: NoticeKind.transaction,
+    ),
+  if (txs.any((tx) => tx.stage == TxStage.dropped))
+    const TxNotice(
+      title: fallbackTitle,
+      body: fallbackDropped,
+      kind: NoticeKind.dropped,
+    ),
+];
+
 /// Posts what a batch of announcements amounts to.
 ///
 /// What it is handed are [LiveTx]: transactions the core gave out once,
@@ -181,10 +219,16 @@ class NewTxAnnouncer {
   final NotificationService service;
   final GerfautBridge bridge;
 
-  /// Posts what the core says about [txs], in its order.
+  /// Posts what the core says about [txs], in its order, or, when the
+  /// core cannot say it, [fallbackNotices].
   Future<void> announce(List<LiveTx> txs, NoticeContext context) async {
     if (txs.isEmpty) return;
-    final notices = await bridge.liveNotices(txs, context);
+    List<TxNotice> notices;
+    try {
+      notices = await bridge.liveNotices(txs, context);
+    } catch (_) {
+      notices = fallbackNotices(txs);
+    }
     for (final notice in notices) {
       await service.show(postedId(notice), notice.title, notice.body);
     }
