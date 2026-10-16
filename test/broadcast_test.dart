@@ -610,6 +610,11 @@ void main() {
     await tester.pumpAndSettle();
     await preview(tester);
     expect(find.text('as the PSBT claims'), findsNothing);
+    // Nor the advice to compare the amounts: they are proven.
+    expect(
+      find.textContaining('Compare them with what your signer shows'),
+      findsNothing,
+    );
     await tester.tap(find.widgetWithText(FilledButton, 'Broadcast'));
     await tester.pumpAndSettle();
     expect(find.textContaining('as the PSBT claims'), findsNothing);

@@ -439,7 +439,11 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                 const SizedBox(height: GerfautSpacing.sm),
                 for (final (index, warning) in preview.warnings.indexed) ...[
                   if (index > 0) const SizedBox(height: GerfautSpacing.sm),
-                  _WarningRow(warning: warning, tokens: tokens),
+                  _WarningRow(
+                    warning: warning,
+                    amountsDeclared: preview.amountsDeclared,
+                    tokens: tokens,
+                  ),
                 ],
               ],
               const SizedBox(height: GerfautSpacing.lg),
@@ -779,9 +783,17 @@ IconData _warningIcon(TxWarningKind kind) => switch (kind) {
 
 /// One caution, in the tone the core gave it.
 class _WarningRow extends StatelessWidget {
-  const _WarningRow({required this.warning, required this.tokens});
+  const _WarningRow({
+    required this.warning,
+    required this.amountsDeclared,
+    required this.tokens,
+  });
 
   final TxWarning warning;
+
+  /// Whether a value shown is one nothing proves: only then is checking
+  /// the amounts advice worth giving.
+  final bool amountsDeclared;
   final GerfautTokens tokens;
 
   @override
@@ -800,7 +812,8 @@ class _WarningRow extends StatelessWidget {
       // The core says which coin went unconfirmed; what the page shows
       // in its place, and what to do about it, is the page's to say.
       hint: switch (warning.kind) {
-        TxWarningKind.inputUnknown => _unconfirmedHint,
+        // A coin the previous transaction proves needs no comparing.
+        TxWarningKind.inputUnknown => amountsDeclared ? _unconfirmedHint : null,
         TxWarningKind.uncommittedOutputs => _uncommittedHint,
         _ => null,
       },
