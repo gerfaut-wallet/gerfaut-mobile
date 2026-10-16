@@ -44,7 +44,6 @@ jobs:
         with:
           repository: gerfaut-wallet/gerfaut-core
           ref: ${{ steps.core.outputs.rev }}
-          ssh-key: ${{ secrets.CORE_DEPLOY_KEY }}
           path: gerfaut-core
           persist-credentials: false
 
