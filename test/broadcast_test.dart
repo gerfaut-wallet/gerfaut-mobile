@@ -541,6 +541,50 @@ void main() {
     );
   });
 
+  // Outputs over amounts only the file declares stay sendable: the node
+  // goes by the real coins. The last look before the send says what
+  // happens if the declared amounts are right.
+  testWidgets('the confirmation says when declared amounts would be refused', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    const line =
+        'The outputs pay more than the inputs bring, by the amounts this '
+        'transaction declares for its coins: if those are right, the network '
+        'will refuse it.';
+    final bridge = FakeBridge()
+      ..onPreview = (_, _) => makePreview(
+        feeSats: null,
+        feeRate: null,
+        amountsDeclared: true,
+        warnings: const [
+          TxWarning(
+            kind: TxWarningKind.feeUnknown,
+            message: line,
+            severity: TxSeverity.info,
+          ),
+        ],
+      );
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+    await preview(tester);
+    expect(find.text('Ready to broadcast'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Broadcast'));
+    await tester.pumpAndSettle();
+    final dialog = find.byType(AlertDialog);
+    expect(
+      find.descendant(
+        of: dialog,
+        matching: find.text('Its fee could not be established.'),
+      ),
+      findsOneWidget,
+    );
+    final said = find.descendant(of: dialog, matching: find.text(line));
+    expect(said, findsOneWidget);
+    expect(tester.widget<Text>(said).style?.color, GerfautTokens.light.pending);
+  });
+
   // No backend answered, but the file carries the previous transaction,
   // which proves the value: the coin is unchecked, its amount is not a
   // claim, and no figure says it is.

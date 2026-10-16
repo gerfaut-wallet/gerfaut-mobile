@@ -1279,8 +1279,17 @@ class _ConfirmDialog extends ConsumerWidget {
     final ending = preview.amountsDeclared
         ? ', $_claimedMark: no backend confirmed what its inputs are worth.'
         : '.';
-    // Outputs over the inputs never get here: the core blocks the send,
-    // so a fee missing is one nobody could establish.
+    // Outputs over proven amounts, or past all the bitcoin there will
+    // ever be, never get here: the core blocks the send. Over amounts
+    // only the file declares, the fee is as unknown as they are, and the
+    // core's own line on why is said again under it, the one that says
+    // the network will refuse them if those amounts are right.
+    final whyNoFee = fee == null
+        ? preview.warnings
+              .where((w) => w.kind == TxWarningKind.feeUnknown)
+              .map((w) => w.message)
+              .firstOrNull
+        : null;
     final feeLine = fee == null
         ? 'Its fee could not be established.'
         : 'It pays a fee of ${masked ? maskedValue : formatAmount(fee, unit)}'
@@ -1301,6 +1310,13 @@ class _ConfirmDialog extends ConsumerWidget {
             semanticsLabel: spokenIfMasked(feeLine),
             style: tokens.bodySmall,
           ),
+          if (whyNoFee != null) ...[
+            const SizedBox(height: GerfautSpacing.sm),
+            Text(
+              whyNoFee,
+              style: tokens.bodySmall.copyWith(color: tokens.pending),
+            ),
+          ],
           const SizedBox(height: GerfautSpacing.sm),
           Text(
             'Once the network has it, this cannot be undone.',
