@@ -1342,10 +1342,28 @@ class FakeBridge implements GerfautBridge {
             out.close();
           }
         });
+        _breakRun = (failure) {
+          inner?.cancel();
+          out
+            ..addError(failure)
+            ..close();
+        };
       },
       onCancel: () => inner?.cancel(),
     );
     return out.stream;
+  }
+
+  void Function(Object failure)? _breakRun;
+
+  /// Cuts the run being listened to short, as the bridge does when the
+  /// core panics in it: an error, then the end.
+  void breakRun([
+    Object failure = const BridgeException('internal', internalFailure),
+  ]) {
+    watchStatus = const LiveWatchStatus();
+    _breakRun?.call(failure);
+    _breakRun = null;
   }
 
   @override

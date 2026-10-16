@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -714,4 +715,50 @@ void main() {
       expect(await guardPanics(Future.value('{"ok":true}')), '{"ok":true}');
     },
   );
+
+  group('the one guard against panics', () {
+    final internal = isA<BridgeException>()
+        .having((e) => e.kind, 'kind', 'internal')
+        .having((e) => e.message, 'message', internalFailure);
+
+    test('a call that panics answers a failure the screens catch', () async {
+      await expectLater(
+        guardCall(Future<String>.error(PanicException('unwrap on None'))),
+        throwsA(internal),
+      );
+    });
+
+    test('a stream a panic cut short ends on that failure', () async {
+      final events = StreamController<String>();
+      final stream = events.stream;
+      // As the generated code does: nobody awaits the call itself, and
+      // no uncaught error may come of it.
+      unawaited(
+        guardCall(
+          Future<void>.error(PanicException('index out of bounds')),
+          streams: [stream],
+        ),
+      );
+      events
+        ..add('{"type":"status"}')
+        ..close();
+      await expectLater(
+        endsWithItsCall(stream),
+        emitsInOrder(['{"type":"status"}', emitsError(internal), emitsDone]),
+      );
+    });
+
+    test('a stream whose call returned simply ends', () async {
+      final events = StreamController<String>();
+      final stream = events.stream;
+      unawaited(guardCall(Future<void>.value(), streams: [stream]));
+      events
+        ..add('{"type":"stopped"}')
+        ..close();
+      await expectLater(
+        endsWithItsCall(stream),
+        emitsInOrder(['{"type":"stopped"}', emitsDone]),
+      );
+    });
+  });
 }

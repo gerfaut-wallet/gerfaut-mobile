@@ -499,6 +499,74 @@ void main() {
       expect(service.bridge.liveStartCalls, 2);
     });
 
+    test('a run the core cut short is said, then started again', () async {
+      final service = _Service(
+        _bridge(),
+        restartAfter: const Duration(milliseconds: 20),
+      );
+      await service.runner.run();
+      expect(service.bridge.liveStartCalls, 1);
+      service.bridge.breakRun();
+      await service.settle();
+      // Not "Connecting…" for good: the notification says what happened.
+      expect(service.told.last, ('status', liveBrokeText));
+      for (var i = 0; i < 200 && service.bridge.liveStartCalls < 2; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(service.bridge.liveStartCalls, 2);
+      await service.runner.stop(revert: false);
+    });
+
+    test('a run that keeps breaking waits longer each time', () async {
+      final service = _Service(
+        _bridge(),
+        restartAfter: const Duration(milliseconds: 40),
+      );
+      await service.runner.run();
+      Future<Duration> restartTime(int calls) async {
+        final clock = Stopwatch()..start();
+        service.bridge.breakRun();
+        for (var i = 0; i < 400 && service.bridge.liveStartCalls < calls; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+        }
+        expect(service.bridge.liveStartCalls, calls);
+        return clock.elapsed;
+      }
+
+      final first = await restartTime(2);
+      final third = await restartTime(3) + await restartTime(4);
+      // 40 ms, then 80 and 160: a failure that comes back every time
+      // does not keep the phone busy.
+      expect(first, lessThan(const Duration(milliseconds: 160)));
+      expect(third, greaterThanOrEqualTo(const Duration(milliseconds: 240)));
+
+      // A run that reaches its server again starts the count over.
+      service.bridge.liveController.add(
+        const LiveStatusChanged(LiveWatchStatus(state: WatchState.connected)),
+      );
+      await service.settle();
+      final again = await restartTime(5);
+      expect(again, lessThan(const Duration(milliseconds: 160)));
+      await service.runner.stop(revert: false);
+    });
+
+    test('a run refused for another reason is not said as broken', () async {
+      final bridge = _bridge()
+        ..runRefusal = const BridgeException('not_initialized', 'no vault');
+      final service = _Service(
+        bridge,
+        restartAfter: const Duration(milliseconds: 20),
+      );
+      await service.runner.run();
+      await service.settle();
+      expect(service.told.map((t) => t.$2), isNot(contains(liveBrokeText)));
+      bridge.runRefusal = null;
+      for (var i = 0; i < 200 && bridge.liveStartCalls < 2; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      await service.runner.stop(revert: false);
+    });
+
     test('a watch started again is held up while it reconnects', () async {
       final service = _Service(
         _bridge(),

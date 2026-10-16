@@ -7,7 +7,8 @@ import 'frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `console_log_level`, `core_error_json`, `decode_key`, `error_json`, `from_json`, `manager`, `ok_json`, `parse_network_opt`, `parse_network`, `parse_variant`, `to_json`
+// These functions are ignored because they are not marked as `pub`: `console_log_level`, `core_error_json`, `decode_key`, `error_json`, `from_json`, `manager`, `ok_json`, `parse_network_opt`, `parse_network`, `parse_variant`, `put_down`, `stopped_json`, `then_always`, `to_json`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `RunEnd`
 
 /// Opens (or creates) the vault under `data_dir` with a 32-byte key given
 /// as 64 hex characters. Idempotent: once initialized, later calls (hot
@@ -356,6 +357,13 @@ Future<String> importBackup({
 /// that goes away without [`live_stop`] stops the watch at the next
 /// event, so nothing more is taken for nobody; the event in hand then
 /// is lost with it, which is why the host stops the watch first.
+///
+/// However the run ends, a panic included, the watch is put down before
+/// anything else is said: stopped, free for the next run, and the
+/// screens told. A panic is raised again after that, for the Dart side
+/// to turn into a failure as it does every other; a watch that ended
+/// with nobody asking ends the stream on an `internal` error, so the
+/// caller says it rather than wait in silence.
 Stream<String> liveRun() => RustLib.instance.api.crateApiLiveRun();
 
 /// Stops the live watch and closes its connection. Returns at once; the

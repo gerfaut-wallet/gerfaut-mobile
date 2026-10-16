@@ -343,6 +343,17 @@ String? liveStatusLine(LiveState live) {
   }
 }
 
+/// The permanent notification once the core cut a run short: a panic,
+/// or a watch that ended with nobody asking. Live starts again by
+/// itself, and the next start says "Connecting…" over it.
+const String liveBrokeText = 'Stopped by an error. Starting again…';
+
+/// Whether [error] is a failure inside the core rather than a refusal:
+/// what [PanicGuard] makes of a panic, and what a watch that ended on
+/// its own is reported as.
+bool isInternalFailure(Object error) =>
+    error is BridgeException && error.kind == 'internal';
+
 /// The status line while the network in use holds no wallet.
 const String liveNoWalletLine = 'Off until you add a wallet.';
 
@@ -483,7 +494,17 @@ class LiveController extends Notifier<LiveState> {
     _events ??= ref
         .read(bridgeProvider)
         .liveEvents()
-        .listen(_onEvent, onError: (_) {});
+        .listen(
+          _onEvent,
+          onError: (_) {},
+          // The core's side of it never ends but on a failure: what the
+          // line says is read again now, and the next time the app
+          // comes on screen listens anew.
+          onDone: () {
+            _events = null;
+            unawaited(refresh().catchError((Object _) {}));
+          },
+        );
     final platform = ref.read(livePlatformProvider);
     if (!_chosen) {
       // Live is no longer the choice: a hold left from when it was
@@ -670,6 +691,11 @@ const Duration _endWait = Duration(seconds: 3);
 /// How long a watch that ended on its own is left before it starts again.
 const Duration _restartAfter = Duration(seconds: 2);
 
+/// A watch that keeps breaking waits at most this many doublings of
+/// [_restartAfter] before it starts again: about four minutes, the
+/// heartbeat's own pace.
+const int _maxBackoffDoublings = 7;
+
 /// How long the phone stays awake after the last word from a watch at
 /// work: a ping answered, a wallet synced, a status said.
 const Duration _quietAfter = Duration(seconds: 5);
@@ -726,6 +752,15 @@ class LiveRunner {
   /// Which run the subscription belongs to: the end of an older one
   /// must not be taken for the end of the current.
   int _run = 0;
+
+  /// The current run broke inside the core.
+  bool _broke = false;
+
+  /// How many runs in a row broke inside the core, with no word from
+  /// the watch in between: each waits twice as long as the last before
+  /// it starts again, so a failure that comes back every time does not
+  /// keep the phone busy.
+  int _breaks = 0;
   bool _stopping = false;
   Completer<void>? _ended;
   final Map<String, List<LiveTx>> _pending = {};
@@ -785,10 +820,15 @@ class LiveRunner {
       await _tell('status', liveNotificationText(const LiveWatchStatus()));
       final run = ++_run;
       _started = true;
+      _broke = false;
       _events = bridge.liveRun().listen(
         _onEvent,
-        // A run that could not start ends right after: see onDone.
-        onError: (Object _) {},
+        // A run that could not start ends right after: see onDone. One
+        // the core cut short, a panic or a watch that ended with nobody
+        // asking, ends there too, and is said.
+        onError: (Object error) {
+          if (run == _run && isInternalFailure(error)) _broke = true;
+        },
         onDone: () => _runEnded(run),
       );
       return true;
@@ -861,7 +901,13 @@ class LiveRunner {
         connectingFor,
       _ => quietAfter,
     });
-    if (event is LiveStatusChanged) _lastState = event.status.state;
+    if (event is LiveStatusChanged) {
+      _lastState = event.status.state;
+      // The watch reached its server: what broke before is behind it.
+      if (event.status.state case WatchState.connected || WatchState.polling) {
+        _breaks = 0;
+      }
+    }
     switch (event) {
       case LiveTransaction(:final tx):
         _pending.putIfAbsent(tx.walletId, () => []).add(tx);
@@ -896,9 +942,16 @@ class LiveRunner {
     _lastState = null;
     final ended = _ended;
     if (ended != null && !ended.isCompleted) ended.complete();
-    if (!_stopping) {
-      Timer(restartAfter, () => unawaited(_ensureStarted()));
+    if (_stopping) return;
+    var wait = restartAfter;
+    if (_broke) {
+      _broke = false;
+      // Said where Live speaks, rather than "Connecting…" for good.
+      unawaited(_tell('status', liveBrokeText));
+      wait = restartAfter * (1 << _breaks.clamp(0, _maxBackoffDoublings));
+      _breaks++;
     }
+    Timer(wait, () => unawaited(_ensureStarted()));
   }
 
   Future<void> _flushAll() async {
