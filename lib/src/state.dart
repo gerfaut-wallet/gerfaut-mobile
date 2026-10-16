@@ -3,7 +3,6 @@
 // preferences and sync progress.
 
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -346,63 +345,38 @@ final priceProvider = AsyncNotifierProvider<PriceNotifier, PriceQuote?>(
   PriceNotifier.new,
 );
 
-/// Most broadcasts kept for a later status check.
-const int recentBroadcastsCap = 10;
-
-/// The transactions this app sent, newest first, so the broadcast
-/// screen can check on them again after a restart. Persisted as JSON
-/// under "broadcast.recent", capped at [recentBroadcastsCap].
-class RecentBroadcastsNotifier extends Notifier<List<RecentBroadcast>> {
+/// The transactions this app sent on a network, newest first, as the
+/// vault keeps them, so the broadcast screen can check on them again
+/// after a restart.
+class RecentBroadcastsNotifier
+    extends FamilyAsyncNotifier<List<RecentBroadcast>, Network> {
   @override
-  List<RecentBroadcast> build() => const [];
+  Future<List<RecentBroadcast>> build(Network network) =>
+      ref.watch(bridgeProvider).recentBroadcasts(network);
 
-  void hydrate(String? stored) {
-    if (stored == null || stored.isEmpty) return;
-    try {
-      final decoded = jsonDecode(stored);
-      if (decoded is! List) return;
-      state = [
-        for (final entry in decoded)
-          if (entry is Map<String, dynamic>) RecentBroadcast.fromJson(entry),
-      ];
-    } on FormatException {
-      // A preference this build cannot read is left alone: the next
-      // broadcast rewrites it.
-    }
-  }
-
-  /// Records a broadcast, replacing an earlier entry with the same txid.
-  void add(RecentBroadcast broadcast) {
-    state = [
-      broadcast,
-      ...state.where((b) => b.txid != broadcast.txid),
-    ].take(recentBroadcastsCap).toList();
-    _persist();
-  }
+  /// Reads the list again, once the vault has kept a transaction sent.
+  void reload() => ref.invalidateSelf();
 
   /// Drops the record of a broadcast, with no way back. Only this app's
   /// own note of it goes: the transaction is on the network, where
-  /// Gerfaut has never had any say.
-  void forget(String txid) {
-    state = state.where((b) => b.txid != txid).toList();
-    _persist();
-  }
-
-  void _persist() {
-    ref
-        .read(bridgeProvider)
-        .setAppPref(
-          Pref.recentBroadcasts,
-          jsonEncode([for (final b in state) b.toJson()]),
-        )
-        .catchError((_) {});
+  /// Gerfaut has never had any say. A vault that cannot write keeps it,
+  /// and the list read again says so.
+  Future<void> forget(String txid) async {
+    try {
+      await ref.read(bridgeProvider).forgetBroadcast(txid);
+    } on BridgeException {
+      // Said by the list itself, which still holds it.
+    }
+    ref.invalidateSelf();
   }
 }
 
 final recentBroadcastsProvider =
-    NotifierProvider<RecentBroadcastsNotifier, List<RecentBroadcast>>(
-      RecentBroadcastsNotifier.new,
-    );
+    AsyncNotifierProvider.family<
+      RecentBroadcastsNotifier,
+      List<RecentBroadcast>,
+      Network
+    >(RecentBroadcastsNotifier.new);
 
 /// One-shot guards: prefs hydration and the startup auto-sync.
 final prefsHydratedProvider = StateProvider<bool>((ref) => false);

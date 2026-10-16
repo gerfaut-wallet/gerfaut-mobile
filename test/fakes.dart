@@ -1398,6 +1398,11 @@ class FakeBridge implements GerfautBridge {
   /// Every broadcast call's hex, for assertions.
   final List<String> broadcastHexes = [];
 
+  /// What the vault keeps of the broadcasts, newest first, the way the
+  /// core keeps it: a send the network took at the head, in place of an
+  /// earlier one of the same txid.
+  final List<RecentBroadcast> keptBroadcasts = [];
+
   @override
   Future<BroadcastReport> broadcastTransaction(
     Network network,
@@ -1405,12 +1410,37 @@ class FakeBridge implements GerfautBridge {
   ) async {
     broadcastHexes.add(hex);
     final broadcast = onBroadcast;
-    if (broadcast != null) return broadcast(network, hex);
-    return BroadcastReport(
-      txid: fakeTxid,
-      backend: 'mempool.space',
-      at: 1755000000,
-    );
+    final report = broadcast != null
+        ? await broadcast(network, hex)
+        : BroadcastReport(
+            txid: fakeTxid,
+            backend: 'mempool.space',
+            at: 1755000000,
+          );
+    keptBroadcasts
+      ..removeWhere((kept) => kept.txid == report.txid)
+      ..insert(
+        0,
+        RecentBroadcast(
+          txid: report.txid,
+          network: network,
+          hex: hex,
+          backend: report.backend,
+          at: report.at,
+        ),
+      );
+    return report;
+  }
+
+  @override
+  Future<List<RecentBroadcast>> recentBroadcasts(Network network) async => [
+    for (final kept in keptBroadcasts)
+      if (kept.network == network) kept,
+  ];
+
+  @override
+  Future<void> forgetBroadcast(String txid) async {
+    keptBroadcasts.removeWhere((kept) => kept.txid == txid);
   }
 
   /// Status hook; the default reports the transaction waiting in the

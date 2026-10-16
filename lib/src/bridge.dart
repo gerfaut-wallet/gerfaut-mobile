@@ -190,6 +190,14 @@ abstract class GerfautBridge {
   /// Where a broadcast transaction stands as the backend sees it.
   Future<BroadcastStatus> transactionStatus(Network network, String hex);
 
+  /// The last transactions sent on [network], newest first, as the
+  /// vault keeps them.
+  Future<List<RecentBroadcast>> recentBroadcasts(Network network);
+
+  /// Drops the vault's record of a broadcast; the transaction itself is
+  /// on the network and untouched.
+  Future<void> forgetBroadcast(String txid);
+
   /// Classifies wallet material with the advanced choices (script type,
   /// derivation paths). Inputs that fix their own ignore them.
   Future<ParsedInput> parseInputWithOptions(
@@ -570,6 +578,17 @@ class RustBridge implements GerfautBridge {
       rust.transactionStatus(network: network.id, hex: hex),
     );
     return BroadcastStatus.fromJson(_object(raw));
+  }
+
+  @override
+  Future<List<RecentBroadcast>> recentBroadcasts(Network network) async {
+    final raw = await _guard(rust.recentBroadcasts(network: network.id));
+    return _list(raw).map(RecentBroadcast.fromJson).toList();
+  }
+
+  @override
+  Future<void> forgetBroadcast(String txid) async {
+    _ok(await _guard(rust.forgetBroadcast(txid: txid)));
   }
 
   @override

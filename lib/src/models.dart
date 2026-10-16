@@ -2538,13 +2538,14 @@ class BroadcastStatus {
   final int at;
 }
 
-/// A transaction this app sent, kept so it can be checked again after a
-/// restart. Stored as JSON under the `broadcast.recent` preference.
+/// A transaction this app sent, kept by the vault so it can be checked
+/// again after a restart.
 class RecentBroadcast {
   const RecentBroadcast({
     required this.txid,
     required this.network,
     required this.hex,
+    required this.backend,
     required this.at,
   });
 
@@ -2553,6 +2554,7 @@ class RecentBroadcast {
       txid: json['txid'] as String,
       network: Network.fromId(json['network'] as String),
       hex: json['hex'] as String,
+      backend: json['backend'] as String,
       at: json['at'] as int,
     );
   }
@@ -2563,15 +2565,12 @@ class RecentBroadcast {
   /// The transaction as sent: what the status check decodes.
   final String hex;
 
+  /// Host that accepted it; empty for one this app kept before the vault
+  /// did, which did not note it.
+  final String backend;
+
   /// Unix timestamp, seconds, of the broadcast.
   final int at;
-
-  Map<String, dynamic> toJson() => {
-    'txid': txid,
-    'network': network.id,
-    'hex': hex,
-    'at': at,
-  };
 }
 
 // --- backup ------------------------------------------------------------
