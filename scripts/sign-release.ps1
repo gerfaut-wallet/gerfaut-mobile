@@ -3,21 +3,25 @@
 # checks the certificate and the payload, swaps them into the draft under
 # their final names, then hashes the signed files into a SHA256SUMS
 # manifest and signs that with minisign. Neither key ever leaves this
-# machine. CI only ever builds.
+# machine. CI only ever builds. Nothing is signed unless the tag names
+# the same commit in this clone and on GitHub, a commit of main.
 #
 # The keystore path, its password, the key alias and the key password
 # come from android/key.properties (untracked), the file the Gradle build
 # reads. Passwords reach apksigner through the environment, never through
-# the command line. Needs: gh, minisign, a JDK (JAVA_HOME or java on
+# the command line. Needs: gh, git, minisign, a JDK (JAVA_HOME or java on
 # PATH), the Android SDK build-tools (ANDROID_HOME, ANDROID_SDK_ROOT or
 # the default install location) and Python 3 for reproducible/compare.py.
 #
 # Usage:  pwsh scripts/sign-release.ps1 v0.1.0
 #         (works on the draft release before you click Publish; safe to
-#         run again if it stopped halfway)
+#         run again if it stopped halfway; run it from a clone that has
+#         the tag, see Get-ReleaseCommit)
 
 param([Parameter(Mandatory)][string]$Tag)
 $ErrorActionPreference = "Stop"
+$slug = "gerfaut-wallet/gerfaut-mobile"
+. (Join-Path $PSScriptRoot "release-checks.ps1")
 
 # SHA-256 of the release signing certificate, as `apksigner verify
 # --print-certs` prints it. Every APK that goes up is checked against it,
@@ -101,7 +105,8 @@ function Assert-ReleaseCertificate([string]$Apk) {
     }
 }
 
-foreach ($tool in "gh", "minisign") {
+if ($Tag -notmatch '^v\d+\.\d+\.\d+$') { throw "not a release tag: $Tag" }
+foreach ($tool in "gh", "git", "minisign") {
     if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
         throw "$tool not found - install it first"
     }
@@ -130,6 +135,10 @@ if (-not [System.IO.Path]::IsPathRooted($storeFile)) {
 if (-not (Test-Path -LiteralPath $storeFile -PathType Leaf)) {
     throw "android/key.properties: storeFile does not point at a file"
 }
+
+Write-Output "checking what $Tag names..."
+$commit = Get-ReleaseCommit -RepoDir $repo -Tag $Tag -Slug $slug
+Write-Output "  $Tag is $commit here and on GitHub, a commit of main"
 
 Write-Output "checking the $Tag draft..."
 $release = gh release view $Tag --json "isDraft,assets" | ConvertFrom-Json
