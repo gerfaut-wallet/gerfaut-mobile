@@ -10,9 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
-/// The activity's channel for files: it writes the file of a share and
-/// opens the share sheet on it (SharedFiles.kt).
-const MethodChannel _files = MethodChannel('gerfaut/files');
+import 'documents.dart' show filesChannel;
 
 /// Offers [bytes] to the share sheet as a file named [filename], and
 /// answers once the sheet has closed: true when an app was picked, false
@@ -25,7 +23,7 @@ const MethodChannel _files = MethodChannel('gerfaut/files');
 Future<bool> _share(Uint8List bytes, String filename, String mimeType) async {
   await sharedCopies.sweep();
   try {
-    return await _files.invokeMethod<bool>('share', {
+    return await filesChannel.invokeMethod<bool>('share', {
           'bytes': bytes,
           'filename': filename,
           'mimeType': mimeType,
