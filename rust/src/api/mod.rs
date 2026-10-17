@@ -717,8 +717,9 @@ static LIVE_EVENTS: LazyLock<broadcast::Sender<String>> =
 /// asked for while another is still ending waits for it to be gone.
 static LIVE_RUNNING: Mutex<bool> = Mutex::const_new(false);
 
-/// Whether [`live_stop`] was called since the run in place began: a
-/// watch that ends without it ended on its own, and that is a failure.
+/// Whether [`live_stop`] was called since the run in place was asked
+/// for, its start included: a watch that ends without it ended on its
+/// own, and that is a failure.
 static LIVE_STOP_ASKED: AtomicBool = AtomicBool::new(false);
 
 /// What the screens and the caller hear once a run is over.
@@ -769,10 +770,12 @@ pub async fn live_run(sink: StreamSink<String>) {
             let _ = sink.add(error_json("live_running", "the live watch is held already"));
             return;
         }
+        // Cleared before the start, never after: a stop asked while the
+        // watch opens is kept, and ends this run as a stop.
+        LIVE_STOP_ASKED.store(false, Ordering::SeqCst);
         match manager.live_start().await {
             Ok(events) => {
                 *running = true;
-                LIVE_STOP_ASKED.store(false, Ordering::SeqCst);
                 events
             }
             Err(e) => {
@@ -781,6 +784,11 @@ pub async fn live_run(sink: StreamSink<String>) {
             }
         }
     };
+    // That stop may have come before the watch was in place, and found
+    // nothing to stop: it is carried out now.
+    if LIVE_STOP_ASKED.load(Ordering::SeqCst) {
+        manager.live_stop().await;
+    }
     let forward = async {
         while let Some(event) = events.next().await {
             let payload = to_json(&event);
