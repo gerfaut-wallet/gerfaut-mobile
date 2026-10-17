@@ -196,6 +196,20 @@ class MainActivity : FlutterFragmentActivity() {
                         createDocument(filename, mimeType, bytes, result)
                     }
                 }
+                "share" -> {
+                    val filename = call.argument<String>("filename")
+                    val mimeType = call.argument<String>("mimeType")
+                    val bytes = call.argument<ByteArray>("bytes")
+                    if (filename == null || mimeType == null || bytes == null) {
+                        result.error(
+                            "bad_argument",
+                            "share takes filename, mimeType and bytes",
+                            null,
+                        )
+                    } else {
+                        shareFile(bytes, filename, mimeType, result)
+                    }
+                }
                 "openDocument" -> {
                     val mimeTypes = call.argument<List<String>>("mimeTypes")
                     val maxBytes = call.argument<Int>("maxBytes")
@@ -535,6 +549,46 @@ class MainActivity : FlutterFragmentActivity() {
                 )
             }
         }
+    }
+
+    // Writes the file off the main thread, then opens the share sheet on
+    // it. Answers once the sheet is up; an error when it could not be.
+    private fun shareFile(
+        bytes: ByteArray,
+        filename: String,
+        mimeType: String,
+        result: MethodChannel.Result,
+    ) {
+        Thread {
+            val sheet = try {
+                Result.success(SharedFiles.prepare(this, bytes, filename, mimeType))
+            } catch (error: Exception) {
+                Result.failure(error)
+            }
+            runOnUiThread {
+                val failure = sheet.fold(
+                    {
+                        try {
+                            startActivity(it)
+                            null
+                        } catch (error: Exception) {
+                            error
+                        }
+                    },
+                    { it },
+                )
+                when (failure) {
+                    null -> result.success(null)
+                    is ActivityNotFoundException ->
+                        result.error("unavailable", "no app on this device can take a file", null)
+                    else -> result.error(
+                        "failed",
+                        failure.message ?: "the share sheet could not be opened",
+                        null,
+                    )
+                }
+            }
+        }.start()
     }
 
     // Opens the system's open-document dialog and answers with the file

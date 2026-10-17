@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What SharedFileProvider serves: the folder each share writes its
+     file into under the cache, and nothing else of the app's data. -->
+<paths>
+    <cache-path name="shared" path="shared/" />
+</paths>

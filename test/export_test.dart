@@ -367,6 +367,29 @@ void main() {
     expect(elsewhere.existsSync(), isTrue);
   });
 
+  test('a history shared by the app goes from its folder, and the '
+      'folder with it', () async {
+    final cache = await Directory.systemTemp.createTemp('gerfaut-cache');
+    addTearDown(() => cache.delete(recursive: true));
+    final sep = Platform.pathSeparator;
+    // One folder per share, under the app's own `shared`.
+    final share = Directory('${cache.path}${sep}shared${sep}0b5f6d2e-uuid')
+      ..createSync(recursive: true);
+    final copy = File('${share.path}${sep}savings-transactions.csv')
+      ..writeAsStringSync('txid,amount');
+    copy.setLastModifiedSync(longAgo());
+    final young = Directory('${cache.path}${sep}shared${sep}1c6e7f3f-uuid')
+      ..createSync();
+    final recent = File('${young.path}${sep}cold-transactions.csv')
+      ..writeAsStringSync('txid,amount');
+
+    expect((await sweepSharedCopies(cache: cache)).gone, 1);
+    expect(copy.existsSync(), isFalse);
+    expect(share.existsSync(), isFalse);
+    // Still within its hour: the app it went to may be reading it.
+    expect(recent.existsSync(), isTrue);
+  });
+
   test(
     'a history shared within the hour stays for the app reading it',
     () async {

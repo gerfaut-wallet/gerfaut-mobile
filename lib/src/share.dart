@@ -1,15 +1,38 @@
 // Hands a built CSV or a sealed backup to the system share sheet. Kept
 // behind small interfaces so widget tests substitute fakes instead of
-// touching the path_provider and share_plus plugins.
+// touching the platform.
 
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
+
+/// The activity's channel for files: it writes the file of a share and
+/// opens the share sheet on it (SharedFiles.kt).
+const MethodChannel _files = MethodChannel('gerfaut/files');
+
+/// Offers [bytes] to the share sheet as a file named [filename]. The
+/// file is written into a folder of its own under the cache, so no two
+/// shares share an address, and only the app picked in the sheet is
+/// granted a read of it, for as long as it holds it: no app could reach
+/// it before the choice, nor a later file through an old grant. It
+/// stays [sharedCopyLifetime], then [sharedCopies] deletes it.
+Future<void> _share(Uint8List bytes, String filename, String mimeType) async {
+  await sharedCopies.sweep();
+  try {
+    await _files.invokeMethod<void>('share', {
+      'bytes': bytes,
+      'filename': filename,
+      'mimeType': mimeType,
+    });
+  } finally {
+    // The copy just written is too young to go: this sets the hour.
+    unawaited(sharedCopies.sweepQuietly());
+  }
+}
 
 /// Offers a CSV to the system share sheet under `filename`.
 abstract class CsvSharer {
@@ -20,16 +43,12 @@ abstract class CsvSharer {
   Future<void> forgetCopies();
 }
 
-/// The real sharer: the text goes straight to the share sheet, as a
-/// backup does, never written by Gerfaut to a file of its own. A history
-/// left in the cache, amounts, txids and labels in the clear, would
-/// outlive the wallet it came from and the vault that keeps it sealed.
-///
-/// The share sheet still needs a file, and share_plus writes one into a
-/// folder of its own under the cache, which it never deletes. That copy
-/// goes once [sharedCopyLifetime] has passed, by [sharedCopies]: not
-/// right after the sheet closes, when the app it went to may still be
-/// reading it.
+/// The real sharer. A history left in the cache, amounts, txids and
+/// labels in the clear, would outlive the wallet it came from and the
+/// vault that keeps it sealed: the share sheet needs a file, and that
+/// copy goes once [sharedCopyLifetime] has passed, by [sharedCopies],
+/// not right after the sheet closes, when the app it went to may still
+/// be reading it.
 class SystemCsvSharer implements CsvSharer {
   const SystemCsvSharer();
 
@@ -37,34 +56,14 @@ class SystemCsvSharer implements CsvSharer {
   Future<void> forgetCopies() => sharedCopies.sweepQuietly();
 
   @override
-  Future<void> shareCsv({required String csv, required String filename}) async {
-    await sharedCopies.sweep();
-    try {
-      await SharePlus.instance.share(
-        ShareParams(
-          files: [
-            XFile.fromData(
-              Uint8List.fromList(utf8.encode(csv)),
-              mimeType: 'text/csv',
-              name: filename,
-            ),
-          ],
-          fileNameOverrides: [filename],
-        ),
-      );
-    } finally {
-      // The copy just written is too young to go: this sets the hour.
-      unawaited(sharedCopies.sweepQuietly());
-    }
-  }
+  Future<void> shareCsv({required String csv, required String filename}) =>
+      _share(Uint8List.fromList(utf8.encode(csv)), filename, 'text/csv');
 }
 
 /// How long a shared copy stays before it may go. The app a file went
 /// to reads it within minutes, an upload or a mail attachment included;
 /// an hour leaves room for a slow network or a draft left open, and a
-/// file younger than that may still be on its way. share_plus empties
-/// its own `share_plus` folder at every share whatever this says: within
-/// the hour, a second share still takes the first one's copy from there.
+/// file younger than that may still be on its way.
 const sharedCopyLifetime = Duration(hours: 1);
 
 /// What one sweep did: how many copies went, and how long until the
@@ -72,11 +71,12 @@ const sharedCopyLifetime = Duration(hours: 1);
 typedef SharedSweep = ({int gone, Duration? next});
 
 /// Deletes the histories and backups left in the cache to share them,
-/// once older than `lifetime`. Only the two places that hold them are
-/// read, not the whole cache, which this runs over at every start: its
-/// top, where earlier builds wrote histories, and the folders right under
-/// it, one for each file share_plus is handed from memory and its own
-/// `share_plus` it copies them to. A folder emptied here goes too.
+/// once older than `lifetime`. Only the places that hold them are read,
+/// not the whole cache, which this runs over at every start: its top,
+/// where earlier builds wrote histories, the folders right under it,
+/// where share_plus kept what earlier builds shared through it, and the
+/// folders under those, one for each share in Gerfaut's own `shared`. A
+/// folder emptied here goes too.
 ///
 /// Sweeps may overlap (the start, a share, the hour coming): a file or a
 /// folder another one took is skipped, and the rest is still read, so
@@ -97,6 +97,13 @@ Future<SharedSweep> sweepSharedCopies({
   return (gone: sweep.gone, next: sweep.next);
 }
 
+/// The folder of the cache each share writes its file into, one folder
+/// per share under it: the one res/xml/shared_paths.xml names.
+const String sharedFolder = 'shared';
+
+String _name(FileSystemEntity entity) =>
+    entity.uri.pathSegments.where((part) => part.isNotEmpty).last;
+
 /// What a folder holds, past any entry that cannot be read; nothing when
 /// the folder itself cannot be, or is gone.
 Stream<FileSystemEntity> _entries(Directory dir) => dir
@@ -111,12 +118,18 @@ class _Sweep {
   int gone = 0;
   Duration? next;
 
-  /// The shared files in one folder, not below it; the folder goes once
-  /// they have left it empty.
-  Future<void> folder(Directory folder) async {
+  /// The shared files in one folder, and for Gerfaut's own `shared` in
+  /// the folders right under it, one per share; a folder goes once they
+  /// have left it empty.
+  Future<void> folder(Directory folder, {bool top = true}) async {
     final before = gone;
+    final shares = top && _name(folder) == sharedFolder;
     await for (final entry in _entries(folder)) {
-      if (entry is File) await file(entry);
+      if (entry is File) {
+        await file(entry);
+      } else if (entry is Directory && shares) {
+        await this.folder(entry, top: false);
+      }
     }
     if (gone == before) return;
     try {
@@ -143,7 +156,7 @@ class _Sweep {
       await file.delete();
       gone++;
     } on FileSystemException {
-      // Taken by another sweep, or by share_plus: nothing left to do.
+      // Taken by another sweep: nothing left to do.
     }
   }
 }
@@ -215,13 +228,10 @@ abstract class BackupSharer {
   });
 }
 
-/// The real sharer: the bytes go straight to the share sheet, which
-/// writes them to a temporary file of its own. The name override is
-/// what names that file: an in-memory [XFile] drops its name on Android.
-///
-/// Sealed as it is, that file has no business outliving the share: it
-/// goes the way a history's copy goes, once [sharedCopyLifetime] has
-/// passed, never while the app it went to may still read it.
+/// The real sharer. Sealed as it is, the backup's file has no business
+/// outliving the share: it goes the way a history's copy goes, once
+/// [sharedCopyLifetime] has passed, never while the app it went to may
+/// still read it.
 class SystemBackupSharer implements BackupSharer {
   const SystemBackupSharer();
 
@@ -229,26 +239,7 @@ class SystemBackupSharer implements BackupSharer {
   Future<void> shareBackup({
     required Uint8List bytes,
     required String filename,
-  }) async {
-    await sharedCopies.sweep();
-    try {
-      await SharePlus.instance.share(
-        ShareParams(
-          files: [
-            XFile.fromData(
-              bytes,
-              mimeType: 'application/octet-stream',
-              name: filename,
-            ),
-          ],
-          fileNameOverrides: [filename],
-        ),
-      );
-    } finally {
-      // The copy just written is too young to go: this sets the hour.
-      unawaited(sharedCopies.sweepQuietly());
-    }
-  }
+  }) => _share(bytes, filename, 'application/octet-stream');
 }
 
 /// The backup sharer in use. Widget tests override this with a fake.
