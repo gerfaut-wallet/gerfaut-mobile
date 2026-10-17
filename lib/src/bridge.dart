@@ -166,8 +166,21 @@ abstract class GerfautBridge {
 
   /// Assembles the distinct QR frames scanned so far (plain text, UR,
   /// BBQr). Feed the growing list until [QrProgress.complete], then
-  /// hand [QrProgress.text] to [parseInput].
+  /// hand [QrProgress.text] to [parseInput]. The scanner uses a scan the
+  /// core holds instead: [openQrScan], [pushQrFrame], [closeQrScan].
   Future<QrProgress> assembleQr(List<String> frames);
+
+  /// Opens a scan the core holds while the scanner is up, and gives the
+  /// number its frames go under.
+  Future<int> openQrScan();
+
+  /// Sends one new frame to an open scan: where it stands after it, as
+  /// [assembleQr] says of every frame so far. Once it answers with its
+  /// text or a refusal, the core starts the scan again empty.
+  Future<QrProgress> pushQrFrame(int scan, String frame);
+
+  /// Lets the core drop a scan; one already closed stays closed.
+  Future<void> closeQrScan(int scan);
 
   /// Reads a server address scanned or pasted into the backend form:
   /// the Electrum one-liner `host:port:s|t` node dashboards print, an
@@ -429,6 +442,18 @@ class RustBridge implements GerfautBridge {
     final raw = await rust.assembleQr(framesJson: jsonEncode(frames));
     return QrProgress.fromJson(_object(raw));
   }
+
+  @override
+  Future<int> openQrScan() => rust.openQrScan();
+
+  @override
+  Future<QrProgress> pushQrFrame(int scan, String frame) async {
+    final raw = await rust.pushQrFrame(scan: scan, frame: frame);
+    return QrProgress.fromJson(_object(raw));
+  }
+
+  @override
+  Future<void> closeQrScan(int scan) => rust.closeQrScan(scan: scan);
 
   @override
   Future<ScannedBackend> parseBackend(String input) async {

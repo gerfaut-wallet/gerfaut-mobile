@@ -115,6 +115,9 @@ void main() {
       ['wpkh([9a6a2580/84h/1h/0h]tpub.../0/*)'],
     ]);
     expect(find.byType(ScanScreen), findsNothing);
+    // The scan the core held went with the screen.
+    expect(bridge.scansOpened, 1);
+    expect(bridge.scansClosed, [1]);
   });
 
   testWidgets('an animated code counts its parts and pops once complete', (
@@ -158,6 +161,13 @@ void main() {
         'ur:crypto-output/3-3/part-three',
       ],
     ]);
+    // Each frame crossed once, to the one scan the core held.
+    expect(bridge.pushedFrames, [
+      'ur:crypto-output/1-3/part-one',
+      'ur:crypto-output/2-3/part-two',
+      'ur:crypto-output/3-3/part-three',
+    ]);
+    expect(bridge.scansOpened, 1);
   });
 
   testWidgets('a code that never comes together stops the scan for good', (
@@ -337,6 +347,8 @@ void main() {
     expect(find.byKey(_camera), findsNothing);
     expect(outcome.pops, 0);
     expect(find.byType(ScanScreen), findsOneWidget);
+    // The scan is over: the core lets it go with the camera.
+    expect(bridge.scansClosed, [1]);
   });
 
   testWidgets('frames decoded after the pop are ignored', (tester) async {
@@ -417,6 +429,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(outcome.pops, 1);
     expect(outcome.text, isNull);
+    // The scan the core held is let go with the screen.
+    expect(bridge.scansClosed, [1]);
 
     // The core answering after the user walked away must not reach a
     // screen that is gone, nor hand the caller a late scan.
