@@ -37,7 +37,8 @@ import java.io.File
 import java.io.IOException
 import java.util.UUID
 
-// A fragment activity, which is what the biometric prompt attaches to.
+// A fragment activity, which is what the biometric prompt attaches to
+// (StrongBiometrics).
 class MainActivity : FlutterFragmentActivity() {
     // The save under way: the bytes to write once the picker names a
     // place, and the call waiting for the answer. One at a time.
@@ -126,6 +127,10 @@ class MainActivity : FlutterFragmentActivity() {
     private var pendingExemption: MethodChannel.Result? = null
 
     private val main = Handler(Looper.getMainLooper())
+
+    // The phone's prompt for the app lock; a prompt still up when the
+    // activity goes is answered then (onDestroy).
+    private val biometrics by lazy { StrongBiometrics(this) }
     private val clearSensitive = Runnable { clearSensitiveIfOurs() }
 
     private val exemptionDialog: ActivityResultLauncher<Intent> =
@@ -138,9 +143,19 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Another app's window drawn over this one could hide what a
+        // button does and let the tap through to it. From Android 12 the
+        // system hides every such window while this one is in front; its
+        // own windows still show.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            window.setHideOverlayWindows(true)
+        }
         // The task switcher must show the calculator from the first frame
         // of a disguised app, before the Dart side has asked anything.
-        applyTaskDescription(isDisguised())
+        val disguised = isDisguised()
+        applyTaskDescription(disguised)
+        applyRecentsScreenshot(disguised)
+        recallSensitive()
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -185,6 +200,20 @@ class MainActivity : FlutterFragmentActivity() {
                         createDocument(filename, mimeType, bytes, result)
                     }
                 }
+                "share" -> {
+                    val filename = call.argument<String>("filename")
+                    val mimeType = call.argument<String>("mimeType")
+                    val bytes = call.argument<ByteArray>("bytes")
+                    if (filename == null || mimeType == null || bytes == null) {
+                        result.error(
+                            "bad_argument",
+                            "share takes filename, mimeType and bytes",
+                            null,
+                        )
+                    } else {
+                        shareFile(bytes, filename, mimeType, result)
+                    }
+                }
                 "openDocument" -> {
                     val mimeTypes = call.argument<List<String>>("mimeTypes")
                     val maxBytes = call.argument<Int>("maxBytes")
@@ -197,6 +226,27 @@ class MainActivity : FlutterFragmentActivity() {
                     } else {
                         openDocument(mimeTypes, maxBytes, result)
                     }
+                }
+                else -> result.notImplemented()
+            }
+        }
+        MethodChannel(messenger, BIOMETRICS_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "support" -> result.success(biometrics.support())
+                "keyPresence" -> result.success(biometrics.keyPresence())
+                "prepareKey" -> result.success(biometrics.prepareKey())
+                "prompt" -> {
+                    val title = call.argument<String>("title")
+                    val cancel = call.argument<String>("cancel")
+                    if (title == null || cancel == null) {
+                        result.error("bad_argument", "prompt takes title and cancel", null)
+                    } else {
+                        biometrics.prompt(title, cancel, result)
+                    }
+                }
+                "forget" -> {
+                    biometrics.forget()
+                    result.success(null)
                 }
                 else -> result.notImplemented()
             }
@@ -362,9 +412,89 @@ class MainActivity : FlutterFragmentActivity() {
             0L
         }
         sensitiveCopiedAt = SystemClock.elapsedRealtime()
+        noteSensitive()
         main.removeCallbacks(clearSensitive)
         main.postDelayed(clearSensitive, SENSITIVE_CLEAR_MS)
     }
+
+    // The copy waiting to be cleared, as the process knows it, written
+    // down beside the app's data: a process that dies within the minute
+    // takes its timer with it, and the copy would otherwise stay on the
+    // clipboard for good. Only the mark and two clock readings, never
+    // the text. Written at once, not in the background: the process may
+    // be about to go. The one write that waits for the disk.
+    private fun noteSensitive() {
+        clipboardNote().edit()
+            .putString(NOTE_MARK, sensitiveMark)
+            .putLong(NOTE_STAMP, sensitiveStamp)
+            .putLong(NOTE_COPIED_AT, sensitiveCopiedAt)
+            .putInt(NOTE_BOOT, bootCount())
+            // Synchronous on purpose: a few bytes that must outlive the process.
+            .commit()
+    }
+
+    // How many times the phone has started, as Android counts it; -1 when
+    // it will not say. Tells a note from this run of the phone from one
+    // the clipboard did not survive.
+    private fun bootCount(): Int = try {
+        Settings.Global.getInt(contentResolver, Settings.Global.BOOT_COUNT)
+    } catch (_: Exception) {
+        -1
+    }
+
+    // A note left behind clears nothing: written in the background, the
+    // copy it named being gone already.
+    private fun forgetSensitive() {
+        sensitiveMark = null
+        clipboardNote().edit().clear().apply()
+    }
+
+    // The first activity of a process reads back a copy an earlier one
+    // left: its minute is counted from when it was made, and once over,
+    // the next focus clears it if it is still on the clipboard. A copy
+    // from before the phone restarted is gone with the clipboard, and its
+    // note with it: the start count says so, and the clock it was timed
+    // by, which starts again from zero, where the count is not to be had.
+    //
+    // Read off the main thread, the first screen being drawn meanwhile,
+    // and taken up on it, where the copy's state lives.
+    private fun recallSensitive() {
+        if (recalled) return
+        recalled = true
+        val app = applicationContext
+        Thread {
+            val note = app.getSharedPreferences(CLIPBOARD_NOTE, Context.MODE_PRIVATE)
+            val mark = note.getString(NOTE_MARK, null)
+            val stamp = note.getLong(NOTE_STAMP, 0L)
+            val copiedAt = note.getLong(NOTE_COPIED_AT, 0L)
+            val boot = note.getInt(NOTE_BOOT, -1)
+            val now = bootCount()
+            val sameBoot = if (boot >= 0 && now >= 0) {
+                boot == now
+            } else {
+                copiedAt > 0L && copiedAt <= SystemClock.elapsedRealtime()
+            }
+            main.post { takeUpRecalled(mark, stamp, copiedAt, sameBoot) }
+        }.start()
+    }
+
+    private fun takeUpRecalled(mark: String?, stamp: Long, copiedAt: Long, sameBoot: Boolean) {
+        // Nothing left, or a copy made since in this process: that one
+        // is the one to clear.
+        if (mark == null || sensitiveMark != null) return
+        if (!sameBoot || copiedAt <= 0L) {
+            forgetSensitive()
+            return
+        }
+        sensitiveMark = mark
+        sensitiveStamp = stamp
+        sensitiveCopiedAt = copiedAt
+        // Its minute may be over already: cleared now if the app has the
+        // focus, and timed for later if not.
+        clearSensitiveIfOurs()
+    }
+
+    private fun clipboardNote() = getSharedPreferences(CLIPBOARD_NOTE, Context.MODE_PRIVATE)
 
     // A minute after a secret was copied, it leaves the clipboard: long
     // enough to paste it, and it does not wait there for whatever reads
@@ -399,7 +529,7 @@ class MainActivity : FlutterFragmentActivity() {
             // Unreadable: nothing is cleared on a guess.
             return
         }
-        sensitiveMark = null
+        forgetSensitive()
         val marked = description?.extras?.getString(COPY_MARK) == mark
         val stamped = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             sensitiveStamp != 0L && description?.timestamp == sensitiveStamp
@@ -418,6 +548,9 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun onDestroy() {
         main.removeCallbacks(clearSensitive)
+        // A prompt still waiting is answered: the call behind it must
+        // not wait for an activity that is gone.
+        biometrics.onDestroy()
         super.onDestroy()
     }
 
@@ -459,6 +592,53 @@ class MainActivity : FlutterFragmentActivity() {
                 )
             }
         }
+    }
+
+    // Writes the file off the main thread, then opens the share sheet on
+    // it. Answers once the sheet is up, and nothing about what was picked
+    // there: the sheet is all the feedback there is. An error when it
+    // could not open, or when this activity went away during the writing,
+    // in which case nothing is opened over whatever came next.
+    private fun shareFile(
+        bytes: ByteArray,
+        filename: String,
+        mimeType: String,
+        result: MethodChannel.Result,
+    ) {
+        val reply = Reply(result)
+        Thread {
+            val sheet = try {
+                Result.success(SharedFiles.prepare(this, bytes, filename, mimeType))
+            } catch (error: Exception) {
+                Result.failure(error)
+            }
+            runOnUiThread {
+                if (isDestroyed) {
+                    reply.error("gone", "the screen that asked has closed")
+                    return@runOnUiThread
+                }
+                val failure = sheet.fold(
+                    {
+                        try {
+                            startActivity(it)
+                            null
+                        } catch (error: Exception) {
+                            error
+                        }
+                    },
+                    { it },
+                )
+                when (failure) {
+                    null -> reply.success(null)
+                    is ActivityNotFoundException ->
+                        reply.error("unavailable", "no app on this device can take a file")
+                    else -> reply.error(
+                        "failed",
+                        failure.message ?: "the share sheet could not be opened",
+                    )
+                }
+            }
+        }.start()
     }
 
     // Opens the system's open-document dialog and answers with the file
@@ -610,6 +790,19 @@ class MainActivity : FlutterFragmentActivity() {
         // calculator; this says the same thing a second time, on purpose.
         if (disguised) LiveService.stop(this)
         applyTaskDescription(disguised)
+        applyRecentsScreenshot(disguised)
+    }
+
+    // Disguised, the task switcher keeps no picture of the app at all
+    // from Android 13: the one it takes as the app leaves could catch a
+    // wallet on its way to the calculator, and an older one would stay
+    // until replaced. The card shows the calculator's icon over a plain
+    // ground instead. Earlier versions have no such switch: the
+    // activation sheet says to clear the recent apps.
+    private fun applyRecentsScreenshot(disguised: Boolean) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            setRecentsScreenshotEnabled(!disguised)
+        }
     }
 
     private fun writeMarker(disguised: Boolean) {
@@ -729,11 +922,30 @@ class MainActivity : FlutterFragmentActivity() {
 
     private class PendingOpen(val maxBytes: Int, val result: MethodChannel.Result)
 
+    // A channel call answered once, whatever asks to answer it after:
+    // a second answer would end the app.
+    private class Reply(private val result: MethodChannel.Result) {
+        private var answered = false
+
+        fun success(value: Any?) {
+            if (answered) return
+            answered = true
+            result.success(value)
+        }
+
+        fun error(code: String, message: String) {
+            if (answered) return
+            answered = true
+            result.error(code, message, null)
+        }
+    }
+
     private companion object {
         const val WINDOW_CHANNEL = "gerfaut/window"
         const val FILES_CHANNEL = "gerfaut/files"
         const val DISGUISE_CHANNEL = "gerfaut/disguise"
         const val LIVE_CHANNEL = "gerfaut/live"
+        const val BIOMETRICS_CHANNEL = "gerfaut/biometrics"
         const val DISGUISE_MARKER = "disguised"
 
         // As on the desktop app: a minute on the clipboard, then gone.
@@ -750,6 +962,18 @@ class MainActivity : FlutterFragmentActivity() {
         private var sensitiveMark: String? = null
         private var sensitiveStamp = 0L
         private var sensitiveCopiedAt = 0L
+
+        // Whether this process read back what an earlier one wrote down
+        // (see recallSensitive): once, by its first activity.
+        private var recalled = false
+
+        // Where the copy waiting to be cleared is written down, and its
+        // four entries. Plain names: nothing here says what was copied.
+        const val CLIPBOARD_NOTE = "clipboard"
+        const val NOTE_MARK = "mark"
+        const val NOTE_STAMP = "stamp"
+        const val NOTE_COPIED_AT = "copied_at"
+        const val NOTE_BOOT = "boot"
 
         // The key of the mark on a sensitive copy. Plain on purpose: a
         // clipboard manager that lists extras must find no app's name.

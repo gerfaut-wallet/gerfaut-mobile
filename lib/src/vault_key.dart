@@ -15,6 +15,7 @@ import 'dart:io';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'bridge.dart' show PanicGuard;
 import 'rust/api.dart' as rust_api;
 import 'rust/frb_generated.dart';
 
@@ -167,7 +168,10 @@ Future<void> setVaultAside() async {
 /// again after a vault was set aside: the bridge is only loaded the
 /// first time.
 Future<void> bootstrapGerfaut() async {
-  if (!RustLib.instance.initialized) await RustLib.init();
+  // Every call to the core goes through the guard against its panics.
+  if (!RustLib.instance.initialized) {
+    await RustLib.init(handler: PanicGuard());
+  }
   final dir = await getApplicationDocumentsDirectory();
   final keyHex = await obtainVaultKeyHex(dataDir: dir.path);
   final result = await rust_api.initManager(dataDir: dir.path, keyHex: keyHex);

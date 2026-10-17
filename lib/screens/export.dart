@@ -154,10 +154,11 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
         case _Destination.share:
           final sharer = ref.read(csvSharerProvider);
           try {
+            // The sheet is the feedback: what was picked there, if
+            // anything, is the sheet's to know.
             await lock.excursion(
               () => sharer.shareCsv(csv: result.csv, filename: filename),
             );
-            messenger.showSnackBar(Toast('$rows exported'));
           } catch (_) {
             // No sheet came up: nothing left the screen.
             _fail('The share sheet could not be opened.');

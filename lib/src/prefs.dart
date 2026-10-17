@@ -12,6 +12,10 @@ abstract final class Pref {
   static const background = 'notify.background';
   static const onboardingSeen = 'onboarding.seen';
   static const widgetBalances = 'widgets.balances';
+
+  /// The launch at which the phone first said it had no strong
+  /// biometric, while biometrics stood on; empty or absent when none.
+  static const biometricLack = 'lock.biometric_lack';
 }
 
 /// The preferences of this app alone that a background isolate acts

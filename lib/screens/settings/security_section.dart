@@ -17,6 +17,13 @@ import '../../widgets/password_field.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/setting_switch.dart';
 
+/// Why "Unlock with biometrics" is greyed on a phone whose only
+/// biometric is a weak one.
+String biometricsWeakNote(LockKind kind) =>
+    'Android rates the face or fingerprint unlock of this phone as weak, '
+    'easy to fool. Your ${kind == LockKind.pin ? 'PIN' : 'password'} stays '
+    'the way in.';
+
 /// The settings card that turns the lock on and changes its secret.
 class SecuritySection extends ConsumerStatefulWidget {
   const SecuritySection({super.key});
@@ -78,6 +85,8 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
       if (mounted) setState(() => _error = error.message);
       return;
     }
+    // The biometric key opened the lock, and goes with it.
+    await ref.read(biometricGateProvider).forget();
     // Only once the core accepts: the launcher face is restored after
     // the lock is gone, never before it is agreed.
     if (disguised) await _swapFace(false);
@@ -135,27 +144,25 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
     // phone must not be able to make it a key to this vault.
     final current = await _askSecret(kind, 'Unlock with biometrics');
     if (current == null) return;
-    // Then prove the phone answers, before storing a promise it
-    // cannot keep.
-    if (on) {
-      final passed = await ref
-          .read(biometricGateProvider)
-          .authenticate('Unlock Gerfaut');
-      if (!passed) {
-        if (mounted) {
-          setState(
-            () => _error = 'The phone did not confirm. Nothing changed.',
-          );
-        }
-        return;
+    final gate = ref.read(biometricGateProvider);
+    // Then make the key a strong biometric alone unlocks, and prove the
+    // phone answers on it, before storing a promise it cannot keep.
+    if (on && !await gate.enroll('Unlock Gerfaut')) {
+      if (mounted) {
+        setState(() => _error = 'The phone did not confirm. Nothing changed.');
       }
+      return;
     }
     try {
       await ref.read(bridgeProvider).setBiometricUnlock(on, current);
-      _afterChange();
     } on BridgeException catch (error) {
+      // The vault said no: a key made for nothing is not kept.
+      if (on) await gate.forget();
       if (mounted) setState(() => _error = error.message);
+      return;
     }
+    if (!on) await gate.forget();
+    _afterChange();
   }
 
   @override
@@ -164,8 +171,8 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
     // The vault is the source of truth for what is set; the lock
     // provider only knows whether the screen is up right now.
     final lock = ref.watch(settingsProvider).valueOrNull?.appLock;
-    final canBiometrics =
-        ref.watch(biometricsAvailableProvider).valueOrNull ?? false;
+    final biometrics = ref.watch(biometricSupportProvider).valueOrNull;
+    final weakOnly = biometrics == BiometricSupport.weakOnly;
     final disguised = ref.watch(disguiseProvider).disguised;
     final pinLock = lock?.kind == LockKind.pin;
 
@@ -200,12 +207,18 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
               ),
             ],
           ),
-          if (canBiometrics) ...[
+          // Shown wherever a biometric is set up. A weak one can be
+          // fooled, by a photograph for most face unlocks: it is never
+          // offered, and the card says why rather than leave the user
+          // looking for the switch. A sensor that cannot answer for now
+          // changes nothing: the switch stays as it is.
+          if (biometrics != null && biometrics != BiometricSupport.none) ...[
             const SizedBox(height: GerfautSpacing.md),
             SettingSwitch(
               title: 'Unlock with biometrics',
-              value: lock.biometric,
-              onChanged: (on) => _setBiometric(on, lock.kind),
+              hint: weakOnly ? biometricsWeakNote(lock.kind) : null,
+              value: !weakOnly && lock.biometric,
+              onChanged: weakOnly ? null : (on) => _setBiometric(on, lock.kind),
             ),
           ],
           const SizedBox(height: GerfautSpacing.md),
@@ -501,13 +514,27 @@ class DisguiseSheet extends StatelessWidget {
       'name. Background checks stay silent, and home-screen widgets are '
       'turned off.';
 
+  /// What Android keeps of the notifications posted before, out of the
+  /// app's reach: its history lists them under the app's name.
+  static const String historyFact =
+      "Android's notification history, if you turned it on, still lists "
+      "Gerfaut's earlier notifications. Turning it off in Android's "
+      'notification settings clears it.';
+
+  /// From Android 13 the recent apps keep no picture of the disguised
+  /// app (MainActivity.applyRecentsScreenshot); before, an older one
+  /// stays until replaced.
+  static const String recentsFact =
+      'Below Android 13, clear your recent apps once: Android may still '
+      'show an older Gerfaut thumbnail.';
+
   static const List<String> facts = [
     'The launcher will show a calculator named "Calculator".',
     'Open the wallet by typing your PIN into it, then =.',
     'Settings → Apps and the app store still list "Gerfaut".',
     silenceFact,
-    'Clear your recent apps once: Android may still show an older Gerfaut '
-        'thumbnail.',
+    historyFact,
+    recentsFact,
   ];
 
   @override

@@ -16,25 +16,6 @@ import 'package:gerfaut/src/window.dart';
 
 import 'fakes.dart';
 
-/// Answers the phone's prompt the way a test asks it to. Kept here so
-/// the disguise tests can prove the calculator never raises it.
-class FakeBiometrics implements BiometricGate {
-  FakeBiometrics({this.available = true, this.passes = true});
-
-  bool available;
-  bool passes;
-  int prompts = 0;
-
-  @override
-  Future<bool> canCheck() async => available;
-
-  @override
-  Future<bool> authenticate(String reason) async {
-    prompts++;
-    return passes;
-  }
-}
-
 const AppLock pinLock = AppLock(kind: LockKind.pin, biometric: false);
 
 FakeBridge locked({

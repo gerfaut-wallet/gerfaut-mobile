@@ -25,13 +25,6 @@ import 'fakes.dart';
 const String _releases =
     'https://github.com/gerfaut-wallet/gerfaut-mobile/releases/latest';
 
-class _NoBiometrics implements BiometricGate {
-  @override
-  Future<bool> canCheck() async => false;
-  @override
-  Future<bool> authenticate(String reason) async => false;
-}
-
 /// A vault with one wallet, whose core already knows of [known], a
 /// newer release, and finds [finds] when a session asks.
 FakeBridge _bridge({
@@ -71,7 +64,9 @@ Future<void> _launch(
         disguiseServiceProvider.overrideWithValue(
           FakeDisguise(disguised: disguised),
         ),
-        biometricGateProvider.overrideWithValue(_NoBiometrics()),
+        biometricGateProvider.overrideWithValue(
+          FakeBiometrics(available: false),
+        ),
         windowGuardProvider.overrideWithValue(FakeWindowGuard()),
       ],
       child: const GerfautApp(),

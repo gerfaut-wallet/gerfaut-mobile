@@ -17,7 +17,7 @@ import 'package:gerfaut/widgets/notice.dart';
 
 import 'fakes.dart';
 
-/// Records share calls instead of touching the platform plugins.
+/// Records share calls instead of touching the platform.
 class FakeCsvSharer implements CsvSharer {
   final List<({String csv, String filename})> shared = [];
 
@@ -219,7 +219,7 @@ void main() {
     expect(find.text('3 of 3 transactions selected'), findsOneWidget);
   });
 
-  testWidgets('sharing hands the file to the sheet and states the count', (
+  testWidgets('sharing hands the file to the sheet, which says the rest', (
     tester,
   ) async {
     final sharer = FakeCsvSharer();
@@ -236,11 +236,9 @@ void main() {
     expect(sharer.shared.single.filename, 'cold-storage-transactions.csv');
     expect(sharer.shared.single.csv, contains('txid,date_utc'));
     expect(saver.saved, isEmpty);
-    expect(find.text('3 transactions exported'), findsOneWidget);
-
-    // Flush the snackbar timer.
-    await tester.pump(const Duration(seconds: 5));
-    await tester.pumpAndSettle();
+    // Whether an app took it is the sheet's to say: nothing claims it.
+    expect(find.textContaining('shared'), findsNothing);
+    expect(find.textContaining('exported'), findsNothing);
   });
 
   testWidgets('a save that fails is said under the buttons, not in a toast', (
@@ -365,6 +363,48 @@ void main() {
     expect(copied.existsSync(), isFalse);
     expect(shareFolder.existsSync(), isFalse);
     expect(elsewhere.existsSync(), isTrue);
+  });
+
+  test('a history shared by the app goes from its folder, and the '
+      'folder with it', () async {
+    final cache = await Directory.systemTemp.createTemp('gerfaut-cache');
+    addTearDown(() => cache.delete(recursive: true));
+    final sep = Platform.pathSeparator;
+    // One folder per share, under the app's own `shared`.
+    final share = Directory('${cache.path}${sep}shared${sep}0b5f6d2e-uuid')
+      ..createSync(recursive: true);
+    final copy = File('${share.path}${sep}savings-transactions.csv')
+      ..writeAsStringSync('txid,amount');
+    copy.setLastModifiedSync(longAgo());
+    final young = Directory('${cache.path}${sep}shared${sep}1c6e7f3f-uuid')
+      ..createSync();
+    final recent = File('${young.path}${sep}cold-transactions.csv')
+      ..writeAsStringSync('txid,amount');
+
+    expect((await sweepSharedCopies(cache: cache)).gone, 1);
+    expect(copy.existsSync(), isFalse);
+    expect(share.existsSync(), isFalse);
+    // Still within its hour: the app it went to may be reading it.
+    expect(recent.existsSync(), isTrue);
+  });
+
+  test('a shared file goes by its age, whatever its name', () async {
+    final cache = await Directory.systemTemp.createTemp('gerfaut-cache');
+    addTearDown(() => cache.delete(recursive: true));
+    final sep = Platform.pathSeparator;
+    // A name the platform fell back on, or one a later build may give.
+    final share = Directory('${cache.path}${sep}shared${sep}2d7f8a4a-uuid')
+      ..createSync(recursive: true);
+    final copy = File('${share.path}${sep}shared')..writeAsStringSync('x');
+    copy.setLastModifiedSync(longAgo());
+    // Elsewhere in the cache, a name that is not ours stays.
+    final other = File('${cache.path}${sep}shared.txt')
+      ..writeAsStringSync('not ours');
+    other.setLastModifiedSync(longAgo());
+
+    expect((await sweepSharedCopies(cache: cache)).gone, 1);
+    expect(copy.existsSync(), isFalse);
+    expect(other.existsSync(), isTrue);
   });
 
   test(

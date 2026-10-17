@@ -7,10 +7,12 @@
 //! the core has the core's own code (`ErrorCode`) as its kind and the
 //! few kinds this bridge adds are its own. A panic is not one of
 //! those: flutter_rust_bridge catches it at the boundary and raises it on
-//! the Dart side as an error of its own, outside this shape, so the Dart
-//! code must be ready for a failure that carries no `kind`.
+//! the Dart side as an error of its own, outside this shape. The Dart
+//! side turns it into an `internal` failure in one place, every call and
+//! every stream alike (`PanicGuard`, lib/src/bridge.dart).
 
 use crate::frb_generated::StreamSink;
+use flutter_rust_bridge::for_generated::futures::FutureExt;
 use gerfaut_core::backup::{BackupOptions, ImportChoices};
 use gerfaut_core::chain::BackendConfig;
 use gerfaut_core::chain::tor::TorSettings;
@@ -27,7 +29,9 @@ use gerfaut_core::wallet::snapshot::SyncReport;
 use gerfaut_core::{CoreError, Network, WalletManager};
 use rand::TryRngCore;
 use serde_json::json;
+use std::panic::AssertUnwindSafe;
 use std::sync::LazyLock;
+use std::sync::atomic::{AtomicU32, Ordering};
 use tokio::sync::{Mutex, OnceCell, broadcast};
 
 /// The process-wide manager, set once by [`init_manager`].
@@ -713,6 +717,38 @@ static LIVE_EVENTS: LazyLock<broadcast::Sender<String>> =
 /// asked for while another is still ending waits for it to be gone.
 static LIVE_RUNNING: Mutex<bool> = Mutex::const_new(false);
 
+/// How many times [`live_stop`] was called, ever. A run is handed the
+/// count as it stood when it was asked for ([`live_stops`]): any stop
+/// after that, whenever it is carried out, ends that run, and a watch
+/// that ends with the count unchanged ended on its own, which is a
+/// failure. A count and not a flag: nothing ever takes a stop back.
+static LIVE_STOPS: AtomicU32 = AtomicU32::new(0);
+
+/// The number of stops asked so far, for the caller to hand to the
+/// [`live_run`] it asks for next. Read on the caller's own thread, in
+/// the order of its calls: a stop it asks after this read counts against
+/// that run even if it is carried out before the run starts.
+#[flutter_rust_bridge::frb(sync)]
+pub fn live_stops() -> u32 {
+    LIVE_STOPS.load(Ordering::SeqCst)
+}
+
+/// What the screens and the caller hear once a run is over.
+fn stopped_json() -> String {
+    json!({ "type": "stopped" }).to_string()
+}
+
+/// How a run of the watch came to its end.
+enum RunEnd {
+    /// [`live_stop`] was called.
+    Stopped,
+    /// The caller went away; the watch was stopped for it.
+    CallerGone,
+    /// The watch ended with nobody asking: a panic inside the core's
+    /// own tasks is the one way there.
+    OnItsOwn,
+}
+
 /// Starts the live watch of the active network and hands everything it
 /// says to this one caller, each a serialized `LiveEvent`, then
 /// `{"type":"stopped"}` once the watch has ended. The caller announces
@@ -724,7 +760,18 @@ static LIVE_RUNNING: Mutex<bool> = Mutex::const_new(false);
 /// that goes away without [`live_stop`] stops the watch at the next
 /// event, so nothing more is taken for nobody; the event in hand then
 /// is lost with it, which is why the host stops the watch first.
-pub async fn live_run(sink: StreamSink<String>) {
+///
+/// However the run ends, a panic included, the watch is put down before
+/// anything else is said: stopped, free for the next run, and the
+/// screens told. A panic is raised again after that, for the Dart side
+/// to turn into a failure as it does every other; a watch that ended
+/// with nobody asking ends the stream on an `internal` error, so the
+/// caller says it rather than wait in silence.
+///
+/// `stops_seen` is what [`live_stops`] answered when the run was asked
+/// for: a stop asked since, even during the start, ends the run as a
+/// stop.
+pub async fn live_run(sink: StreamSink<String>, stops_seen: u32) {
     let manager = match manager() {
         Ok(manager) => manager,
         Err(payload) => {
@@ -749,21 +796,56 @@ pub async fn live_run(sink: StreamSink<String>) {
             }
         }
     };
-    while let Some(event) = events.next().await {
-        let payload = to_json(&event);
-        if !matches!(event, LiveEvent::Transaction(_)) {
-            // The screens may not be listening; nothing is lost then.
-            let _ = LIVE_EVENTS.send(payload.clone());
-        }
-        if sink.add(payload).is_err() {
-            manager.live_stop().await;
-            break;
-        }
+    // A stop asked since the run was asked for may have come before the
+    // watch was in place, and found nothing to stop: carried out now.
+    let stopped = || LIVE_STOPS.load(Ordering::SeqCst) != stops_seen;
+    if stopped() {
+        manager.live_stop().await;
     }
+    let forward = async {
+        while let Some(event) = events.next().await {
+            let payload = to_json(&event);
+            if !matches!(event, LiveEvent::Transaction(_)) {
+                // The screens may not be listening; nothing is lost then.
+                let _ = LIVE_EVENTS.send(payload.clone());
+            }
+            if sink.add(payload).is_err() {
+                return RunEnd::CallerGone;
+            }
+        }
+        if stopped() {
+            RunEnd::Stopped
+        } else {
+            RunEnd::OnItsOwn
+        }
+    };
+    let end = then_always(forward, put_down(manager)).await;
+    if matches!(end, RunEnd::OnItsOwn) {
+        let _ = sink.add(error_json("internal", "the live watch ended on its own"));
+    }
+    let _ = sink.add(stopped_json());
+}
+
+/// Puts the watch down after a run, whatever ended it: the core's watch
+/// stopped (again, if that is what ended it: it is idempotent), the
+/// hold released for the next run, and the screens told.
+async fn put_down(manager: &WalletManager) {
+    manager.live_stop().await;
     *LIVE_RUNNING.lock().await = false;
-    let stopped = json!({ "type": "stopped" }).to_string();
-    let _ = LIVE_EVENTS.send(stopped.clone());
-    let _ = sink.add(stopped);
+    let _ = LIVE_EVENTS.send(stopped_json());
+}
+
+/// Runs `work`, then `after`, even when `work` panics; the panic is
+/// raised again once `after` is done. What a stream function must undo
+/// is undone, and the panic still reaches the one place on the Dart
+/// side that catches them all.
+async fn then_always<T>(work: impl Future<Output = T>, after: impl Future<Output = ()>) -> T {
+    let outcome = AssertUnwindSafe(work).catch_unwind().await;
+    after.await;
+    match outcome {
+        Ok(value) => value,
+        Err(panic) => std::panic::resume_unwind(panic),
+    }
 }
 
 /// Stops the live watch and closes its connection. Returns at once; the
@@ -771,6 +853,7 @@ pub async fn live_run(sink: StreamSink<String>) {
 /// Idempotent.
 pub async fn live_stop() -> String {
     let manager = try_json!(manager());
+    LIVE_STOPS.fetch_add(1, Ordering::SeqCst);
     manager.live_stop().await;
     ok_json()
 }
@@ -960,6 +1043,31 @@ mod tests {
 
     fn payload(error: &CoreError) -> Value {
         serde_json::from_str(&core_error_json(error)).expect("the payload is JSON")
+    }
+
+    /// A stream function that panics still puts down what it holds
+    /// (the live watch, its hold, the screens' word that it stopped),
+    /// and the panic still goes on to the boundary, where the Dart side
+    /// turns it into a failure it can say.
+    #[tokio::test]
+    async fn a_panic_puts_the_watch_down_before_it_goes_on() {
+        let put_down = std::sync::atomic::AtomicBool::new(false);
+        let outcome = AssertUnwindSafe(then_always(
+            async {
+                panic!("a simulated panic of the watch");
+            },
+            async { put_down.store(true, Ordering::SeqCst) },
+        ))
+        .catch_unwind()
+        .await;
+        assert!(outcome.is_err(), "the panic goes on to the boundary");
+        assert!(
+            put_down.load(Ordering::SeqCst),
+            "the watch was put down first"
+        );
+
+        let calm = then_always(async { 7 }, async {}).await;
+        assert_eq!(calm, 7);
     }
 
     /// A frame of a multi-part UR announcing `total` parts.

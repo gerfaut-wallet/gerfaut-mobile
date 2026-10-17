@@ -52,16 +52,24 @@ class _LockScreenState extends ConsumerState<LockScreen> {
 
   /// The offer is made once the phone has said it can answer; until
   /// then the secret is the way in, which it always is.
-  bool get _offersBiometrics =>
-      (ref.watch(lockProvider).lock?.biometric ?? false) &&
-      (ref.watch(biometricsAvailableProvider).valueOrNull ?? false);
+  bool get _offersBiometrics {
+    final lock = ref.watch(lockProvider);
+    return (lock.lock?.biometric ?? false) &&
+        lock.biometricLapse == null &&
+        ref.watch(biometricSupportProvider).valueOrNull ==
+            BiometricSupport.strong;
+  }
 
   Future<void> _tryBiometrics() async {
-    if (!(ref.read(lockProvider).lock?.biometric ?? false)) return;
+    final lock = ref.read(lockProvider);
+    if (!(lock.lock?.biometric ?? false) || lock.biometricLapse != null) {
+      return;
+    }
     // Awaited, not read: the sensor answers a moment after the screen
-    // is up, and the prompt is worth waiting for.
-    final can = await ref.read(biometricsAvailableProvider.future);
-    if (!can || !mounted) return;
+    // is up, and the prompt is worth waiting for. A phone left with a
+    // weak biometric only is not asked: it cannot answer.
+    final support = await ref.read(biometricSupportProvider.future);
+    if (support != BiometricSupport.strong || !mounted) return;
     await ref.read(lockProvider.notifier).unlockWithBiometrics();
     // A refusal says nothing: the secret field is right there.
   }
@@ -116,9 +124,22 @@ class _LockScreenState extends ConsumerState<LockScreen> {
     final kind = ref.watch(lockProvider).lock?.kind ?? LockKind.pin;
     final pin = kind == LockKind.pin;
     final blocked = _wait > 0;
+    final secret = pin ? 'PIN' : 'password';
     final note = blocked
         ? 'Too many attempts. Try again in $_wait s'
-        : _message;
+        : _message ??
+              switch (ref.watch(lockProvider).biometricLapse) {
+                BiometricLapse.changed =>
+                  'The fingerprints or faces on this phone changed. Unlock '
+                      'with your $secret, then turn biometrics on again in '
+                      'Settings.',
+                // A vault from before keys: nothing changed on the
+                // phone, there is only a step to take again.
+                BiometricLapse.missing =>
+                  'Unlock with your $secret, then turn biometrics on again '
+                      'in Settings.',
+                null => null,
+              };
 
     return Scaffold(
       body: SafeArea(

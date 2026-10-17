@@ -268,6 +268,10 @@ class _Gate extends ConsumerStatefulWidget {
 }
 
 class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
+  /// The app went out of sight since it was last in front: a return from
+  /// the phone's own prompt, which only takes the focus, is not one.
+  bool _wasAway = false;
+
   @override
   void initState() {
     super.initState();
@@ -292,10 +296,18 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
       case AppLifecycleState.hidden:
       case AppLifecycleState.detached:
         lock.noteHidden();
+        _wasAway = true;
         ref.read(appInFrontProvider.notifier).state = false;
       case AppLifecycleState.resumed:
         lock.noteResumed();
         ref.read(appInFrontProvider.notifier).state = true;
+        // A fingerprint or a face may have been set up or removed in
+        // Android's settings meanwhile: what the phone offers is asked
+        // again, after a real trip away only.
+        if (_wasAway) {
+          _wasAway = false;
+          ref.invalidate(biometricSupportProvider);
+        }
         // The launcher may have gained or lost a widget meanwhile. Only
         // once the preferences are in: a feed started before them would
         // publish the defaults first.

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -81,7 +83,9 @@ class _Service {
     Duration restartAfter = const Duration(seconds: 2),
     Duration quietAfter = const Duration(seconds: 5),
     Duration connectingFor = const Duration(seconds: 30),
+    bool recordWaits = false,
   }) {
+    now = DateTime(2026, 10, 17, 12);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_serviceChannel, (call) async {
           // The wake lock is kept apart from what the notification is
@@ -104,10 +108,26 @@ class _Service {
       restartAfter: restartAfter,
       quietAfter: quietAfter,
       connectingFor: connectingFor,
+      // Read rather than sat through: each wait is written down, and
+      // the start it holds back happens on the next turn of the loop.
+      clock: () => now,
+      startLater: recordWaits
+          ? (wait, start) {
+              waits.add(wait);
+              Timer.run(start);
+            }
+          : (wait, start) => Timer(wait, start),
     );
   }
 
   final FakeBridge bridge;
+
+  /// What each watch that ended waited before it started again, in
+  /// order, when the service was made with `recordWaits`.
+  final List<Duration> waits = [];
+
+  /// The runner's clock, which the test moves.
+  late DateTime now;
   final FakeNotifications notifications = FakeNotifications();
   final List<(String, Object?)> told = [];
 
@@ -497,6 +517,117 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 10));
       }
       expect(service.bridge.liveStartCalls, 2);
+    });
+
+    test(
+      'a stop asked while the start opens the vault starts nothing',
+      () async {
+        final opening = Completer<void>();
+        final service = _Service(_bridge(), bootstrap: () => opening.future);
+        final starting = service.runner.run();
+        await service.settle();
+        final stopping = service.runner.stop(revert: false);
+        opening.complete();
+        await starting;
+        await stopping;
+        await service.settle();
+        // No watch was started for nobody.
+        expect(service.bridge.liveStartCalls, 0);
+      },
+    );
+
+    test('a run the core cut short is said, then started again', () async {
+      final service = _Service(_bridge(), recordWaits: true);
+      await service.runner.run();
+      expect(service.bridge.liveStartCalls, 1);
+      service.bridge.breakRun();
+      await service.settle();
+      // Not "Connecting…" for good: the notification says what happened.
+      expect(service.told.map((t) => t.$2), contains(liveBrokeText));
+      expect(service.waits, [const Duration(seconds: 2)]);
+      await service.settle();
+      expect(service.bridge.liveStartCalls, 2);
+      await service.runner.stop(revert: false);
+    });
+
+    test('what a broken run handed out is said at once', () async {
+      // A batch waits for the report that closes it: a broken run will
+      // send none, and its transactions are not left to the timer.
+      final service = _Service(
+        _bridge(),
+        recordWaits: true,
+        flushAfter: const Duration(hours: 1),
+      );
+      await service.runner.run();
+      service.bridge.liveController.add(LiveTransaction(_live('cut', 1)));
+      await service.settle();
+      expect(service.notifications.posted, isEmpty);
+
+      service.bridge.breakRun();
+      for (var i = 0; i < 5; i++) {
+        await service.settle();
+      }
+      expect(service.notifications.posted, hasLength(1));
+      await service.runner.stop(revert: false);
+    });
+
+    test('a run that keeps breaking waits longer each time', () async {
+      final service = _Service(_bridge(), recordWaits: true);
+      await service.runner.run();
+      Future<void> breakAndRestart() async {
+        final starts = service.bridge.liveStartCalls;
+        service.bridge.breakRun();
+        await service.settle();
+        await service.settle();
+        expect(service.bridge.liveStartCalls, starts + 1);
+      }
+
+      await breakAndRestart();
+      await breakAndRestart();
+      await breakAndRestart();
+      // 2 s, then 4 and 8: a failure that comes back every time does
+      // not keep the phone busy.
+      expect(service.waits, const [
+        Duration(seconds: 2),
+        Duration(seconds: 4),
+        Duration(seconds: 8),
+      ]);
+
+      // A run that breaks soon after reaching its server, during a sync
+      // or a pushed transaction, keeps the count going: no restart every
+      // two seconds, the phone held up for each.
+      service.bridge.liveController.add(
+        const LiveStatusChanged(LiveWatchStatus(state: WatchState.connected)),
+      );
+      await service.settle();
+      service.now = service.now.add(const Duration(minutes: 1));
+      await breakAndRestart();
+      expect(service.waits.last, const Duration(seconds: 16));
+
+      // One that stayed at its server five minutes starts it over.
+      service.bridge.liveController.add(
+        const LiveStatusChanged(LiveWatchStatus(state: WatchState.polling)),
+      );
+      await service.settle();
+      service.now = service.now.add(const Duration(minutes: 5));
+      await breakAndRestart();
+      expect(service.waits.last, const Duration(seconds: 2));
+      await service.runner.stop(revert: false);
+    });
+
+    test('a run refused for another reason is not said as broken', () async {
+      final bridge = _bridge()
+        ..runRefusal = const BridgeException('not_initialized', 'no vault');
+      final service = _Service(bridge, recordWaits: true);
+      await service.runner.run();
+      bridge.runRefusal = null;
+      await service.settle();
+      await service.settle();
+      expect(service.told.map((t) => t.$2), isNot(contains(liveBrokeText)));
+      // Started again after the plain wait, never a longer one.
+      expect(service.waits, [const Duration(seconds: 2)]);
+      expect(bridge.liveStartCalls, 2);
+      await service.runner.stop(revert: false);
     });
 
     test('a watch started again is held up while it reconnects', () async {

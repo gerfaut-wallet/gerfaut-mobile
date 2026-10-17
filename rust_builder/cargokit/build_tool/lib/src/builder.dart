@@ -154,6 +154,10 @@ class RustBuilder {
         (target.android == null && environment.glibcVersion != null)
             ? 'zigbuild'
             : 'build',
+        // The dependencies are the ones rust/Cargo.lock names, or the
+        // build stops: never a version resolved afresh on the machine
+        // that happens to build.
+        '--locked',
         ...extraArgs,
         '--manifest-path',
         manifestPath,

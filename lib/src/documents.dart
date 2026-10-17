@@ -39,12 +39,14 @@ abstract class DocumentSaver {
   });
 }
 
+/// The activity's channel for files: the save and open dialogs here,
+/// the share sheet in share.dart. One channel, named once.
+const MethodChannel filesChannel = MethodChannel('gerfaut/files');
+
 /// The real saver: a method channel the Android activity answers with
 /// the system's create-document dialog.
 class SystemDocumentSaver implements DocumentSaver {
   const SystemDocumentSaver();
-
-  static const MethodChannel _channel = MethodChannel('gerfaut/files');
 
   @override
   Future<bool> save({
@@ -53,7 +55,7 @@ class SystemDocumentSaver implements DocumentSaver {
     required String mimeType,
   }) async {
     try {
-      final saved = await _channel.invokeMethod<bool>('createDocument', {
+      final saved = await filesChannel.invokeMethod<bool>('createDocument', {
         'filename': filename,
         'mimeType': mimeType,
         'bytes': bytes,
@@ -116,11 +118,10 @@ Future<XFile?> openBoundedFile({
 }) async {
   final Map<Object?, Object?>? picked;
   try {
-    picked = await SystemDocumentSaver._channel
-        .invokeMethod<Map<Object?, Object?>>('openDocument', {
-          'mimeTypes': mimeTypes,
-          'maxBytes': maxBytes,
-        });
+    picked = await filesChannel.invokeMethod<Map<Object?, Object?>>(
+      'openDocument',
+      {'mimeTypes': mimeTypes, 'maxBytes': maxBytes},
+    );
   } on PlatformException catch (error) {
     if (error.code == 'read_failed') {
       throw const FileReadException('This file could not be read.');
