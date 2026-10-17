@@ -428,8 +428,18 @@ class MainActivity : FlutterFragmentActivity() {
             .putString(NOTE_MARK, sensitiveMark)
             .putLong(NOTE_STAMP, sensitiveStamp)
             .putLong(NOTE_COPIED_AT, sensitiveCopiedAt)
+            .putInt(NOTE_BOOT, bootCount())
             // Synchronous on purpose: a few bytes that must outlive the process.
             .commit()
+    }
+
+    // How many times the phone has started, as Android counts it; -1 when
+    // it will not say. Tells a note from this run of the phone from one
+    // the clipboard did not survive.
+    private fun bootCount(): Int = try {
+        Settings.Global.getInt(contentResolver, Settings.Global.BOOT_COUNT)
+    } catch (_: Exception) {
+        -1
     }
 
     // A note left behind clears nothing: written in the background, the
@@ -442,8 +452,9 @@ class MainActivity : FlutterFragmentActivity() {
     // The first activity of a process reads back a copy an earlier one
     // left: its minute is counted from when it was made, and once over,
     // the next focus clears it if it is still on the clipboard. A copy
-    // from before the phone restarted is gone with the clipboard: the
-    // clock it was timed by started again from zero.
+    // from before the phone restarted is gone with the clipboard, and its
+    // note with it: the start count says so, and the clock it was timed
+    // by, which starts again from zero, where the count is not to be had.
     //
     // Read off the main thread, the first screen being drawn meanwhile,
     // and taken up on it, where the copy's state lives.
@@ -456,15 +467,22 @@ class MainActivity : FlutterFragmentActivity() {
             val mark = note.getString(NOTE_MARK, null)
             val stamp = note.getLong(NOTE_STAMP, 0L)
             val copiedAt = note.getLong(NOTE_COPIED_AT, 0L)
-            main.post { takeUpRecalled(mark, stamp, copiedAt) }
+            val boot = note.getInt(NOTE_BOOT, -1)
+            val now = bootCount()
+            val sameBoot = if (boot >= 0 && now >= 0) {
+                boot == now
+            } else {
+                copiedAt > 0L && copiedAt <= SystemClock.elapsedRealtime()
+            }
+            main.post { takeUpRecalled(mark, stamp, copiedAt, sameBoot) }
         }.start()
     }
 
-    private fun takeUpRecalled(mark: String?, stamp: Long, copiedAt: Long) {
+    private fun takeUpRecalled(mark: String?, stamp: Long, copiedAt: Long, sameBoot: Boolean) {
         // Nothing left, or a copy made since in this process: that one
         // is the one to clear.
         if (mark == null || sensitiveMark != null) return
-        if (copiedAt <= 0L || copiedAt > SystemClock.elapsedRealtime()) {
+        if (!sameBoot || copiedAt <= 0L) {
             forgetSensitive()
             return
         }
@@ -950,11 +968,12 @@ class MainActivity : FlutterFragmentActivity() {
         private var recalled = false
 
         // Where the copy waiting to be cleared is written down, and its
-        // three entries. Plain names: nothing here says what was copied.
+        // four entries. Plain names: nothing here says what was copied.
         const val CLIPBOARD_NOTE = "clipboard"
         const val NOTE_MARK = "mark"
         const val NOTE_STAMP = "stamp"
         const val NOTE_COPIED_AT = "copied_at"
+        const val NOTE_BOOT = "boot"
 
         // The key of the mark on a sensitive copy. Plain on purpose: a
         // clipboard manager that lists extras must find no app's name.
