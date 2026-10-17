@@ -388,6 +388,25 @@ void main() {
     expect(recent.existsSync(), isTrue);
   });
 
+  test('a shared file goes by its age, whatever its name', () async {
+    final cache = await Directory.systemTemp.createTemp('gerfaut-cache');
+    addTearDown(() => cache.delete(recursive: true));
+    final sep = Platform.pathSeparator;
+    // A name the platform fell back on, or one a later build may give.
+    final share = Directory('${cache.path}${sep}shared${sep}2d7f8a4a-uuid')
+      ..createSync(recursive: true);
+    final copy = File('${share.path}${sep}shared')..writeAsStringSync('x');
+    copy.setLastModifiedSync(longAgo());
+    // Elsewhere in the cache, a name that is not ours stays.
+    final other = File('${cache.path}${sep}shared.txt')
+      ..writeAsStringSync('not ours');
+    other.setLastModifiedSync(longAgo());
+
+    expect((await sweepSharedCopies(cache: cache)).gone, 1);
+    expect(copy.existsSync(), isFalse);
+    expect(other.existsSync(), isTrue);
+  });
+
   test(
     'a history shared within the hour stays for the app reading it',
     () async {

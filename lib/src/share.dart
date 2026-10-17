@@ -169,16 +169,21 @@ class _Sweep {
   Duration? next;
 
   /// The shared files in one folder, and for Gerfaut's own `shared` in
-  /// the folders right under it, one per share; a folder goes once they
-  /// have left it empty.
-  Future<void> folder(Directory folder, {bool top = true}) async {
+  /// the folders right under it, one per share, where every file is a
+  /// share whatever its name; a folder goes once they have left it
+  /// empty.
+  Future<void> folder(
+    Directory folder, {
+    bool top = true,
+    bool share = false,
+  }) async {
     final before = gone;
     final shares = top && _name(folder) == sharedFolder;
     await for (final entry in _entries(folder)) {
       if (entry is File) {
-        await file(entry);
+        await file(entry, anyName: share);
       } else if (entry is Directory && shares) {
-        await this.folder(entry, top: false);
+        await this.folder(entry, top: false, share: true);
       }
     }
     if (gone == before) return;
@@ -191,12 +196,16 @@ class _Sweep {
 
   /// A history is named after its wallet, a backup carries the extension
   /// every Gerfaut backup has: nothing else in the cache ends that way.
-  /// Either goes once `lifetime` old; a younger one says when it will be.
-  Future<void> file(File file) async {
+  /// In a folder of Gerfaut's own shares, [anyName]: every file there is
+  /// one, whatever it was called. Each goes once `lifetime` old; a
+  /// younger one says when it will be.
+  Future<void> file(File file, {bool anyName = false}) async {
     final path = file.path;
-    if (!path.endsWith('-transactions.csv') && !path.endsWith('.gerfaut')) {
-      return;
-    }
+    final ours =
+        anyName ||
+        path.endsWith('-transactions.csv') ||
+        path.endsWith('.gerfaut');
+    if (!ours) return;
     try {
       final left = (await file.lastModified()).add(lifetime).difference(now);
       if (left > Duration.zero) {
