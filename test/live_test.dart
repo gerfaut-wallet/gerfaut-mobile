@@ -528,6 +528,27 @@ void main() {
       await service.runner.stop(revert: false);
     });
 
+    test('what a broken run handed out is said at once', () async {
+      // A batch waits for the report that closes it: a broken run will
+      // send none, and its transactions are not left to the timer.
+      final service = _Service(
+        _bridge(),
+        recordWaits: true,
+        flushAfter: const Duration(hours: 1),
+      );
+      await service.runner.run();
+      service.bridge.liveController.add(LiveTransaction(_live('cut', 1)));
+      await service.settle();
+      expect(service.notifications.posted, isEmpty);
+
+      service.bridge.breakRun();
+      for (var i = 0; i < 5; i++) {
+        await service.settle();
+      }
+      expect(service.notifications.posted, hasLength(1));
+      await service.runner.stop(revert: false);
+    });
+
     test('a run that keeps breaking waits longer each time', () async {
       final service = _Service(_bridge(), recordWaits: true);
       await service.runner.run();

@@ -858,6 +858,7 @@ class LiveRunner {
   /// announced here. Nothing handed out is ever handed out again.
   Future<void> stop({required bool revert}) async {
     _stopping = true;
+    _breaks = 0;
     _stayAwake(connectingFor);
     final running = _started;
     final ended = _ended = Completer<void>();
@@ -950,6 +951,10 @@ class LiveRunner {
     final ended = _ended;
     if (ended != null && !ended.isCompleted) ended.complete();
     if (_stopping) return;
+    // The run hands out nothing more: what it gave is said now, rather
+    // than when the report that closes a batch would have come. A stop
+    // says it itself, before it lets the phone sleep.
+    unawaited(_flushAll());
     var wait = restartAfter;
     if (_broke) {
       _broke = false;
