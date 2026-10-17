@@ -81,4 +81,7 @@ dependencies {
     // The biometric prompt bound to a Keystore key (StrongBiometrics),
     // at the version the local_auth plugin used to pull in.
     implementation("androidx.biometric:biometric:1.1.0")
+    // The widgets' layout rules, held to real launcher sizes on the JVM
+    // (src/test): nothing of it goes into the APK.
+    testImplementation("junit:junit:4.13.2")
 }

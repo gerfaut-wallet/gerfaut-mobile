@@ -160,7 +160,7 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
       final report = await ref.read(syncProvider.notifier).rescanWallet(id);
       if (report != null && mounted) _toast(_rescanSummary(report.newTxCount));
     } catch (error) {
-      if (mounted) setState(() => _walletError = '$error');
+      if (mounted) setState(() => _walletError = syncFailure(error));
     } finally {
       if (mounted) setState(() => _rescanningId = null);
     }

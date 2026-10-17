@@ -276,6 +276,7 @@ final Map<String, _Entry> _contract = {
   }),
   'CoreError': const _Failure(),
   'Coverage': _enum(Coverage.values, (v) => v.id, Coverage.fromId),
+  'Credit': _reads(Credit.fromJson),
   'CurrencyEntry': _reads(CurrencyEntry.fromJson),
   'CurrencyReach': _enum(
     CurrencyReach.values,
@@ -302,6 +303,7 @@ final Map<String, _Entry> _contract = {
     ).toJson(),
   }),
   'ExportResult': _reads(ExportResult.fromJson),
+  'FeeRateBasis': _enum(FeeRateBasis.values, (v) => v.id, FeeRateBasis.fromId),
   'FiatCurrency': const _Text(
     "the list of currencies is the core's: the settings offer what its "
     'table lists',
@@ -362,7 +364,7 @@ final Map<String, _Entry> _contract = {
       masked: true,
       fiat: true,
       fiatCurrency: FiatCurrency('chf'),
-      priceSource: PriceSource.kraken,
+      priceSource: PriceSource.mempoolSpace,
       notifyNewTx: true,
       explorerAck: true,
     ).toJson(),
@@ -382,6 +384,7 @@ final Map<String, _Entry> _contract = {
     (v) => v.id,
     RecognizedKind.fromId,
   ),
+  'RefusedWallet': _reads(RefusedWallet.fromJson),
   'RelativeLock': _reads(RelativeLock.fromJson),
   'Remaining': _reads(Remaining.fromJson),
   'Remedy': _reads(LiveRemedy.fromJson),
@@ -789,7 +792,10 @@ void main() {
       ('lib/screens/scan.dart', {'too_many_parts'}),
       ('lib/screens/settings/about_section.dart', {'tor'}),
       ('lib/screens/settings/general_section.dart', {'tor'}),
-      ('lib/src/bridge.dart', {'private_material', 'descriptor'}),
+      (
+        'lib/src/bridge.dart',
+        {'private_material', 'descriptor', 'false_proof'},
+      ),
     ]) {
       expect(compared[file], containsAll(kinds), reason: file);
     }

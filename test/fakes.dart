@@ -19,6 +19,7 @@ import 'package:gerfaut/src/home_widgets.dart';
 import 'package:gerfaut/src/live.dart';
 import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
+import 'package:gerfaut/widgets/price_credit.dart';
 import 'package:gerfaut/src/screen.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/window.dart';
@@ -34,16 +35,12 @@ const kPreferences = Preferences(
   masked: false,
   fiat: false,
   fiatCurrency: FiatCurrency('eur'),
-  priceSource: PriceSource.coingecko,
+  priceSource: PriceSource.mempoolSpace,
   notifyNewTx: false,
   explorerAck: false,
 );
 
-const _everySource = [
-  PriceSource.coingecko,
-  PriceSource.kraken,
-  PriceSource.mempoolSpace,
-];
+const _everySource = [PriceSource.mempoolSpace, PriceSource.coingecko];
 
 CurrencyEntry _currency(String id, String name, {bool everySource = true}) {
   return CurrencyEntry(
@@ -67,12 +64,32 @@ final kPriceTable = PriceTable(
     _currency('try', 'Turkish lira', everySource: false),
   ],
   sources: const [
-    SourceEntry(source: PriceSource.coingecko, label: 'CoinGecko'),
-    SourceEntry(source: PriceSource.kraken, label: 'Kraken'),
     SourceEntry(source: PriceSource.mempoolSpace, label: 'mempool.space'),
+    SourceEntry(
+      source: PriceSource.coingecko,
+      label: 'CoinGecko',
+      credit: Credit(
+        text: 'Powered by CoinGecko',
+        url: 'https://www.coingecko.com',
+      ),
+    ),
   ],
   refresh: const Duration(seconds: 60),
 );
+
+/// What GerfautApp puts around every screen for the credit of the
+/// price, its observer and its slot, for a test that builds a screen
+/// in a MaterialApp of its own.
+Widget creditedApp({required ThemeData theme, required Widget home}) {
+  return Consumer(
+    builder: (context, ref, _) => MaterialApp(
+      theme: theme,
+      navigatorObservers: [CreditObserver(ref.read(creditBoardProvider))],
+      builder: (context, child) => CreditFrame(child: child!),
+      home: home,
+    ),
+  );
+}
 
 /// Puts [change] in what the screens hold, as hydration does with the
 /// preferences a vault stored.
@@ -1835,7 +1852,9 @@ TxPreview makePreview({
   List<TxWarning> warnings = const [],
   int? feeSats = 1000,
   double? feeRate = 7.1,
+  FeeRateBasis feeRateBasis = FeeRateBasis.exact,
   bool amountsDeclared = false,
+  bool amountsListed = false,
   String? feeUnknownReason,
   List<TxInputPreview>? inputs,
   List<TxOutputPreview>? outputs,
@@ -1874,7 +1893,9 @@ TxPreview makePreview({
         ],
     feeSats: feeSats,
     feeRateSatVb: feeRate,
+    feeRateBasis: feeRateBasis,
     amountsDeclared: amountsDeclared,
+    amountsListed: amountsListed,
     feeUnknownReason: feeUnknownReason,
     vsize: 141,
     weight: 561,

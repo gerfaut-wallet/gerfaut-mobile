@@ -512,6 +512,101 @@ void main() {
     expect(primaryButton(tester, 'Broadcast').onPressed, isNotNull);
   });
 
+  // This very transaction already waits in the mempool: it used to read
+  // "Ready to broadcast" in green beside a red line saying its coin was
+  // spent by itself. Now the pill says it is waiting, in amber, no red
+  // anywhere, and sending it again stays possible.
+  testWidgets('a transaction already in the mempool is said waiting', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    const message =
+        'This transaction is already waiting in the mempool: it was '
+        'broadcast before. Broadcasting it again does no harm.';
+    final bridge = FakeBridge()
+      ..onPreview = (_, _) => makePreview(
+        readiness: TxReadiness.inMempool,
+        warnings: const [
+          TxWarning(
+            kind: TxWarningKind.inMempool,
+            message: message,
+            severity: TxSeverity.info,
+          ),
+        ],
+      );
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+    await preview(tester);
+
+    final light = GerfautTokens.light;
+    expect(find.text('Already in the mempool'), findsOneWidget);
+    expect(find.text('Ready to broadcast'), findsNothing);
+    expect(
+      blockOf(tester, 'Already in the mempool').color,
+      light.pendingSurface,
+    );
+    expect(blockOf(tester, message).color, light.pendingSurface);
+    expect(find.byIcon(LucideIcons.hourglass), findsNWidgets(2));
+    expect(primaryButton(tester, 'Broadcast').onPressed, isNotNull);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Broadcast'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'It is already waiting in the mempool: broadcasting it again does no '
+        'harm.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  // Before the signatures are in, the rate is the one the transaction
+  // will pay once they are: the core's estimate, said as one, or the most
+  // it can be when nothing tells what the signatures weigh.
+  testWidgets('an unsigned transaction gives its rate once signed', (
+    tester,
+  ) async {
+    useTallSurface(tester);
+    for (final (basis, figure) in [
+      (FeeRateBasis.estimated, '≈ 5.0 sat/vB'),
+      (FeeRateBasis.upperBound, '≤ 5.0 sat/vB'),
+    ]) {
+      final bridge = FakeBridge()
+        ..onPreview = (_, _) =>
+            makePreview(ready: false, feeRate: 4.96, feeRateBasis: basis);
+      await tester.pumpWidget(broadcastApp(bridge));
+      await tester.pumpAndSettle();
+      await preview(tester);
+      expect(find.text(figure), findsOneWidget);
+      expect(find.text('once signed'), findsOneWidget);
+      expect(find.text('Not fully signed'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    }
+  });
+
+  // A figure from a watched address's listing nobody backed is the
+  // server's, not the PSBT's: the mark says it is unproven.
+  testWidgets('a listing nobody backed is marked unproven', (tester) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge()
+      ..onPreview = (_, _) =>
+          makePreview(amountsDeclared: true, amountsListed: true);
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+    await preview(tester);
+    expect(find.text('as the PSBT claims'), findsNothing);
+    expect(find.text('unproven'), findsNWidgets(4));
+    await tester.tap(find.widgetWithText(FilledButton, 'Broadcast'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'It pays a fee of 0.00001000 BTC (7.1 sat/vB), unproven: no backend '
+        'confirmed what its inputs are worth.',
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets("a coin nobody confirmed marks the figures as the file's", (
     tester,
   ) async {

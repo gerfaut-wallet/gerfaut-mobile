@@ -280,7 +280,7 @@ void main() {
             'code': 'EUR',
             'name': 'Euro',
             'reach': 'every',
-            'sources': ['coingecko', 'kraken', 'mempool_space'],
+            'sources': ['mempool_space', 'coingecko'],
           },
           {
             'currency': 'ngn',
@@ -292,14 +292,18 @@ void main() {
         ],
         'sources': [
           {
-            'source': 'coingecko',
-            'label': 'CoinGecko',
-            'ranges': ['day', 'week', 'month', 'year'],
-          },
-          {
             'source': 'mempool_space',
             'label': 'mempool.space',
             'ranges': ['month', 'year', 'max'],
+          },
+          {
+            'source': 'coingecko',
+            'label': 'CoinGecko',
+            'ranges': ['day', 'week', 'month', 'year'],
+            'credit': {
+              'text': 'Powered by CoinGecko',
+              'url': 'https://www.coingecko.com',
+            },
           },
         ],
         'refresh_secs': 60,
@@ -315,9 +319,14 @@ void main() {
       expect(naira.sources, [PriceSource.coingecko]);
       expect(table.entryOf(const FiatCurrency('xxx')), isNull);
       expect(table.sources.map((entry) => entry.label), [
-        'CoinGecko',
         'mempool.space',
+        'CoinGecko',
       ]);
+      // The credit each source asks for, as the table carries it.
+      expect(table.creditOf(PriceSource.mempoolSpace), isNull);
+      final credit = table.creditOf(PriceSource.coingecko)!;
+      expect(credit.text, 'Powered by CoinGecko');
+      expect(credit.url, 'https://www.coingecko.com');
     });
   });
 
@@ -438,6 +447,8 @@ void main() {
       'locktime': 0,
       'rbf': true,
       'amounts_declared': false,
+      'amounts_listed': false,
+      'fee_rate_basis': 'exact',
       'fee_unknown_reason': null,
       'ready': ready,
       'readiness': ?readiness,
@@ -456,6 +467,11 @@ void main() {
         TxPreview.fromJson(wire(true, 'ready')).readiness,
         TxReadiness.ready,
       );
+      final waiting = TxPreview.fromJson(wire(true, 'in_mempool'));
+      expect(waiting.readiness, TxReadiness.inMempool);
+      expect(waiting.readiness.sendable, isTrue);
+      expect(TxReadiness.refused.sendable, isFalse);
+      expect(TxReadiness.unsigned.sendable, isFalse);
     });
 
     test('a state this build does not know is refused', () {

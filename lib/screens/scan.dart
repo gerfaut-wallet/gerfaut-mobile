@@ -44,31 +44,10 @@ class ScanScreen extends ConsumerStatefulWidget {
 }
 
 /// What the scanner says of a code with more parts than Gerfaut reads:
-/// one the core turns away by the count it announces, or a scan that
-/// collected more frames than any code needs. The desktop app says the
-/// same.
+/// one the core turns away by the count it announces, or by the frames
+/// it took without coming together (the core keeps count). The desktop
+/// app says the same.
 const String _tooManyParts = 'This code has more parts than Gerfaut can read.';
-
-/// The most distinct frames one scan collects before the code says how
-/// many parts it has. Every new frame sends the whole collection to the
-/// core again, so an endless stream of distinct frames would cost more
-/// at each one.
-@visibleForTesting
-const int maxScanFrames = 2000;
-
-/// The most distinct frames any scan collects. A fountain code keeps
-/// sending new frames that mix parts, and a camera that misses half of
-/// them needs about twice as many frames as the code has parts: a large
-/// PSBT shown at low density runs to well over a thousand parts.
-@visibleForTesting
-const int maxScanFramesCeiling = 10000;
-
-/// The frames a scan may collect once the code has announced [total]
-/// parts: three times as many, within [maxScanFrames] and
-/// [maxScanFramesCeiling].
-@visibleForTesting
-int scanFrameLimit(int? total) =>
-    ((total ?? 0) * 3).clamp(maxScanFrames, maxScanFramesCeiling);
 
 class ScanScreenState extends ConsumerState<ScanScreen> {
   /// Distinct frames in scan order; the set makes the repeat check O(1).
@@ -80,8 +59,16 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
   /// the same answer every time.
   final Set<String> _refused = {};
 
-  /// True once the screen popped: frames still decoded are ignored.
+  /// True once the screen popped, or the scan stopped: frames still
+  /// decoded are ignored.
   bool _done = false;
+
+  /// The scan stopped on a code too large to read: the camera is off,
+  /// and the reason stays.
+  bool _stopped = false;
+
+  /// The screen is held on: from the start until the camera goes.
+  bool _keeping = true;
 
   /// An assembly call is in flight; `_pending` remembers that a frame
   /// arrived meanwhile and the list must be fed again after it.
@@ -108,8 +95,14 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
 
   @override
   void dispose() {
-    _keeper.release();
+    _letScreenGo();
     super.dispose();
+  }
+
+  void _letScreenGo() {
+    if (!_keeping) return;
+    _keeping = false;
+    _keeper.release();
   }
 
   /// Feeds one decoded frame. A repeat and a frame already turned down
@@ -117,10 +110,6 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
   @visibleForTesting
   void onFrame(String text) {
     if (_done || !mounted || _refused.contains(text) || !_seen.add(text)) {
-      return;
-    }
-    if (_frames.length >= scanFrameLimit(_progress?.total)) {
-      _startOver(_tooManyParts);
       return;
     }
     _frames.add(text);
@@ -148,9 +137,14 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
           if (!mounted || _done) return;
           // Or to a collection already dropped meanwhile.
           if (collection != _collection) continue;
-          // The core refused what was collected: a PSBT, an envelope it
-          // cannot open, a count of parts past what Gerfaut reads.
-          _startOver(e.kind == 'too_many_parts' ? _tooManyParts : e.message);
+          // The core refused what was collected: a PSBT or an envelope
+          // it cannot open starts over; a code past what Gerfaut reads
+          // stops the scan.
+          if (e.kind == 'too_many_parts') {
+            _stop(_tooManyParts);
+          } else {
+            _startOver(e.message);
+          }
           return;
         }
         if (!mounted || _done) return;
@@ -198,12 +192,31 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
     });
   }
 
+  /// Ends the scan on a code too large to read: the camera goes and the
+  /// reason stays. A fountain code never runs out of new frames, and
+  /// scanning on would only start a collection the core refuses again,
+  /// a moment later, the reason gone meanwhile.
+  void _stop(String reason) {
+    _done = true;
+    _collection++;
+    _frames.clear();
+    _seen.clear();
+    _letScreenGo();
+    setState(() {
+      _stopped = true;
+      _progress = null;
+      _error = reason;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final progress = _progress;
-    final camera =
-        widget.cameraBuilder?.call(onFrame) ?? QrCamera(onFrame: onFrame);
+    // Out of the tree, the camera lets the sensor go.
+    final camera = _stopped
+        ? ColoredBox(color: tokens.surfaceSunken)
+        : widget.cameraBuilder?.call(onFrame) ?? QrCamera(onFrame: onFrame);
     return Scaffold(
       appBar: GerfautAppBar.text('Scan a QR code'),
       body: SafeArea(

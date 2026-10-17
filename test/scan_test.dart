@@ -22,6 +22,10 @@ const _caption =
     'code: plain text, UR, or BBQr, animated or not.';
 const _hint = 'Keep the camera on the animated code';
 const _psbt = 'This QR code holds a PSBT, not a wallet to watch.';
+const _tooManyParts = 'This code has more parts than Gerfaut can read.';
+
+/// The camera stand-in, findable while the scan runs.
+const _camera = Key('camera');
 
 /// What the scanner handed back to the page that opened it.
 class _Outcome {
@@ -46,8 +50,9 @@ Widget _app(FakeBridge bridge, _Outcome outcome, {ScreenKeeper? keeper}) {
           onPressed: () async {
             final scanned = await Navigator.of(context).push<QrProgress>(
               MaterialPageRoute<QrProgress>(
-                builder: (_) =>
-                    ScanScreen(cameraBuilder: (_) => const SizedBox.expand()),
+                builder: (_) => ScanScreen(
+                  cameraBuilder: (_) => const SizedBox.expand(key: _camera),
+                ),
               ),
             );
             outcome.pops += 1;
@@ -155,33 +160,52 @@ void main() {
     ]);
   });
 
-  testWidgets('a code that never ends is dropped, and the scan goes on', (
+  testWidgets('a code that never comes together stops the scan for good', (
     tester,
   ) async {
+    // The core keeps count of the frames a code took: past what a code
+    // of its size needs, it refuses the scan.
     final bridge = FakeBridge()
-      ..onAssembleQr = (frames) => QrProgress(
-        format: QrFormat.ur,
-        received: frames.length,
-        total: 500,
-        complete: false,
-      );
+      ..onAssembleQr = (frames) => frames.length < 3
+          ? QrProgress(
+              format: QrFormat.ur,
+              received: 1,
+              total: 2,
+              complete: false,
+            )
+          : throw coreFailure(
+              'too_many_parts',
+              'invalid qr: 3 frames scanned without the code coming '
+                  'together, more than Gerfaut reads',
+            );
+    final keeper = FakeScreenKeeper();
     final outcome = _Outcome();
-    final state = await _open(tester, bridge, outcome);
+    final state = await _open(tester, bridge, outcome, keeper: keeper);
 
-    for (var i = 1; i <= maxScanFrames + 1; i++) {
-      state.onFrame('ur:bytes/$i-500/part-$i');
+    for (var i = 1; i <= 3; i++) {
+      state.onFrame('ur:bytes/$i-2/part-$i');
+      await tester.pumpAndSettle();
+    }
+    expect(find.text(_tooManyParts), findsOneWidget);
+    expect(find.byKey(_camera), findsNothing);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(keeper.releases, 1);
+
+    // New frames keep passing in front of a camera that is gone: none
+    // is read, and the reason stays.
+    for (var i = 4; i <= 8; i++) {
+      state.onFrame('ur:bytes/$i-2/part-$i');
     }
     await tester.pumpAndSettle();
-    expect(
-      find.text('This code has more parts than Gerfaut can read.'),
-      findsOneWidget,
-    );
-    expect(
-      bridge.assembleCalls.every((call) => call.length <= maxScanFrames),
-      isTrue,
-    );
+    expect(bridge.assembleCalls, hasLength(3));
+    expect(find.text(_tooManyParts), findsOneWidget);
     expect(outcome.pops, 0);
     expect(find.byType(ScanScreen), findsOneWidget);
+
+    // Leaving does not hand the screen back twice.
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(keeper.releases, 1);
   });
 
   testWidgets('a large code missed half the time still completes', (
@@ -214,13 +238,6 @@ void main() {
     );
     expect(outcome.pops, 1);
     expect(outcome.text, 'cHNidP8B');
-  });
-
-  test('the frame limit follows the parts a code announces', () {
-    expect(scanFrameLimit(null), maxScanFrames);
-    expect(scanFrameLimit(3), maxScanFrames);
-    expect(scanFrameLimit(1250), 3750);
-    expect(scanFrameLimit(10000), maxScanFramesCeiling);
   });
 
   testWidgets('a repeated frame is not fed again', (tester) async {
@@ -315,11 +332,9 @@ void main() {
     state.onFrame('ur:crypto-psbt/1-6000/part-one');
     await tester.pumpAndSettle();
 
-    expect(
-      find.text('This code has more parts than Gerfaut can read.'),
-      findsOneWidget,
-    );
+    expect(find.text(_tooManyParts), findsOneWidget);
     expect(find.textContaining('invalid qr'), findsNothing);
+    expect(find.byKey(_camera), findsNothing);
     expect(outcome.pops, 0);
     expect(find.byType(ScanScreen), findsOneWidget);
   });

@@ -35,7 +35,7 @@ Widget settingsApp(FakeBridge bridge, {SettingsSection? section}) {
       bridgeProvider.overrideWithValue(bridge),
       disguiseServiceProvider.overrideWithValue(FakeDisguise()),
     ],
-    child: MaterialApp(
+    child: creditedApp(
       theme: themeFrom(GerfautTokens.light, Brightness.light),
       home: SettingsScreen(section: section),
     ),
@@ -942,9 +942,12 @@ void main() {
       await tester.pumpAndSettle();
       await enableFiat(tester);
 
-      await tester.tap(find.text('Kraken'));
-      await tester.pumpAndSettle();
-      expect(bridge.preferences.priceSource, PriceSource.kraken);
+      // mempool.space by default, first, as the core lists it.
+      expect(bridge.preferences.priceSource, PriceSource.mempoolSpace);
+      expect(
+        tester.getTopLeft(find.text('mempool.space')).dx,
+        lessThan(tester.getTopLeft(find.text('CoinGecko')).dx),
+      );
       expect(sourcePill(tester, 'mempool.space').onTap, isNotNull);
 
       currencyField(tester).onChanged!(FiatCurrency('ngn'));
@@ -959,20 +962,21 @@ void main() {
         find.text('CoinGecko is the only source that quotes NGN.'),
         findsOneWidget,
       );
-      // The two sources that cannot quote it are out of reach, not
-      // silently wrong.
-      expect(sourcePill(tester, 'Kraken').onTap, isNull);
+      // The source that cannot quote it is out of reach, not silently
+      // wrong.
       expect(sourcePill(tester, 'mempool.space').onTap, isNull);
       expect(sourcePill(tester, 'CoinGecko').onTap, isNotNull);
       expect(
-        tester.widget<Text>(find.text('Kraken')).style!.color,
+        tester.widget<Text>(find.text('mempool.space')).style!.color,
         GerfautTokens.light.textMuted,
       );
 
-      // Back to a currency everyone quotes: the sources return.
+      // Back to a currency everyone quotes: the sources return, and
+      // the one the core kept stays.
       currencyField(tester).onChanged!(FiatCurrency('chf'));
       await tester.pumpAndSettle();
-      expect(sourcePill(tester, 'Kraken').onTap, isNotNull);
+      expect(sourcePill(tester, 'mempool.space').onTap, isNotNull);
+      expect(bridge.preferences.priceSource, PriceSource.coingecko);
       expect(find.textContaining('the only source that quotes'), findsNothing);
     });
 
@@ -987,14 +991,25 @@ void main() {
       expect(find.text('Powered by CoinGecko'), findsNothing);
 
       await enableFiat(tester);
+      // mempool.space, the default, asks for no credit.
+      expect(find.text('Powered by CoinGecko'), findsNothing);
+
+      await tester.tap(find.text('CoinGecko'));
+      await tester.pumpAndSettle();
       expect(find.text('Powered by CoinGecko'), findsOneWidget);
-      // The API terms ask for a legible line, not a hidden one.
+      // The API terms ask for a legible line, not a hidden one: 12 px,
+      // under the page, after the rate it comes with.
       expect(
         tester.widget<Text>(find.text('Powered by CoinGecko')).style!.fontSize!,
-        greaterThanOrEqualTo(10),
+        greaterThanOrEqualTo(12),
+      );
+      expect(
+        tester.getTopLeft(find.text('Powered by CoinGecko')).dy,
+        greaterThan(tester.getTopLeft(find.textContaining('1 BTC =')).dy),
       );
 
-      await tester.tap(find.text('Kraken'));
+      // Back to mempool.space: the credit goes.
+      await tester.tap(find.text('mempool.space'));
       await tester.pumpAndSettle();
       expect(find.text('Powered by CoinGecko'), findsNothing);
     });
@@ -1011,9 +1026,9 @@ void main() {
       currencyField(tester).onChanged!(FiatCurrency('inr'));
       await tester.pumpAndSettle();
 
-      final kraken = tester.getSemantics(find.text('Kraken'));
-      expect(kraken.label, 'Kraken');
-      expect(kraken.flagsCollection.isEnabled, Tristate.isFalse);
+      final mempool = tester.getSemantics(find.text('mempool.space'));
+      expect(mempool.label, 'mempool.space');
+      expect(mempool.flagsCollection.isEnabled, Tristate.isFalse);
       final coingecko = tester.getSemantics(find.text('CoinGecko'));
       expect(coingecko.flagsCollection.isEnabled, Tristate.isTrue);
       expect(coingecko.flagsCollection.isSelected, Tristate.isTrue);

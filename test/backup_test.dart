@@ -1178,6 +1178,108 @@ void main() {
       expect(find.textContaining('Wrong password'), findsNothing);
     });
 
+    testWidgets('a wallet the core refuses by name stops the restore', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge();
+      bridge.onPreviewBackup = (_, _) => preview();
+      // A network that does not match, or a private key, comes under
+      // invalid_input once the core has named the wallet.
+      const said =
+          'invalid backup: "Savings" cannot be restored: input contains '
+          'private key material and was rejected';
+      bridge.onImportBackup = (_, _, _) =>
+          throw coreFailure('invalid_input', said);
+      await openBackup(tester, bridge);
+      await tester.tap(find.text('Restore 2 wallets'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Nothing was restored. The core says: $said'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Wrong password'), findsNothing);
+    });
+
+    testWidgets('a refused wallet is listed, greyed, with its reason', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge();
+      const reason =
+          'descriptor error: the change descriptor does not spend under the '
+          "receive descriptor's keys and conditions";
+      bridge.onPreviewBackup = (_, _) => BackupPreview(
+        createdAt: 1755000000,
+        hasSettings: false,
+        wallets: [
+          preview().wallets.first,
+          const BackupWalletPreview(
+            index: 1,
+            name: 'Handed over',
+            network: Network.signet,
+            kind: DescriptorsKind(
+              external: 'wpkh(tpub.../0/*)',
+              internal: 'wpkh(tpub.../1/*)',
+              script: ScriptKind.segwit,
+            ),
+            alreadyWatched: false,
+            refused: reason,
+          ),
+        ],
+      );
+      bridge.onImportBackup = (_, _, _) => ImportReport(
+        added: [makeMeta(network: Network.signet)],
+        skipped: 1,
+        settingsApplied: false,
+      );
+      await openBackup(tester, bridge);
+
+      expect(find.text('Handed over'), findsOneWidget);
+      expect(find.textContaining('Cannot be restored'), findsOneWidget);
+      expect(find.text(reason), findsOneWidget);
+      final boxes = tester.widgetList<Checkbox>(find.byType(Checkbox)).toList();
+      expect(boxes[1].value, isFalse);
+      expect(boxes[1].onChanged, isNull);
+      await tester.tap(find.text('Handed over'));
+      await tester.pumpAndSettle();
+      expect(find.text('Restore 1 wallet'), findsOneWidget);
+
+      await tester.tap(find.text('Restore 1 wallet'));
+      await tester.pumpAndSettle();
+
+      // Never asked for, and named on the way out.
+      expect(bridge.importCalls.single.indexes, [0]);
+      expect(
+        find.text('1 wallet restored · 1 left out: Handed over'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the wallets the core left out are named', (tester) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge();
+      bridge.onPreviewBackup = (_, _) => preview();
+      bridge.onImportBackup = (_, _, _) => ImportReport(
+        added: [makeMeta(network: Network.signet)],
+        skipped: 0,
+        settingsApplied: true,
+        refused: const [
+          RefusedWallet(index: 1, name: 'Savings', reason: 'no'),
+          RefusedWallet(index: 2, name: 'Wallet 3 of the backup', reason: 'no'),
+        ],
+      );
+      await openBackup(tester, bridge);
+      await tester.tap(find.text('Restore 2 wallets'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('1 wallet restored · settings applied · 2 left out'),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('a watched wallet is listed but cannot be chosen', (
       tester,
     ) async {

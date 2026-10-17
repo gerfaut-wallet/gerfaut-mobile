@@ -7,6 +7,7 @@ import '../src/models.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
 import 'facts.dart';
+import 'price_credit.dart';
 
 /// Fiat value of an amount held on [network], when the display is
 /// enabled and a quote is available. Degrades to null, never to an
@@ -24,7 +25,7 @@ import 'facts.dart';
 /// as money that does not exist. Every amount becomes fiat here, and
 /// every widget that shows one names its network, so no screen can
 /// leave the rule out.
-String? fiatValueOf(WidgetRef ref, int sats, {required Network network}) {
+String? _fiatValueOf(WidgetRef ref, int sats, {required Network network}) {
   if (!ref.watch(fiatEnabledProvider) || ref.watch(maskedProvider)) {
     return null;
   }
@@ -34,6 +35,54 @@ String? fiatValueOf(WidgetRef ref, int sats, {required Network network}) {
   if (quote.currency != ref.watch(fiatCurrencyProvider)) return null;
   final priced = network == Network.mainnet ? sats : 0;
   return formatFiat(priced, quote.rate, quote.currency);
+}
+
+/// A fiat value on screen: the one way an amount shows its value in
+/// the chosen currency, so that the screen credits the price behind it
+/// ([CreditMark]) whatever screen it is on. Nothing at all while there
+/// is no value to show; [top] is the gap above it, there only with it.
+/// Off mainnet the value is zero, which no source priced, and it marks
+/// nothing.
+class FiatText extends ConsumerWidget {
+  const FiatText({
+    super.key,
+    required this.sats,
+    required this.network,
+    required this.style,
+    this.top = 0,
+    this.textAlign,
+    this.oneLine = false,
+  });
+
+  final int sats;
+  final Network network;
+  final TextStyle style;
+  final double top;
+  final TextAlign? textAlign;
+
+  /// Never wrapped: for a cell whose figure must stay whole.
+  final bool oneLine;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final fiat = _fiatValueOf(ref, sats, network: network);
+    if (fiat == null) return const SizedBox.shrink();
+    return CreditMark(
+      source: network == Network.mainnet
+          ? ref.watch(priceProvider).valueOrNull?.source
+          : null,
+      child: Padding(
+        padding: EdgeInsets.only(top: top),
+        child: Text(
+          fiat,
+          style: style,
+          textAlign: textAlign,
+          maxLines: oneLine ? 1 : null,
+          softWrap: oneLine ? false : null,
+        ),
+      ),
+    );
+  }
 }
 
 /// Large balance figure: UI face, tabular, masked-aware, never
@@ -52,7 +101,6 @@ class BalanceAmount extends ConsumerWidget {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final masked = ref.watch(maskedProvider);
     final unit = ref.watch(unitProvider);
-    final fiat = fiatValueOf(ref, sats, network: network);
     final primary = unit == AmountUnit.btc ? formatBtc(sats) : formatSats(sats);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -78,10 +126,12 @@ class BalanceAmount extends ConsumerWidget {
             maxLines: 1,
           ),
         ),
-        if (fiat != null) ...[
-          const SizedBox(height: GerfautSpacing.xs),
-          Text(fiat, style: tokens.figureOf(color: tokens.textMuted)),
-        ],
+        FiatText(
+          sats: sats,
+          network: network,
+          style: tokens.figureOf(color: tokens.textMuted),
+          top: GerfautSpacing.xs,
+        ),
       ],
     );
   }
@@ -190,7 +240,6 @@ class ListAmount extends ConsumerWidget {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final masked = ref.watch(maskedProvider);
     final unit = ref.watch(unitProvider);
-    final fiat = fiatValueOf(ref, sats, network: network);
     final color = sats > 0 && !pending ? tokens.confirmed : tokens.text;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
@@ -202,12 +251,12 @@ class ListAmount extends ConsumerWidget {
           style: tokens.figureOf(weight: FontWeight.w500, color: color),
           textAlign: TextAlign.right,
         ),
-        if (fiat != null)
-          Text(
-            fiat,
-            style: tokens.figureOf(size: 11, color: tokens.textMuted),
-            textAlign: TextAlign.right,
-          ),
+        FiatText(
+          sats: sats,
+          network: network,
+          style: tokens.figureOf(size: 11, color: tokens.textMuted),
+          textAlign: TextAlign.right,
+        ),
       ],
     );
   }
@@ -228,7 +277,6 @@ class StackedAmount extends ConsumerWidget {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final masked = ref.watch(maskedProvider);
     final unit = ref.watch(unitProvider);
-    final fiat = fiatValueOf(ref, sats, network: network);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
@@ -241,14 +289,13 @@ class StackedAmount extends ConsumerWidget {
           softWrap: false,
           textAlign: TextAlign.right,
         ),
-        if (fiat != null)
-          Text(
-            fiat,
-            style: tokens.figureOf(size: 11, color: tokens.textMuted),
-            maxLines: 1,
-            softWrap: false,
-            textAlign: TextAlign.right,
-          ),
+        FiatText(
+          sats: sats,
+          network: network,
+          style: tokens.figureOf(size: 11, color: tokens.textMuted),
+          textAlign: TextAlign.right,
+          oneLine: true,
+        ),
       ],
     );
   }

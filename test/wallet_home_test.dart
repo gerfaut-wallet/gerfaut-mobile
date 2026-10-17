@@ -163,6 +163,37 @@ void main() {
     );
   });
 
+  testWidgets('a false proof is said in words, not as the core logs it', (
+    tester,
+  ) async {
+    final meta = makeMeta();
+    final bridge = FakeBridge(
+      wallets: [meta],
+      snapshots: {'w1': makeSnapshot(meta: meta)},
+    );
+    bridge.onSyncWallet = (_) => throw const BridgeException(
+      'false_proof',
+      'sync failed via electrum.example.org: the server sent a false proof '
+          'of a confirmation',
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [bridgeProvider.overrideWithValue(bridge)],
+        child: MaterialApp(
+          theme: themeFrom(GerfautTokens.light, Brightness.light),
+          home: const WalletHomeScreen(walletId: 'w1'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Sync'));
+    await tester.pumpAndSettle();
+
+    expect(find.text(falseProofMessage), findsOneWidget);
+    expect(find.textContaining('electrum.example.org'), findsNothing);
+  });
+
   testWidgets('the header keeps the sync and menus the rest', (tester) async {
     final meta = makeMeta();
     final bridge = FakeBridge(
