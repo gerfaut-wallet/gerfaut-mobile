@@ -36,6 +36,51 @@ String? fiatValueOf(WidgetRef ref, int sats, {required Network network}) {
   return formatFiat(priced, quote.rate, quote.currency);
 }
 
+/// The credit the price source asks for under the fiat amounts of a
+/// screen that shows coins held on [network], while they show one its
+/// quote priced: the conditions of [fiatValueOf], on mainnet. Off
+/// mainnet every fiat value is zero, which no source priced. Null when
+/// the source asks for none.
+String? fiatCreditOf(WidgetRef ref, {required Network network}) {
+  if (network != Network.mainnet) return null;
+  if (fiatValueOf(ref, 0, network: network) == null) return null;
+  return ref.watch(priceProvider).valueOrNull?.credit;
+}
+
+/// The credit a price source asks for under its data, word for word as
+/// the core hands it over with the price ("Powered by CoinGecko"), and
+/// nothing for mempool.space, which asks for none. Once on a screen,
+/// under what it credits, in the muted voice at 12 px: legible without
+/// competing with the figures, and read by a screen reader like any
+/// line. [top] is the gap above it, there only when the credit is.
+class PriceCredit extends StatelessWidget {
+  const PriceCredit(
+    this.credit, {
+    super.key,
+    this.top = 0,
+    this.align = TextAlign.start,
+  });
+
+  final String? credit;
+  final double top;
+  final TextAlign align;
+
+  @override
+  Widget build(BuildContext context) {
+    final credit = this.credit;
+    if (credit == null) return const SizedBox.shrink();
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    return Padding(
+      padding: EdgeInsets.only(top: top),
+      child: Text(
+        credit,
+        textAlign: align,
+        style: tokens.bodySmall.copyWith(fontSize: 12, color: tokens.textMuted),
+      ),
+    );
+  }
+}
+
 /// Large balance figure: UI face, tabular, masked-aware, never
 /// animated. The primary line follows the unit setting; the second line
 /// carries only the fiat value, when that display is on.

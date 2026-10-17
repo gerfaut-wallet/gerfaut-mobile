@@ -332,6 +332,61 @@ void main() {
       expect(find.text('-€1.00'), findsOneWidget);
     });
 
+    // CoinGecko's terms ask for its credit close to its data: once on a
+    // screen that shows amounts it priced, under them. mempool.space
+    // asks for none, and a test coin's zero was priced by nobody.
+    testWidgets('CoinGecko is credited once a screen, under its data', (
+      tester,
+    ) async {
+      final bridge = testCoins(Network.mainnet);
+      bridge.preferences = bridge.preferences.copyWith(
+        priceSource: PriceSource.coingecko,
+      );
+      await tester.pumpWidget(app(bridge));
+      await tester.pumpAndSettle();
+
+      // Under the wallet cards, at 12 px.
+      expect(find.text('Powered by CoinGecko'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Powered by CoinGecko')).dy,
+        greaterThan(tester.getBottomLeft(find.text('€61.73')).dy),
+      );
+      expect(
+        tester.widget<Text>(find.text('Powered by CoinGecko')).style!.fontSize,
+        greaterThanOrEqualTo(12),
+      );
+
+      // The wallet: once, under the balance, for the lists too.
+      await tester.tap(find.text('Cold storage'));
+      await tester.pumpAndSettle();
+      expect(find.text('Powered by CoinGecko'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Powered by CoinGecko')).dy,
+        lessThan(tester.getTopLeft(find.text('Transactions')).dy),
+      );
+    });
+
+    testWidgets('mempool.space and a test coin are credited nowhere', (
+      tester,
+    ) async {
+      await tester.pumpWidget(app(testCoins(Network.mainnet)));
+      await tester.pumpAndSettle();
+      expect(find.text('€61.73'), findsOneWidget);
+      expect(find.text('Powered by CoinGecko'), findsNothing);
+      await tester.tap(find.text('Cold storage'));
+      await tester.pumpAndSettle();
+      expect(find.text('Powered by CoinGecko'), findsNothing);
+
+      final signet = testCoins(Network.signet);
+      signet.preferences = signet.preferences.copyWith(
+        priceSource: PriceSource.coingecko,
+      );
+      await tester.pumpWidget(app(signet));
+      await tester.pumpAndSettle();
+      expect(find.text('€0.00'), findsWidgets);
+      expect(find.text('Powered by CoinGecko'), findsNothing);
+    });
+
     testWidgets('hidden amounts stay hidden off mainnet', (tester) async {
       final bridge = testCoins(Network.signet);
       bridge.preferences = bridge.preferences.copyWith(masked: true);

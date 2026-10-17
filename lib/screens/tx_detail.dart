@@ -254,6 +254,10 @@ class _Hero extends ConsumerWidget {
         if (fiat != null) ...[
           const SizedBox(height: GerfautSpacing.xs),
           Text(fiat, style: tokens.figureOf(color: tokens.textMuted)),
+          PriceCredit(
+            fiatCreditOf(ref, network: network),
+            top: GerfautSpacing.xs,
+          ),
         ],
         const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
         // The height sits beside the pill and drops under it at a large

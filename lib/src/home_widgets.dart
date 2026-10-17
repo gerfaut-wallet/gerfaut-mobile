@@ -43,6 +43,10 @@ abstract final class WidgetKeys {
   /// When the quote was fetched, in unix seconds. No widget shows it:
   /// the as-of lines are written again from it while no new quote comes.
   static const String priceAt = 'price.at';
+
+  /// The credit the source of the price asks for under it ("Powered by
+  /// CoinGecko"); absent when it asks for none.
+  static const String priceCredit = 'price.credit';
   static const String balanceTotal = 'balance.total';
   static const String balanceSynced = 'balance.synced';
   static const String networkHeight = 'network.height';
@@ -65,6 +69,7 @@ class PricePayload {
     required this.at,
     required this.asOf,
     this.asOfNarrow,
+    this.credit,
   });
 
   /// The quote as the widget states it: the price of one bitcoin in the
@@ -77,6 +82,7 @@ class PricePayload {
       at: quote.at,
       asOf: asOf.full,
       asOfNarrow: asOf.narrow,
+      credit: quote.credit,
     );
   }
 
@@ -86,6 +92,7 @@ class PricePayload {
     WidgetKeys.priceAsOf,
     WidgetKeys.priceAsOfNarrow,
     WidgetKeys.priceAt,
+    WidgetKeys.priceCredit,
   ];
 
   final String figure;
@@ -100,12 +107,17 @@ class PricePayload {
   final String asOf;
   final String? asOfNarrow;
 
+  /// What the source of the quote asks to be shown with it, word for
+  /// word, as the core gave it; null when it asks for nothing.
+  final String? credit;
+
   Map<String, String?> toData() => {
     WidgetKeys.priceFigure: figure,
     WidgetKeys.priceChange: change,
     WidgetKeys.priceAsOf: asOf,
     WidgetKeys.priceAsOfNarrow: asOfNarrow,
     WidgetKeys.priceAt: '$at',
+    WidgetKeys.priceCredit: credit,
   };
 }
 

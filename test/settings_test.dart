@@ -997,10 +997,15 @@ void main() {
       await tester.tap(find.text('CoinGecko'));
       await tester.pumpAndSettle();
       expect(find.text('Powered by CoinGecko'), findsOneWidget);
-      // The API terms ask for a legible line, not a hidden one.
+      // The API terms ask for a legible line, not a hidden one: 12 px,
+      // under the rate it comes with.
       expect(
         tester.widget<Text>(find.text('Powered by CoinGecko')).style!.fontSize!,
-        greaterThanOrEqualTo(10),
+        greaterThanOrEqualTo(12),
+      );
+      expect(
+        tester.getTopLeft(find.text('Powered by CoinGecko')).dy,
+        greaterThan(tester.getTopLeft(find.textContaining('1 BTC =')).dy),
       );
     });
 

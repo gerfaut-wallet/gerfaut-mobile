@@ -42,7 +42,7 @@ SyncStamp _stamp(int at, {int tipHeight = 912345}) =>
 const PriceQuote _quote = PriceQuote(
   rate: 50000,
   currency: FiatCurrency('eur'),
-  source: PriceSource.coingecko,
+  source: PriceSource.mempoolSpace,
   at: _syncedAt,
 );
 
@@ -112,6 +112,22 @@ void main() {
       expect(payload.toData()[WidgetKeys.priceChange], isNull);
       expect(payload.toData()[WidgetKeys.priceAt], '$_syncedAt');
       expect(payload.toData().keys, PricePayload.keys);
+      // mempool.space asks for no credit: the line stays hidden.
+      expect(payload.toData()[WidgetKeys.priceCredit], isNull);
+    });
+
+    test('carries the credit its source asks for, word for word', () {
+      const quote = PriceQuote(
+        rate: 7738073,
+        currency: FiatCurrency('inr'),
+        source: PriceSource.coingecko,
+        at: _syncedAt,
+        credit: 'Powered by CoinGecko',
+      );
+      expect(
+        PricePayload.of(quote).toData()[WidgetKeys.priceCredit],
+        'Powered by CoinGecko',
+      );
     });
 
     test('a quote from today says its time alone', () {

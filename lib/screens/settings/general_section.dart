@@ -7,6 +7,7 @@ import '../../src/format.dart';
 import '../../src/models.dart';
 import '../../src/state.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/amounts.dart';
 import '../../widgets/choice_group.dart';
 import '../../widgets/facts.dart';
 import '../../widgets/section_card.dart';
@@ -99,18 +100,6 @@ class GeneralSection extends ConsumerWidget {
                   'CoinGecko is the only source that quotes '
                   '${currency.code}.',
                   style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                ),
-              ],
-              if (ref.watch(fiatSourceProvider) == PriceSource.coingecko) ...[
-                const SizedBox(height: GerfautSpacing.xs),
-                // Required by the CoinGecko API terms wherever their
-                // data is shown.
-                Text(
-                  'Powered by CoinGecko',
-                  style: tokens.label.copyWith(
-                    fontSize: 11,
-                    color: tokens.textMuted,
-                  ),
                 ),
               ],
               const SizedBox(height: GerfautSpacing.sm),
@@ -227,10 +216,18 @@ class _RatePreview extends ConsumerWidget {
         style: tokens.bodySmall.copyWith(color: tokens.textMuted),
       );
     }
-    return Text(
-      '1 BTC = ${formatFiatPrice(quote.rate, quote.currency)} · '
-      'updated ${relativeTime(quote.at)}',
-      style: tokens.figureOf(color: tokens.textMuted),
+    // Under the rate, the credit its source asks for, as the core
+    // gives it with the price.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '1 BTC = ${formatFiatPrice(quote.rate, quote.currency)} · '
+          'updated ${relativeTime(quote.at)}',
+          style: tokens.figureOf(color: tokens.textMuted),
+        ),
+        PriceCredit(quote.credit, top: GerfautSpacing.xs),
+      ],
     );
   }
 }

@@ -217,6 +217,16 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
           style: tokens.bodySmall.copyWith(color: tokens.textMuted),
         ),
       ],
+      // Once, under the cards, for the balances they price.
+      if ([
+        ...list.external,
+        ...list.internal,
+      ].any((row) => row.balanceSats > 0))
+        PriceCredit(
+          fiatCreditOf(ref, network: network),
+          top: GerfautSpacing.sm,
+          align: TextAlign.end,
+        ),
     ];
   }
 }

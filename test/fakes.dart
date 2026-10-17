@@ -1242,6 +1242,8 @@ class FakeBridge implements GerfautBridge {
       currency: currency,
       source: source,
       at: 1755000000,
+      // As the core gives it: CoinGecko's terms ask for it.
+      credit: source == PriceSource.coingecko ? 'Powered by CoinGecko' : null,
     );
   }
 
