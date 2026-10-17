@@ -428,6 +428,7 @@ class MainActivity : FlutterFragmentActivity() {
             .putString(NOTE_MARK, sensitiveMark)
             .putLong(NOTE_STAMP, sensitiveStamp)
             .putLong(NOTE_COPIED_AT, sensitiveCopiedAt)
+            // Synchronous on purpose: a few bytes that must outlive the process.
             .commit()
     }
 
