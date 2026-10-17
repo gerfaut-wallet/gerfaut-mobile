@@ -30,10 +30,27 @@ const Duration _statusPollInterval = Duration(seconds: 30);
 /// Confirmations after which a broadcast stops being watched.
 const int _settledConfirmations = 6;
 
-/// The mark under a figure the PSBT states and nobody confirmed: the
-/// inputs total, the fee, its rate. Outputs need none — they are the
-/// transaction's own, not a claim about the chain. The desktop's words.
-const String _claimedMark = 'as the PSBT claims';
+/// The mark under a figure nobody confirmed: the inputs total, the fee,
+/// its rate. Outputs need none — they are the transaction's own, not a
+/// claim about the chain. It names whose word the figure is: the PSBT's,
+/// or, when a watched address's listing is among the values, nobody's in
+/// particular, since that figure is the server's. The desktop's words.
+String _claimedMark({required bool listed}) =>
+    listed ? 'unproven' : 'as the PSBT claims';
+
+/// What qualifies a rate read before the signatures are in.
+const String _onceSigned = 'once signed';
+
+/// The fee rate as the core measured it: the rate paid, the estimate once
+/// signed, or the most it can be once signed.
+String _rateFigure(TxPreview preview, double rate) {
+  final figure = '${rate.toStringAsFixed(1)} sat/vB';
+  return switch (preview.feeRateBasis) {
+    FeeRateBasis.exact => figure,
+    FeeRateBasis.estimated => '≈ $figure',
+    FeeRateBasis.upperBound => '≤ $figure',
+  };
+}
 
 /// Under the core's line about a coin no backend confirmed: what to do
 /// about it, and nothing else. The core names the coin and says its
@@ -407,6 +424,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     // PSBT's word: the inputs total and the fee wear the mark, so the
     // number is never read as the chain's.
     final claimed = preview.amountsDeclared;
+    final mark = _claimedMark(listed: preview.amountsListed);
     final inputsTotal = sideTotal(preview.inputs.map((i) => i.valueSats));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -429,7 +447,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                 inputs: _inputBranches(preview.inputs),
                 outputs: _outputBranches(preview.outputs),
                 feeSats: preview.feeSats,
-                feeNote: claimed ? _claimedMark : null,
+                feeNote: claimed ? mark : null,
               ),
               if (preview.warnings.isNotEmpty) ...[
                 const SizedBox(height: GerfautSpacing.lg),
@@ -449,7 +467,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                 title: 'Inputs',
                 count: preview.inputs.length,
                 totalSats: inputsTotal,
-                note: claimed && inputsTotal != null ? _claimedMark : null,
+                note: claimed && inputsTotal != null ? mark : null,
               ),
               const SizedBox(height: GerfautSpacing.sm),
               for (final (index, input) in preview.inputs.indexed) ...[
@@ -496,8 +514,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                         icon: LucideIcons.radio,
                         expand: true,
                         // The state the pill reads, not a second one.
-                        onPressed:
-                            preview.readiness == TxReadiness.ready && !_sending
+                        onPressed: preview.readiness.sendable && !_sending
                             ? () => _confirmAndSend(preview)
                             : null,
                       ),
@@ -663,7 +680,10 @@ class _Hero extends StatelessWidget {
             ),
             // Where it stands is the core's word, read as it comes. Amber
             // whenever it cannot go: a status, since Broadcast stays off.
-            // The red is the core's caution below, which says why.
+            // The red is the core's caution below, which says why. Amber
+            // too for one already out, waiting to be mined: neither the
+            // green of a send still to make nor a red, since sending it
+            // again does no harm.
             _Pill(
               tone: preview.readiness == TxReadiness.ready
                   ? _Tone.confirmed
@@ -672,11 +692,13 @@ class _Hero extends StatelessWidget {
                 TxReadiness.ready => LucideIcons.circleCheck,
                 TxReadiness.refused => LucideIcons.ban,
                 TxReadiness.unsigned => LucideIcons.penOff,
+                TxReadiness.inMempool => LucideIcons.hourglass,
               },
               label: switch (preview.readiness) {
                 TxReadiness.ready => 'Ready to broadcast',
                 TxReadiness.refused => 'Will be refused',
                 TxReadiness.unsigned => 'Not fully signed',
+                TxReadiness.inMempool => 'Already in the mempool',
               },
               tokens: tokens,
             ),
@@ -771,6 +793,7 @@ IconData _warningIcon(TxWarningKind kind) => switch (kind) {
   TxWarningKind.locked => LucideIcons.clock,
   TxWarningKind.inputUnknown => LucideIcons.circleHelp,
   TxWarningKind.inputSpent => LucideIcons.ban,
+  TxWarningKind.inMempool => LucideIcons.hourglass,
   TxWarningKind.inputMismatch => LucideIcons.equalNot,
   TxWarningKind.feeUnknown => LucideIcons.circleHelp,
   TxWarningKind.dustOutput => LucideIcons.coins,
@@ -822,31 +845,51 @@ class _WarningRow extends StatelessWidget {
 /// A fact value with [_claimedMark] under it when [claimed], the value
 /// alone otherwise. Right-aligned, like every value of the card, and
 /// amber: the mark is a caution about the figure, not a footnote to
-/// it, and the desktop paints it in the same tone.
+/// it, and the desktop paints it in the same tone. [qualifier], muted,
+/// comes between the two: what the figure is measured on.
 class _Claimed extends StatelessWidget {
   const _Claimed({
     required this.claimed,
+    required this.listed,
     required this.tokens,
     required this.child,
+    this.qualifier,
   });
 
   final bool claimed;
+
+  /// Among the values nothing proves, a watched address's listing.
+  final bool listed;
   final GerfautTokens tokens;
   final Widget child;
+  final String? qualifier;
 
   @override
   Widget build(BuildContext context) {
-    if (!claimed) return child;
+    if (!claimed && qualifier == null) return child;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
       children: [
         child,
-        Text(
-          _claimedMark,
-          style: tokens.label.copyWith(letterSpacing: 0, color: tokens.pending),
-          textAlign: TextAlign.right,
-        ),
+        if (qualifier != null)
+          Text(
+            qualifier!,
+            style: tokens.label.copyWith(
+              letterSpacing: 0,
+              color: tokens.textMuted,
+            ),
+            textAlign: TextAlign.right,
+          ),
+        if (claimed)
+          Text(
+            _claimedMark(listed: listed),
+            style: tokens.label.copyWith(
+              letterSpacing: 0,
+              color: tokens.pending,
+            ),
+            textAlign: TextAlign.right,
+          ),
       ],
     );
   }
@@ -1205,6 +1248,7 @@ class _TechnicalCard extends StatelessWidget {
           child: preview.feeSats != null
               ? _Claimed(
                   claimed: preview.amountsDeclared,
+                  listed: preview.amountsListed,
                   tokens: tokens,
                   child: _FeeValue(sats: preview.feeSats!),
                 )
@@ -1214,11 +1258,17 @@ class _TechnicalCard extends StatelessWidget {
           label: 'Fee rate',
           tokens: tokens,
           child: preview.feeRateSatVb != null
+              // Before the signatures are in, the rate is the one the
+              // transaction will pay once they are: said under it.
               ? _Claimed(
                   claimed: preview.amountsDeclared,
+                  listed: preview.amountsListed,
+                  qualifier: preview.feeRateBasis == FeeRateBasis.exact
+                      ? null
+                      : _onceSigned,
                   tokens: tokens,
                   child: FactValue(
-                    '${preview.feeRateSatVb!.toStringAsFixed(1)} sat/vB',
+                    _rateFigure(preview, preview.feeRateSatVb!),
                     tokens,
                   ),
                 )
@@ -1288,7 +1338,8 @@ class _ConfirmDialog extends ConsumerWidget {
     // A fee resting on a coin nobody confirmed is said as such here
     // too: this is the last line read before the send.
     final ending = preview.amountsDeclared
-        ? ', $_claimedMark: no backend confirmed what its inputs are worth.'
+        ? ', ${_claimedMark(listed: preview.amountsListed)}: no backend '
+              'confirmed what its inputs are worth.'
         : '.';
     // Outputs over proven amounts, or past all the bitcoin there will
     // ever be, never get here: the core blocks the send. Over amounts
@@ -1299,7 +1350,7 @@ class _ConfirmDialog extends ConsumerWidget {
     final feeLine = fee == null
         ? 'Its fee could not be established.'
         : 'It pays a fee of ${masked ? maskedValue : formatAmount(fee, unit)}'
-              '${rate != null ? ' (${rate.toStringAsFixed(1)} sat/vB)' : ''}'
+              '${rate != null ? ' (${_rateFigure(preview, rate)}${preview.feeRateBasis == FeeRateBasis.exact ? '' : ' $_onceSigned'})' : ''}'
               '$ending';
     return AlertDialog(
       backgroundColor: tokens.surface,
@@ -1325,7 +1376,10 @@ class _ConfirmDialog extends ConsumerWidget {
           ],
           const SizedBox(height: GerfautSpacing.sm),
           Text(
-            'Once the network has it, this cannot be undone.',
+            preview.readiness == TxReadiness.inMempool
+                ? 'It is already waiting in the mempool: broadcasting it '
+                      'again does no harm.'
+                : 'Once the network has it, this cannot be undone.',
             style: tokens.bodySmall.copyWith(color: tokens.textMuted),
           ),
         ],

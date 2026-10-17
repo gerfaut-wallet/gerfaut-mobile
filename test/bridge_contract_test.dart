@@ -303,6 +303,7 @@ final Map<String, _Entry> _contract = {
     ).toJson(),
   }),
   'ExportResult': _reads(ExportResult.fromJson),
+  'FeeRateBasis': _enum(FeeRateBasis.values, (v) => v.id, FeeRateBasis.fromId),
   'FiatCurrency': const _Text(
     "the list of currencies is the core's: the settings offer what its "
     'table lists',
