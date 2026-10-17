@@ -229,8 +229,6 @@ class _Hero extends ConsumerWidget {
     final unit = ref.watch(unitProvider);
     final summary = detail.summary;
     final sats = summary.netSats;
-    // The subline carries only the fiat value, when that display is on.
-    final fiat = fiatValueOf(ref, sats, network: network);
     final explorer = explorerTxUrl(network, summary.txid);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -251,10 +249,14 @@ class _Hero extends ConsumerWidget {
             maxLines: 1,
           ),
         ),
-        if (fiat != null) ...[
-          const SizedBox(height: GerfautSpacing.xs),
-          Text(fiat, style: tokens.figureOf(color: tokens.textMuted)),
-        ],
+        // The subline carries only the fiat value, when that display
+        // is on.
+        FiatText(
+          sats: sats,
+          network: network,
+          style: tokens.figureOf(color: tokens.textMuted),
+          top: GerfautSpacing.xs,
+        ),
         const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
         // The height sits beside the pill and drops under it at a large
         // text size, where the two together are wider than the phone.

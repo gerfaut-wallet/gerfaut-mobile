@@ -69,7 +69,7 @@ Widget _app(
 }) {
   return ProviderScope(
     overrides: [bridgeProvider.overrideWithValue(bridge)],
-    child: MaterialApp(
+    child: creditedApp(
       theme: themeFrom(GerfautTokens.light, Brightness.light),
       home: Builder(
         builder: (context) => MediaQuery(
@@ -186,6 +186,26 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('€2.50'), findsOneWidget);
+  });
+
+  testWidgets('CoinGecko is credited once, under the screen', (tester) async {
+    _usePhone(tester);
+    final bridge = FakeBridge(txDetails: {'w1:$_txid': _detail()});
+    bridge.preferences = bridge.preferences.copyWith(
+      priceSource: PriceSource.coingecko,
+    );
+    await tester.pumpWidget(_app(bridge));
+    await tester.pumpAndSettle();
+    expect(find.text('Powered by CoinGecko'), findsNothing);
+
+    _containerOf(tester).read(fiatEnabledProvider.notifier).set(true);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Powered by CoinGecko'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Powered by CoinGecko')).dy,
+      greaterThan(tester.getTopLeft(find.text('€2.50')).dy),
+    );
   });
 
   testWidgets('an amount nobody could price reads n/a', (tester) async {

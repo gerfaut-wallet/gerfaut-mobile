@@ -21,7 +21,7 @@ Widget receiveApp(
 }) {
   return ProviderScope(
     overrides: [bridgeProvider.overrideWithValue(bridge)],
-    child: MaterialApp(
+    child: creditedApp(
       theme: themeFrom(tokens ?? GerfautTokens.light, brightness),
       home: const ReceiveScreen(walletId: 'w1'),
     ),
@@ -544,6 +544,47 @@ void main() {
       // Short keychains have nothing to unfold; nothing was truncated.
       expect(find.textContaining('Show all'), findsNothing);
       expect(find.textContaining('Long keychains are capped'), findsNothing);
+    });
+
+    // A balance folded away is no figure on screen: CoinGecko's credit
+    // comes with the row that shows one, and goes with it.
+    testWidgets('a folded balance is not credited, an unfolded one is', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = bridgeWith(
+        AddressList(
+          external: [
+            for (var i = 0; i < 6; i++) row(i, used: true),
+            row(6, used: true, balance: 150000),
+          ],
+          internal: const [],
+        ),
+        meta: makeMeta(network: Network.mainnet),
+      );
+      bridge.preferences = bridge.preferences.copyWith(
+        fiat: true,
+        priceSource: PriceSource.coingecko,
+      );
+      await tester.pumpWidget(receiveApp(bridge));
+      await tester.pumpAndSettle();
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ReceiveScreen)),
+        listen: false,
+      );
+      container.read(preferencesProvider.notifier).hydrate(bridge.preferences);
+      await tester.pumpAndSettle();
+      expect(find.text('€75.00'), findsNothing);
+      expect(find.text('Powered by CoinGecko'), findsNothing);
+
+      await tester.tap(find.text('Show all 7'));
+      await tester.pumpAndSettle();
+      expect(find.text('€75.00'), findsOneWidget);
+      expect(find.text('Powered by CoinGecko'), findsOneWidget);
+
+      await tester.tap(find.text('Show less'));
+      await tester.pumpAndSettle();
+      expect(find.text('Powered by CoinGecko'), findsNothing);
     });
 
     testWidgets('a long keychain shows five rows, then all of them', (

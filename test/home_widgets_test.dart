@@ -42,7 +42,7 @@ SyncStamp _stamp(int at, {int tipHeight = 912345}) =>
 const PriceQuote _quote = PriceQuote(
   rate: 50000,
   currency: FiatCurrency('eur'),
-  source: PriceSource.coingecko,
+  source: PriceSource.mempoolSpace,
   at: _syncedAt,
 );
 
@@ -103,6 +103,7 @@ void main() {
     test('states one bitcoin in the currency and the clock time', () {
       final payload = PricePayload.of(
         _quote,
+        kPriceTable,
         now: DateTime.fromMillisecondsSinceEpoch(_syncedAt * 1000),
       );
       expect(payload.figure, '€50 000');
@@ -112,6 +113,21 @@ void main() {
       expect(payload.toData()[WidgetKeys.priceChange], isNull);
       expect(payload.toData()[WidgetKeys.priceAt], '$_syncedAt');
       expect(payload.toData().keys, PricePayload.keys);
+      // mempool.space asks for no credit: the line stays hidden.
+      expect(payload.toData()[WidgetKeys.priceCredit], isNull);
+      expect(payload.toData()[WidgetKeys.priceSource], 'mempool_space');
+    });
+
+    test('carries the credit its source asks for, word for word', () {
+      const quote = PriceQuote(
+        rate: 7738073,
+        currency: FiatCurrency('inr'),
+        source: PriceSource.coingecko,
+        at: _syncedAt,
+      );
+      final data = PricePayload.of(quote, kPriceTable).toData();
+      expect(data[WidgetKeys.priceCredit], 'Powered by CoinGecko');
+      expect(data[WidgetKeys.priceSource], 'coingecko');
     });
 
     test('a quote from today says its time alone', () {
@@ -137,6 +153,7 @@ void main() {
           source: PriceSource.coingecko,
           at: at,
         ),
+        kPriceTable,
         now: DateTime(2026, 10, 4, 8),
       ).toData();
       expect(data[WidgetKeys.priceAsOf], 'as of Oct 03, 09:41');
@@ -159,10 +176,10 @@ void main() {
       const quote = PriceQuote(
         rate: 66741.37,
         currency: FiatCurrency('eur'),
-        source: PriceSource.kraken,
+        source: PriceSource.mempoolSpace,
         at: _syncedAt,
       );
-      expect(PricePayload.of(quote).figure, '€66 741');
+      expect(PricePayload.of(quote, kPriceTable).figure, '€66 741');
       expect(formatFiatPrice(66741.37, FiatCurrency('eur')), '€66 741');
       expect(formatFiatPrice(9876543.2, FiatCurrency('jpy')), '¥9 876 543');
       // Under a hundred the currency keeps its own decimals.
@@ -429,6 +446,7 @@ void main() {
         board,
         installed: board.installed,
         price: price,
+        table: kPriceTable,
         balance: _noBalance,
         network: _noNetwork,
         now: now,
@@ -441,17 +459,20 @@ void main() {
         source: PriceSource.coingecko,
         at: _secs(DateTime(2026, 10, 3, 23, 50)),
       );
-      await write(PricePayload.of(quote, now: evening), evening);
+      await write(PricePayload.of(quote, kPriceTable, now: evening), evening);
       final figure = board.data[WidgetKeys.priceFigure];
       expect(board.data[WidgetKeys.priceAsOf], 'as of 23:50');
       expect(board.data.containsKey(WidgetKeys.priceAsOfNarrow), isFalse);
 
-      // Past midnight, and nothing new came: the same quote, dated.
+      // Past midnight, and nothing new came: the same quote, dated, and
+      // credited as its source asks.
       board.updates.clear();
+      board.data.remove(WidgetKeys.priceCredit);
       await write(null, DateTime(2026, 10, 4, 0, 10));
       expect(board.data[WidgetKeys.priceFigure], figure);
       expect(board.data[WidgetKeys.priceAsOf], 'as of Oct 03, 23:50');
       expect(board.data[WidgetKeys.priceAsOfNarrow], 'as of Oct 03');
+      expect(board.data[WidgetKeys.priceCredit], 'Powered by CoinGecko');
       expect(board.updates, [HomeWidgets.price]);
 
       // Taken off the home screen, the time goes with the rest.
@@ -460,6 +481,27 @@ void main() {
       for (final key in PricePayload.keys) {
         expect(board.data.containsKey(key), isFalse, reason: key);
       }
+    });
+
+    test('a price from a build that kept no source goes, rather than stand '
+        'without its credit', () async {
+      final board = FakeWidgetBoard(installed: {HomeWidgets.price});
+      // What an earlier build left: a figure and its time, no source.
+      board.data
+        ..[WidgetKeys.priceFigure] = '€72 537'
+        ..[WidgetKeys.priceAt] = '$_syncedAt'
+        ..[WidgetKeys.priceAsOf] = 'as of 09:41';
+      await WidgetFeed.write(
+        board,
+        installed: board.installed,
+        table: kPriceTable,
+        balance: _noBalance,
+        network: _noNetwork,
+      );
+      for (final key in PricePayload.keys) {
+        expect(board.data.containsKey(key), isFalse, reason: key);
+      }
+      expect(board.updates, contains(HomeWidgets.price));
     });
 
     test('a return to the foreground reads the placed widgets again', () async {
@@ -687,7 +729,8 @@ void main() {
       board.data
         ..[WidgetKeys.priceFigure] = 'kept'
         ..[WidgetKeys.priceAsOf] = 'as of 09:41'
-        ..[WidgetKeys.priceAt] = '$at';
+        ..[WidgetKeys.priceAt] = '$at'
+        ..[WidgetKeys.priceSource] = 'mempool_space';
       await refreshWidgets(
         bridge: bridge,
         board: board,
@@ -748,7 +791,7 @@ void main() {
         );
       }
 
-      final fresh = PricePayload.of(_quote, now: _now);
+      final fresh = PricePayload.of(_quote, kPriceTable, now: _now);
 
       // Built-in Tor, not running in this process: nothing is asked,
       // and the last price stays up with its time.

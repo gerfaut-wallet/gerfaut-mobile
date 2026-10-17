@@ -1960,9 +1960,8 @@ class UnreachableCertificate extends CertificateStatus {
 /// Which currencies each quotes, and its name, are the core's: see
 /// [PriceTable].
 enum PriceSource {
-  coingecko('coingecko'),
-  kraken('kraken'),
-  mempoolSpace('mempool_space');
+  mempoolSpace('mempool_space'),
+  coingecko('coingecko');
 
   const PriceSource(this.id);
 
@@ -2048,12 +2047,31 @@ class CurrencyEntry {
 
 /// One price source of the [PriceTable].
 class SourceEntry {
-  const SourceEntry({required this.source, required this.label});
+  const SourceEntry({required this.source, required this.label, this.credit});
 
   final PriceSource source;
 
   /// Its name, as it writes it.
   final String label;
+
+  /// What its terms ask to be shown with its data, or null: once on
+  /// each screen that shows a price or an amount it priced.
+  final Credit? credit;
+}
+
+/// The credit a price source asks for beside its data: its words, and
+/// the page they link to.
+class Credit {
+  const Credit({required this.text, required this.url});
+
+  factory Credit.fromJson(Map<String, dynamic> json) =>
+      Credit(text: json['text'] as String, url: json['url'] as String);
+
+  /// Word for word, as its terms write it.
+  final String text;
+
+  /// The page the words link to, opened in the browser.
+  final String url;
 }
 
 /// What the settings offer for the fiat value, and how often its price
@@ -2077,7 +2095,14 @@ class PriceTable {
                 (entry as Map<String, dynamic>)['source'] as String,
               )
               case final source?)
-            SourceEntry(source: source, label: entry['label'] as String),
+            SourceEntry(
+              source: source,
+              label: entry['label'] as String,
+              credit: switch (entry['credit']) {
+                final Map<String, dynamic> credit => Credit.fromJson(credit),
+                _ => null,
+              },
+            ),
       ],
       refresh: Duration(seconds: json['refresh_secs'] as int),
     );
@@ -2097,6 +2122,14 @@ class PriceTable {
   CurrencyEntry? entryOf(FiatCurrency currency) {
     for (final entry in currencies) {
       if (entry.currency == currency) return entry;
+    }
+    return null;
+  }
+
+  /// The credit [source] asks for beside its data, if it asks for one.
+  Credit? creditOf(PriceSource source) {
+    for (final entry in sources) {
+      if (entry.source == source) return entry.credit;
     }
     return null;
   }

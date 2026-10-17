@@ -280,7 +280,7 @@ void main() {
             'code': 'EUR',
             'name': 'Euro',
             'reach': 'every',
-            'sources': ['coingecko', 'kraken', 'mempool_space'],
+            'sources': ['mempool_space', 'coingecko'],
           },
           {
             'currency': 'ngn',
@@ -292,14 +292,18 @@ void main() {
         ],
         'sources': [
           {
-            'source': 'coingecko',
-            'label': 'CoinGecko',
-            'ranges': ['day', 'week', 'month', 'year'],
-          },
-          {
             'source': 'mempool_space',
             'label': 'mempool.space',
             'ranges': ['month', 'year', 'max'],
+          },
+          {
+            'source': 'coingecko',
+            'label': 'CoinGecko',
+            'ranges': ['day', 'week', 'month', 'year'],
+            'credit': {
+              'text': 'Powered by CoinGecko',
+              'url': 'https://www.coingecko.com',
+            },
           },
         ],
         'refresh_secs': 60,
@@ -315,9 +319,14 @@ void main() {
       expect(naira.sources, [PriceSource.coingecko]);
       expect(table.entryOf(const FiatCurrency('xxx')), isNull);
       expect(table.sources.map((entry) => entry.label), [
-        'CoinGecko',
         'mempool.space',
+        'CoinGecko',
       ]);
+      // The credit each source asks for, as the table carries it.
+      expect(table.creditOf(PriceSource.mempoolSpace), isNull);
+      final credit = table.creditOf(PriceSource.coingecko)!;
+      expect(credit.text, 'Powered by CoinGecko');
+      expect(credit.url, 'https://www.coingecko.com');
     });
   });
 

@@ -17,16 +17,16 @@ Widget _app({
       body: Padding(
         padding: const EdgeInsets.all(GerfautSpacing.md),
         child: ChoiceGroup<String>(
-          label: 'Price source',
+          label: 'Theme',
           value: value,
           options: [
-            const ChoiceOption(value: 'first', label: 'CoinGecko'),
+            const ChoiceOption(value: 'first', label: 'Light'),
             ChoiceOption(
               value: 'second',
-              label: 'Kraken',
+              label: 'Dark',
               enabled: middleEnabled,
             ),
-            const ChoiceOption(value: 'third', label: 'mempool.space'),
+            const ChoiceOption(value: 'third', label: 'System'),
           ],
           onChanged: onChanged,
         ),
@@ -50,17 +50,17 @@ void main() {
     // The failure this guards: options laid out with no gap read as one
     // block of colour, and adjacent touch targets need room of their own
     // to be aimed at.
-    final first = _option(tester, 'CoinGecko');
-    final second = _option(tester, 'Kraken');
-    final third = _option(tester, 'mempool.space');
+    final first = _option(tester, 'Light');
+    final second = _option(tester, 'Dark');
+    final third = _option(tester, 'System');
     expect(second.top - first.bottom, GerfautSpacing.sm);
     expect(third.top - second.bottom, GerfautSpacing.sm);
     // Each one is drawn a control's height and answers the finger over
     // a full target, and the targets stand apart.
     expect(first.height, GerfautTouch.control);
     expect(second.height, GerfautTouch.control);
-    final firstTarget = _target(tester, 'CoinGecko');
-    final secondTarget = _target(tester, 'Kraken');
+    final firstTarget = _target(tester, 'Light');
+    final secondTarget = _target(tester, 'Dark');
     expect(firstTarget.height, GerfautTouch.target);
     expect(secondTarget.height, GerfautTouch.target);
     expect(secondTarget.top, greaterThan(firstTarget.bottom));
@@ -70,7 +70,7 @@ void main() {
     final picked = <String>[];
     await tester.pumpWidget(_app(value: 'first', onChanged: picked.add));
 
-    await tester.tap(find.text('mempool.space'));
+    await tester.tap(find.text('System'));
     await tester.pumpAndSettle();
     expect(picked, ['third']);
   });
@@ -79,13 +79,13 @@ void main() {
     final picked = <String>[];
     await tester.pumpWidget(_app(value: 'first', onChanged: picked.add));
 
-    await tester.tap(find.text('Kraken'));
+    await tester.tap(find.text('Dark'));
     await tester.pumpAndSettle();
     expect(picked, isEmpty);
 
     // Quiet rather than absent: the option still says it exists.
     final tokens = GerfautTokens.light;
-    final label = tester.widget<Text>(find.text('Kraken'));
+    final label = tester.widget<Text>(find.text('Dark'));
     expect(label.style?.color, tokens.textMuted);
   });
 
@@ -102,8 +102,8 @@ void main() {
               .first,
         )
         .color!;
-    expect(fill('mempool.space'), tokens.primary);
-    expect(fill('CoinGecko'), tokens.surfaceSunken);
-    expect(fill('Kraken'), tokens.surfaceSunken);
+    expect(fill('System'), tokens.primary);
+    expect(fill('Light'), tokens.surfaceSunken);
+    expect(fill('Dark'), tokens.surfaceSunken);
   });
 }
