@@ -32,12 +32,11 @@ class FakeBackupSharer implements BackupSharer {
   final List<({List<int> bytes, String filename})> shared = [];
 
   @override
-  Future<bool> shareBackup({
+  Future<void> shareBackup({
     required List<int> bytes,
     required String filename,
   }) async {
     shared.add((bytes: bytes, filename: filename));
-    return true;
   }
 }
 

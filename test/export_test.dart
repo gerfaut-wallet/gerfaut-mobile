@@ -21,13 +21,9 @@ import 'fakes.dart';
 class FakeCsvSharer implements CsvSharer {
   final List<({String csv, String filename})> shared = [];
 
-  /// What the sheet answers: an app picked, or the sheet waved away.
-  bool picked = true;
-
   @override
-  Future<bool> shareCsv({required String csv, required String filename}) async {
+  Future<void> shareCsv({required String csv, required String filename}) async {
     shared.add((csv: csv, filename: filename));
-    return picked;
   }
 
   @override
@@ -223,7 +219,7 @@ void main() {
     expect(find.text('3 of 3 transactions selected'), findsOneWidget);
   });
 
-  testWidgets('sharing hands the file to the sheet and states the count', (
+  testWidgets('sharing hands the file to the sheet, which says the rest', (
     tester,
   ) async {
     final sharer = FakeCsvSharer();
@@ -240,24 +236,7 @@ void main() {
     expect(sharer.shared.single.filename, 'cold-storage-transactions.csv');
     expect(sharer.shared.single.csv, contains('txid,date_utc'));
     expect(saver.saved, isEmpty);
-    expect(find.text('3 transactions shared'), findsOneWidget);
-
-    // Flush the snackbar timer.
-    await tester.pump(const Duration(seconds: 5));
-    await tester.pumpAndSettle();
-  });
-
-  testWidgets('a share sheet waved away says nothing was shared', (
-    tester,
-  ) async {
-    final sharer = FakeCsvSharer()..picked = false;
-    await tester.pumpWidget(exportApp(makeBridge(), sharer));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Share'));
-    await tester.pumpAndSettle();
-
-    expect(sharer.shared, hasLength(1));
+    // Whether an app took it is the sheet's to say: nothing claims it.
     expect(find.textContaining('shared'), findsNothing);
     expect(find.textContaining('exported'), findsNothing);
   });
