@@ -7,14 +7,17 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'documents.dart' show filesChannel;
 
 /// Offers [bytes] to the share sheet as a file named [filename], and
-/// answers once the sheet is up: the sheet itself is all the feedback a
-/// share gets. The file is written into a folder of its own under the
+/// answers once the app is back in front: the sheet itself is all the
+/// feedback a share gets, and a screen that waits for this answer takes
+/// no second tap meanwhile, which would open a second sheet over a
+/// second copy. The file is written into a folder of its own under the
 /// cache, so no two shares share an address, and only the app picked in
 /// the sheet is granted a read of it, for as long as it holds it: no app
 /// could reach it before the choice, nor a later file through an old
@@ -22,15 +25,62 @@ import 'documents.dart' show filesChannel;
 /// (SharedFiles.kt).
 Future<void> _share(Uint8List bytes, String filename, String mimeType) async {
   await sharedCopies.sweep();
+  // Listened to before the sheet is asked for: the app may leave the
+  // front before the platform has even answered.
+  final back = FrontReturn();
+  final listener = AppLifecycleListener(onStateChange: back.lifecycle);
   try {
     await filesChannel.invokeMethod<void>('share', {
       'bytes': bytes,
       'filename': filename,
       'mimeType': mimeType,
     });
+    await back.wait();
   } finally {
+    listener.dispose();
+    back.dispose();
     // The copy just written is too young to go: this sets the hour.
     unawaited(sharedCopies.sweepQuietly());
+  }
+}
+
+/// The app's return to the front after a screen of the system's it
+/// opened. Done at the first `resumed` after the app was seen out of
+/// focus; and, should it never leave within [patience] of [wait], no
+/// screen came up after all, and that is done too.
+class FrontReturn {
+  FrontReturn({this.patience = const Duration(seconds: 3)});
+
+  final Duration patience;
+  final Completer<void> _done = Completer<void>();
+  bool _left = false;
+  Timer? _patience;
+
+  void lifecycle(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (_left) _finish();
+    } else {
+      _left = true;
+      _patience?.cancel();
+    }
+  }
+
+  /// Done once the app is back, or right after [patience] if it never
+  /// left.
+  Future<void> wait() {
+    if (!_left && !_done.isCompleted) {
+      _patience = Timer(patience, () {
+        if (!_left) _finish();
+      });
+    }
+    return _done.future;
+  }
+
+  void dispose() => _patience?.cancel();
+
+  void _finish() {
+    _patience?.cancel();
+    if (!_done.isCompleted) _done.complete();
   }
 }
 
