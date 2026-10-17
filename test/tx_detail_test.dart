@@ -69,7 +69,7 @@ Widget _app(
 }) {
   return ProviderScope(
     overrides: [bridgeProvider.overrideWithValue(bridge)],
-    child: MaterialApp(
+    child: creditedApp(
       theme: themeFrom(GerfautTokens.light, Brightness.light),
       home: Builder(
         builder: (context) => MediaQuery(
@@ -188,9 +188,7 @@ void main() {
     expect(find.text('€2.50'), findsOneWidget);
   });
 
-  testWidgets('CoinGecko is credited once, under the value it priced', (
-    tester,
-  ) async {
+  testWidgets('CoinGecko is credited once, under the screen', (tester) async {
     _usePhone(tester);
     final bridge = FakeBridge(txDetails: {'w1:$_txid': _detail()});
     bridge.preferences = bridge.preferences.copyWith(

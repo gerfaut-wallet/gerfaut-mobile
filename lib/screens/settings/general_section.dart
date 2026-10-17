@@ -7,7 +7,7 @@ import '../../src/format.dart';
 import '../../src/models.dart';
 import '../../src/state.dart';
 import '../../theme/tokens.dart';
-import '../../widgets/amounts.dart';
+import '../../widgets/price_credit.dart';
 import '../../widgets/choice_group.dart';
 import '../../widgets/facts.dart';
 import '../../widgets/section_card.dart';
@@ -216,18 +216,14 @@ class _RatePreview extends ConsumerWidget {
         style: tokens.bodySmall.copyWith(color: tokens.textMuted),
       );
     }
-    // Under the rate, the credit its source asks for, as the core
-    // gives it with the price.
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '1 BTC = ${formatFiatPrice(quote.rate, quote.currency)} · '
-          'updated ${relativeTime(quote.at)}',
-          style: tokens.figureOf(color: tokens.textMuted),
-        ),
-        PriceCredit(quote.credit, top: GerfautSpacing.xs),
-      ],
+    // The rate on screen is the source's: the screen credits it.
+    return CreditMark(
+      source: quote.source,
+      child: Text(
+        '1 BTC = ${formatFiatPrice(quote.rate, quote.currency)} · '
+        'updated ${relativeTime(quote.at)}',
+        style: tokens.figureOf(color: tokens.textMuted),
+      ),
     );
   }
 }

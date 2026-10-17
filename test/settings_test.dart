@@ -35,7 +35,7 @@ Widget settingsApp(FakeBridge bridge, {SettingsSection? section}) {
       bridgeProvider.overrideWithValue(bridge),
       disguiseServiceProvider.overrideWithValue(FakeDisguise()),
     ],
-    child: MaterialApp(
+    child: creditedApp(
       theme: themeFrom(GerfautTokens.light, Brightness.light),
       home: SettingsScreen(section: section),
     ),
@@ -998,7 +998,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Powered by CoinGecko'), findsOneWidget);
       // The API terms ask for a legible line, not a hidden one: 12 px,
-      // under the rate it comes with.
+      // under the page, after the rate it comes with.
       expect(
         tester.widget<Text>(find.text('Powered by CoinGecko')).style!.fontSize!,
         greaterThanOrEqualTo(12),
@@ -1007,6 +1007,11 @@ void main() {
         tester.getTopLeft(find.text('Powered by CoinGecko')).dy,
         greaterThan(tester.getTopLeft(find.textContaining('1 BTC =')).dy),
       );
+
+      // Back to mempool.space: the credit goes.
+      await tester.tap(find.text('mempool.space'));
+      await tester.pumpAndSettle();
+      expect(find.text('Powered by CoinGecko'), findsNothing);
     });
 
     testWidgets('a disabled source announces itself as such', (tester) async {

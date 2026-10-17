@@ -299,6 +299,10 @@ void main() {
             'source': 'coingecko',
             'label': 'CoinGecko',
             'ranges': ['day', 'week', 'month', 'year'],
+            'credit': {
+              'text': 'Powered by CoinGecko',
+              'url': 'https://www.coingecko.com',
+            },
           },
         ],
         'refresh_secs': 60,
@@ -317,6 +321,11 @@ void main() {
         'mempool.space',
         'CoinGecko',
       ]);
+      // The credit each source asks for, as the table carries it.
+      expect(table.creditOf(PriceSource.mempoolSpace), isNull);
+      final credit = table.creditOf(PriceSource.coingecko)!;
+      expect(credit.text, 'Powered by CoinGecko');
+      expect(credit.url, 'https://www.coingecko.com');
     });
   });
 

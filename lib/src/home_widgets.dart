@@ -47,6 +47,11 @@ abstract final class WidgetKeys {
   /// The credit the source of the price asks for under it ("Powered by
   /// CoinGecko"); absent when it asks for none.
   static const String priceCredit = 'price.credit';
+
+  /// Which source the price comes from, by the core's identifier. No
+  /// widget shows it: the credit is written again from it while the
+  /// same price stands.
+  static const String priceSource = 'price.source';
   static const String balanceTotal = 'balance.total';
   static const String balanceSynced = 'balance.synced';
   static const String networkHeight = 'network.height';
@@ -69,20 +74,23 @@ class PricePayload {
     required this.at,
     required this.asOf,
     this.asOfNarrow,
+    required this.source,
     this.credit,
   });
 
   /// The quote as the widget states it: the price of one bitcoin in the
   /// quote's currency, in the same figures the app's own price line
-  /// uses, and when it was fetched, as [priceAsOf] says it [now].
-  factory PricePayload.of(PriceQuote quote, {DateTime? now}) {
+  /// uses, when it was fetched, as [priceAsOf] says it [now], and the
+  /// credit its source asks for in the core's [table].
+  factory PricePayload.of(PriceQuote quote, PriceTable table, {DateTime? now}) {
     final asOf = priceAsOf(quote.at, now: now);
     return PricePayload(
       figure: formatFiatPrice(quote.rate, quote.currency),
       at: quote.at,
       asOf: asOf.full,
       asOfNarrow: asOf.narrow,
-      credit: quote.credit,
+      source: quote.source.id,
+      credit: table.creditOf(quote.source)?.text,
     );
   }
 
@@ -93,6 +101,7 @@ class PricePayload {
     WidgetKeys.priceAsOfNarrow,
     WidgetKeys.priceAt,
     WidgetKeys.priceCredit,
+    WidgetKeys.priceSource,
   ];
 
   final String figure;
@@ -107,8 +116,11 @@ class PricePayload {
   final String asOf;
   final String? asOfNarrow;
 
+  /// The source of the quote, by the core's identifier.
+  final String source;
+
   /// What the source of the quote asks to be shown with it, word for
-  /// word, as the core gave it; null when it asks for nothing.
+  /// word, as the core's table gives it; null when it asks for nothing.
   final String? credit;
 
   Map<String, String?> toData() => {
@@ -118,6 +130,7 @@ class PricePayload {
     WidgetKeys.priceAsOfNarrow: asOfNarrow,
     WidgetKeys.priceAt: '$at',
     WidgetKeys.priceCredit: credit,
+    WidgetKeys.priceSource: source,
   };
 }
 
@@ -508,10 +521,12 @@ class WidgetFeed {
     }
     final wallets = _ref.read(walletsProvider).valueOrNull ?? const [];
     final quote = _ref.read(widgetPriceProvider).valueOrNull;
+    final table = await _ref.read(priceTableProvider.future);
     await write(
       _ref.read(widgetBoardProvider),
       installed: installed,
-      price: quote == null ? null : PricePayload.of(quote),
+      price: quote == null ? null : PricePayload.of(quote, table),
+      table: table,
       balance: BalancePayload.of(
         wallets,
         unit: _ref.read(unitProvider),
@@ -525,11 +540,13 @@ class WidgetFeed {
   /// Writes each placed widget's data and asks it to redraw. The keys
   /// of a widget nobody placed are cleared, so the store holds only
   /// what is on a home screen. A missing [price] leaves the last quote
-  /// standing: it carries its own time, and a dash would say less.
+  /// standing: it carries its own time, and a dash would say less; its
+  /// source's credit stands with it, written again from [table].
   static Future<void> write(
     WidgetBoard board, {
     required Set<String> installed,
     PricePayload? price,
+    PriceTable? table,
     required BalancePayload balance,
     required NetworkPayload network,
     DateTime? now,
@@ -558,11 +575,22 @@ class WidgetFeed {
       final at = int.tryParse(
         await board.readWidgetData(WidgetKeys.priceAt) ?? '',
       );
-      if (at != null) {
+      final source = PriceSource.fromId(
+        await board.readWidgetData(WidgetKeys.priceSource),
+      );
+      if (at != null && source == null) {
+        // A price from a build that kept no source: CoinGecko may have
+        // priced it, and it would stand without the credit its terms
+        // ask for. It goes, until a fresh one comes.
+        await clear(PricePayload.keys);
+        await board.updateWidget(HomeWidgets.price);
+      } else if (at != null) {
         final asOf = priceAsOf(at, now: now);
         await put(HomeWidgets.price, {
           WidgetKeys.priceAsOf: asOf.full,
           WidgetKeys.priceAsOfNarrow: asOf.narrow,
+          if (table != null)
+            WidgetKeys.priceCredit: table.creditOf(source!)?.text,
         });
       }
     }
@@ -627,6 +655,7 @@ Future<bool> refreshWidgets({
     final network = settings.activeNetwork;
     final wallets = await bridge.listWallets(network);
     PriceQuote? quote;
+    final table = await bridge.priceTable();
     if (installed.contains(HomeWidgets.price)) {
       try {
         if (await priceWithoutStartingTor(bridge)) {
@@ -639,7 +668,8 @@ Future<bool> refreshWidgets({
     await WidgetFeed.write(
       board,
       installed: installed,
-      price: quote == null ? null : PricePayload.of(quote, now: now),
+      price: quote == null ? null : PricePayload.of(quote, table, now: now),
+      table: table,
       balance: BalancePayload.of(
         wallets,
         unit: shared.unit,

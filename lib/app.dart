@@ -22,6 +22,7 @@ import 'src/vault_key.dart';
 import 'theme/tokens.dart';
 import 'widgets/buttons.dart';
 import 'widgets/notice.dart';
+import 'widgets/price_credit.dart';
 import 'src/prefs.dart';
 import 'src/share.dart';
 
@@ -50,6 +51,10 @@ class _GerfautAppState extends ConsumerState<GerfautApp> {
   /// bootstrap itself pushes: the restore page after a vault was set
   /// aside.
   final _navigator = GlobalKey<NavigatorState>();
+
+  /// Tells the credit slot which route is on top: only that one's
+  /// figures are credited.
+  late final _credits = CreditObserver(ref.read(creditBoardProvider));
 
   /// A quiet retry is already running behind the calculator.
   bool _retryingBehind = false;
@@ -119,6 +124,10 @@ class _GerfautAppState extends ConsumerState<GerfautApp> {
     return MaterialApp(
       title: 'Gerfaut',
       navigatorKey: _navigator,
+      navigatorObservers: [_credits],
+      // One slot for the credit a price source asks for, under every
+      // screen: see widgets/price_credit.dart.
+      builder: (context, child) => CreditFrame(child: child!),
       theme: themeFrom(GerfautTokens.light, Brightness.light),
       darkTheme: themeFrom(GerfautTokens.dark, Brightness.dark),
       themeMode: themeMode,

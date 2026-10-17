@@ -18,6 +18,7 @@ import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/home_widgets.dart';
 import 'package:gerfaut/src/live.dart';
 import 'package:gerfaut/src/models.dart';
+import 'package:gerfaut/widgets/price_credit.dart';
 import 'package:gerfaut/src/screen.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/window.dart';
@@ -63,10 +64,31 @@ final kPriceTable = PriceTable(
   ],
   sources: const [
     SourceEntry(source: PriceSource.mempoolSpace, label: 'mempool.space'),
-    SourceEntry(source: PriceSource.coingecko, label: 'CoinGecko'),
+    SourceEntry(
+      source: PriceSource.coingecko,
+      label: 'CoinGecko',
+      credit: Credit(
+        text: 'Powered by CoinGecko',
+        url: 'https://www.coingecko.com',
+      ),
+    ),
   ],
   refresh: const Duration(seconds: 60),
 );
+
+/// What GerfautApp puts around every screen for the credit of the
+/// price, its observer and its slot, for a test that builds a screen
+/// in a MaterialApp of its own.
+Widget creditedApp({required ThemeData theme, required Widget home}) {
+  return Consumer(
+    builder: (context, ref, _) => MaterialApp(
+      theme: theme,
+      navigatorObservers: [CreditObserver(ref.read(creditBoardProvider))],
+      builder: (context, child) => CreditFrame(child: child!),
+      home: home,
+    ),
+  );
+}
 
 /// Puts [change] in what the screens hold, as hydration does with the
 /// preferences a vault stored.
@@ -1242,8 +1264,6 @@ class FakeBridge implements GerfautBridge {
       currency: currency,
       source: source,
       at: 1755000000,
-      // As the core gives it: CoinGecko's terms ask for it.
-      credit: source == PriceSource.coingecko ? 'Powered by CoinGecko' : null,
     );
   }
 

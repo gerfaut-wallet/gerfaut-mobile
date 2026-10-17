@@ -285,12 +285,6 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                         const SizedBox(height: GerfautSpacing.sm),
                         PendingAmount(sats: pending),
                       ],
-                      // Once on this page, under the balance: the fiat
-                      // of the lists below comes from the same price.
-                      PriceCredit(
-                        fiatCreditOf(ref, network: snapshot.meta.network),
-                        top: GerfautSpacing.sm,
-                      ),
                     ],
                   ),
                 ),

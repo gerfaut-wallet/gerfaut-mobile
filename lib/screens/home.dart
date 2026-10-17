@@ -374,11 +374,6 @@ class _WalletListState extends ConsumerState<_WalletList> {
                         ),
                 ),
               ),
-        // Once, under the cards, for the balances they price: the
-        // wallets of one network, the active one.
-        footer: shown.isEmpty
-            ? null
-            : PriceCredit(fiatCreditOf(ref, network: shown.first.network)),
         itemCount: shown.length,
         onReorderItem: _reorder,
         itemBuilder: (context, index) {

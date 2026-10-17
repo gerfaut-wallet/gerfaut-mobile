@@ -276,6 +276,7 @@ final Map<String, _Entry> _contract = {
   }),
   'CoreError': const _Failure(),
   'Coverage': _enum(Coverage.values, (v) => v.id, Coverage.fromId),
+  'Credit': _reads(Credit.fromJson),
   'CurrencyEntry': _reads(CurrencyEntry.fromJson),
   'CurrencyReach': _enum(
     CurrencyReach.values,

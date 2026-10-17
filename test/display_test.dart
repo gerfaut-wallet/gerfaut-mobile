@@ -7,6 +7,7 @@ import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/disguise.dart';
+import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
 import 'fakes.dart';
 
@@ -332,12 +333,15 @@ void main() {
       expect(find.text('-€1.00'), findsOneWidget);
     });
 
-    // CoinGecko's terms ask for its credit close to its data: once on a
-    // screen that shows amounts it priced, under them. mempool.space
-    // asks for none, and a test coin's zero was priced by nobody.
-    testWidgets('CoinGecko is credited once a screen, under its data', (
+    // CoinGecko's terms ask for its credit close to its data, as a link
+    // to its site: one slot under every screen shows it once while the
+    // screen on top shows a figure it priced. mempool.space asks for
+    // none, and a test coin's zero was priced by nobody.
+    testWidgets('CoinGecko is credited once a screen, as a link', (
       tester,
     ) async {
+      final launcher = FakeUrlLauncher();
+      UrlLauncherPlatform.instance = launcher;
       final bridge = testCoins(Network.mainnet);
       bridge.preferences = bridge.preferences.copyWith(
         priceSource: PriceSource.coingecko,
@@ -356,14 +360,27 @@ void main() {
         greaterThanOrEqualTo(12),
       );
 
-      // The wallet: once, under the balance, for the lists too.
+      // The wallet, over the list: once, for its own figures.
       await tester.tap(find.text('Cold storage'));
       await tester.pumpAndSettle();
       expect(find.text('Powered by CoinGecko'), findsOneWidget);
-      expect(
-        tester.getTopLeft(find.text('Powered by CoinGecko')).dy,
-        lessThan(tester.getTopLeft(find.text('Transactions')).dy),
+
+      // A tap opens CoinGecko's site in the browser.
+      await tester.tap(find.text('Powered by CoinGecko'));
+      await tester.pumpAndSettle();
+      expect(launcher.launched, ['https://www.coingecko.com']);
+    });
+
+    testWidgets('hidden amounts are no figure to credit', (tester) async {
+      final bridge = testCoins(Network.mainnet);
+      bridge.preferences = bridge.preferences.copyWith(
+        priceSource: PriceSource.coingecko,
+        masked: true,
       );
+      await tester.pumpWidget(app(bridge));
+      await tester.pumpAndSettle();
+      expect(findMasked(), findsWidgets);
+      expect(find.text('Powered by CoinGecko'), findsNothing);
     });
 
     testWidgets('mempool.space and a test coin are credited nowhere', (
