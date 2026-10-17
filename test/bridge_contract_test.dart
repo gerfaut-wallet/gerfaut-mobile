@@ -384,6 +384,7 @@ final Map<String, _Entry> _contract = {
     (v) => v.id,
     RecognizedKind.fromId,
   ),
+  'RefusedWallet': _reads(RefusedWallet.fromJson),
   'RelativeLock': _reads(RelativeLock.fromJson),
   'Remaining': _reads(Remaining.fromJson),
   'Remedy': _reads(LiveRemedy.fromJson),

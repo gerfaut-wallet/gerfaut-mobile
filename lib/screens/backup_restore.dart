@@ -96,8 +96,8 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
   String? _error;
   BackupPreview? _preview;
 
-  /// Indexes of the wallets to restore; already-watched ones never
-  /// enter it.
+  /// Indexes of the wallets to restore; ones already watched or refused
+  /// by the core never enter it.
   final Set<int> _chosen = {};
   bool _applySettings = false;
   bool _restoring = false;
@@ -217,7 +217,7 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
           ..clear()
           ..addAll([
             for (final wallet in preview.wallets)
-              if (!wallet.alreadyWatched) wallet.index,
+              if (!wallet.outOfReach) wallet.index,
           ]);
         _applySettings = false;
       });
@@ -276,18 +276,48 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
       navigator.pop();
       messenger.showSnackBar(Toast(_restoredMessage(report)));
     } on BridgeException catch (error) {
-      if (mounted) setState(() => _error = _messageOf(error));
+      if (mounted) setState(() => _error = _restoreMessageOf(error));
     } finally {
       if (mounted) setState(() => _restoring = false);
     }
   }
 
-  static String _restoredMessage(ImportReport report) {
+  /// What a failed restore says. A restore goes whole or not at all, so
+  /// a wallet the core refuses stops every one of them, and the words
+  /// say so. The core names the wallet in its own words; a network that
+  /// does not match or a private key comes under `invalid_input` with
+  /// that name.
+  String _restoreMessageOf(BridgeException error) => switch (error.kind) {
+    'descriptor' =>
+      'A wallet in this backup is not a descriptor Gerfaut can watch, so '
+          'nothing was restored. The core says: ${error.message}',
+    'invalid_input' => 'Nothing was restored. The core says: ${error.message}',
+    _ => _messageOf(error),
+  };
+
+  String _restoredMessage(ImportReport report) {
     final count = report.added.length;
     final wallets = count == 1
         ? '1 wallet restored'
         : '$count wallets restored';
-    return report.settingsApplied ? '$wallets · settings applied' : wallets;
+    final settings = report.settingsApplied ? ' · settings applied' : '';
+    return '$wallets$settings${leftOutWords(_leftOut(report))}';
+  }
+
+  /// The wallets a restore left out because the core cannot watch them:
+  /// those the preview marked, which this screen never asks for, and
+  /// any the core left out of the restore itself.
+  List<String> _leftOut(ImportReport report) {
+    final names = [
+      for (final wallet in _preview?.wallets ?? const <BackupWalletPreview>[])
+        if (!wallet.alreadyWatched && wallet.refused != null)
+          calledInBackup(wallet.index, wallet.name),
+    ];
+    for (final wallet in report.refused) {
+      final called = calledInBackup(wallet.index, wallet.name);
+      if (!names.contains(called)) names.add(called);
+    }
+    return names;
   }
 
   void _toggle(int index, bool chosen) {
@@ -411,7 +441,7 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
                 _WalletRow(
                   wallet: wallet,
                   chosen: _chosen.contains(wallet.index),
-                  onChanged: wallet.alreadyWatched
+                  onChanged: wallet.outOfReach
                       ? null
                       : (chosen) => _toggle(wallet.index, chosen),
                 ),
@@ -576,9 +606,23 @@ class _SettingsPanel extends StatelessWidget {
   }
 }
 
+/// What a wallet of a backup is called on screen: its name, or its
+/// place in the backup when it has none.
+String calledInBackup(int index, String name) =>
+    name.trim().isEmpty ? 'Wallet ${index + 1}' : name;
+
+/// " · 1 left out: Handed over", " · 2 left out", or nothing.
+String leftOutWords(List<String> names) => switch (names.length) {
+  0 => '',
+  1 => ' · 1 left out: ${names.single}',
+  final count => ' · $count left out',
+};
+
 /// One wallet of the backup: a checkbox, its name, and what it is. A
-/// wallet already watched here stays visible, unchecked and out of
-/// reach: restoring it again would only be skipped.
+/// wallet already watched here, or one the core refuses, stays visible,
+/// unchecked and out of reach: showing what will not be done says more
+/// than dropping it, which would read as a backup missing a wallet. A
+/// refused one says why, in the core's words.
 class _WalletRow extends StatelessWidget {
   const _WalletRow({
     required this.wallet,
@@ -597,9 +641,12 @@ class _WalletRow extends StatelessWidget {
     final kind = wallet.kind is SingleAddressKind
         ? 'Single address'
         : 'Descriptor wallet';
+    final refused = wallet.alreadyWatched ? null : wallet.refused;
     final detail = enabled
         ? '${wallet.network.label} · $kind'
-        : '${wallet.network.label} · $kind · Already watched';
+        : wallet.alreadyWatched
+        ? '${wallet.network.label} · $kind · Already watched'
+        : '${wallet.network.label} · $kind · Cannot be restored';
     // One node: the box is read with the wallet it restores, not as a
     // nameless "not checked".
     return MergeSemantics(
@@ -631,7 +678,7 @@ class _WalletRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      wallet.name,
+                      calledInBackup(wallet.index, wallet.name),
                       style: tokens.bodySmall.copyWith(
                         color: enabled ? tokens.text : tokens.textMuted,
                         fontWeight: FontWeight.w500,
@@ -644,6 +691,14 @@ class _WalletRow extends StatelessWidget {
                       detail,
                       style: tokens.label.copyWith(color: tokens.textMuted),
                     ),
+                    if (refused != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: GerfautSpacing.xs),
+                        child: Text(
+                          refused,
+                          style: tokens.label.copyWith(color: tokens.textMuted),
+                        ),
+                      ),
                   ],
                 ),
               ),

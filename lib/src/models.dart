@@ -2895,6 +2895,7 @@ class BackupWalletPreview {
     required this.network,
     required this.kind,
     required this.alreadyWatched,
+    this.refused,
   });
 
   factory BackupWalletPreview.fromJson(Map<String, dynamic> json) {
@@ -2904,6 +2905,7 @@ class BackupWalletPreview {
       network: Network.fromId(json['network'] as String),
       kind: WalletKind.fromJson(json['kind'] as Map<String, dynamic>),
       alreadyWatched: json['already_watched'] as bool,
+      refused: json['refused'] as String?,
     );
   }
 
@@ -2915,6 +2917,14 @@ class BackupWalletPreview {
   /// The same material is already watched here: restoring it again
   /// would be a duplicate.
   final bool alreadyWatched;
+
+  /// Why a restore cannot take this wallet, in the core's words: its
+  /// name or material does not read as a wallet to watch. Null for one
+  /// it takes.
+  final String? refused;
+
+  /// Out of reach of the restore: already watched, or refused.
+  bool get outOfReach => alreadyWatched || refused != null;
 }
 
 /// What a backup holds, listed before anything is added.
@@ -2992,6 +3002,7 @@ class ImportReport {
     required this.added,
     required this.skipped,
     required this.settingsApplied,
+    this.refused = const [],
   });
 
   factory ImportReport.fromJson(Map<String, dynamic> json) {
@@ -3001,6 +3012,9 @@ class ImportReport {
           .toList(),
       skipped: json['skipped'] as int,
       settingsApplied: json['settings_applied'] as bool,
+      refused: (json['refused'] as List)
+          .map((w) => RefusedWallet.fromJson(w as Map<String, dynamic>))
+          .toList(),
     );
   }
 
@@ -3009,6 +3023,37 @@ class ImportReport {
   /// Wallets left out: already watched, or not chosen.
   final int skipped;
   final bool settingsApplied;
+
+  /// Wallets a restore of every wallet left out because the core cannot
+  /// watch them.
+  final List<RefusedWallet> refused;
+}
+
+/// A wallet of a backup a restore left out, mirroring `RefusedWallet`
+/// in gerfaut-core.
+class RefusedWallet {
+  const RefusedWallet({
+    required this.index,
+    required this.name,
+    required this.reason,
+  });
+
+  factory RefusedWallet.fromJson(Map<String, dynamic> json) {
+    return RefusedWallet(
+      index: json['index'] as int,
+      name: json['name'] as String,
+      reason: json['reason'] as String,
+    );
+  }
+
+  /// Its place in the backup.
+  final int index;
+
+  /// Its name, or its place when it has none, as the core calls it.
+  final String name;
+
+  /// Why, in the core's words.
+  final String reason;
 }
 
 // --- tor ---------------------------------------------------------------
