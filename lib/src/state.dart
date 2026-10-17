@@ -570,7 +570,10 @@ class SyncController extends Notifier<Set<String>> {
         errors.clear(sync.walletId);
       }
       for (final failure in report.failures) {
-        errors.set(failure.walletId, failure.message);
+        errors.set(
+          failure.walletId,
+          reportedFailure(failure.kind, failure.message),
+        );
       }
       await ref.read(syncAnnouncerProvider).announce(report.reports);
       return report;
