@@ -1958,8 +1958,8 @@ class FakeBiometrics implements BiometricGate {
   bool passes;
   BiometricOutcome? outcome;
 
-  /// Whether the key the prompt unlocks is there.
-  bool keyed = true;
+  /// What the Keystore says of the key the prompt unlocks.
+  KeyPresence keyed = KeyPresence.present;
 
   /// What the phone offers, over what [available] says.
   BiometricSupport? offers;
@@ -1985,7 +1985,7 @@ class FakeBiometrics implements BiometricGate {
   }
 
   @override
-  Future<bool> hasKey() async => keyed;
+  Future<KeyPresence> keyPresence() async => keyed;
 
   @override
   Future<void> forget() async => forgets++;

@@ -233,7 +233,7 @@ class MainActivity : FlutterFragmentActivity() {
         MethodChannel(messenger, BIOMETRICS_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "support" -> result.success(biometrics.support())
-                "hasKey" -> result.success(biometrics.hasKey())
+                "keyPresence" -> result.success(biometrics.keyPresence())
                 "prepareKey" -> result.success(biometrics.prepareKey())
                 "prompt" -> {
                     val title = call.argument<String>("title")

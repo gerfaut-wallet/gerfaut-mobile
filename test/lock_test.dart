@@ -10,6 +10,7 @@ import 'package:gerfaut/screens/welcome.dart';
 import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
+import 'package:gerfaut/src/prefs.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/updates.dart';
 import 'package:gerfaut/src/window.dart';
@@ -272,7 +273,7 @@ void main() {
       tester,
     ) async {
       final biometrics = FakeBiometrics(outcome: BiometricOutcome.missing)
-        ..keyed = false;
+        ..keyed = KeyPresence.absent;
       final bridge = locked(
         lock: const AppLock(kind: LockKind.pin, biometric: true),
       );
@@ -296,42 +297,58 @@ void main() {
       expect(bridge.lock?.biometric, isFalse);
     });
 
-    testWidgets('a phone left with a weak biometric turns the flag off', (
+    testWidgets('no strong biometric, said at two launches, turns it off', (
       tester,
     ) async {
-      final bridge = locked(
-        lock: const AppLock(kind: LockKind.pin, biometric: true),
-      );
-      await tester.pumpWidget(
-        app(
-          bridge,
-          biometrics: FakeBiometrics(offers: BiometricSupport.weakOnly),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), '1234');
-      await tester.tap(find.text('Unlock'));
-      await tester.pumpAndSettle();
+      for (final lack in [BiometricSupport.weakOnly, BiometricSupport.none]) {
+        final bridge = locked(
+          lock: const AppLock(kind: LockKind.pin, biometric: true),
+        );
+        Future<void> launchAndUnlock(String launch) async {
+          await tester.pumpWidget(const SizedBox());
+          await tester.pumpWidget(
+            app(bridge, biometrics: FakeBiometrics(offers: lack)),
+          );
+          await tester.pumpAndSettle();
+          ProviderScope.containerOf(tester.element(find.byType(LockScreen)))
+                  .read(lockProvider.notifier)
+                  .launch =
+              launch;
+          await tester.enterText(find.byType(TextField), '1234');
+          await tester.tap(find.text('Unlock'));
+          await tester.pumpAndSettle();
+          expect(find.byType(LockScreen), findsNothing);
+        }
 
-      expect(find.byType(LockScreen), findsNothing);
-      expect(bridge.lock?.biometric, isFalse);
+        // Once: a sensor that says so for a moment turns nothing off.
+        await launchAndUnlock('first');
+        expect(bridge.lock?.biometric, isTrue, reason: '$lack');
+        // The same launch again proves nothing more.
+        await launchAndUnlock('first');
+        expect(bridge.lock?.biometric, isTrue, reason: '$lack');
+        // Another launch, the same answer: it is so for good.
+        await launchAndUnlock('second');
+        expect(bridge.lock?.biometric, isFalse, reason: '$lack');
+        expect(bridge.appPrefs[Pref.biometricLack], isEmpty);
+      }
     });
 
-    testWidgets('a phone left with no strong biometric at all goes off too', (
+    testWidgets('a strong biometric seen again forgets a passing lack', (
       tester,
     ) async {
       final bridge = locked(
         lock: const AppLock(kind: LockKind.pin, biometric: true),
-      );
+      )..appPrefs[Pref.biometricLack] = 'earlier';
       await tester.pumpWidget(
-        app(bridge, biometrics: FakeBiometrics(offers: BiometricSupport.none)),
+        app(bridge, biometrics: FakeBiometrics(passes: false)),
       );
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), '1234');
       await tester.tap(find.text('Unlock'));
       await tester.pumpAndSettle();
 
-      expect(bridge.lock?.biometric, isFalse);
+      expect(bridge.lock?.biometric, isTrue);
+      expect(bridge.appPrefs[Pref.biometricLack], isEmpty);
     });
 
     testWidgets('biometrics that still open stay on after the secret', (
@@ -343,6 +360,8 @@ void main() {
         // A sensor that cannot answer for now: no reason to turn
         // anything off.
         FakeBiometrics(offers: BiometricSupport.unavailable),
+        // A Keystore that could not be read: no proof the key is gone.
+        FakeBiometrics(passes: false)..keyed = KeyPresence.unknown,
       ]) {
         final bridge = locked(
           lock: const AppLock(kind: LockKind.pin, biometric: true),

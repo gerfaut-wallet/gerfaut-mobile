@@ -45,18 +45,19 @@ internal class StrongBiometrics(private val activity: FragmentActivity) {
     // a passing state that changes nothing.
     fun support(): String {
         val manager = BiometricManager.from(activity)
-        return when (manager.canAuthenticate(BIOMETRIC_STRONG)) {
-            BiometricManager.BIOMETRIC_SUCCESS -> "strong"
+        val strong = manager.canAuthenticate(BIOMETRIC_STRONG)
+        if (strong == BiometricManager.BIOMETRIC_SUCCESS) return "strong"
+        // Android answers "unavailable" for strong when the sensor is
+        // there but rated weak, as for one that cannot answer right now:
+        // a weak biometric that works tells the two apart.
+        val weak = manager.canAuthenticate(BIOMETRIC_WEAK)
+        if (weak == BiometricManager.BIOMETRIC_SUCCESS) return "weak"
+        val passing = setOf(
             BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE,
             BiometricManager.BIOMETRIC_STATUS_UNKNOWN,
             BiometricManager.BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED,
-            -> "unavailable"
-            else -> if (manager.canAuthenticate(BIOMETRIC_WEAK) == BiometricManager.BIOMETRIC_SUCCESS) {
-                "weak"
-            } else {
-                "none"
-            }
-        }
+        )
+        return if (strong in passing || weak in passing) "unavailable" else "none"
     }
 
     // A new key in place of any other, for turning biometrics on: the
@@ -73,12 +74,15 @@ internal class StrongBiometrics(private val activity: FragmentActivity) {
     }
 
     // Whether a key is there for the prompt to unlock, without asking
-    // for anything: a vault that turned biometrics on before keys were
-    // made has none, and simply has to turn them on again.
-    fun hasKey(): Boolean = try {
-        loadKey() != null
+    // for anything: "present", "absent" when the Keystore was read and
+    // holds none (a vault that turned biometrics on before keys were
+    // made, which simply has to turn them on again), or "unknown" when
+    // it could not be read, a Keystore not ready yet after the phone
+    // started: no proof of anything.
+    fun keyPresence(): String = try {
+        if (loadKey() != null) "present" else "absent"
     } catch (_: Exception) {
-        false
+        "unknown"
     }
 
     // Drops the key: the biometric no longer opens anything.

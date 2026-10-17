@@ -18,6 +18,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'disguise.dart';
 import 'models.dart';
+import 'prefs.dart';
 import 'state.dart';
 import 'window.dart';
 
@@ -89,7 +90,7 @@ abstract class BiometricGate {
   Future<BiometricOutcome> authenticate(String reason);
 
   /// Whether the key made by [enroll] is there, without any prompt.
-  Future<bool> hasKey();
+  Future<KeyPresence> keyPresence();
 
   /// Drops the key: biometrics are off.
   Future<void> forget();
@@ -164,11 +165,15 @@ class SystemBiometricGate implements BiometricGate {
   }
 
   @override
-  Future<bool> hasKey() async {
+  Future<KeyPresence> keyPresence() async {
     try {
-      return await _channel.invokeMethod<bool>('hasKey') ?? false;
+      return switch (await _channel.invokeMethod<String>('keyPresence')) {
+        'present' => KeyPresence.present,
+        'absent' => KeyPresence.absent,
+        _ => KeyPresence.unknown,
+      };
     } catch (_) {
-      return false;
+      return KeyPresence.unknown;
     }
   }
 
@@ -180,6 +185,18 @@ class SystemBiometricGate implements BiometricGate {
       // Nothing to drop where there is no platform.
     }
   }
+}
+
+/// What the Keystore says of the key the prompt unlocks.
+enum KeyPresence {
+  present,
+
+  /// Read, and not there: a sure absence.
+  absent,
+
+  /// Could not be read, a Keystore not ready yet after the phone
+  /// started: proves nothing.
+  unknown,
 }
 
 /// How one prompt of the phone ended, before anyone decides what that
@@ -486,21 +503,50 @@ class LockController extends Notifier<LockState> {
     final gate = ref.read(biometricGateProvider);
     try {
       final support = await gate.support();
-      if (support.lacksStrong) return true;
-      return support == BiometricSupport.strong && !await gate.hasKey();
+      if (support.lacksStrong) return await _lackSeenBefore();
+      if (support != BiometricSupport.strong) return false;
+      await _forgetLack();
+      return await gate.keyPresence() == KeyPresence.absent;
     } catch (_) {
       return false;
     }
   }
 
+  /// A phone that says it has no strong biometric is believed the second
+  /// time, at another launch of the app: a sensor that reports none for
+  /// a moment, as some do after the phone starts, turns nothing off. The
+  /// first time is written down in the vault, under this launch.
+  Future<bool> _lackSeenBefore() async {
+    final bridge = ref.read(bridgeProvider);
+    final seen = (await bridge.getSettings()).appPrefs[Pref.biometricLack];
+    if (seen != null && seen.isNotEmpty && seen != launch) return true;
+    if (seen != launch) await bridge.setAppPref(Pref.biometricLack, launch);
+    return false;
+  }
+
+  /// A strong biometric seen again: a lack written down earlier was a
+  /// passing one.
+  Future<void> _forgetLack() async {
+    final bridge = ref.read(bridgeProvider);
+    final seen = (await bridge.getSettings()).appPrefs[Pref.biometricLack];
+    if (seen != null && seen.isNotEmpty) {
+      await bridge.setAppPref(Pref.biometricLack, '');
+    }
+  }
+
+  /// This launch of the app, as [_lackSeenBefore] writes it down.
+  @visibleForTesting
+  String launch = _launch;
+
   /// Biometrics can no longer open the vault: it stops offering them,
-  /// with the secret just given, any key left goes, and the settings say
-  /// they are off. Turning them on again makes a new key, behind the
+  /// with the secret just given, any key left goes, a lack written down
+  /// with it, and the settings say they are off. Turning them on again makes a new key, behind the
   /// secret and a prompt, as the first time.
   Future<void> _retireBiometrics(String secret) async {
     try {
       await ref.read(bridgeProvider).setBiometricUnlock(false, secret);
       await ref.read(biometricGateProvider).forget();
+      await _forgetLack();
       state = state.copyWith(clearLapse: true);
       ref.invalidate(settingsProvider);
     } catch (_) {
@@ -617,6 +663,9 @@ class LockController extends Notifier<LockState> {
     lockNow();
   }
 }
+
+/// This launch of the app: one per process, told apart from the next.
+final String _launch = '${DateTime.now().microsecondsSinceEpoch}';
 
 final lockProvider = NotifierProvider<LockController, LockState>(
   LockController.new,
