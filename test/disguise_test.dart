@@ -86,6 +86,15 @@ Widget _securityApp(
   );
 }
 
+/// Confirms the activation sheet, whose button may sit below the fold
+/// of a test's screen: the sheet scrolls.
+Future<void> _turnOn(WidgetTester tester) async {
+  final button = find.text('Turn on the disguise');
+  await tester.ensureVisible(button);
+  await tester.pumpAndSettle();
+  await tester.tap(button);
+}
+
 Finder _disguiseSwitch() => find.descendant(
   of: find.ancestor(
     of: find.text('Disguise the app'),
@@ -185,7 +194,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('Live watch is turned off'), findsOneWidget);
 
-      await tester.tap(find.text('Turn on the disguise'));
+      await _turnOn(tester);
       await tester.pumpAndSettle();
       expect(platform.calls, ['stop']);
       expect(bridge.appPrefs['notify.background'], '900');
@@ -209,6 +218,20 @@ void main() {
       );
     });
 
+    testWidgets('the sheet says what Android keeps of the app', (tester) async {
+      await tester.pumpWidget(_securityApp(_locked(), FakeDisguise()));
+      await tester.pumpAndSettle();
+      await tester.tap(_disguiseSwitch());
+      await tester.pumpAndSettle();
+      // Its notification history, out of the app's reach.
+      expect(
+        find.textContaining("Android's notification history"),
+        findsOneWidget,
+      );
+      // An older thumbnail, where the system still takes them.
+      expect(find.textContaining('Below Android 13'), findsOneWidget);
+    });
+
     testWidgets('without Live, the sheet does not mention it', (tester) async {
       await tester.pumpWidget(_securityApp(_locked(), FakeDisguise()));
       await tester.pumpAndSettle();
@@ -226,7 +249,7 @@ void main() {
 
       await tester.tap(_disguiseSwitch());
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Turn on the disguise'));
+      await _turnOn(tester);
       await tester.pumpAndSettle();
 
       // Widgets off before the launcher swap, so nothing "Gerfaut" is
@@ -251,7 +274,7 @@ void main() {
 
       await tester.tap(_disguiseSwitch());
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Turn on the disguise'));
+      await _turnOn(tester);
       await tester.pumpAndSettle();
 
       expect(disguise.disguised, isTrue);
@@ -274,7 +297,7 @@ void main() {
 
       await tester.tap(_disguiseSwitch());
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Turn on the disguise'));
+      await _turnOn(tester);
       await tester.pumpAndSettle();
 
       expect(disguise.disguised, isTrue);
@@ -294,7 +317,7 @@ void main() {
 
       await tester.tap(_disguiseSwitch());
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Turn on the disguise'));
+      await _turnOn(tester);
       await tester.pumpAndSettle();
 
       expect(disguise.disguised, isFalse);
@@ -309,9 +332,13 @@ void main() {
 
       await tester.tap(_disguiseSwitch());
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Cancel'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
 
+      // The sheet is gone, and nothing was asked of the launcher.
+      expect(find.text('Turn on the disguise'), findsNothing);
       expect(disguise.calls, isEmpty);
       expect(disguise.disguised, isFalse);
     });

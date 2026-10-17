@@ -519,13 +519,27 @@ class DisguiseSheet extends StatelessWidget {
       'name. Background checks stay silent, and home-screen widgets are '
       'turned off.';
 
+  /// What Android keeps of the notifications posted before, out of the
+  /// app's reach: its history lists them under the app's name.
+  static const String historyFact =
+      "Android's notification history, if you turned it on, still lists "
+      "Gerfaut's earlier notifications. Turning it off in Android's "
+      'notification settings clears it.';
+
+  /// From Android 13 the recent apps keep no picture of the disguised
+  /// app (MainActivity.applyRecentsScreenshot); before, an older one
+  /// stays until replaced.
+  static const String recentsFact =
+      'Below Android 13, clear your recent apps once: Android may still '
+      'show an older Gerfaut thumbnail.';
+
   static const List<String> facts = [
     'The launcher will show a calculator named "Calculator".',
     'Open the wallet by typing your PIN into it, then =.',
     'Settings → Apps and the app store still list "Gerfaut".',
     silenceFact,
-    'Clear your recent apps once: Android may still show an older Gerfaut '
-        'thumbnail.',
+    historyFact,
+    recentsFact,
   ];
 
   @override

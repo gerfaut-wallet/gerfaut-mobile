@@ -148,7 +148,9 @@ class MainActivity : FlutterFragmentActivity() {
         }
         // The task switcher must show the calculator from the first frame
         // of a disguised app, before the Dart side has asked anything.
-        applyTaskDescription(isDisguised())
+        val disguised = isDisguised()
+        applyTaskDescription(disguised)
+        applyRecentsScreenshot(disguised)
         recallSensitive()
     }
 
@@ -684,6 +686,19 @@ class MainActivity : FlutterFragmentActivity() {
         // calculator; this says the same thing a second time, on purpose.
         if (disguised) LiveService.stop(this)
         applyTaskDescription(disguised)
+        applyRecentsScreenshot(disguised)
+    }
+
+    // Disguised, the task switcher keeps no picture of the app at all
+    // from Android 13: the one it takes as the app leaves could catch a
+    // wallet on its way to the calculator, and an older one would stay
+    // until replaced. The card shows the calculator's icon over a plain
+    // ground instead. Earlier versions have no such switch: the
+    // activation sheet says to clear the recent apps.
+    private fun applyRecentsScreenshot(disguised: Boolean) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            setRecentsScreenshotEnabled(!disguised)
+        }
     }
 
     private fun writeMarker(disguised: Boolean) {
