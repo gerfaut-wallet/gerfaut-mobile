@@ -8,7 +8,9 @@ name: Dependencies
 # every pull request, every Monday, and on demand (Actions, Dependencies,
 # Run workflow). The weekly run is the one that catches an advisory
 # published while nothing here changed; when it fails, GitHub notifies
-# whoever last edited the cron line below.
+# whoever last edited the cron line below. Not covered: the native code
+# that plugins compile from their own sources, such as zxing-cpp in
+# flutter_zxing, which no lockfile names.
 on:
   push:
     branches: [main]
