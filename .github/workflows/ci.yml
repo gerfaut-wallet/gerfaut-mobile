@@ -58,6 +58,14 @@ jobs:
       - name: Test
         working-directory: gerfaut-mobile
         run: flutter test
+      # Which lines of the price widget fit at the sizes launchers grant
+      # (android/app/src/test, on the JVM, against the runner's Android
+      # SDK): nothing of it goes into the APK.
+      - name: Widget layout
+        working-directory: gerfaut-mobile
+        run: |
+          flutter build apk --config-only
+          cd android && ./gradlew :app:testDebugUnitTest
 
   rust:
     runs-on: ubuntu-latest

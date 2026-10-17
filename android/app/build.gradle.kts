@@ -78,4 +78,7 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    // The widgets' layout rules, held to real launcher sizes on the JVM
+    // (src/test): nothing of it goes into the APK.
+    testImplementation("junit:junit:4.13.2")
 }

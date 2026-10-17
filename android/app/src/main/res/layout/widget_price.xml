@@ -27,20 +27,25 @@
         android:maxLines="1"
         android:ellipsize="end" />
 
-    <!-- Shrinks to the width it has rather than cutting a figure:
-         a cut price or height is a wrong one. -->
+    <!-- Shrinks to the room it has rather than cutting a figure: a cut
+         price or height is a wrong one. It takes the height the other
+         lines leave, so a low widget, or a large text size, shrinks the
+         figure and never pushes the credit under the edge. The smallest
+         size is in dp: in sp, the reader's text size would raise it. -->
     <TextView
         android:id="@+id/price_figure"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:layout_marginTop="2dp"
+        android:gravity="center_vertical|start"
         android:text="@string/widget_placeholder"
         android:contentDescription="@string/widget_placeholder_spoken"
         android:textSize="22sp"
         android:autoSizeTextType="uniform"
-        android:autoSizeMinTextSize="13sp"
+        android:autoSizeMinTextSize="10dp"
         android:autoSizeMaxTextSize="22sp"
-        android:autoSizeStepGranularity="1sp"
+        android:autoSizeStepGranularity="1dp"
         android:fontFamily="sans-serif-medium"
         android:fontFeatureSettings="'tnum'"
         android:letterSpacing="-0.01"
@@ -81,7 +86,9 @@
     </LinearLayout>
 
     <!-- "Powered by CoinGecko" under the price it came with, never cut:
-         two lines when the widget is too narrow for one. -->
+         PriceWidgetProvider sizes it to hold its line at a large text
+         size, down to 10dp, the least the CoinGecko terms allow, and
+         gives it a second line on a widget too narrow even then. -->
     <TextView
         android:id="@+id/price_credit"
         android:layout_width="match_parent"
@@ -90,6 +97,6 @@
         android:textSize="12sp"
         android:fontFamily="sans-serif"
         android:textColor="@color/widget_text_muted"
-        android:maxLines="2"
+        android:maxLines="1"
         android:visibility="gone" />
 </LinearLayout>
