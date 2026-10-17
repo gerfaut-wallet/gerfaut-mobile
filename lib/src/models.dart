@@ -2471,6 +2471,10 @@ enum TxWarningKind {
   locked('locked'),
   inputUnknown('input_unknown'),
   inputSpent('input_spent'),
+
+  /// This very transaction is already waiting in the mempool: sending it
+  /// again does no harm.
+  inMempool('in_mempool'),
   inputMismatch('input_mismatch'),
   feeUnknown('fee_unknown'),
   dustOutput('dust_output'),
@@ -2565,7 +2569,11 @@ class TxWarning {
 enum TxReadiness {
   ready('ready'),
   refused('refused'),
-  unsigned('unsigned');
+  unsigned('unsigned'),
+
+  /// Signed, and already waiting in the mempool: it can be sent again,
+  /// which does no harm.
+  inMempool('in_mempool');
 
   const TxReadiness(this.id);
 
@@ -2573,6 +2581,30 @@ enum TxReadiness {
 
   static TxReadiness fromId(String id) =>
       TxReadiness.values.firstWhere((r) => r.id == id);
+
+  /// Whether the Broadcast button is on.
+  bool get sendable => this == ready || this == inMempool;
+}
+
+/// What the fee rate is measured on.
+enum FeeRateBasis {
+  /// The transaction as it will be sent: every input signed.
+  exact('exact'),
+
+  /// The transaction once signed, each missing signature counted at the
+  /// most it can weigh.
+  estimated('estimated'),
+
+  /// Some signatures missing and their weight unknown: the rate on the
+  /// transaction as it is, the most it can be once signed.
+  upperBound('upper_bound');
+
+  const FeeRateBasis(this.id);
+
+  final String id;
+
+  static FeeRateBasis fromId(String id) =>
+      FeeRateBasis.values.firstWhere((b) => b.id == id);
 }
 
 /// Everything shown before broadcasting a transaction.
@@ -2592,8 +2624,10 @@ class TxPreview {
     required this.readiness,
     this.feeSats,
     this.feeRateSatVb,
+    this.feeRateBasis = FeeRateBasis.exact,
     this.feeUnknownReason,
     this.amountsDeclared = false,
+    this.amountsListed = false,
     this.warnings = const [],
     this.hex,
   });
@@ -2611,6 +2645,7 @@ class TxPreview {
           .toList(),
       feeSats: json['fee_sats'] as int?,
       feeRateSatVb: (json['fee_rate_sat_vb'] as num?)?.toDouble(),
+      feeRateBasis: FeeRateBasis.fromId(json['fee_rate_basis'] as String),
       vsize: json['vsize'] as int,
       weight: json['weight'] as int,
       size: json['size'] as int,
@@ -2620,6 +2655,7 @@ class TxPreview {
       readiness: TxReadiness.fromId(json['readiness'] as String),
       feeUnknownReason: json['fee_unknown_reason'] as String?,
       amountsDeclared: json['amounts_declared'] as bool,
+      amountsListed: json['amounts_listed'] as bool,
       warnings: ((json['warnings'] as List?) ?? const [])
           .map((w) => TxWarning.fromJson(w as Map<String, dynamic>))
           .toList(),
@@ -2637,7 +2673,14 @@ class TxPreview {
   /// all the bitcoin there will ever be, and the outputs pay no more than
   /// the inputs bring.
   final int? feeSats;
+
+  /// The fee over the size the transaction has once signed: see
+  /// [feeRateBasis].
   final double? feeRateSatVb;
+
+  /// Whether [feeRateSatVb] is the rate paid, an estimate of it before
+  /// the signatures are in, or the most it can be.
+  final FeeRateBasis feeRateBasis;
 
   /// Why there is no fee, in the words of the core's caution: what the
   /// confirmation repeats. Null when there is a fee.
@@ -2648,6 +2691,10 @@ class TxPreview {
   /// The inputs total and the fee rest on that word then, and wear the
   /// mark that says so.
   final bool amountsDeclared;
+
+  /// One of those values is a watched address's listing, the server's
+  /// figure, rather than the file's word: the mark says it neutrally.
+  final bool amountsListed;
   final int vsize;
   final int weight;
   final int size;

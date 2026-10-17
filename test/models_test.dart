@@ -437,6 +437,8 @@ void main() {
       'locktime': 0,
       'rbf': true,
       'amounts_declared': false,
+      'amounts_listed': false,
+      'fee_rate_basis': 'exact',
       'fee_unknown_reason': null,
       'ready': ready,
       'readiness': ?readiness,
@@ -455,6 +457,11 @@ void main() {
         TxPreview.fromJson(wire(true, 'ready')).readiness,
         TxReadiness.ready,
       );
+      final waiting = TxPreview.fromJson(wire(true, 'in_mempool'));
+      expect(waiting.readiness, TxReadiness.inMempool);
+      expect(waiting.readiness.sendable, isTrue);
+      expect(TxReadiness.refused.sendable, isFalse);
+      expect(TxReadiness.unsigned.sendable, isFalse);
     });
 
     test('a state this build does not know is refused', () {
