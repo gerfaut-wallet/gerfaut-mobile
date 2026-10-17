@@ -1,8 +1,6 @@
 package com.gerfautwallet.gerfaut
 
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
@@ -33,41 +31,44 @@ import javax.crypto.SecretKey
 // Gerfaut never sees the biometric; the key encrypts nothing kept
 // anywhere. Using it once after the prompt is the proof the prompt was
 // answered by a biometric the Keystore accepts.
+//
+// This side only puts one prompt up and says how it ended. What an end
+// means, a refusal or a trip away to come back from, is decided by the
+// Dart side (PromptSession, lib/src/lock.dart), which sees the app's
+// whole lifecycle.
 internal class StrongBiometrics(private val activity: FragmentActivity) {
 
-    // What the phone offers: "strong", "weak" when the only biometric
-    // set up is a weak one, or "none".
+    // What the phone offers: "strong"; "weak" when the only biometric set
+    // up is a weak one; "none" when no strong one can be had (none set
+    // up, no sensor); "unavailable" when a strong one may be there but
+    // cannot answer right now (the sensor busy or held, an update due):
+    // a passing state that changes nothing.
     fun support(): String {
         val manager = BiometricManager.from(activity)
-        return when {
-            manager.canAuthenticate(BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS -> "strong"
-            manager.canAuthenticate(BIOMETRIC_WEAK) == BiometricManager.BIOMETRIC_SUCCESS -> "weak"
-            else -> "none"
+        return when (manager.canAuthenticate(BIOMETRIC_STRONG)) {
+            BiometricManager.BIOMETRIC_SUCCESS -> "strong"
+            BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE,
+            BiometricManager.BIOMETRIC_STATUS_UNKNOWN,
+            BiometricManager.BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED,
+            -> "unavailable"
+            else -> if (manager.canAuthenticate(BIOMETRIC_WEAK) == BiometricManager.BIOMETRIC_SUCCESS) {
+                "weak"
+            } else {
+                "none"
+            }
         }
     }
 
-    // A new key, then the prompt on it: true once the phone confirmed.
-    // A key the prompt did not confirm is not kept.
-    fun enroll(title: String, cancel: String, result: MethodChannel.Result) {
-        if (pending != null) {
-            // Another prompt is up: this one is refused at once, and the
-            // key that prompt opens is left alone.
-            result.success(false)
-            return
-        }
-        val key = try {
+    // A new key in place of any other, for turning biometrics on: the
+    // prompt that follows confirms it, or the key is forgotten.
+    fun prepareKey(): Boolean {
+        if (attempt != null) return false
+        return try {
             createKey()
-            loadKey() ?: throw IllegalStateException("the key was not kept")
+            loadKey() != null
         } catch (_: Exception) {
             forget()
-            result.success(false)
-            return
-        }
-        // Not carried over a trip to the background: coming back locks
-        // the app, and the switch that asked is no longer on screen.
-        prompt(key, title, cancel, persist = false) { passed ->
-            if (!passed) forget()
-            result.success(passed)
+            false
         }
     }
 
@@ -80,11 +81,31 @@ internal class StrongBiometrics(private val activity: FragmentActivity) {
         false
     }
 
-    // The prompt on the key in place: "passed", "refused" (cancelled,
-    // or not answered), "reset" when the key no longer opens, the
-    // biometrics of the phone having changed since it was made, or
-    // "missing" when there never was one.
-    fun authenticate(title: String, cancel: String, result: MethodChannel.Result) {
+    // Drops the key: the biometric no longer opens anything.
+    fun forget() {
+        try {
+            keyStore().deleteEntry(KEY_ALIAS)
+        } catch (_: Exception) {
+            // Nothing to drop.
+        }
+    }
+
+    // One prompt on the key in place, answered once, with how it ended:
+    //   "passed"   a strong biometric unlocked the key, and it was used;
+    //   "missing"  there is no key;
+    //   "reset"    the key no longer opens: the phone's biometrics changed;
+    //   "busy"     another prompt is up (androidx keeps one per activity,
+    //              and a second would take the first one's answer away);
+    //   "unshown"  the activity was on its way out of sight, and androidx
+    //              would have shown nothing and said nothing;
+    //   "gone"     the activity went away with the prompt up;
+    //   "error:N"  the prompt closed on androidx error N, a cancel included;
+    //   "refused"  anything else that kept it from opening.
+    fun prompt(title: String, cancel: String, result: MethodChannel.Result) {
+        if (attempt != null) {
+            result.success("busy")
+            return
+        }
         val key = try {
             loadKey()
         } catch (_: Exception) {
@@ -95,7 +116,7 @@ internal class StrongBiometrics(private val activity: FragmentActivity) {
             result.success("missing")
             return
         }
-        try {
+        val cipher = try {
             cipherFor(key)
         } catch (_: KeyPermanentlyInvalidatedException) {
             forget()
@@ -105,105 +126,12 @@ internal class StrongBiometrics(private val activity: FragmentActivity) {
             result.success("refused")
             return
         }
-        prompt(key, title, cancel, persist = true) { passed ->
-            result.success(if (passed) "passed" else "refused")
-        }
-    }
-
-    // Drops the key: the biometric no longer opens anything.
-    fun forget() {
-        try {
-            keyStore().deleteEntry(KEY_ALIAS)
-        } catch (_: Exception) {
-            // Nothing to drop.
-        }
-    }
-
-    // The activity's own moments, which a prompt has to follow.
-    fun onPause() {
-        paused = true
-        // A prompt the system cancelled a moment ago went with the app.
-        pending?.let { if (it.cancelled) it.resumeWanted = true }
-    }
-
-    fun onResume() {
-        paused = false
-        val waiting = pending ?: return
-        if (waiting.resumeWanted) {
-            waiting.resumeWanted = false
-            waiting.cancelled = false
-            show(waiting)
-        }
-    }
-
-    fun onDestroy() {
-        pending?.let { finish(it, false) }
-    }
-
-    // The prompt asked for and not answered yet. One at a time: androidx
-    // keeps one prompt state per activity, and a second prompt would
-    // take the first one's answer away, leaving its caller waiting for
-    // good. A second ask is refused at once instead.
-    private var pending: Pending? = null
-
-    // The activity is behind something: the launcher, or the face
-    // unlock some phones draw over it while the camera reads.
-    private var paused = false
-
-    private class Pending(
-        val key: SecretKey,
-        val title: String,
-        val cancel: String,
-        // Shown again when the app comes back, if a trip to the
-        // background cancelled it.
-        val persist: Boolean,
-        val done: (Boolean) -> Unit,
-    ) {
-        var answered = false
-        var resumeWanted = false
-
-        // Cancelled by the system, and not answered yet: a pause coming
-        // right after says the app was leaving.
-        var cancelled = false
-    }
-
-    private val main = Handler(Looper.getMainLooper())
-
-    private fun prompt(
-        key: SecretKey,
-        title: String,
-        cancel: String,
-        persist: Boolean,
-        done: (Boolean) -> Unit,
-    ) {
-        if (pending != null) {
-            done(false)
-            return
-        }
-        val waiting = Pending(key, title, cancel, persist, done)
-        pending = waiting
-        show(waiting)
-    }
-
-    // Puts the prompt up, or answers at once: every path ends in an
-    // answer, now or once the app is back.
-    private fun show(waiting: Pending) {
         if (activity.supportFragmentManager.isStateSaved) {
-            // androidx would return without a word: the activity is on
-            // its way out of sight.
-            if (waiting.persist && paused) {
-                waiting.resumeWanted = true
-            } else {
-                finish(waiting, false)
-            }
+            result.success("unshown")
             return
         }
-        val cipher = try {
-            cipherFor(waiting.key)
-        } catch (_: Exception) {
-            finish(waiting, false)
-            return
-        }
+        val current = Attempt(result)
+        attempt = current
         val callback = object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(outcome: BiometricPrompt.AuthenticationResult) {
                 // The key works only for a biometric the Keystore took:
@@ -213,37 +141,19 @@ internal class StrongBiometrics(private val activity: FragmentActivity) {
                 } catch (_: Exception) {
                     false
                 }
-                finish(waiting, used)
+                end(current, if (used) "passed" else "refused")
             }
 
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                // Cancelled by a trip to the background, not by the
-                // user's "Cancel": asked again when the app is back. The
-                // cancel may come a moment before the pause (Android 16
-                // reports the home gesture as the user's), so it waits a
-                // beat for one before it counts as a refusal.
-                val leaving = errorCode == BiometricPrompt.ERROR_CANCELED ||
-                    errorCode == BiometricPrompt.ERROR_USER_CANCELED
-                if (waiting.persist && leaving) {
-                    if (paused) {
-                        waiting.resumeWanted = true
-                        return
-                    }
-                    waiting.cancelled = true
-                    main.postDelayed({
-                        if (!waiting.resumeWanted) finish(waiting, false)
-                    }, LEAVING_GRACE_MS)
-                    return
-                }
-                finish(waiting, false)
+                end(current, "error:$errorCode")
             }
 
             // A finger not recognised: the prompt stays up for another.
             override fun onAuthenticationFailed() {}
         }
         val info = BiometricPrompt.PromptInfo.Builder()
-            .setTitle(waiting.title)
-            .setNegativeButtonText(waiting.cancel)
+            .setTitle(title)
+            .setNegativeButtonText(cancel)
             .setAllowedAuthenticators(BIOMETRIC_STRONG)
             // A face seen is not yet a yes: the prompt waits for a tap, so
             // a phone held up to its owner opens nothing by itself.
@@ -253,15 +163,28 @@ internal class StrongBiometrics(private val activity: FragmentActivity) {
             BiometricPrompt(activity, ContextCompat.getMainExecutor(activity), callback)
                 .authenticate(info, BiometricPrompt.CryptoObject(cipher))
         } catch (_: Exception) {
-            finish(waiting, false)
+            end(current, "refused")
         }
     }
 
-    private fun finish(waiting: Pending, passed: Boolean) {
-        if (waiting.answered) return
-        waiting.answered = true
-        if (pending === waiting) pending = null
-        waiting.done(passed)
+    // The activity is going: a prompt still up is answered, for nobody to
+    // wait on an activity that is gone.
+    fun onDestroy() {
+        attempt?.let { end(it, "gone") }
+    }
+
+    // The prompt up, if any, and the call waiting for how it ends.
+    private var attempt: Attempt? = null
+
+    private class Attempt(val result: MethodChannel.Result) {
+        var answered = false
+    }
+
+    private fun end(current: Attempt, outcome: String) {
+        if (current.answered) return
+        current.answered = true
+        if (attempt === current) attempt = null
+        current.result.success(outcome)
     }
 
     private fun createKey() {
@@ -297,10 +220,6 @@ internal class StrongBiometrics(private val activity: FragmentActivity) {
 
     private companion object {
         const val KEYSTORE = "AndroidKeyStore"
-
-        // How long a cancelled prompt waits for the pause that would say
-        // the app was leaving.
-        const val LEAVING_GRACE_MS = 500L
 
         // A plain name: a list of the Keystore's aliases must not say
         // what the key opens.

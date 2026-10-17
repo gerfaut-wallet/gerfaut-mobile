@@ -317,15 +317,32 @@ void main() {
       expect(bridge.lock?.biometric, isFalse);
     });
 
+    testWidgets('a phone left with no strong biometric at all goes off too', (
+      tester,
+    ) async {
+      final bridge = locked(
+        lock: const AppLock(kind: LockKind.pin, biometric: true),
+      );
+      await tester.pumpWidget(
+        app(bridge, biometrics: FakeBiometrics(offers: BiometricSupport.none)),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '1234');
+      await tester.tap(find.text('Unlock'));
+      await tester.pumpAndSettle();
+
+      expect(bridge.lock?.biometric, isFalse);
+    });
+
     testWidgets('biometrics that still open stay on after the secret', (
       tester,
     ) async {
       for (final biometrics in [
         // A strong biometric with its key: nothing lapsed.
         FakeBiometrics(passes: false),
-        // A sensor that answers nothing for now: no reason to turn
+        // A sensor that cannot answer for now: no reason to turn
         // anything off.
-        FakeBiometrics(available: false),
+        FakeBiometrics(offers: BiometricSupport.unavailable),
       ]) {
         final bridge = locked(
           lock: const AppLock(kind: LockKind.pin, biometric: true),
@@ -596,6 +613,30 @@ void main() {
       expect(tester.widget<SettingSwitch>(row).onChanged, isNull);
       expect(tester.widget<SettingSwitch>(row).value, isFalse);
       expect(find.text(biometricsWeakNote(LockKind.pin)), findsOneWidget);
+    });
+
+    testWidgets('a sensor out of service for now greys nothing out', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = locked(
+        lock: const AppLock(kind: LockKind.pin, biometric: true),
+      )..lockSecret = '1234';
+      await tester.pumpWidget(
+        settingsApp(
+          bridge,
+          biometrics: FakeBiometrics(offers: BiometricSupport.unavailable),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final row = find.ancestor(
+        of: find.text('Unlock with biometrics'),
+        matching: find.byType(SettingSwitch),
+      );
+      expect(tester.widget<SettingSwitch>(row).onChanged, isNotNull);
+      expect(tester.widget<SettingSwitch>(row).value, isTrue);
+      expect(find.text(biometricsWeakNote(LockKind.pin)), findsNothing);
     });
 
     testWidgets('turning biometrics on makes the key behind the secret', (

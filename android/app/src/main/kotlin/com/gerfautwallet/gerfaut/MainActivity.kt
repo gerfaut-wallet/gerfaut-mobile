@@ -128,8 +128,8 @@ class MainActivity : FlutterFragmentActivity() {
 
     private val main = Handler(Looper.getMainLooper())
 
-    // The phone's prompt for the app lock, which follows this activity's
-    // moments (onPause, onResume, onDestroy).
+    // The phone's prompt for the app lock; a prompt still up when the
+    // activity goes is answered then (onDestroy).
     private val biometrics by lazy { StrongBiometrics(this) }
     private val clearSensitive = Runnable { clearSensitiveIfOurs() }
 
@@ -234,15 +234,14 @@ class MainActivity : FlutterFragmentActivity() {
             when (call.method) {
                 "support" -> result.success(biometrics.support())
                 "hasKey" -> result.success(biometrics.hasKey())
-                "enroll", "authenticate" -> {
+                "prepareKey" -> result.success(biometrics.prepareKey())
+                "prompt" -> {
                     val title = call.argument<String>("title")
                     val cancel = call.argument<String>("cancel")
                     if (title == null || cancel == null) {
-                        result.error("bad_argument", "${call.method} takes title and cancel", null)
-                    } else if (call.method == "enroll") {
-                        biometrics.enroll(title, cancel, result)
+                        result.error("bad_argument", "prompt takes title and cancel", null)
                     } else {
-                        biometrics.authenticate(title, cancel, result)
+                        biometrics.prompt(title, cancel, result)
                     }
                 }
                 "forget" -> {
@@ -526,16 +525,6 @@ class MainActivity : FlutterFragmentActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) clearSensitiveIfOurs()
-    }
-
-    override fun onPause() {
-        super.onPause()
-        biometrics.onPause()
-    }
-
-    override fun onResume() {
-        super.onResume()
-        biometrics.onResume()
     }
 
     override fun onDestroy() {

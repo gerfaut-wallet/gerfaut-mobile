@@ -12,8 +12,8 @@
 
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'disguise.dart';
@@ -32,6 +32,15 @@ enum BiometricSupport {
 
   /// None is set up, or the phone has no sensor.
   none,
+
+  /// A strong one may be there but cannot answer right now: the sensor
+  /// busy or held, an update due. A passing state: it turns nothing off
+  /// and greys nothing out.
+  unavailable;
+
+  /// No strong biometric can be had on this phone, for good: biometrics
+  /// standing on in the vault have nothing left to open it.
+  bool get lacksStrong => this == weakOnly || this == none;
 }
 
 /// How a biometric prompt ended.
@@ -101,41 +110,56 @@ class SystemBiometricGate implements BiometricGate {
       return switch (await _channel.invokeMethod<String>('support')) {
         'strong' => BiometricSupport.strong,
         'weak' => BiometricSupport.weakOnly,
-        _ => BiometricSupport.none,
+        'none' => BiometricSupport.none,
+        _ => BiometricSupport.unavailable,
       };
     } catch (_) {
-      // A phone that cannot answer is a phone without biometrics.
-      return BiometricSupport.none;
+      // A phone that cannot answer now may answer later.
+      return BiometricSupport.unavailable;
+    }
+  }
+
+  /// One prompt, and how it ended, as StrongBiometrics.kt says it.
+  Future<PromptEnd> _prompt(String reason) async {
+    try {
+      final answer = await _channel.invokeMethod<String>('prompt', {
+        'title': reason,
+        'cancel': _cancel,
+      });
+      return PromptEnd.parse(answer);
+    } catch (_) {
+      return PromptEnd.refused;
     }
   }
 
   @override
   Future<bool> enroll(String reason) async {
     try {
-      return await _channel.invokeMethod<bool>('enroll', {
-            'title': reason,
-            'cancel': _cancel,
-          }) ??
-          false;
+      if (await _channel.invokeMethod<bool>('prepareKey') != true) {
+        return false;
+      }
     } catch (_) {
       return false;
     }
+    // One prompt, never brought back: leaving the app locks it, and the
+    // switch that asked is no longer on screen.
+    final passed = await _prompt(reason) == PromptEnd.passed;
+    if (!passed) await forget();
+    return passed;
   }
 
   @override
   Future<BiometricOutcome> authenticate(String reason) async {
+    final binding = WidgetsBinding.instance;
+    final session = PromptSession(
+      () => _prompt(reason),
+      focused: binding.lifecycleState == AppLifecycleState.resumed,
+    );
+    final listener = AppLifecycleListener(onStateChange: session.lifecycle);
     try {
-      return switch (await _channel.invokeMethod<String>('authenticate', {
-        'title': reason,
-        'cancel': _cancel,
-      })) {
-        'passed' => BiometricOutcome.passed,
-        'reset' => BiometricOutcome.reset,
-        'missing' => BiometricOutcome.missing,
-        _ => BiometricOutcome.refused,
-      };
-    } catch (_) {
-      return BiometricOutcome.refused;
+      return await session.run();
+    } finally {
+      listener.dispose();
     }
   }
 
@@ -156,6 +180,159 @@ class SystemBiometricGate implements BiometricGate {
       // Nothing to drop where there is no platform.
     }
   }
+}
+
+/// How one prompt of the phone ended, before anyone decides what that
+/// means.
+enum PromptEnd {
+  passed,
+  missing,
+  reset,
+
+  /// Turned down on purpose ("Cancel"), or kept from opening.
+  refused,
+
+  /// Closed by a cancel that may be the user's (back, a touch outside
+  /// it) or the system's as the app goes (the home gesture, which
+  /// Android 16 reports as the user's): what the app does next tells.
+  cancelled,
+
+  /// Not put up at all: the app was on its way out of sight.
+  unshown;
+
+  /// What StrongBiometrics.kt answers, read. Error codes are androidx's
+  /// BiometricPrompt ones: 13 is the prompt's own "Cancel" button, 10 a
+  /// cancel by the user, 5 one by the system.
+  static PromptEnd parse(String? answer) => switch (answer) {
+    'passed' => passed,
+    'missing' => missing,
+    'reset' => reset,
+    'unshown' => unshown,
+    'error:10' || 'error:5' => cancelled,
+    _ => refused,
+  };
+}
+
+/// One unlock by the phone's prompt, from the ask to its single answer.
+///
+/// A cancel alone does not say whose it is. The app's lifecycle does,
+/// with no timer: an app that goes out of sight (hidden, paused) was
+/// taken away, and the prompt comes back when it is in front again; an
+/// app that is back in focus with nothing having left (resumed) saw its
+/// user wave the prompt off, and that is a refusal, for good. Every
+/// other end answers at once.
+class PromptSession {
+  PromptSession(this._attempt, {this.focused = true});
+
+  /// Puts one prompt up and says how it ended.
+  final Future<PromptEnd> Function() _attempt;
+
+  final Completer<BiometricOutcome> _answer = Completer<BiometricOutcome>();
+  _Phase _phase = _Phase.idle;
+
+  /// The app has the focus: nothing of the system's is over it. Given
+  /// as it stands when the unlock is asked for.
+  @visibleForTesting
+  bool focused;
+
+  /// The app went out of sight since the prompt was last put up.
+  bool _left = false;
+
+  /// How many prompts were put up: the first, and one per return.
+  @visibleForTesting
+  int attempts = 0;
+
+  /// The single answer, once one is due.
+  Future<BiometricOutcome> run() {
+    if (_phase == _Phase.idle) _show();
+    return _answer.future;
+  }
+
+  void _show() {
+    _phase = _Phase.showing;
+    _left = false;
+    attempts++;
+    _attempt().then(
+      _ended,
+      onError: (Object _) => _finish(BiometricOutcome.refused),
+    );
+  }
+
+  void _ended(PromptEnd end) {
+    if (_phase != _Phase.showing) return;
+    switch (end) {
+      case PromptEnd.passed:
+        _finish(BiometricOutcome.passed);
+      case PromptEnd.missing:
+        _finish(BiometricOutcome.missing);
+      case PromptEnd.reset:
+        _finish(BiometricOutcome.reset);
+      case PromptEnd.refused:
+        _finish(BiometricOutcome.refused);
+      case PromptEnd.unshown:
+        if (_left) {
+          _phase = _Phase.away;
+        } else {
+          _finish(BiometricOutcome.refused);
+        }
+      case PromptEnd.cancelled:
+        if (_left) {
+          _phase = _Phase.away;
+        } else if (focused) {
+          // Back in focus already, nothing having left: the user's.
+          _finish(BiometricOutcome.refused);
+        } else {
+          _phase = _Phase.cancelled;
+        }
+    }
+  }
+
+  /// What the app goes through while the prompt is asked for.
+  void lifecycle(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.resumed:
+        focused = true;
+        switch (_phase) {
+          case _Phase.away:
+            _show();
+          case _Phase.cancelled:
+            _finish(BiometricOutcome.refused);
+          case _Phase.idle || _Phase.showing || _Phase.done:
+            break;
+        }
+      case AppLifecycleState.inactive:
+        focused = false;
+      case AppLifecycleState.hidden || AppLifecycleState.paused:
+        focused = false;
+        _left = true;
+        if (_phase == _Phase.cancelled) _phase = _Phase.away;
+      case AppLifecycleState.detached:
+        _finish(BiometricOutcome.refused);
+    }
+  }
+
+  void _finish(BiometricOutcome outcome) {
+    if (_phase == _Phase.done) return;
+    _phase = _Phase.done;
+    _answer.complete(outcome);
+  }
+}
+
+enum _Phase {
+  /// Not asked yet.
+  idle,
+
+  /// A prompt is up, or on its way.
+  showing,
+
+  /// The prompt was cancelled, and whose cancel it was is not known yet.
+  cancelled,
+
+  /// The app was taken away with the prompt: it comes back with the app.
+  away,
+
+  /// Answered.
+  done,
 }
 
 const MethodChannel _biometricsChannel = MethodChannel('gerfaut/biometrics');
@@ -301,20 +478,16 @@ class LockController extends Notifier<LockState> {
 
   /// Whether biometrics stand on in the vault and can no longer open
   /// it: the key changed, or was never made (a vault from before keys),
-  /// or the phone is left with a weak biometric only, which never
-  /// unlocks. A phone that answers nothing at all is left alone: a
-  /// sensor out of service for a moment is no reason to turn anything
-  /// off.
+  /// or the phone has no strong biometric any more, for good. A sensor
+  /// that cannot answer for now is no reason to turn anything off.
   Future<bool> _biometricsLapsed() async {
     if (!(state.lock?.biometric ?? false)) return false;
     if (state.biometricLapse != null) return true;
     final gate = ref.read(biometricGateProvider);
     try {
-      return switch (await gate.support()) {
-        BiometricSupport.weakOnly => true,
-        BiometricSupport.strong => !await gate.hasKey(),
-        BiometricSupport.none => false,
-      };
+      final support = await gate.support();
+      if (support.lacksStrong) return true;
+      return support == BiometricSupport.strong && !await gate.hasKey();
     } catch (_) {
       return false;
     }

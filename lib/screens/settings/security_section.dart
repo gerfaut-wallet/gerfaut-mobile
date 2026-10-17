@@ -206,7 +206,10 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
               ),
             ],
           ),
-          if (biometrics == BiometricSupport.strong) ...[
+          // A sensor that cannot answer for now changes nothing here: the
+          // switch stays as it is, and a prompt that fails says so.
+          if (biometrics == BiometricSupport.strong ||
+              biometrics == BiometricSupport.unavailable) ...[
             const SizedBox(height: GerfautSpacing.md),
             SettingSwitch(
               title: 'Unlock with biometrics',
