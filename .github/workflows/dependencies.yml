@@ -2,13 +2,13 @@ name: Dependencies
 
 # Known advisories in what the APK is built from: the crates in
 # rust/Cargo.lock, gerfaut-core's included, checked by cargo-deny against
-# rust/deny.toml (licenses and sources too); the Dart packages in
-# pubspec.lock and in Cargokit's build tool; and the Android libraries
-# Gradle resolves for the release APK. The last two by osv-scanner. On
-# every push to main, every pull request, every Monday, and on demand
-# (Actions, Dependencies, Run workflow). The weekly run is the one that
-# catches an advisory published while nothing here changed; when it
-# fails, GitHub notifies whoever last edited the cron line below.
+# rust/deny.toml (licenses and sources too); then, by osv-scanner, the
+# Dart packages of the app and of Cargokit's build tool, and the Android
+# libraries Gradle resolves for the release APK. On every push to main,
+# every pull request, every Monday, and on demand (Actions, Dependencies,
+# Run workflow). The weekly run is the one that catches an advisory
+# published while nothing here changed; when it fails, GitHub notifies
+# whoever last edited the cron line below.
 on:
   push:
     branches: [main]
@@ -51,51 +51,25 @@ jobs:
       - name: Install cargo-deny
         run: |
           name="cargo-deny-$CARGO_DENY_VERSION-x86_64-unknown-linux-musl"
-          curl -fsSL -o "$RUNNER_TEMP/$name.tar.gz" "https://github.com/EmbarkStudios/cargo-deny/releases/download/$CARGO_DENY_VERSION/$name.tar.gz"
+          curl -fsSL --retry 3 --retry-all-errors -o "$RUNNER_TEMP/$name.tar.gz" "https://github.com/EmbarkStudios/cargo-deny/releases/download/$CARGO_DENY_VERSION/$name.tar.gz"
           echo "$CARGO_DENY_SHA256  $RUNNER_TEMP/$name.tar.gz" | sha256sum --check --strict
           tar -xzf "$RUNNER_TEMP/$name.tar.gz" -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/$name" >> "$GITHUB_PATH"
 
       - name: Install the pinned Rust toolchain
         working-directory: gerfaut-mobile/rust
-        run: rustup show
+        run: rustup toolchain install
 
       # Fetches the RustSec advisory database at every run.
       - name: Check advisories, licenses and sources
         working-directory: gerfaut-mobile/rust
         run: cargo deny --locked check advisories licenses sources
 
-  dart-packages:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      # One version, checked against the hash its release publishes.
-      OSV_SCANNER_VERSION: 2.7.0
-      OSV_SCANNER_SHA256: 160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          persist-credentials: false
-      - name: Install osv-scanner
-        run: |
-          mkdir -p "$RUNNER_TEMP/bin"
-          curl -fsSL -o "$RUNNER_TEMP/bin/osv-scanner" "https://github.com/google/osv-scanner/releases/download/v$OSV_SCANNER_VERSION/osv-scanner_linux_amd64"
-          echo "$OSV_SCANNER_SHA256  $RUNNER_TEMP/bin/osv-scanner" | sha256sum --check --strict
-          chmod +x "$RUNNER_TEMP/bin/osv-scanner"
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-      # The app's packages, and those of the tool that builds the Rust
-      # library during a release. Advisories from osv.dev, queried at
-      # every run.
-      - name: Check the Dart packages
-        run: osv-scanner scan source --lockfile pubspec.lock --lockfile rust_builder/cargokit/build_tool/pubspec.lock
-
-  # Gradle keeps no lockfile here: .github/gradle-locks.gradle has it
-  # write one outside the checkout, and only the release APK's runtime
-  # classpath is checked, not the tools that build it.
-  android-libraries:
+  packages:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
+      # One version, checked against the hash its release publishes.
       OSV_SCANNER_VERSION: 2.7.0
       OSV_SCANNER_SHA256: 160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b
     steps:
@@ -112,19 +86,37 @@ jobs:
       - name: Install osv-scanner
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
-          curl -fsSL -o "$RUNNER_TEMP/bin/osv-scanner" "https://github.com/google/osv-scanner/releases/download/v$OSV_SCANNER_VERSION/osv-scanner_linux_amd64"
+          curl -fsSL --retry 3 --retry-all-errors -o "$RUNNER_TEMP/bin/osv-scanner" "https://github.com/google/osv-scanner/releases/download/v$OSV_SCANNER_VERSION/osv-scanner_linux_amd64"
           echo "$OSV_SCANNER_SHA256  $RUNNER_TEMP/bin/osv-scanner" | sha256sum --check --strict
           chmod +x "$RUNNER_TEMP/bin/osv-scanner"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - run: flutter pub get
+
+      # A release runs Cargokit's build tool from a project that
+      # run_build_tool.sh writes and resolves on the spot, without the
+      # build tool's own pubspec.lock: the script itself, asked for its
+      # help, resolves the packages a release would get today.
+      - name: Resolve the packages of Cargokit's build tool
+        env:
+          CARGOKIT_TOOL_TEMP_DIR: ${{ runner.temp }}/build-tool
+        run: bash "$PWD/rust_builder/cargokit/run_build_tool.sh" --help > /dev/null
+
+      # Gradle keeps no lockfile here: .github/gradle-locks.gradle has it
+      # write one outside the checkout, for the release APK's runtime
+      # classpath only, not for the tools that build it. The dependencies
+      # task reports a module it cannot resolve as FAILED and still
+      # succeeds, so the report is read for that word.
       - run: flutter build apk --config-only
-      - name: Resolve the Android libraries
+      - name: Resolve the Android libraries of the release APK
         working-directory: android
         env:
           GRADLE_LOCKS_DIR: ${{ runner.temp }}/gradle-locks
-        run: ./gradlew --quiet --init-script ../.github/gradle-locks.gradle :app:dependencies --write-locks > /dev/null
-      - name: Check those of the release APK
         run: |
+          ./gradlew --quiet --init-script ../.github/gradle-locks.gradle :app:dependencies --configuration releaseRuntimeClasspath --write-locks > "$RUNNER_TEMP/gradle-report.txt"
+          if grep -n 'FAILED' "$RUNNER_TEMP/gradle-report.txt"; then exit 1; fi
           mkdir -p "$RUNNER_TEMP/release-apk"
           grep -E '=.*\breleaseRuntimeClasspath\b' "$RUNNER_TEMP/gradle-locks/app.lockfile" > "$RUNNER_TEMP/release-apk/gradle.lockfile"
-          osv-scanner scan source --lockfile "$RUNNER_TEMP/release-apk/gradle.lockfile"
+
+      # Advisories from osv.dev, queried at every run.
+      - name: Check the Dart packages and the Android libraries
+        run: osv-scanner scan source --lockfile pubspec.lock --lockfile "$RUNNER_TEMP/build-tool/pubspec.lock" --lockfile "$RUNNER_TEMP/release-apk/gradle.lockfile"

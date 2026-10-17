@@ -21,7 +21,8 @@ all-features = true
 [advisories]
 # Every vulnerability fails the check, and so does every unsound crate.
 # An unmaintained crate fails only when this crate depends on it
-# directly, the one case where replacing it is in our hands.
+# directly, the one case where replacing it is in our hands; those that
+# gerfaut-core depends on directly fail in its own check.
 unmaintained = "workspace"
 unsound = "all"
 yanked = "deny"
