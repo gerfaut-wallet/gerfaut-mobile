@@ -27,6 +27,7 @@ Gerfaut watches bitcoin wallets it cannot spend from. There is no key generation
 
 - Broadcast a signed transaction or a PSBT, read back in plain language before it goes anywhere. When no backend could confirm a coin it spends and only the PSBT declares its amount, Gerfaut marks the amounts and the fee "as the PSBT claims" and says what to check before sending.
 - A signature that leaves the outputs open (SIGHASH_NONE or SIGHASH_SINGLE) gets a red warning: whoever relays such a transaction can send that money elsewhere. A transaction the network is sure to refuse, such as one that spends a coin already spent in a block, reads "Will be refused" and cannot be sent.
+- On a PSBT still missing signatures, the fee rate reads "≈ … once signed", the rate it pays once your signing device has signed it. A transaction already waiting in the mempool reads "Already in the mempool" and can go out again, which does no harm.
 
 #### Talking to the chain
 
@@ -34,7 +35,9 @@ Gerfaut watches bitcoin wallets it cannot spend from. There is no key generation
 - A Tor client built in, so a `.onion` backend works with no Orbot installed. While "Test the connection" starts it, the Tor card shows its progress.
 - A sync downloads only what a wallet lacks, so a payment that Live notices costs a few kilobytes. Gerfaut reads a wallet in full when the vault opens and once a day.
 - A "This is my node" switch under the address of your own server, in Settings › Network. Turned on, it lets Live follow up to 20,000 addresses, against 2,000 otherwise. Leave it off for a server you do not run: it would refuse most of them and learn every one.
-- With Live on and the Automatic backend, syncs go first to the server Live talks to, Blockstream's Electrum server on mainnet, so a single operator sees your addresses. A broadcast and a transaction preview go to the rotation, which starts with mempool.space.
+- With Live on and the Automatic backend, syncs, transaction previews and broadcasts go first to the operator Live talks to, Blockstream on mainnet, so a single operator sees your addresses. When Gerfaut opens, the first sync waits up to 20 seconds for Live to connect.
+- A preview or a broadcast moves to another server only when one cannot be reached. When a node refuses a transaction, Gerfaut asks no other and shows the node's own words.
+- A server that is down while another one answers goes to the end of the list for 5 minutes, then twice as long each time it fails again, up to an hour. When the server Live talks to sees no new block for 2 hours, Gerfaut compares it with another server of the same operator, and Live moves there if it lags 2 blocks or more.
 
 #### Getting told when something moves
 
@@ -53,10 +56,11 @@ Gerfaut watches bitcoin wallets it cannot spend from. There is no key generation
 - An encrypted backup file, and the same backup as an animated QR code, so another device gets your wallets with no server in between. The export page asks for a passphrase of several words, since a copied file can be guessed offline, and can add your node settings. The restore page lists what the file holds, wallet by wallet and node setting by node setting, before it writes anything. A wrong password, a file that is not a Gerfaut backup and a backup made by a newer Gerfaut each get their own sentence, so Gerfaut never blames a password that was right.
 - The vault stays out of Android's own backups and device-to-device transfers: it leaves the phone only as a Gerfaut backup, sealed under your password.
 - A vault this phone cannot open, such as one restored without its key, is never overwritten. Gerfaut sets it aside under another name and offers to start over, with the restore page first.
-- Fiat value beside the balances and the transaction amounts, in the currency you pick, from CoinGecko, Kraken or mempool.space. No price source hears from Gerfaut until you turn "Fiat value" on or place the price widget. A wallet on signet, testnet4 or regtest shows 0 in your currency, since test coins are worth nothing.
+- Fiat value beside the balances and the transaction amounts, in the currency you pick, from mempool.space, the default, or CoinGecko. With CoinGecko, "Powered by CoinGecko" shows once on each screen that uses its prices, and on the price widget. No price source hears from Gerfaut until you turn "Fiat value" on or place the price widget. A wallet on signet, testnet4 or regtest shows 0 in your currency, since test coins are worth nothing.
 - Amounts in BTC or in sats, and a light, dark or system theme.
 - A PIN or password lock with biometrics. Attempts slow down after 3 tries and stay slowed after a restart, and coming back from a file picker, a save dialog or a share sheet more than 10 minutes after it opened asks for the lock again.
-- A calculator disguise for the icon. While Gerfaut is disguised, it posts no notification, Live stays off and no update check goes out.
+- Only a biometric that Android rates as strong opens the lock. On a phone whose face or fingerprint unlock is rated weak, the switch stays greyed out and says why. When the fingerprints or faces on the phone change, biometrics stop opening Gerfaut until you turn them on again.
+- A calculator disguise for the icon. While Gerfaut is disguised, it posts no notification, Live stays off and no update check goes out. From Android 13, the recent apps keep no picture of Gerfaut while it is disguised. The sheet that turns the disguise on also says what Android keeps: an older thumbnail below Android 13, and Gerfaut's earlier notifications in the notification history, if you turned it on.
 - A notice on the home screen when a newer release is out, with a button to the release page and a "Later" button that closes it for that release. Gerfaut asks GitHub at most once a day, when you open it, the first time a day after you first opened it, and never announces a pre-release. Settings › About turns the automatic check off.
 - Settings › About marks a 0.x version as a beta, with a "Report a problem" button that opens the issues of this repository. The first page of the welcome tour says that Gerfaut is in public beta.
 - One APK per processor architecture, so a phone downloads only the code it runs. Gerfaut installs on a phone without a camera, and scanning stays optional.
@@ -65,11 +69,13 @@ Gerfaut watches bitcoin wallets it cannot spend from. There is no key generation
 ### Security
 
 - The wallet list is stored encrypted, under a key that Android's secure storage keeps apart from the vault.
-- Gerfaut marks a descriptor or a policy you copy as sensitive on the clipboard: Android shows no preview of it and keeps it out of its history. Gerfaut clears it from the clipboard a minute later, unless you copied something else since.
+- Gerfaut marks a descriptor or a policy you copy as sensitive on the clipboard: Android shows no preview of it and keeps it out of its history. Gerfaut clears it from the clipboard a minute later, unless you copied something else since. If Android closes Gerfaut within that minute, Gerfaut clears it the next time it opens.
+- A server cannot make up a confirmation. Gerfaut checks that the transaction is in the block the server names and, on mainnet, that the block carries the work the network asked for. Over Electrum, a confirmation in an older block must also link to the checkpoints built into Gerfaut.
 - When one of your nodes is a `.onion` address, the price and the update check go through Tor, on any network, and Gerfaut sends neither when Tor is out of reach. Neither the price widget nor the automatic update check starts Tor for itself. When the check finds no Tor running, the day does not count, and it asks again the next time Gerfaut comes back on screen.
 - While an app lock is set, the balance widget shows no wallet name and no amount, and "Show balances on widgets" stays greyed out.
 - Under the calculator disguise, a vault that fails to open shows the calculator, not Gerfaut's error page.
 - Gerfaut refuses a file far too large to be a wallet, a transaction or a backup, and an animated QR code that announces more than 5,000 parts.
-- A transaction history shared as CSV does not stay in Gerfaut's cache: Gerfaut deletes the copy at the next share, or when it next starts.
+- A history or a backup you share reaches only the app you pick in the share sheet. Gerfaut deletes its copy from the cache an hour later, or when it next starts.
+- From Android 12, Android hides the windows other apps draw over Gerfaut, so none can cover what a button does.
 - A release build writes no error text to the system log, where it could quote an address.
 - Every release carries a `SHA256SUMS` manifest signed with minisign. CI builds the APKs unsigned, and the author signs them on his own machine, so the release key never reaches GitHub.
