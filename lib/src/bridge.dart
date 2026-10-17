@@ -758,8 +758,16 @@ class RustBridge implements GerfautBridge {
   }
 
   @override
-  Stream<LiveEvent> liveRun() async* {
-    await for (final raw in endsWithItsCall(rust.liveRun())) {
+  Stream<LiveEvent> liveRun() {
+    // Read now, in the caller's turn: a stop it asks after this call
+    // ends the run, even one carried out before the run itself starts.
+    final stopsSeen = rust.liveStops();
+    return _liveRun(stopsSeen);
+  }
+
+  Stream<LiveEvent> _liveRun(int stopsSeen) async* {
+    final payloads = rust.liveRun(stopsSeen: stopsSeen);
+    await for (final raw in endsWithItsCall(payloads)) {
       final Object? decoded;
       try {
         decoded = jsonDecode(raw);

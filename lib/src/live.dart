@@ -825,6 +825,9 @@ class LiveRunner {
       }
       // Said before the run begins, so what the run says comes after.
       await _tell('status', liveNotificationText(const LiveWatchStatus()));
+      // A stop asked while this start was opening the vault or reading
+      // the settings: nothing is started after it.
+      if (_stopping) return false;
       final run = ++_run;
       _started = true;
       _broke = false;

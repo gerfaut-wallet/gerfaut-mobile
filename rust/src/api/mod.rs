@@ -31,7 +31,7 @@ use rand::TryRngCore;
 use serde_json::json;
 use std::panic::AssertUnwindSafe;
 use std::sync::LazyLock;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use tokio::sync::{Mutex, OnceCell, broadcast};
 
 /// The process-wide manager, set once by [`init_manager`].
@@ -717,10 +717,21 @@ static LIVE_EVENTS: LazyLock<broadcast::Sender<String>> =
 /// asked for while another is still ending waits for it to be gone.
 static LIVE_RUNNING: Mutex<bool> = Mutex::const_new(false);
 
-/// Whether [`live_stop`] was called since the run in place was asked
-/// for, its start included: a watch that ends without it ended on its
-/// own, and that is a failure.
-static LIVE_STOP_ASKED: AtomicBool = AtomicBool::new(false);
+/// How many times [`live_stop`] was called, ever. A run is handed the
+/// count as it stood when it was asked for ([`live_stops`]): any stop
+/// after that, whenever it is carried out, ends that run, and a watch
+/// that ends with the count unchanged ended on its own, which is a
+/// failure. A count and not a flag: nothing ever takes a stop back.
+static LIVE_STOPS: AtomicU32 = AtomicU32::new(0);
+
+/// The number of stops asked so far, for the caller to hand to the
+/// [`live_run`] it asks for next. Read on the caller's own thread, in
+/// the order of its calls: a stop it asks after this read counts against
+/// that run even if it is carried out before the run starts.
+#[flutter_rust_bridge::frb(sync)]
+pub fn live_stops() -> u32 {
+    LIVE_STOPS.load(Ordering::SeqCst)
+}
 
 /// What the screens and the caller hear once a run is over.
 fn stopped_json() -> String {
@@ -756,7 +767,11 @@ enum RunEnd {
 /// to turn into a failure as it does every other; a watch that ended
 /// with nobody asking ends the stream on an `internal` error, so the
 /// caller says it rather than wait in silence.
-pub async fn live_run(sink: StreamSink<String>) {
+///
+/// `stops_seen` is what [`live_stops`] answered when the run was asked
+/// for: a stop asked since, even during the start, ends the run as a
+/// stop.
+pub async fn live_run(sink: StreamSink<String>, stops_seen: u32) {
     let manager = match manager() {
         Ok(manager) => manager,
         Err(payload) => {
@@ -770,9 +785,6 @@ pub async fn live_run(sink: StreamSink<String>) {
             let _ = sink.add(error_json("live_running", "the live watch is held already"));
             return;
         }
-        // Cleared before the start, never after: a stop asked while the
-        // watch opens is kept, and ends this run as a stop.
-        LIVE_STOP_ASKED.store(false, Ordering::SeqCst);
         match manager.live_start().await {
             Ok(events) => {
                 *running = true;
@@ -784,9 +796,10 @@ pub async fn live_run(sink: StreamSink<String>) {
             }
         }
     };
-    // That stop may have come before the watch was in place, and found
-    // nothing to stop: it is carried out now.
-    if LIVE_STOP_ASKED.load(Ordering::SeqCst) {
+    // A stop asked since the run was asked for may have come before the
+    // watch was in place, and found nothing to stop: carried out now.
+    let stopped = || LIVE_STOPS.load(Ordering::SeqCst) != stops_seen;
+    if stopped() {
         manager.live_stop().await;
     }
     let forward = async {
@@ -800,7 +813,7 @@ pub async fn live_run(sink: StreamSink<String>) {
                 return RunEnd::CallerGone;
             }
         }
-        if LIVE_STOP_ASKED.load(Ordering::SeqCst) {
+        if stopped() {
             RunEnd::Stopped
         } else {
             RunEnd::OnItsOwn
@@ -840,7 +853,7 @@ async fn then_always<T>(work: impl Future<Output = T>, after: impl Future<Output
 /// Idempotent.
 pub async fn live_stop() -> String {
     let manager = try_json!(manager());
-    LIVE_STOP_ASKED.store(true, Ordering::SeqCst);
+    LIVE_STOPS.fetch_add(1, Ordering::SeqCst);
     manager.live_stop().await;
     ok_json()
 }

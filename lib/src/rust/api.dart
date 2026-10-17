@@ -346,6 +346,12 @@ Future<String> importBackup({
   choicesJson: choicesJson,
 );
 
+/// The number of stops asked so far, for the caller to hand to the
+/// [`live_run`] it asks for next. Read on the caller's own thread, in
+/// the order of its calls: a stop it asks after this read counts against
+/// that run even if it is carried out before the run starts.
+int liveStops() => RustLib.instance.api.crateApiLiveStops();
+
 /// Starts the live watch of the active network and hands everything it
 /// says to this one caller, each a serialized `LiveEvent`, then
 /// `{"type":"stopped"}` once the watch has ended. The caller announces
@@ -364,7 +370,12 @@ Future<String> importBackup({
 /// to turn into a failure as it does every other; a watch that ended
 /// with nobody asking ends the stream on an `internal` error, so the
 /// caller says it rather than wait in silence.
-Stream<String> liveRun() => RustLib.instance.api.crateApiLiveRun();
+///
+/// `stops_seen` is what [`live_stops`] answered when the run was asked
+/// for: a stop asked since, even during the start, ends the run as a
+/// stop.
+Stream<String> liveRun({required int stopsSeen}) =>
+    RustLib.instance.api.crateApiLiveRun(stopsSeen: stopsSeen);
 
 /// Stops the live watch and closes its connection. Returns at once; the
 /// stream of [`live_run`] ends right after what the watch still held.

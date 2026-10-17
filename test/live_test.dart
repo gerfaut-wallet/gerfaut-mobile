@@ -514,6 +514,23 @@ void main() {
       expect(service.bridge.liveStartCalls, 2);
     });
 
+    test(
+      'a stop asked while the start opens the vault starts nothing',
+      () async {
+        final opening = Completer<void>();
+        final service = _Service(_bridge(), bootstrap: () => opening.future);
+        final starting = service.runner.run();
+        await service.settle();
+        final stopping = service.runner.stop(revert: false);
+        opening.complete();
+        await starting;
+        await stopping;
+        await service.settle();
+        // No watch was started for nobody.
+        expect(service.bridge.liveStartCalls, 0);
+      },
+    );
+
     test('a run the core cut short is said, then started again', () async {
       final service = _Service(_bridge(), recordWaits: true);
       await service.runner.run();
