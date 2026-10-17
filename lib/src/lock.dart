@@ -214,7 +214,8 @@ enum PromptEnd {
   /// Android 16 reports as the user's): what the app does next tells.
   cancelled,
 
-  /// Not put up at all: the app was on its way out of sight.
+  /// Not put up at all: the app was on its way out of sight, and the
+  /// prompt is put up again when it is back.
   unshown;
 
   /// What StrongBiometrics.kt answers, read. Error codes are androidx's
@@ -287,11 +288,9 @@ class PromptSession {
       case PromptEnd.refused:
         _finish(BiometricOutcome.refused);
       case PromptEnd.unshown:
-        if (_left) {
-          _phase = _Phase.away;
-        } else {
-          _finish(BiometricOutcome.refused);
-        }
+        // The activity had saved its state: it is on its way out of
+        // sight, whatever the app has heard yet. Back with it.
+        _phase = _Phase.away;
       case PromptEnd.cancelled:
         if (_left) {
           _phase = _Phase.away;

@@ -125,22 +125,23 @@ void main() {
     expect(s.session.attempts, 2);
   });
 
-  test('a prompt that could not open waits for the app if it went', () async {
-    final s = _asked();
-    s.session.lifecycle(AppLifecycleState.paused);
-    s.phone.end(PromptEnd.unshown);
-    await _settle();
-    expect(s.answers, isEmpty);
-    s.session.lifecycle(AppLifecycleState.resumed);
-    await _settle();
-    expect(s.session.attempts, 2);
-  });
-
-  test('a prompt that could not open with the app here refuses', () async {
-    final s = _asked();
-    s.phone.end(PromptEnd.unshown);
-    await _settle();
-    expect(s.answers, [BiometricOutcome.refused]);
+  test('a prompt that could not open comes back with the app', () async {
+    // The activity had saved its state: it was leaving, even before the
+    // app heard of it.
+    for (final heardFirst in [true, false]) {
+      final s = _asked();
+      if (heardFirst) s.session.lifecycle(AppLifecycleState.paused);
+      s.phone.end(PromptEnd.unshown);
+      await _settle();
+      expect(s.answers, isEmpty, reason: 'heard first: $heardFirst');
+      if (!heardFirst) s.session.lifecycle(AppLifecycleState.paused);
+      s.session.lifecycle(AppLifecycleState.resumed);
+      await _settle();
+      expect(s.session.attempts, 2, reason: 'heard first: $heardFirst');
+      s.phone.end(PromptEnd.passed);
+      await _settle();
+      expect(s.answers, [BiometricOutcome.passed]);
+    }
   });
 
   test('a missing or changed key is said as it is', () async {
