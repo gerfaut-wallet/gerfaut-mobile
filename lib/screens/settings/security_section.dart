@@ -172,6 +172,7 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
     // provider only knows whether the screen is up right now.
     final lock = ref.watch(settingsProvider).valueOrNull?.appLock;
     final biometrics = ref.watch(biometricSupportProvider).valueOrNull;
+    final weakOnly = biometrics == BiometricSupport.weakOnly;
     final disguised = ref.watch(disguiseProvider).disguised;
     final pinLock = lock?.kind == LockKind.pin;
 
@@ -206,27 +207,18 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
               ),
             ],
           ),
-          // A sensor that cannot answer for now changes nothing here: the
-          // switch stays as it is, and a prompt that fails says so.
-          if (biometrics == BiometricSupport.strong ||
-              biometrics == BiometricSupport.unavailable) ...[
+          // Shown wherever a biometric is set up. A weak one can be
+          // fooled, by a photograph for most face unlocks: it is never
+          // offered, and the card says why rather than leave the user
+          // looking for the switch. A sensor that cannot answer for now
+          // changes nothing: the switch stays as it is.
+          if (biometrics != null && biometrics != BiometricSupport.none) ...[
             const SizedBox(height: GerfautSpacing.md),
             SettingSwitch(
               title: 'Unlock with biometrics',
-              value: lock.biometric,
-              onChanged: (on) => _setBiometric(on, lock.kind),
-            ),
-          ],
-          // A weak biometric can be fooled, by a photograph for most
-          // face unlocks: it is never offered, and the card says why
-          // rather than leave the user looking for the switch.
-          if (biometrics == BiometricSupport.weakOnly) ...[
-            const SizedBox(height: GerfautSpacing.md),
-            SettingSwitch(
-              title: 'Unlock with biometrics',
-              hint: biometricsWeakNote(lock.kind),
-              value: false,
-              onChanged: null,
+              hint: weakOnly ? biometricsWeakNote(lock.kind) : null,
+              value: !weakOnly && lock.biometric,
+              onChanged: weakOnly ? null : (on) => _setBiometric(on, lock.kind),
             ),
           ],
           const SizedBox(height: GerfautSpacing.md),
