@@ -29,7 +29,7 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
 # Cargo only honours [patch] in the root manifest: the same pin as in
 # gerfaut-core, see the note there.
 [patch.crates-io]
-saturating-time = { git = "https://github.com/gerfaut-wallet/saturating-time", rev = "7bef6ba00f3adaa6aff7e68966614c9d55bb60ec" }
+saturating-time = { git = "https://github.com/gerfaut-wallet/saturating-time", rev = "185ef6a4a1647adac291bd43bb9fd2821e73b9bc" }
 
 [dev-dependencies]
 # To run the bridge's async functions in a test.
