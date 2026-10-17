@@ -1414,8 +1414,8 @@ void main() {
 
       expect(
         find.text(
-          'Replaces your backend choice, accepted certificates and gap '
-          "limit with the backup's.",
+          "Replaces your backend choice and gap limit with the backup's, "
+          'and adds the certificates it accepted.',
         ),
         findsOneWidget,
       );
