@@ -691,6 +691,8 @@ const Duration _endWait = Duration(seconds: 3);
 /// How long a watch that ended on its own is left before it starts again.
 const Duration _restartAfter = Duration(seconds: 2);
 
+void _startLater(Duration wait, void Function() start) => Timer(wait, start);
+
 /// A watch that keeps breaking waits at most this many doublings of
 /// [_restartAfter] before it starts again: about four minutes, the
 /// heartbeat's own pace.
@@ -720,6 +722,7 @@ class LiveRunner {
     this.restartAfter = _restartAfter,
     this.quietAfter = _quietAfter,
     this.connectingFor = _connectingFor,
+    this.startLater = _startLater,
   });
 
   final GerfautBridge bridge;
@@ -732,6 +735,10 @@ class LiveRunner {
   final Duration restartAfter;
   final Duration quietAfter;
   final Duration connectingFor;
+
+  /// Starts a watch that ended once its wait is over: a timer, which a
+  /// test replaces to read the waits rather than sit through them.
+  final void Function(Duration wait, void Function() start) startLater;
 
   StreamSubscription<LiveEvent>? _events;
 
@@ -951,7 +958,7 @@ class LiveRunner {
       wait = restartAfter * (1 << _breaks.clamp(0, _maxBackoffDoublings));
       _breaks++;
     }
-    Timer(wait, () => unawaited(_ensureStarted()));
+    startLater(wait, () => unawaited(_ensureStarted()));
   }
 
   Future<void> _flushAll() async {
