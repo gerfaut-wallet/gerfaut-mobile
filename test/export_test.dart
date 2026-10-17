@@ -17,13 +17,17 @@ import 'package:gerfaut/widgets/notice.dart';
 
 import 'fakes.dart';
 
-/// Records share calls instead of touching the platform plugins.
+/// Records share calls instead of touching the platform.
 class FakeCsvSharer implements CsvSharer {
   final List<({String csv, String filename})> shared = [];
 
+  /// What the sheet answers: an app picked, or the sheet waved away.
+  bool picked = true;
+
   @override
-  Future<void> shareCsv({required String csv, required String filename}) async {
+  Future<bool> shareCsv({required String csv, required String filename}) async {
     shared.add((csv: csv, filename: filename));
+    return picked;
   }
 
   @override
@@ -236,11 +240,26 @@ void main() {
     expect(sharer.shared.single.filename, 'cold-storage-transactions.csv');
     expect(sharer.shared.single.csv, contains('txid,date_utc'));
     expect(saver.saved, isEmpty);
-    expect(find.text('3 transactions exported'), findsOneWidget);
+    expect(find.text('3 transactions shared'), findsOneWidget);
 
     // Flush the snackbar timer.
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('a share sheet waved away says nothing was shared', (
+    tester,
+  ) async {
+    final sharer = FakeCsvSharer()..picked = false;
+    await tester.pumpWidget(exportApp(makeBridge(), sharer));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Share'));
+    await tester.pumpAndSettle();
+
+    expect(sharer.shared, hasLength(1));
+    expect(find.textContaining('shared'), findsNothing);
+    expect(find.textContaining('exported'), findsNothing);
   });
 
   testWidgets('a save that fails is said under the buttons, not in a toast', (

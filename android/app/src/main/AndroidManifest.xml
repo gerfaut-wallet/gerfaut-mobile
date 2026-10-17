@@ -239,6 +239,12 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/shared_paths" />
         </provider>
+        <!-- Told by the share sheet which app it handed a file to. Not
+             exported: the system reaches it through the PendingIntent the
+             sheet is given, and no other app can. -->
+        <receiver
+            android:name=".ShareChosenReceiver"
+            android:exported="false" />
         <!-- The image picker comes with the QR decoder and is never called:
              the camera is driven by Gerfaut itself. Its file provider would
              still open the whole cache folder to any app it is ever granted

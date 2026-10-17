@@ -123,6 +123,28 @@ class MainActivity : FlutterFragmentActivity() {
             }.start()
         }
 
+    // The share whose sheet is up, and the call waiting for its answer.
+    private var pendingShare: PendingShare? = null
+
+    // The sheet's own result says nothing of the app picked: that comes
+    // from ShareChosenReceiver, a moment before the sheet closes. A
+    // sheet waved away is given a beat more, for a word from the
+    // receiver still on its way.
+    private val shareDialog: ActivityResultLauncher<Intent> =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            val share = pendingShare ?: return@registerForActivityResult
+            fun answer() {
+                if (pendingShare !== share) return
+                pendingShare = null
+                share.result.success(SharedFiles.takeChosen(share.token))
+            }
+            if (SharedFiles.wasChosen(share.token)) {
+                answer()
+            } else {
+                main.postDelayed({ answer() }, SHARE_GRACE_MS)
+            }
+        }
+
     // The call waiting for the battery question to be answered.
     private var pendingExemption: MethodChannel.Result? = null
 
@@ -525,6 +547,9 @@ class MainActivity : FlutterFragmentActivity() {
         // A prompt still waiting is answered: the call behind it must
         // not wait for an activity that is gone.
         biometrics.onDestroy()
+        val share = pendingShare
+        pendingShare = null
+        share?.result?.success(false)
         super.onDestroy()
     }
 
@@ -569,16 +594,25 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     // Writes the file off the main thread, then opens the share sheet on
-    // it. Answers once the sheet is up; an error when it could not be.
+    // it. Answers once the sheet has closed: true when an app was
+    // picked, false when the sheet was waved away; an error when it could
+    // not open. One at a time.
     private fun shareFile(
         bytes: ByteArray,
         filename: String,
         mimeType: String,
         result: MethodChannel.Result,
     ) {
+        if (pendingShare != null) {
+            result.error("busy", "a share is already under way", null)
+            return
+        }
+        val token = UUID.randomUUID().toString()
+        val share = PendingShare(token, result)
+        pendingShare = share
         Thread {
             val sheet = try {
-                Result.success(SharedFiles.prepare(this, bytes, filename, mimeType))
+                Result.success(SharedFiles.prepare(this, bytes, filename, mimeType, token))
             } catch (error: Exception) {
                 Result.failure(error)
             }
@@ -586,7 +620,7 @@ class MainActivity : FlutterFragmentActivity() {
                 val failure = sheet.fold(
                     {
                         try {
-                            startActivity(it)
+                            shareDialog.launch(it)
                             null
                         } catch (error: Exception) {
                             error
@@ -594,8 +628,9 @@ class MainActivity : FlutterFragmentActivity() {
                     },
                     { it },
                 )
+                if (failure != null && pendingShare === share) pendingShare = null
                 when (failure) {
-                    null -> result.success(null)
+                    null -> Unit
                     is ActivityNotFoundException ->
                         result.error("unavailable", "no app on this device can take a file", null)
                     else -> result.error(
@@ -889,6 +924,8 @@ class MainActivity : FlutterFragmentActivity() {
 
     private class PendingOpen(val maxBytes: Int, val result: MethodChannel.Result)
 
+    private class PendingShare(val token: String, val result: MethodChannel.Result)
+
     private companion object {
         const val WINDOW_CHANNEL = "gerfaut/window"
         const val FILES_CHANNEL = "gerfaut/files"
@@ -896,6 +933,10 @@ class MainActivity : FlutterFragmentActivity() {
         const val LIVE_CHANNEL = "gerfaut/live"
         const val BIOMETRICS_CHANNEL = "gerfaut/biometrics"
         const val DISGUISE_MARKER = "disguised"
+
+        // How long a share sheet waved away waits for a late word that an
+        // app was picked after all.
+        const val SHARE_GRACE_MS = 300L
 
         // As on the desktop app: a minute on the clipboard, then gone.
         const val SENSITIVE_CLEAR_MS = 60_000L

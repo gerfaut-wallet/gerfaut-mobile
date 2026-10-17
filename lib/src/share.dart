@@ -14,20 +14,23 @@ import 'package:path_provider/path_provider.dart';
 /// opens the share sheet on it (SharedFiles.kt).
 const MethodChannel _files = MethodChannel('gerfaut/files');
 
-/// Offers [bytes] to the share sheet as a file named [filename]. The
-/// file is written into a folder of its own under the cache, so no two
-/// shares share an address, and only the app picked in the sheet is
-/// granted a read of it, for as long as it holds it: no app could reach
-/// it before the choice, nor a later file through an old grant. It
-/// stays [sharedCopyLifetime], then [sharedCopies] deletes it.
-Future<void> _share(Uint8List bytes, String filename, String mimeType) async {
+/// Offers [bytes] to the share sheet as a file named [filename], and
+/// answers once the sheet has closed: true when an app was picked, false
+/// when the sheet was waved away. The file is written into a folder of
+/// its own under the cache, so no two shares share an address, and only
+/// the app picked in the sheet is granted a read of it, for as long as
+/// it holds it: no app could reach it before the choice, nor a later
+/// file through an old grant. It stays [sharedCopyLifetime], then
+/// [sharedCopies] deletes it (SharedFiles.kt).
+Future<bool> _share(Uint8List bytes, String filename, String mimeType) async {
   await sharedCopies.sweep();
   try {
-    await _files.invokeMethod<void>('share', {
-      'bytes': bytes,
-      'filename': filename,
-      'mimeType': mimeType,
-    });
+    return await _files.invokeMethod<bool>('share', {
+          'bytes': bytes,
+          'filename': filename,
+          'mimeType': mimeType,
+        }) ??
+        false;
   } finally {
     // The copy just written is too young to go: this sets the hour.
     unawaited(sharedCopies.sweepQuietly());
@@ -36,7 +39,9 @@ Future<void> _share(Uint8List bytes, String filename, String mimeType) async {
 
 /// Offers a CSV to the system share sheet under `filename`.
 abstract class CsvSharer {
-  Future<void> shareCsv({required String csv, required String filename});
+  /// True when an app was picked in the sheet; false when it was waved
+  /// away.
+  Future<bool> shareCsv({required String csv, required String filename});
 
   /// Deletes what earlier shares left in the cache: the histories, and
   /// the backups shared from their own screen.
@@ -56,7 +61,7 @@ class SystemCsvSharer implements CsvSharer {
   Future<void> forgetCopies() => sharedCopies.sweepQuietly();
 
   @override
-  Future<void> shareCsv({required String csv, required String filename}) =>
+  Future<bool> shareCsv({required String csv, required String filename}) =>
       _share(Uint8List.fromList(utf8.encode(csv)), filename, 'text/csv');
 }
 
@@ -222,7 +227,9 @@ final csvSharerProvider = Provider<CsvSharer>((ref) => const SystemCsvSharer());
 
 /// Offers a sealed backup to the system share sheet under `filename`.
 abstract class BackupSharer {
-  Future<void> shareBackup({
+  /// True when an app was picked in the sheet; false when it was waved
+  /// away.
+  Future<bool> shareBackup({
     required Uint8List bytes,
     required String filename,
   });
@@ -236,7 +243,7 @@ class SystemBackupSharer implements BackupSharer {
   const SystemBackupSharer();
 
   @override
-  Future<void> shareBackup({
+  Future<bool> shareBackup({
     required Uint8List bytes,
     required String filename,
   }) => _share(bytes, filename, 'application/octet-stream');
