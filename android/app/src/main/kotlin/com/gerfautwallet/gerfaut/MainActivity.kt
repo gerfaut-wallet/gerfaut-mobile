@@ -127,6 +127,10 @@ class MainActivity : FlutterFragmentActivity() {
     private var pendingExemption: MethodChannel.Result? = null
 
     private val main = Handler(Looper.getMainLooper())
+
+    // The phone's prompt for the app lock, which follows this activity's
+    // moments (onPause, onResume, onDestroy).
+    private val biometrics by lazy { StrongBiometrics(this) }
     private val clearSensitive = Runnable { clearSensitiveIfOurs() }
 
     private val exemptionDialog: ActivityResultLauncher<Intent> =
@@ -226,7 +230,6 @@ class MainActivity : FlutterFragmentActivity() {
                 else -> result.notImplemented()
             }
         }
-        val biometrics = StrongBiometrics(this)
         MethodChannel(messenger, BIOMETRICS_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "support" -> result.success(biometrics.support())
@@ -506,8 +509,21 @@ class MainActivity : FlutterFragmentActivity() {
         if (hasFocus) clearSensitiveIfOurs()
     }
 
+    override fun onPause() {
+        super.onPause()
+        biometrics.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        biometrics.onResume()
+    }
+
     override fun onDestroy() {
         main.removeCallbacks(clearSensitive)
+        // A prompt still waiting is answered: the call behind it must
+        // not wait for an activity that is gone.
+        biometrics.onDestroy()
         super.onDestroy()
     }
 
