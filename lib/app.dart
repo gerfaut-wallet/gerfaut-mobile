@@ -296,6 +296,10 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
       case AppLifecycleState.resumed:
         lock.noteResumed();
         ref.read(appInFrontProvider.notifier).state = true;
+        // A fingerprint or a face may have been set up or removed in
+        // Android's settings meanwhile: what the phone offers is asked
+        // again.
+        ref.invalidate(biometricSupportProvider);
         // The launcher may have gained or lost a widget meanwhile. Only
         // once the preferences are in: a feed started before them would
         // publish the defaults first.

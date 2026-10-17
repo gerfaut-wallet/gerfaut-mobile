@@ -17,6 +17,13 @@ import '../../widgets/password_field.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/setting_switch.dart';
 
+/// Why "Unlock with biometrics" is greyed on a phone whose only
+/// biometric is a weak one.
+String biometricsWeakNote(LockKind kind) =>
+    'Android rates the face or fingerprint unlock of this phone as weak, '
+    'easy to fool. Your ${kind == LockKind.pin ? 'PIN' : 'password'} stays '
+    'the way in.';
+
 /// The settings card that turns the lock on and changes its secret.
 class SecuritySection extends ConsumerStatefulWidget {
   const SecuritySection({super.key});
@@ -78,6 +85,8 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
       if (mounted) setState(() => _error = error.message);
       return;
     }
+    // The biometric key opened the lock, and goes with it.
+    await ref.read(biometricGateProvider).forget();
     // Only once the core accepts: the launcher face is restored after
     // the lock is gone, never before it is agreed.
     if (disguised) await _swapFace(false);
@@ -135,27 +144,25 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
     // phone must not be able to make it a key to this vault.
     final current = await _askSecret(kind, 'Unlock with biometrics');
     if (current == null) return;
-    // Then prove the phone answers, before storing a promise it
-    // cannot keep.
-    if (on) {
-      final passed = await ref
-          .read(biometricGateProvider)
-          .authenticate('Unlock Gerfaut');
-      if (!passed) {
-        if (mounted) {
-          setState(
-            () => _error = 'The phone did not confirm. Nothing changed.',
-          );
-        }
-        return;
+    final gate = ref.read(biometricGateProvider);
+    // Then make the key a strong biometric alone unlocks, and prove the
+    // phone answers on it, before storing a promise it cannot keep.
+    if (on && !await gate.enroll('Unlock Gerfaut')) {
+      if (mounted) {
+        setState(() => _error = 'The phone did not confirm. Nothing changed.');
       }
+      return;
     }
     try {
       await ref.read(bridgeProvider).setBiometricUnlock(on, current);
-      _afterChange();
     } on BridgeException catch (error) {
+      // The vault said no: a key made for nothing is not kept.
+      if (on) await gate.forget();
       if (mounted) setState(() => _error = error.message);
+      return;
     }
+    if (!on) await gate.forget();
+    _afterChange();
   }
 
   @override
@@ -164,8 +171,7 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
     // The vault is the source of truth for what is set; the lock
     // provider only knows whether the screen is up right now.
     final lock = ref.watch(settingsProvider).valueOrNull?.appLock;
-    final canBiometrics =
-        ref.watch(biometricsAvailableProvider).valueOrNull ?? false;
+    final biometrics = ref.watch(biometricSupportProvider).valueOrNull;
     final disguised = ref.watch(disguiseProvider).disguised;
     final pinLock = lock?.kind == LockKind.pin;
 
@@ -200,12 +206,24 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
               ),
             ],
           ),
-          if (canBiometrics) ...[
+          if (biometrics == BiometricSupport.strong) ...[
             const SizedBox(height: GerfautSpacing.md),
             SettingSwitch(
               title: 'Unlock with biometrics',
               value: lock.biometric,
               onChanged: (on) => _setBiometric(on, lock.kind),
+            ),
+          ],
+          // A weak biometric can be fooled, by a photograph for most
+          // face unlocks: it is never offered, and the card says why
+          // rather than leave the user looking for the switch.
+          if (biometrics == BiometricSupport.weakOnly) ...[
+            const SizedBox(height: GerfautSpacing.md),
+            SettingSwitch(
+              title: 'Unlock with biometrics',
+              hint: biometricsWeakNote(lock.kind),
+              value: false,
+              onChanged: null,
             ),
           ],
           const SizedBox(height: GerfautSpacing.md),

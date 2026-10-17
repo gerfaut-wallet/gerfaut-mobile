@@ -19,13 +19,6 @@ import 'fakes.dart';
 
 /// Says the phone has no biometric, so the security card never waits on
 /// a sensor that a test binding does not answer.
-class _NoBiometrics implements BiometricGate {
-  @override
-  Future<bool> canCheck() async => false;
-  @override
-  Future<bool> authenticate(String reason) async => false;
-}
-
 /// Records what would have been posted instead of touching the platform.
 class _RecordingNotifications implements NotificationService {
   final List<String> posted = [];
@@ -79,7 +72,7 @@ Widget _securityApp(
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
       disguiseServiceProvider.overrideWithValue(disguise),
-      biometricGateProvider.overrideWithValue(_NoBiometrics()),
+      biometricGateProvider.overrideWithValue(FakeBiometrics(available: false)),
       notificationServiceProvider.overrideWithValue(
         notifications ?? _RecordingNotifications(),
       ),
@@ -162,7 +155,9 @@ void main() {
           overrides: [
             bridgeProvider.overrideWithValue(bridge),
             disguiseServiceProvider.overrideWithValue(disguise),
-            biometricGateProvider.overrideWithValue(_NoBiometrics()),
+            biometricGateProvider.overrideWithValue(
+              FakeBiometrics(available: false),
+            ),
             livePlatformProvider.overrideWithValue(platform),
             backgroundSchedulerProvider.overrideWithValue((seconds) async {}),
           ],
@@ -404,7 +399,9 @@ void main() {
           overrides: [
             bridgeProvider.overrideWithValue(bridge),
             disguiseServiceProvider.overrideWithValue(disguise),
-            biometricGateProvider.overrideWithValue(_NoBiometrics()),
+            biometricGateProvider.overrideWithValue(
+              FakeBiometrics(available: false),
+            ),
             windowGuardProvider.overrideWithValue(FakeWindowGuard()),
           ],
           child: const GerfautApp(),
@@ -426,7 +423,9 @@ void main() {
           overrides: [
             bridgeProvider.overrideWithValue(_locked()),
             disguiseServiceProvider.overrideWithValue(disguise),
-            biometricGateProvider.overrideWithValue(_NoBiometrics()),
+            biometricGateProvider.overrideWithValue(
+              FakeBiometrics(available: false),
+            ),
             windowGuardProvider.overrideWithValue(FakeWindowGuard()),
           ],
           child: const GerfautApp(),

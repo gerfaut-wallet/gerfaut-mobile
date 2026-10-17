@@ -17,6 +17,7 @@ import 'package:gerfaut/src/electrum.dart';
 import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/home_widgets.dart';
 import 'package:gerfaut/src/live.dart';
+import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/screen.dart';
 import 'package:gerfaut/src/state.dart';
@@ -1940,4 +1941,46 @@ class FakeUpdates {
     if (!offline) available = finds;
     return true;
   }
+}
+
+/// Answers the phone's prompt the way a test asks it to: a strong
+/// biometric where [available], the outcome [passes] says, or [outcome]
+/// when set.
+class FakeBiometrics implements BiometricGate {
+  FakeBiometrics({
+    this.available = true,
+    this.passes = true,
+    this.outcome,
+    this.offers,
+  });
+
+  bool available;
+  bool passes;
+  BiometricOutcome? outcome;
+
+  /// What the phone offers, over what [available] says.
+  BiometricSupport? offers;
+  int prompts = 0;
+  int enrolls = 0;
+  int forgets = 0;
+
+  @override
+  Future<BiometricSupport> support() async =>
+      offers ?? (available ? BiometricSupport.strong : BiometricSupport.none);
+
+  @override
+  Future<bool> enroll(String reason) async {
+    enrolls++;
+    return passes;
+  }
+
+  @override
+  Future<BiometricOutcome> authenticate(String reason) async {
+    prompts++;
+    return outcome ??
+        (passes ? BiometricOutcome.passed : BiometricOutcome.refused);
+  }
+
+  @override
+  Future<void> forget() async => forgets++;
 }

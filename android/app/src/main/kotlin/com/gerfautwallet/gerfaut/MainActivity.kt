@@ -37,7 +37,8 @@ import java.io.File
 import java.io.IOException
 import java.util.UUID
 
-// A fragment activity, which is what the biometric prompt attaches to.
+// A fragment activity, which is what the biometric prompt attaches to
+// (StrongBiometrics).
 class MainActivity : FlutterFragmentActivity() {
     // The save under way: the bytes to write once the picker names a
     // place, and the call waiting for the answer. One at a time.
@@ -205,6 +206,28 @@ class MainActivity : FlutterFragmentActivity() {
                     } else {
                         openDocument(mimeTypes, maxBytes, result)
                     }
+                }
+                else -> result.notImplemented()
+            }
+        }
+        val biometrics = StrongBiometrics(this)
+        MethodChannel(messenger, BIOMETRICS_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "support" -> result.success(biometrics.support())
+                "enroll", "authenticate" -> {
+                    val title = call.argument<String>("title")
+                    val cancel = call.argument<String>("cancel")
+                    if (title == null || cancel == null) {
+                        result.error("bad_argument", "${call.method} takes title and cancel", null)
+                    } else if (call.method == "enroll") {
+                        biometrics.enroll(title, cancel, result)
+                    } else {
+                        biometrics.authenticate(title, cancel, result)
+                    }
+                }
+                "forget" -> {
+                    biometrics.forget()
+                    result.success(null)
                 }
                 else -> result.notImplemented()
             }
@@ -785,6 +808,7 @@ class MainActivity : FlutterFragmentActivity() {
         const val FILES_CHANNEL = "gerfaut/files"
         const val DISGUISE_CHANNEL = "gerfaut/disguise"
         const val LIVE_CHANNEL = "gerfaut/live"
+        const val BIOMETRICS_CHANNEL = "gerfaut/biometrics"
         const val DISGUISE_MARKER = "disguised"
 
         // As on the desktop app: a minute on the clipboard, then gone.

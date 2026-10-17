@@ -13,78 +13,152 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:local_auth/local_auth.dart';
 
 import 'disguise.dart';
 import 'models.dart';
 import 'state.dart';
 import 'window.dart';
 
+/// What the phone offers to stand in for the secret.
+enum BiometricSupport {
+  /// A strong biometric (Android's class 3) is set up: it may unlock.
+  strong,
+
+  /// Only a weak one is (class 2, most face unlocks that read a plain
+  /// camera): it can be fooled, and the secret stays the way in.
+  weakOnly,
+
+  /// None is set up, or the phone has no sensor.
+  none,
+}
+
+/// How a biometric prompt ended.
+enum BiometricOutcome {
+  passed,
+
+  /// Cancelled, or not answered.
+  refused,
+
+  /// No key left for it to unlock: a fingerprint or a face was added or
+  /// removed on the phone since biometrics were turned on. The secret is
+  /// asked, and biometrics have to be turned on again.
+  reset,
+}
+
 /// The phone's own prompt, behind an interface so no test ever reaches
 /// the platform. The core never sees a biometric: the system answers,
 /// and only a yes skips the secret.
+///
+/// On Android only a strong biometric answers, through a key of the
+/// Keystore that it alone unlocks: see StrongBiometrics.kt.
 abstract class BiometricGate {
-  /// Whether this device can put the question at all.
-  Future<bool> canCheck();
+  /// What this phone can offer.
+  Future<BiometricSupport> support();
 
-  /// Runs the prompt; false covers a refusal and a cancellation alike.
-  Future<bool> authenticate(String reason);
+  /// Makes the key the prompt unlocks and puts the prompt on it, for
+  /// turning biometrics on. True once the phone confirmed; otherwise no
+  /// key is kept.
+  Future<bool> enroll(String reason);
+
+  /// Puts the prompt on the key made by [enroll].
+  Future<BiometricOutcome> authenticate(String reason);
+
+  /// Drops the key: biometrics are off.
+  Future<void> forget();
 }
 
 class SystemBiometricGate implements BiometricGate {
-  SystemBiometricGate([LocalAuthentication? auth])
-    : _auth = auth ?? LocalAuthentication();
+  const SystemBiometricGate([this._channel = _biometricsChannel]);
 
-  final LocalAuthentication _auth;
+  final MethodChannel _channel;
+
+  /// What the prompt offers instead of a biometric: going back to the
+  /// secret field.
+  static const String _cancel = 'Cancel';
 
   @override
-  Future<bool> canCheck() async {
+  Future<BiometricSupport> support() async {
     try {
-      return await _auth.isDeviceSupported() && await _auth.canCheckBiometrics;
+      return switch (await _channel.invokeMethod<String>('support')) {
+        'strong' => BiometricSupport.strong,
+        'weak' => BiometricSupport.weakOnly,
+        _ => BiometricSupport.none,
+      };
     } catch (_) {
-      // A device that cannot answer is a device without biometrics.
+      // A phone that cannot answer is a phone without biometrics.
+      return BiometricSupport.none;
+    }
+  }
+
+  @override
+  Future<bool> enroll(String reason) async {
+    try {
+      return await _channel.invokeMethod<bool>('enroll', {
+            'title': reason,
+            'cancel': _cancel,
+          }) ??
+          false;
+    } catch (_) {
       return false;
     }
   }
 
   @override
-  Future<bool> authenticate(String reason) async {
+  Future<BiometricOutcome> authenticate(String reason) async {
     try {
-      return await _auth.authenticate(
-        localizedReason: reason,
-        biometricOnly: true,
-        // The prompt survives the app going to the background, which
-        // some launchers do while the sensor reads.
-        persistAcrossBackgrounding: true,
-      );
+      return switch (await _channel.invokeMethod<String>('authenticate', {
+        'title': reason,
+        'cancel': _cancel,
+      })) {
+        'passed' => BiometricOutcome.passed,
+        'reset' => BiometricOutcome.reset,
+        _ => BiometricOutcome.refused,
+      };
     } catch (_) {
-      return false;
+      return BiometricOutcome.refused;
+    }
+  }
+
+  @override
+  Future<void> forget() async {
+    try {
+      await _channel.invokeMethod<void>('forget');
+    } catch (_) {
+      // Nothing to drop where there is no platform.
     }
   }
 }
 
+const MethodChannel _biometricsChannel = MethodChannel('gerfaut/biometrics');
+
 final biometricGateProvider = Provider<BiometricGate>(
-  (ref) => SystemBiometricGate(),
+  (ref) => const SystemBiometricGate(),
 );
 
-/// Whether the phone can put the biometric question at all.
+/// What the phone can offer for the lock.
 ///
 /// Asked apart from the lock itself on purpose: a platform that takes
 /// its time must never hold the lock screen back. Until it answers,
 /// the offer is simply not made.
-final biometricsAvailableProvider = FutureProvider<bool>((ref) async {
+final biometricSupportProvider = FutureProvider<BiometricSupport>((ref) async {
   try {
-    return await ref.watch(biometricGateProvider).canCheck();
+    return await ref.watch(biometricGateProvider).support();
   } catch (_) {
-    return false;
+    return BiometricSupport.none;
   }
 });
 
 /// Where the lock stands.
 @immutable
 class LockState {
-  const LockState({this.lock, this.locked = false, this.loaded = false});
+  const LockState({
+    this.lock,
+    this.locked = false,
+    this.loaded = false,
+    this.biometricReset = false,
+  });
 
   /// The lock the vault holds, without its hash; null when none is set.
   final AppLock? lock;
@@ -96,11 +170,22 @@ class LockState {
   /// screen rather than guessing.
   final bool loaded;
 
-  LockState copyWith({AppLock? lock, bool? locked, bool? loaded}) {
+  /// The last prompt found no key to unlock: the biometrics of the phone
+  /// changed. The lock screen says so, and the next unlock with the
+  /// secret turns biometrics off, for the user to turn on again.
+  final bool biometricReset;
+
+  LockState copyWith({
+    AppLock? lock,
+    bool? locked,
+    bool? loaded,
+    bool? biometricReset,
+  }) {
     return LockState(
       lock: lock ?? this.lock,
       locked: locked ?? this.locked,
       loaded: loaded ?? this.loaded,
+      biometricReset: biometricReset ?? this.biometricReset,
     );
   }
 }
@@ -148,6 +233,7 @@ class LockController extends Notifier<LockState> {
       lock: lock,
       loaded: true,
       locked: first ? lock != null : state.locked,
+      biometricReset: state.biometricReset && (lock?.biometric ?? false),
     );
     _guardWindow();
   }
@@ -179,8 +265,24 @@ class LockController extends Notifier<LockState> {
     if (verdict.unlocked) {
       state = state.copyWith(locked: false);
       _guardWindow();
+      if (state.biometricReset) await _retireBiometrics(secret);
     }
     return verdict;
+  }
+
+  /// The phone's biometrics changed and its key is gone: the vault stops
+  /// offering them, with the secret just given, and the settings say
+  /// they are off. Turning them on again makes a new key, behind the
+  /// secret and a prompt, as the first time.
+  Future<void> _retireBiometrics(String secret) async {
+    try {
+      await ref.read(bridgeProvider).setBiometricUnlock(false, secret);
+      state = state.copyWith(biometricReset: false);
+      ref.invalidate(settingsProvider);
+    } catch (_) {
+      // Asked again at the next unlock; the prompt finds no key
+      // meanwhile, so nothing opens by it.
+    }
   }
 
   /// Asks the phone instead of the secret. False leaves the screen up.
@@ -190,14 +292,20 @@ class LockController extends Notifier<LockState> {
   Future<bool> unlockWithBiometrics() async {
     if (!(state.lock?.biometric ?? false)) return false;
     if (ref.read(disguiseProvider).disguised) return false;
-    final passed = await ref
+    final outcome = await ref
         .read(biometricGateProvider)
         .authenticate('Unlock Gerfaut');
-    if (passed) {
-      state = state.copyWith(locked: false);
-      _guardWindow();
+    switch (outcome) {
+      case BiometricOutcome.passed:
+        state = state.copyWith(locked: false);
+        _guardWindow();
+        return true;
+      case BiometricOutcome.reset:
+        state = state.copyWith(biometricReset: true);
+        return false;
+      case BiometricOutcome.refused:
+        return false;
     }
-    return passed;
   }
 
   void lockNow() {

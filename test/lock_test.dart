@@ -14,27 +14,10 @@ import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/updates.dart';
 import 'package:gerfaut/src/window.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/setting_switch.dart';
 
 import 'fakes.dart';
 import 'menu.dart';
-
-/// Answers the phone's prompt the way a test asks it to.
-class FakeBiometrics implements BiometricGate {
-  FakeBiometrics({this.available = true, this.passes = true});
-
-  bool available;
-  bool passes;
-  int prompts = 0;
-
-  @override
-  Future<bool> canCheck() async => available;
-
-  @override
-  Future<bool> authenticate(String reason) async {
-    prompts++;
-    return passes;
-  }
-}
 
 const AppLock pinLock = AppLock(kind: LockKind.pin, biometric: false);
 
@@ -268,6 +251,47 @@ void main() {
       expect(find.byType(LockScreen), findsOneWidget);
       expect(find.text('Use fingerprint or face'), findsOneWidget);
     });
+    testWidgets('a phone with a weak biometric only is never prompted', (
+      tester,
+    ) async {
+      final biometrics = FakeBiometrics(offers: BiometricSupport.weakOnly);
+      await tester.pumpWidget(
+        app(
+          locked(lock: const AppLock(kind: LockKind.pin, biometric: true)),
+          biometrics: biometrics,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(biometrics.prompts, 0);
+      expect(find.byType(LockScreen), findsOneWidget);
+      expect(find.text('Use fingerprint or face'), findsNothing);
+    });
+
+    testWidgets('biometrics that changed ask for the secret, then go off', (
+      tester,
+    ) async {
+      final biometrics = FakeBiometrics(outcome: BiometricOutcome.reset);
+      final bridge = locked(
+        lock: const AppLock(kind: LockKind.pin, biometric: true),
+      );
+      await tester.pumpWidget(app(bridge, biometrics: biometrics));
+      await tester.pumpAndSettle();
+
+      expect(biometrics.prompts, 1);
+      expect(find.byType(LockScreen), findsOneWidget);
+      expect(find.textContaining('on this phone changed'), findsOneWidget);
+      // Nothing more to try by the sensor: the key it opened is gone.
+      expect(find.text('Use fingerprint or face'), findsNothing);
+
+      await tester.enterText(find.byType(TextField), '1234');
+      await tester.tap(find.text('Unlock'));
+      await tester.pumpAndSettle();
+      expect(find.byType(LockScreen), findsNothing);
+      // Off in the vault, for the user to turn on again with a new key.
+      expect(bridge.lockCalls, contains('biometric:false'));
+      expect(bridge.lock?.biometric, isFalse);
+    });
   });
 
   group('the security card', () {
@@ -477,6 +501,105 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Unlock with biometrics'), findsOneWidget);
+    });
+
+    testWidgets('a weak biometric is not offered, and the card says why', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      await tester.pumpWidget(
+        settingsApp(
+          locked(),
+          biometrics: FakeBiometrics(offers: BiometricSupport.weakOnly),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final row = find.ancestor(
+        of: find.text('Unlock with biometrics'),
+        matching: find.byType(SettingSwitch),
+      );
+      expect(tester.widget<SettingSwitch>(row).onChanged, isNull);
+      expect(tester.widget<SettingSwitch>(row).value, isFalse);
+      expect(find.text(biometricsWeakNote(LockKind.pin)), findsOneWidget);
+    });
+
+    testWidgets('turning biometrics on makes the key behind the secret', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = locked();
+      final biometrics = FakeBiometrics();
+      await tester.pumpWidget(settingsApp(bridge, biometrics: biometrics));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.descendant(
+          of: find.ancestor(
+            of: find.text('Unlock with biometrics'),
+            matching: find.byType(SettingSwitch),
+          ),
+          matching: find.byType(Switch),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('lock.current')), '1234');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirm'));
+      await tester.pumpAndSettle();
+
+      expect(biometrics.enrolls, 1);
+      expect(bridge.lock?.biometric, isTrue);
+
+      // Off again: the key goes with it.
+      await tester.tap(
+        find.descendant(
+          of: find.ancestor(
+            of: find.text('Unlock with biometrics'),
+            matching: find.byType(SettingSwitch),
+          ),
+          matching: find.byType(Switch),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('lock.current')), '1234');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirm'));
+      await tester.pumpAndSettle();
+      expect(bridge.lock?.biometric, isFalse);
+      expect(biometrics.forgets, 1);
+    });
+
+    testWidgets('a key the phone did not confirm turns nothing on', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = locked();
+      final biometrics = FakeBiometrics(passes: false);
+      await tester.pumpWidget(settingsApp(bridge, biometrics: biometrics));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.descendant(
+          of: find.ancestor(
+            of: find.text('Unlock with biometrics'),
+            matching: find.byType(SettingSwitch),
+          ),
+          matching: find.byType(Switch),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('lock.current')), '1234');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirm'));
+      await tester.pumpAndSettle();
+
+      expect(biometrics.enrolls, 1);
+      expect(bridge.lock?.biometric, isFalse);
+      expect(
+        find.text('The phone did not confirm. Nothing changed.'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('locking from a pushed screen brings the lock to the front', (
