@@ -445,7 +445,7 @@ class MainActivity : FlutterFragmentActivity() {
     // takes its timer with it, and the copy would otherwise stay on the
     // clipboard for good. Only the mark and two clock readings, never
     // the text. Written at once, not in the background: the process may
-    // be about to go.
+    // be about to go. The one write that waits for the disk.
     private fun noteSensitive() {
         clipboardNote().edit()
             .putString(NOTE_MARK, sensitiveMark)
@@ -454,9 +454,11 @@ class MainActivity : FlutterFragmentActivity() {
             .commit()
     }
 
+    // A note left behind clears nothing: written in the background, the
+    // copy it named being gone already.
     private fun forgetSensitive() {
         sensitiveMark = null
-        clipboardNote().edit().clear().commit()
+        clipboardNote().edit().clear().apply()
     }
 
     // The first activity of a process reads back a copy an earlier one
@@ -464,20 +466,36 @@ class MainActivity : FlutterFragmentActivity() {
     // the next focus clears it if it is still on the clipboard. A copy
     // from before the phone restarted is gone with the clipboard: the
     // clock it was timed by started again from zero.
+    //
+    // Read off the main thread, the first screen being drawn meanwhile,
+    // and taken up on it, where the copy's state lives.
     private fun recallSensitive() {
         if (recalled) return
         recalled = true
-        if (sensitiveMark != null) return
-        val note = clipboardNote()
-        val mark = note.getString(NOTE_MARK, null) ?: return
-        val copiedAt = note.getLong(NOTE_COPIED_AT, 0L)
+        val app = applicationContext
+        Thread {
+            val note = app.getSharedPreferences(CLIPBOARD_NOTE, Context.MODE_PRIVATE)
+            val mark = note.getString(NOTE_MARK, null)
+            val stamp = note.getLong(NOTE_STAMP, 0L)
+            val copiedAt = note.getLong(NOTE_COPIED_AT, 0L)
+            main.post { takeUpRecalled(mark, stamp, copiedAt) }
+        }.start()
+    }
+
+    private fun takeUpRecalled(mark: String?, stamp: Long, copiedAt: Long) {
+        // Nothing left, or a copy made since in this process: that one
+        // is the one to clear.
+        if (mark == null || sensitiveMark != null) return
         if (copiedAt <= 0L || copiedAt > SystemClock.elapsedRealtime()) {
             forgetSensitive()
             return
         }
         sensitiveMark = mark
-        sensitiveStamp = note.getLong(NOTE_STAMP, 0L)
+        sensitiveStamp = stamp
         sensitiveCopiedAt = copiedAt
+        // Its minute may be over already: cleared now if the app has the
+        // focus, and timed for later if not.
+        clearSensitiveIfOurs()
     }
 
     private fun clipboardNote() = getSharedPreferences(CLIPBOARD_NOTE, Context.MODE_PRIVATE)
