@@ -17,8 +17,6 @@ import 'package:gerfaut/widgets/notice.dart';
 
 import 'fakes.dart';
 
-/// Says the phone has no biometric, so the security card never waits on
-/// a sensor that a test binding does not answer.
 /// Records what would have been posted instead of touching the platform.
 class _RecordingNotifications implements NotificationService {
   final List<String> posted = [];
