@@ -28,19 +28,20 @@ void main() {
         unit: AmountUnit.sats,
         masked: true,
         fiatCurrency: const FiatCurrency('usd'),
-        priceSource: PriceSource.kraken,
+        priceSource: PriceSource.coingecko,
       );
     final container = screens(bridge);
     expect(container.read(unitProvider), AmountUnit.sats);
     expect(container.read(maskedProvider), isTrue);
     expect(container.read(fiatCurrencyProvider), const FiatCurrency('usd'));
-    expect(container.read(fiatSourceProvider), PriceSource.kraken);
+    expect(container.read(fiatSourceProvider), PriceSource.coingecko);
   });
 
   test('the pair the price is asked by is shown as the core kept it', () async {
-    final bridge = FakeBridge()
-      ..preferences = kPreferences.copyWith(priceSource: PriceSource.kraken);
+    // mempool.space, the default, does not quote the rupee.
+    final bridge = FakeBridge();
     final container = screens(bridge);
+    expect(container.read(fiatSourceProvider), PriceSource.mempoolSpace);
 
     final setting = container
         .read(fiatCurrencyProvider.notifier)
@@ -61,8 +62,8 @@ void main() {
     final container = screens(bridge);
     await container
         .read(fiatSourceProvider.notifier)
-        .set(PriceSource.mempoolSpace);
-    expect(container.read(fiatSourceProvider), PriceSource.coingecko);
+        .set(PriceSource.coingecko);
+    expect(container.read(fiatSourceProvider), PriceSource.mempoolSpace);
   });
 
   test(
@@ -165,7 +166,7 @@ void main() {
     container.read(unitProvider.notifier).set(AmountUnit.sats);
     final source = container
         .read(fiatSourceProvider.notifier)
-        .set(PriceSource.kraken);
+        .set(PriceSource.coingecko);
     await pumpEventQueue();
     // The second waits for the first to be answered.
     expect(gate.asked.map((change) => change.toJson()), [
@@ -175,11 +176,11 @@ void main() {
     await pumpEventQueue();
     expect(gate.asked.map((change) => change.toJson()), [
       {'unit': 'sats'},
-      {'price_source': 'kraken'},
+      {'price_source': 'coingecko'},
     ]);
     gate.release();
     await source;
-    expect(container.read(fiatSourceProvider), PriceSource.kraken);
+    expect(container.read(fiatSourceProvider), PriceSource.coingecko);
     expect(container.read(unitProvider), AmountUnit.sats);
     expect(gate.preferences.unit, AmountUnit.sats);
   });

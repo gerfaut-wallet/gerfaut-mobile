@@ -134,7 +134,7 @@ const _untilTheVaultAnswers = Preferences(
   masked: false,
   fiat: false,
   fiatCurrency: FiatCurrency('eur'),
-  priceSource: PriceSource.coingecko,
+  priceSource: PriceSource.mempoolSpace,
   notifyNewTx: false,
   explorerAck: false,
 );

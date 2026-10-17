@@ -1960,9 +1960,8 @@ class UnreachableCertificate extends CertificateStatus {
 /// Which currencies each quotes, and its name, are the core's: see
 /// [PriceTable].
 enum PriceSource {
-  coingecko('coingecko'),
-  kraken('kraken'),
-  mempoolSpace('mempool_space');
+  mempoolSpace('mempool_space'),
+  coingecko('coingecko');
 
   const PriceSource(this.id);
 
@@ -2241,6 +2240,7 @@ class PriceQuote {
     required this.currency,
     required this.source,
     required this.at,
+    this.credit,
   });
 
   factory PriceQuote.fromJson(Map<String, dynamic> json) {
@@ -2249,6 +2249,7 @@ class PriceQuote {
       currency: FiatCurrency(json['currency'] as String),
       source: PriceSource.fromId(json['source'] as String)!,
       at: json['at'] as int,
+      credit: json['credit'] as String?,
     );
   }
 
@@ -2259,6 +2260,12 @@ class PriceQuote {
 
   /// Unix timestamp, seconds, when the quote was fetched.
   final int at;
+
+  /// What the source asks to be shown with its data, word for word
+  /// ("Powered by CoinGecko"), or null when it asks for nothing: once
+  /// on each screen that shows this price or an amount priced by it,
+  /// under the data.
+  final String? credit;
 }
 
 /// What to say about releases: all of it decided by the core, which

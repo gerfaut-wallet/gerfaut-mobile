@@ -159,7 +159,7 @@ void main() {
       const quote = PriceQuote(
         rate: 66741.37,
         currency: FiatCurrency('eur'),
-        source: PriceSource.kraken,
+        source: PriceSource.mempoolSpace,
         at: _syncedAt,
       );
       expect(PricePayload.of(quote).figure, '€66 741');

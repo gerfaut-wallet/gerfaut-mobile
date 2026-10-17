@@ -362,7 +362,7 @@ final Map<String, _Entry> _contract = {
       masked: true,
       fiat: true,
       fiatCurrency: FiatCurrency('chf'),
-      priceSource: PriceSource.kraken,
+      priceSource: PriceSource.mempoolSpace,
       notifyNewTx: true,
       explorerAck: true,
     ).toJson(),

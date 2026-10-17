@@ -33,16 +33,12 @@ const kPreferences = Preferences(
   masked: false,
   fiat: false,
   fiatCurrency: FiatCurrency('eur'),
-  priceSource: PriceSource.coingecko,
+  priceSource: PriceSource.mempoolSpace,
   notifyNewTx: false,
   explorerAck: false,
 );
 
-const _everySource = [
-  PriceSource.coingecko,
-  PriceSource.kraken,
-  PriceSource.mempoolSpace,
-];
+const _everySource = [PriceSource.mempoolSpace, PriceSource.coingecko];
 
 CurrencyEntry _currency(String id, String name, {bool everySource = true}) {
   return CurrencyEntry(
@@ -66,9 +62,8 @@ final kPriceTable = PriceTable(
     _currency('try', 'Turkish lira', everySource: false),
   ],
   sources: const [
-    SourceEntry(source: PriceSource.coingecko, label: 'CoinGecko'),
-    SourceEntry(source: PriceSource.kraken, label: 'Kraken'),
     SourceEntry(source: PriceSource.mempoolSpace, label: 'mempool.space'),
+    SourceEntry(source: PriceSource.coingecko, label: 'CoinGecko'),
   ],
   refresh: const Duration(seconds: 60),
 );
