@@ -693,6 +693,10 @@ const Duration _restartAfter = Duration(seconds: 2);
 
 void _startLater(Duration wait, void Function() start) => Timer(wait, start);
 
+/// How long a run has to stay at its server before the breaks before it
+/// are forgotten.
+const Duration _healthyFor = Duration(minutes: 5);
+
 /// A watch that keeps breaking waits at most this many doublings of
 /// [_restartAfter] before it starts again: about four minutes, the
 /// heartbeat's own pace.
@@ -723,6 +727,8 @@ class LiveRunner {
     this.quietAfter = _quietAfter,
     this.connectingFor = _connectingFor,
     this.startLater = _startLater,
+    this.healthyFor = _healthyFor,
+    this.clock = DateTime.now,
   });
 
   final GerfautBridge bridge;
@@ -739,6 +745,13 @@ class LiveRunner {
   /// Starts a watch that ended once its wait is over: a timer, which a
   /// test replaces to read the waits rather than sit through them.
   final void Function(Duration wait, void Function() start) startLater;
+
+  /// How long a run stays at its server, connected or polling, before
+  /// the runs that broke before it are behind it.
+  final Duration healthyFor;
+
+  /// What [healthyFor] is counted on. Tests move it.
+  final DateTime Function() clock;
 
   StreamSubscription<LiveEvent>? _events;
 
@@ -763,11 +776,15 @@ class LiveRunner {
   /// The current run broke inside the core.
   bool _broke = false;
 
-  /// How many runs in a row broke inside the core, with no word from
-  /// the watch in between: each waits twice as long as the last before
-  /// it starts again, so a failure that comes back every time does not
-  /// keep the phone busy.
+  /// How many runs in a row broke inside the core, with no run healthy
+  /// for [healthyFor] in between: each waits twice as long as the last
+  /// before it starts again, so a failure that comes back every time,
+  /// even one that strikes once the server is reached, does not keep
+  /// the phone busy.
   int _breaks = 0;
+
+  /// When the current run first reached its server; null before.
+  DateTime? _reachedAt;
   bool _stopping = false;
   Completer<void>? _ended;
   final Map<String, List<LiveTx>> _pending = {};
@@ -914,9 +931,8 @@ class LiveRunner {
     });
     if (event is LiveStatusChanged) {
       _lastState = event.status.state;
-      // The watch reached its server: what broke before is behind it.
       if (event.status.state case WatchState.connected || WatchState.polling) {
-        _breaks = 0;
+        _reachedAt ??= clock();
       }
     }
     switch (event) {
@@ -953,6 +969,13 @@ class LiveRunner {
     _lastState = null;
     final ended = _ended;
     if (ended != null && !ended.isCompleted) ended.complete();
+    // A run that stayed at its server long enough leaves what broke
+    // before it behind; one that broke soon after reaching it does not.
+    final reached = _reachedAt;
+    _reachedAt = null;
+    if (reached != null && clock().difference(reached) >= healthyFor) {
+      _breaks = 0;
+    }
     if (_stopping) return;
     // The run hands out nothing more: what it gave is said now, rather
     // than when the report that closes a batch would have come. A stop

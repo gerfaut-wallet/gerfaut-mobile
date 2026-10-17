@@ -85,6 +85,7 @@ class _Service {
     Duration connectingFor = const Duration(seconds: 30),
     bool recordWaits = false,
   }) {
+    now = DateTime(2026, 10, 17, 12);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_serviceChannel, (call) async {
           // The wake lock is kept apart from what the notification is
@@ -109,6 +110,7 @@ class _Service {
       connectingFor: connectingFor,
       // Read rather than sat through: each wait is written down, and
       // the start it holds back happens on the next turn of the loop.
+      clock: () => now,
       startLater: recordWaits
           ? (wait, start) {
               waits.add(wait);
@@ -123,6 +125,9 @@ class _Service {
   /// What each watch that ended waited before it started again, in
   /// order, when the service was made with `recordWaits`.
   final List<Duration> waits = [];
+
+  /// The runner's clock, which the test moves.
+  late DateTime now;
   final FakeNotifications notifications = FakeNotifications();
   final List<(String, Object?)> told = [];
 
@@ -588,11 +593,23 @@ void main() {
         Duration(seconds: 8),
       ]);
 
-      // A run that reaches its server again starts the count over.
+      // A run that breaks soon after reaching its server, during a sync
+      // or a pushed transaction, keeps the count going: no restart every
+      // two seconds, the phone held up for each.
       service.bridge.liveController.add(
         const LiveStatusChanged(LiveWatchStatus(state: WatchState.connected)),
       );
       await service.settle();
+      service.now = service.now.add(const Duration(minutes: 1));
+      await breakAndRestart();
+      expect(service.waits.last, const Duration(seconds: 16));
+
+      // One that stayed at its server five minutes starts it over.
+      service.bridge.liveController.add(
+        const LiveStatusChanged(LiveWatchStatus(state: WatchState.polling)),
+      );
+      await service.settle();
+      service.now = service.now.add(const Duration(minutes: 5));
       await breakAndRestart();
       expect(service.waits.last, const Duration(seconds: 2));
       await service.runner.stop(revert: false);
