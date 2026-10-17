@@ -233,6 +233,7 @@ class MainActivity : FlutterFragmentActivity() {
         MethodChannel(messenger, BIOMETRICS_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "support" -> result.success(biometrics.support())
+                "hasKey" -> result.success(biometrics.hasKey())
                 "enroll", "authenticate" -> {
                     val title = call.argument<String>("title")
                     val cancel = call.argument<String>("cancel")

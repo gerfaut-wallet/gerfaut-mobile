@@ -268,6 +268,80 @@ void main() {
       expect(find.text('Use fingerprint or face'), findsNothing);
     });
 
+    testWidgets('a vault from before keys asks nothing of the phone', (
+      tester,
+    ) async {
+      final biometrics = FakeBiometrics(outcome: BiometricOutcome.missing)
+        ..keyed = false;
+      final bridge = locked(
+        lock: const AppLock(kind: LockKind.pin, biometric: true),
+      );
+      await tester.pumpWidget(app(bridge, biometrics: biometrics));
+      await tester.pumpAndSettle();
+
+      // No alarm: nothing changed on the phone.
+      expect(find.textContaining('changed'), findsNothing);
+      expect(
+        find.text(
+          'Unlock with your PIN, then turn biometrics on again in Settings.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Use fingerprint or face'), findsNothing);
+
+      await tester.enterText(find.byType(TextField), '1234');
+      await tester.tap(find.text('Unlock'));
+      await tester.pumpAndSettle();
+      expect(find.byType(LockScreen), findsNothing);
+      expect(bridge.lock?.biometric, isFalse);
+    });
+
+    testWidgets('a phone left with a weak biometric turns the flag off', (
+      tester,
+    ) async {
+      final bridge = locked(
+        lock: const AppLock(kind: LockKind.pin, biometric: true),
+      );
+      await tester.pumpWidget(
+        app(
+          bridge,
+          biometrics: FakeBiometrics(offers: BiometricSupport.weakOnly),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '1234');
+      await tester.tap(find.text('Unlock'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(LockScreen), findsNothing);
+      expect(bridge.lock?.biometric, isFalse);
+    });
+
+    testWidgets('biometrics that still open stay on after the secret', (
+      tester,
+    ) async {
+      for (final biometrics in [
+        // A strong biometric with its key: nothing lapsed.
+        FakeBiometrics(passes: false),
+        // A sensor that answers nothing for now: no reason to turn
+        // anything off.
+        FakeBiometrics(available: false),
+      ]) {
+        final bridge = locked(
+          lock: const AppLock(kind: LockKind.pin, biometric: true),
+        );
+        await tester.pumpWidget(app(bridge, biometrics: biometrics));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextField), '1234');
+        await tester.tap(find.text('Unlock'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(LockScreen), findsNothing);
+        expect(bridge.lock?.biometric, isTrue);
+        await tester.pumpWidget(const SizedBox());
+      }
+    });
+
     testWidgets('biometrics that changed ask for the secret, then go off', (
       tester,
     ) async {

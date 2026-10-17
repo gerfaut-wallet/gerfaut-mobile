@@ -41,10 +41,24 @@ enum BiometricOutcome {
   /// Cancelled, or not answered.
   refused,
 
-  /// No key left for it to unlock: a fingerprint or a face was added or
+  /// The key no longer opens: a fingerprint or a face was added or
   /// removed on the phone since biometrics were turned on. The secret is
   /// asked, and biometrics have to be turned on again.
   reset,
+
+  /// There never was a key: biometrics were turned on by a build from
+  /// before keys. Nothing is asked of the phone; the secret is, and
+  /// biometrics have to be turned on again.
+  missing,
+}
+
+/// Why biometrics stand on in the vault and can no longer open it.
+enum BiometricLapse {
+  /// The phone's biometrics changed since the key was made.
+  changed,
+
+  /// No key was ever made for this vault.
+  missing,
 }
 
 /// The phone's own prompt, behind an interface so no test ever reaches
@@ -64,6 +78,9 @@ abstract class BiometricGate {
 
   /// Puts the prompt on the key made by [enroll].
   Future<BiometricOutcome> authenticate(String reason);
+
+  /// Whether the key made by [enroll] is there, without any prompt.
+  Future<bool> hasKey();
 
   /// Drops the key: biometrics are off.
   Future<void> forget();
@@ -114,10 +131,20 @@ class SystemBiometricGate implements BiometricGate {
       })) {
         'passed' => BiometricOutcome.passed,
         'reset' => BiometricOutcome.reset,
+        'missing' => BiometricOutcome.missing,
         _ => BiometricOutcome.refused,
       };
     } catch (_) {
       return BiometricOutcome.refused;
+    }
+  }
+
+  @override
+  Future<bool> hasKey() async {
+    try {
+      return await _channel.invokeMethod<bool>('hasKey') ?? false;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -157,7 +184,7 @@ class LockState {
     this.lock,
     this.locked = false,
     this.loaded = false,
-    this.biometricReset = false,
+    this.biometricLapse,
   });
 
   /// The lock the vault holds, without its hash; null when none is set.
@@ -170,22 +197,24 @@ class LockState {
   /// screen rather than guessing.
   final bool loaded;
 
-  /// The last prompt found no key to unlock: the biometrics of the phone
-  /// changed. The lock screen says so, and the next unlock with the
-  /// secret turns biometrics off, for the user to turn on again.
-  final bool biometricReset;
+  /// The last prompt found no key to unlock, and why; null while there
+  /// is nothing to say. The lock screen says what to do, and the next
+  /// unlock with the secret turns biometrics off, for the user to turn
+  /// on again.
+  final BiometricLapse? biometricLapse;
 
   LockState copyWith({
     AppLock? lock,
     bool? locked,
     bool? loaded,
-    bool? biometricReset,
+    BiometricLapse? biometricLapse,
+    bool clearLapse = false,
   }) {
     return LockState(
       lock: lock ?? this.lock,
       locked: locked ?? this.locked,
       loaded: loaded ?? this.loaded,
-      biometricReset: biometricReset ?? this.biometricReset,
+      biometricLapse: clearLapse ? null : biometricLapse ?? this.biometricLapse,
     );
   }
 }
@@ -233,7 +262,7 @@ class LockController extends Notifier<LockState> {
       lock: lock,
       loaded: true,
       locked: first ? lock != null : state.locked,
-      biometricReset: state.biometricReset && (lock?.biometric ?? false),
+      biometricLapse: (lock?.biometric ?? false) ? state.biometricLapse : null,
     );
     _guardWindow();
   }
@@ -265,19 +294,41 @@ class LockController extends Notifier<LockState> {
     if (verdict.unlocked) {
       state = state.copyWith(locked: false);
       _guardWindow();
-      if (state.biometricReset) await _retireBiometrics(secret);
+      if (await _biometricsLapsed()) await _retireBiometrics(secret);
     }
     return verdict;
   }
 
-  /// The phone's biometrics changed and its key is gone: the vault stops
-  /// offering them, with the secret just given, and the settings say
+  /// Whether biometrics stand on in the vault and can no longer open
+  /// it: the key changed, or was never made (a vault from before keys),
+  /// or the phone is left with a weak biometric only, which never
+  /// unlocks. A phone that answers nothing at all is left alone: a
+  /// sensor out of service for a moment is no reason to turn anything
+  /// off.
+  Future<bool> _biometricsLapsed() async {
+    if (!(state.lock?.biometric ?? false)) return false;
+    if (state.biometricLapse != null) return true;
+    final gate = ref.read(biometricGateProvider);
+    try {
+      return switch (await gate.support()) {
+        BiometricSupport.weakOnly => true,
+        BiometricSupport.strong => !await gate.hasKey(),
+        BiometricSupport.none => false,
+      };
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Biometrics can no longer open the vault: it stops offering them,
+  /// with the secret just given, any key left goes, and the settings say
   /// they are off. Turning them on again makes a new key, behind the
   /// secret and a prompt, as the first time.
   Future<void> _retireBiometrics(String secret) async {
     try {
       await ref.read(bridgeProvider).setBiometricUnlock(false, secret);
-      state = state.copyWith(biometricReset: false);
+      await ref.read(biometricGateProvider).forget();
+      state = state.copyWith(clearLapse: true);
       ref.invalidate(settingsProvider);
     } catch (_) {
       // Asked again at the next unlock; the prompt finds no key
@@ -301,7 +352,10 @@ class LockController extends Notifier<LockState> {
         _guardWindow();
         return true;
       case BiometricOutcome.reset:
-        state = state.copyWith(biometricReset: true);
+        state = state.copyWith(biometricLapse: BiometricLapse.changed);
+        return false;
+      case BiometricOutcome.missing:
+        state = state.copyWith(biometricLapse: BiometricLapse.missing);
         return false;
       case BiometricOutcome.refused:
         return false;

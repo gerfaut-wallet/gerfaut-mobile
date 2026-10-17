@@ -71,9 +71,19 @@ internal class StrongBiometrics(private val activity: FragmentActivity) {
         }
     }
 
+    // Whether a key is there for the prompt to unlock, without asking
+    // for anything: a vault that turned biometrics on before keys were
+    // made has none, and simply has to turn them on again.
+    fun hasKey(): Boolean = try {
+        loadKey() != null
+    } catch (_: Exception) {
+        false
+    }
+
     // The prompt on the key in place: "passed", "refused" (cancelled,
-    // or not answered), or "reset" when there is no key to unlock any
-    // more, the biometrics of the phone having changed since it was made.
+    // or not answered), "reset" when the key no longer opens, the
+    // biometrics of the phone having changed since it was made, or
+    // "missing" when there never was one.
     fun authenticate(title: String, cancel: String, result: MethodChannel.Result) {
         val key = try {
             loadKey()
@@ -82,7 +92,7 @@ internal class StrongBiometrics(private val activity: FragmentActivity) {
             return
         }
         if (key == null) {
-            result.success("reset")
+            result.success("missing")
             return
         }
         try {

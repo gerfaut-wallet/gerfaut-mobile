@@ -55,14 +55,16 @@ class _LockScreenState extends ConsumerState<LockScreen> {
   bool get _offersBiometrics {
     final lock = ref.watch(lockProvider);
     return (lock.lock?.biometric ?? false) &&
-        !lock.biometricReset &&
+        lock.biometricLapse == null &&
         ref.watch(biometricSupportProvider).valueOrNull ==
             BiometricSupport.strong;
   }
 
   Future<void> _tryBiometrics() async {
     final lock = ref.read(lockProvider);
-    if (!(lock.lock?.biometric ?? false) || lock.biometricReset) return;
+    if (!(lock.lock?.biometric ?? false) || lock.biometricLapse != null) {
+      return;
+    }
     // Awaited, not read: the sensor answers a moment after the screen
     // is up, and the prompt is worth waiting for. A phone left with a
     // weak biometric only is not asked: it cannot answer.
@@ -126,11 +128,18 @@ class _LockScreenState extends ConsumerState<LockScreen> {
     final note = blocked
         ? 'Too many attempts. Try again in $_wait s'
         : _message ??
-              (ref.watch(lockProvider).biometricReset
-                  ? 'The fingerprints or faces on this phone changed. Unlock '
-                        'with your $secret, then turn biometrics on again in '
-                        'Settings.'
-                  : null);
+              switch (ref.watch(lockProvider).biometricLapse) {
+                BiometricLapse.changed =>
+                  'The fingerprints or faces on this phone changed. Unlock '
+                      'with your $secret, then turn biometrics on again in '
+                      'Settings.',
+                // A vault from before keys: nothing changed on the
+                // phone, there is only a step to take again.
+                BiometricLapse.missing =>
+                  'Unlock with your $secret, then turn biometrics on again '
+                      'in Settings.',
+                null => null,
+              };
 
     return Scaffold(
       body: SafeArea(
