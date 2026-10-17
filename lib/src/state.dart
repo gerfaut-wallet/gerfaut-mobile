@@ -540,7 +540,7 @@ class SyncController extends Notifier<Set<String>> {
       await ref.read(syncAnnouncerProvider).announce([report]);
       return report;
     } catch (error) {
-      ref.read(syncErrorsProvider.notifier).set(id, '$error');
+      ref.read(syncErrorsProvider.notifier).set(id, syncFailure(error));
       rethrow;
     } finally {
       state = {...state}..remove(id);

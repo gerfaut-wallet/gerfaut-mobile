@@ -792,7 +792,10 @@ void main() {
       ('lib/screens/scan.dart', {'too_many_parts'}),
       ('lib/screens/settings/about_section.dart', {'tor'}),
       ('lib/screens/settings/general_section.dart', {'tor'}),
-      ('lib/src/bridge.dart', {'private_material', 'descriptor'}),
+      (
+        'lib/src/bridge.dart',
+        {'private_material', 'descriptor', 'false_proof'},
+      ),
     ]) {
       expect(compared[file], containsAll(kinds), reason: file);
     }

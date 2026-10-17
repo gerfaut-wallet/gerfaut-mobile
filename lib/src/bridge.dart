@@ -19,7 +19,7 @@ import 'rust/api.dart' as rust;
 /// unrecognized_input, private_material, invalid_input, too_many_parts,
 /// network_mismatch, wallet_not_found, duplicate_wallet, wrong_key,
 /// vault_in_use, vault, unreadable_backup, newer_format, sync,
-/// broadcast, backend_unavailable, tor, descriptor, internal. The
+/// false_proof, broadcast, backend_unavailable, tor, descriptor, internal. The
 /// bridge adds its own: not_initialized, bad_key, bad_json, random and
 /// live_running.
 class BridgeException implements Exception {
@@ -119,6 +119,20 @@ Stream<T> endsWithItsCall<T>(Stream<T> stream) async* {
   final failure = await _callEnds[stream];
   if (failure != null) throw failure;
 }
+
+/// Said when a sync stopped on a server whose proof of a confirmation
+/// did not hold. The core alone names such a failure (`false_proof`);
+/// its own words name a server and a layer, these say what happened.
+const String falseProofMessage =
+    'This server sent a false proof of a confirmation. Gerfaut stopped '
+    'trusting it and asked another.';
+
+/// What a wallet's freshness line says of a failed sync: the core's own
+/// words, except for a false proof, which has a sentence of its own.
+String syncFailure(Object error) =>
+    error is BridgeException && error.kind == 'false_proof'
+    ? falseProofMessage
+    : '$error';
 
 /// What the page says when the core refuses wallet material handed to
 /// it: pasted, scanned, read from a file or from a backup.
