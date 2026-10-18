@@ -134,6 +134,12 @@ String syncFailure(Object error) =>
     ? falseProofMessage
     : '$error';
 
+/// The same, for a failure the core hands over as data, by its code and
+/// in its words: a wallet a sync of all of them could not sync, or a
+/// sync the live watch ran.
+String reportedFailure(String kind, String message) =>
+    syncFailure(BridgeException(kind, message));
+
 /// What the page says when the core refuses wallet material handed to
 /// it: pasted, scanned, read from a file or from a backup.
 ///

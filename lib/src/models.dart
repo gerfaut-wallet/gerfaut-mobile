@@ -1463,6 +1463,7 @@ sealed class LiveEvent {
         return LiveSyncFailed(
           walletId: json['wallet_id'] as String,
           message: json['message'] as String? ?? '',
+          kind: json['kind'] as String? ?? 'sync',
         );
       case 'new_block':
         return LiveNewBlock(json['height'] as int);
@@ -1487,10 +1488,17 @@ class LiveWalletSynced extends LiveEvent {
   final SyncReport report;
 }
 
+/// The sync a change asked for failed: the core's words, and the code of
+/// the failure, which the app picks its sentence on.
 class LiveSyncFailed extends LiveEvent {
-  const LiveSyncFailed({required this.walletId, required this.message});
+  const LiveSyncFailed({
+    required this.walletId,
+    required this.message,
+    this.kind = 'sync',
+  });
   final String walletId;
   final String message;
+  final String kind;
 }
 
 class LiveNewBlock extends LiveEvent {
@@ -1575,19 +1583,26 @@ class SyncAllReport {
   final List<SyncFailure> failures;
 }
 
-/// One wallet that failed to sync; the others are unaffected.
+/// One wallet that failed to sync; the others are unaffected. The core's
+/// words, and the code of the failure, which the app picks its sentence on.
 class SyncFailure {
-  const SyncFailure({required this.walletId, required this.message});
+  const SyncFailure({
+    required this.walletId,
+    required this.message,
+    this.kind = 'sync',
+  });
 
   factory SyncFailure.fromJson(Map<String, dynamic> json) {
     return SyncFailure(
       walletId: json['wallet_id'] as String,
       message: json['message'] as String,
+      kind: json['kind'] as String? ?? 'sync',
     );
   }
 
   final String walletId;
   final String message;
+  final String kind;
 }
 
 /// Protocol a public server speaks.
