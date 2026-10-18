@@ -375,7 +375,11 @@ void main() {
 
     state.onFrame('ur:crypto-psbt/1-2/part-one');
     await tester.pumpAndSettle();
-    expect(bridge.assembleCalls, hasLength(1));
+    // Refused once, it is sent once more to a fresh scan, in case the
+    // core had lost the one it held; refused again, it is barred.
+    expect(bridge.assembleCalls, hasLength(2));
+    expect(bridge.scansOpened, 3);
+    expect(bridge.scansClosed, [1, 2]);
     expect(find.text(_psbt), findsOneWidget);
 
     // The refused code stays under the camera and decodes several times
@@ -385,9 +389,41 @@ void main() {
     state.onFrame('ur:crypto-psbt/1-2/part-one');
     await tester.pumpAndSettle();
 
-    expect(bridge.assembleCalls, hasLength(1));
+    expect(bridge.assembleCalls, hasLength(2));
     expect(find.text(_psbt), findsOneWidget);
     expect(outcome.pops, 0);
+  });
+
+  testWidgets('a scan the core lost is opened afresh, the frame sent again', (
+    tester,
+  ) async {
+    var lost = true;
+    final bridge = FakeBridge()
+      ..onAssembleQr = (frames) {
+        if (lost) {
+          lost = false;
+          throw coreFailure(
+            'invalid_input',
+            'invalid qr: this scan was closed: open the scanner again',
+          );
+        }
+        return QrProgress(
+          format: QrFormat.plain,
+          received: 1,
+          total: 1,
+          complete: true,
+          text: frames.last,
+        );
+      };
+    final outcome = _Outcome();
+    final state = await _open(tester, bridge, outcome);
+
+    state.onFrame('wpkh(tpub/0/*)');
+    await tester.pumpAndSettle();
+
+    expect(bridge.pushedFrames, ['wpkh(tpub/0/*)', 'wpkh(tpub/0/*)']);
+    expect(bridge.scansOpened, 2);
+    expect(outcome.pops, 1);
   });
 
   testWidgets('a code that assembles to nothing is said, not popped', (

@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -52,16 +54,20 @@ const String _tooManyParts = 'This code has more parts than Gerfaut can read.';
 
 class ScanScreenState extends ConsumerState<ScanScreen> {
   /// The scan the core holds for this screen, opened with it and let go
-  /// when it goes.
-  late final Future<int> _scan;
-  late final void Function() _close;
+  /// when it goes; a fresh one after a frame fails.
+  late Future<int> _scan;
+  late final GerfautBridge _bridge;
   bool _released = false;
+
+  /// A lone frame sent a second time, to a fresh scan, after its first
+  /// try failed: only a second refusal bars it.
+  String? _secondTry;
 
   /// Distinct frames seen in this collection; the core holds them.
   final Set<String> _seen = {};
 
   /// Frames seen while a call was out, sent in order after it.
-  final List<String> _queue = [];
+  final ListQueue<String> _queue = ListQueue();
 
   /// Frames the core took in this collection, and the first of them:
   /// the one at fault when it is alone.
@@ -104,11 +110,26 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
     super.initState();
     _keeper.keepOn();
     // The bridge is read here: `ref` is not to be used once disposing.
-    final bridge = ref.read(bridgeProvider);
-    _scan = bridge.openQrScan();
+    _bridge = ref.read(bridgeProvider);
+    _openScan();
+  }
+
+  void _openScan() {
+    _scan = _bridge.openQrScan();
     // A scan that would not open is said by the first frame sent to it.
     _scan.ignore();
-    _close = () => _scan.then(bridge.closeQrScan).ignore();
+  }
+
+  void _closeScan() => _scan.then(_bridge.closeQrScan).ignore();
+
+  /// A fresh scan in the core, the old one let go. After any failure:
+  /// the core starts its own scan over when it refuses, but a scan it
+  /// dropped (more scans open than it keeps), one that never opened, or
+  /// a call that failed on the way holds nothing the screen can count
+  /// on, and a fresh one is the same state on both sides.
+  void _reopen() {
+    _closeScan();
+    _openScan();
   }
 
   @override
@@ -122,7 +143,7 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
   void _release() {
     if (_released) return;
     _released = true;
-    _close();
+    _closeScan();
   }
 
   void _letScreenGo() {
@@ -147,14 +168,15 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
     _busy = true;
     try {
       while (_queue.isNotEmpty) {
-        final frame = _queue.removeAt(0);
+        final frame = _queue.removeFirst();
+        final again = _secondTry == frame;
+        _secondTry = null;
         _taken++;
         if (_taken == 1) _lone = frame;
         final collection = _collection;
-        final bridge = ref.read(bridgeProvider);
         final QrProgress progress;
         try {
-          progress = await bridge.pushQrFrame(await _scan, frame);
+          progress = await _bridge.pushQrFrame(await _scan, frame);
         } on BridgeException catch (e) {
           // A refusal landing after the pop belongs to a scan the user
           // has walked away from.
@@ -166,9 +188,19 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
           // stops the scan.
           if (e.kind == 'too_many_parts') {
             _stop(_tooManyParts);
-          } else {
-            _startOver(e.message);
+            return;
           }
+          _reopen();
+          if (_taken == 1 && !again) {
+            // Not yet proven at fault: it may have met a scan the core
+            // no longer held. Once more, on the fresh scan.
+            _taken = 0;
+            _lone = null;
+            _secondTry = frame;
+            _queue.addFirst(frame);
+            continue;
+          }
+          _startOver(e.message);
           return;
         }
         if (!mounted || _done) return;
