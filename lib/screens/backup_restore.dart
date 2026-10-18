@@ -454,8 +454,8 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
           SettingSwitch(
             title: 'Apply node settings',
             hint:
-                'Replaces your backend choice, accepted certificates and gap '
-                "limit with the backup's.",
+                "Replaces your backend choice and gap limit with the backup's, "
+                'and adds the certificates it accepted.',
             value: _applySettings,
             onChanged: (value) => setState(() => _applySettings = value),
           ),

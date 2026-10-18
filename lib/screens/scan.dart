@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -12,11 +14,12 @@ import '../widgets/qr_camera.dart';
 /// Builds the camera view around the sink every decoded frame goes to.
 typedef CameraBuilder = Widget Function(ValueChanged<String> onFrame);
 
-/// Camera QR scanner for wallet material. Collects the distinct frames
-/// the camera decodes, lets the core assemble them (a plain code, or a
-/// UR or BBQr envelope animated over several frames) and pops with the
-/// completed [QrProgress]: the assembled text, which the caller feeds to
-/// the input classifier, and what the core assumed reading the code.
+/// Camera QR scanner for wallet material. Sends each distinct frame the
+/// camera decodes, once, to a scan the core holds while the screen is
+/// up; the core assembles them (a plain code, or a UR or BBQr envelope
+/// animated over several frames) and the screen pops with the completed
+/// [QrProgress]: the assembled text, which the caller feeds to the input
+/// classifier, and what the core assumed reading the code.
 class ScanScreen extends ConsumerStatefulWidget {
   const ScanScreen({
     super.key,
@@ -50,9 +53,26 @@ class ScanScreen extends ConsumerStatefulWidget {
 const String _tooManyParts = 'This code has more parts than Gerfaut can read.';
 
 class ScanScreenState extends ConsumerState<ScanScreen> {
-  /// Distinct frames in scan order; the set makes the repeat check O(1).
-  final List<String> _frames = [];
+  /// The scan the core holds for this screen, opened with it and let go
+  /// when it goes; a fresh one after a frame fails.
+  late Future<int> _scan;
+  late final GerfautBridge _bridge;
+  bool _released = false;
+
+  /// A lone frame sent a second time, to a fresh scan, after its first
+  /// try failed: only a second refusal bars it.
+  String? _secondTry;
+
+  /// Distinct frames seen in this collection; the core holds them.
   final Set<String> _seen = {};
+
+  /// Frames seen while a call was out, sent in order after it.
+  final ListQueue<String> _queue = ListQueue();
+
+  /// Frames the core took in this collection, and the first of them:
+  /// the one at fault when it is alone.
+  int _taken = 0;
+  String? _lone;
 
   /// Frames the core turned down on their own. Without them the code
   /// left under the camera is handed back several times a second, for
@@ -70,10 +90,8 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
   /// The screen is held on: from the start until the camera goes.
   bool _keeping = true;
 
-  /// An assembly call is in flight; `_pending` remembers that a frame
-  /// arrived meanwhile and the list must be fed again after it.
+  /// A call is in flight; frames seen meanwhile wait in `_queue`.
   bool _busy = false;
-  bool _pending = false;
 
   /// Counts the collections dropped, so an answer about one that is
   /// gone is not taken for an answer about the next.
@@ -91,12 +109,41 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
   void initState() {
     super.initState();
     _keeper.keepOn();
+    // The bridge is read here: `ref` is not to be used once disposing.
+    _bridge = ref.read(bridgeProvider);
+    _openScan();
+  }
+
+  void _openScan() {
+    _scan = _bridge.openQrScan();
+    // A scan that would not open is said by the first frame sent to it.
+    _scan.ignore();
+  }
+
+  void _closeScan() => _scan.then(_bridge.closeQrScan).ignore();
+
+  /// A fresh scan in the core, the old one let go. After any failure:
+  /// the core starts its own scan over when it refuses, but a scan it
+  /// dropped (more scans open than it keeps), one that never opened, or
+  /// a call that failed on the way holds nothing the screen can count
+  /// on, and a fresh one is the same state on both sides.
+  void _reopen() {
+    _closeScan();
+    _openScan();
   }
 
   @override
   void dispose() {
     _letScreenGo();
+    _release();
     super.dispose();
+  }
+
+  /// Lets the core drop the scan, once.
+  void _release() {
+    if (_released) return;
+    _released = true;
+    _closeScan();
   }
 
   void _letScreenGo() {
@@ -106,31 +153,30 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
   }
 
   /// Feeds one decoded frame. A repeat and a frame already turned down
-  /// are dropped; a new frame sends the whole collection to the core.
+  /// are dropped; a new frame goes to the core, once.
   @visibleForTesting
   void onFrame(String text) {
     if (_done || !mounted || _refused.contains(text) || !_seen.add(text)) {
       return;
     }
-    _frames.add(text);
-    if (_busy) {
-      _pending = true;
-      return;
-    }
+    _queue.add(text);
+    if (_busy) return;
     _assemble();
   }
 
   Future<void> _assemble() async {
     _busy = true;
     try {
-      do {
-        _pending = false;
-        if (_frames.isEmpty) return;
+      while (_queue.isNotEmpty) {
+        final frame = _queue.removeFirst();
+        final again = _secondTry == frame;
+        _secondTry = null;
+        _taken++;
+        if (_taken == 1) _lone = frame;
         final collection = _collection;
-        final bridge = ref.read(bridgeProvider);
         final QrProgress progress;
         try {
-          progress = await bridge.assembleQr(List.of(_frames));
+          progress = await _bridge.pushQrFrame(await _scan, frame);
         } on BridgeException catch (e) {
           // A refusal landing after the pop belongs to a scan the user
           // has walked away from.
@@ -142,9 +188,19 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
           // stops the scan.
           if (e.kind == 'too_many_parts') {
             _stop(_tooManyParts);
-          } else {
-            _startOver(e.message);
+            return;
           }
+          _reopen();
+          if (_taken == 1 && !again) {
+            // Not yet proven at fault: it may have met a scan the core
+            // no longer held. Once more, on the fresh scan.
+            _taken = 0;
+            _lone = null;
+            _secondTry = frame;
+            _queue.addFirst(frame);
+            continue;
+          }
+          _startOver(e.message);
           return;
         }
         if (!mounted || _done) return;
@@ -162,6 +218,7 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
             return;
           }
           _done = true;
+          _release();
           Navigator.of(context).pop(progress);
           return;
         }
@@ -169,13 +226,14 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
           _progress = progress;
           _error = null;
         });
-      } while (_pending);
+      }
     } finally {
       _busy = false;
     }
   }
 
-  /// Drops the collection and says why, leaving the camera running.
+  /// Drops the collection and says why, leaving the camera running; the
+  /// core has started its scan again on the same answer.
   ///
   /// The counter goes with it: what it counted is no longer being
   /// assembled, and a bar left standing would show progress towards
@@ -183,9 +241,9 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
   /// along any of them could be, so none is barred from a fresh try.
   void _startOver(String reason) {
     _collection++;
-    if (_frames.length == 1) _refused.add(_frames.first);
-    _frames.clear();
-    _seen.clear();
+    final lone = _lone;
+    if (_taken == 1 && lone != null) _refused.add(lone);
+    _forget();
     setState(() {
       _progress = null;
       _error = reason;
@@ -199,14 +257,22 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
   void _stop(String reason) {
     _done = true;
     _collection++;
-    _frames.clear();
-    _seen.clear();
+    _forget();
+    _release();
     _letScreenGo();
     setState(() {
       _stopped = true;
       _progress = null;
       _error = reason;
     });
+  }
+
+  /// Forgets the frames of the collection, those still waiting too.
+  void _forget() {
+    _queue.clear();
+    _seen.clear();
+    _taken = 0;
+    _lone = null;
   }
 
   @override

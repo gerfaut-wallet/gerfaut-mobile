@@ -2006,6 +2006,50 @@ void main() {
     expect(container.read(lockProvider).locked, isTrue);
   });
 
+  /// A sync the watch ran that failed says it under the wallet, by the
+  /// code of its failure: a false proof in the app's words, as for a sync
+  /// the user asked for, anything else in the core's.
+  test('a failed sync of the watch is said by its code', () async {
+    final bridge = _bridge();
+    final container = ProviderContainer(
+      overrides: [
+        bridgeProvider.overrideWithValue(bridge),
+        livePlatformProvider.overrideWithValue(
+          FakeLivePlatform(running: true, wanted: true),
+        ),
+        disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+        notificationServiceProvider.overrideWithValue(FakeNotifications()),
+        backgroundSchedulerProvider.overrideWithValue((seconds) async {}),
+      ],
+    );
+    addTearDown(container.dispose);
+    holdPreferences(container, const PreferencesChange(notifyNewTx: true));
+    container.read(backgroundCheckProvider.notifier).hydrate('live');
+    await container.read(liveProvider.notifier).resume();
+
+    const words =
+        'sync failed via electrum.example.org: electrum.example.org: '
+        'the server sent a false proof of a confirmation';
+    bridge.liveController
+      ..add(
+        const LiveSyncFailed(
+          walletId: 'w1',
+          message: words,
+          kind: 'false_proof',
+        ),
+      )
+      ..add(
+        const LiveSyncFailed(
+          walletId: 'w2',
+          message: 'sync failed via mempool.space: timed out',
+        ),
+      );
+    await pumpEventQueue();
+    final errors = container.read(syncErrorsProvider);
+    expect(errors['w1'], falseProofMessage);
+    expect(errors['w2'], 'sync failed via mempool.space: timed out');
+  });
+
   group('notices the system no longer lets through', () {
     ProviderContainer withNotices(
       FakeBridge bridge,

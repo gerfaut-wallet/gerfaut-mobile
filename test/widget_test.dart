@@ -724,6 +724,32 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('a false proof in a sync of every wallet is said in words', (
+    tester,
+  ) async {
+    final bridge = FakeBridge(wallets: [makeMeta(totalSats: 123456)]);
+    bridge.onSyncAll = (_) => const SyncAllReport(
+      reports: [],
+      failures: [
+        SyncFailure(
+          walletId: 'w1',
+          message:
+              'sync failed via electrum.example.org: electrum.example.org: '
+              'the server sent a false proof of a confirmation',
+          kind: 'false_proof',
+        ),
+      ],
+    );
+    await tester.pumpWidget(app(bridge));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Sync failed'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text(falseProofMessage), findsOneWidget);
+    expect(find.textContaining('electrum.example.org'), findsNothing);
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('the home header keeps the sync and menus the rest', (
     tester,
   ) async {
