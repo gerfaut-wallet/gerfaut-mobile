@@ -723,8 +723,44 @@ class FakeBridge implements GerfautBridge {
   /// envelope or material that is not a wallet to watch.
   FutureOr<QrProgress> Function(List<String> frames)? onAssembleQr;
 
-  /// The frame list of every assembleQr call, for assertions.
+  /// The frame list of every assembleQr call, for assertions; a frame
+  /// sent to a held scan makes one call of every frame it holds.
   final List<List<String>> assembleCalls = [];
+
+  /// Every frame sent to a held scan, one per call.
+  final List<String> pushedFrames = [];
+
+  /// Scans opened so far, and the numbers of those closed.
+  int scansOpened = 0;
+  final List<int> scansClosed = [];
+
+  /// The frames the held scan has, dropped once it answers with a
+  /// text or a refusal, as the core does.
+  List<String> _held = [];
+
+  @override
+  Future<int> openQrScan() async {
+    scansOpened++;
+    _held = [];
+    return scansOpened;
+  }
+
+  @override
+  Future<QrProgress> pushQrFrame(int scan, String frame) async {
+    pushedFrames.add(frame);
+    _held.add(frame);
+    try {
+      final progress = await assembleQr(List.of(_held));
+      if (progress.complete) _held = [];
+      return progress;
+    } catch (_) {
+      _held = [];
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> closeQrScan(int scan) async => scansClosed.add(scan);
 
   @override
   Future<QrProgress> assembleQr(List<String> frames) async {
