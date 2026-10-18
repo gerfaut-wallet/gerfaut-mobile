@@ -1,0 +1,18 @@
+// Records the version Gradle resolves for every dependency of the app's
+// configurations in $GRADLE_LOCKS_DIR/app.lockfile, a format osv-scanner
+// reads, without writing to the build: the Android libraries have no
+// lockfile of their own. Used by .github/workflows/dependencies.yml:
+//
+//   ./gradlew --init-script ../.github/gradle-locks.gradle :app:dependencies --configuration releaseRuntimeClasspath --write-locks
+def locks = System.getenv('GRADLE_LOCKS_DIR')
+if (!locks) {
+    throw new GradleException('GRADLE_LOCKS_DIR is not set')
+}
+allprojects {
+    if (path == ':app') {
+        dependencyLocking {
+            lockAllConfigurations()
+            lockFile = file("${locks}/app.lockfile")
+        }
+    }
+}
