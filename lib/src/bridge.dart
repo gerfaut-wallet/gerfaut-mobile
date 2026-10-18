@@ -124,8 +124,9 @@ Stream<T> endsWithItsCall<T>(Stream<T> stream) async* {
 /// did not hold. The core alone names such a failure (`false_proof`);
 /// its own words name a server and a layer, these say what happened.
 const String falseProofMessage =
-    'This server sent a false proof of a confirmation. Gerfaut stopped '
-    'trusting it and asked another.';
+    'A server sent a false proof of a confirmation, so Gerfaut stopped '
+    'trusting its answer. No other server answered in its place. Try again '
+    'later, or use your own node.';
 
 /// What a wallet's freshness line says of a failed sync: the core's own
 /// words, except for a false proof, which has a sentence of its own.
