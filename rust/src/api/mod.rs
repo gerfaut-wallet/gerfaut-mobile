@@ -17,6 +17,7 @@ use gerfaut_core::backup::{BackupOptions, ImportChoices};
 use gerfaut_core::chain::BackendConfig;
 use gerfaut_core::chain::tor::TorSettings;
 use gerfaut_core::export::ExportOptions;
+use gerfaut_core::input::qr::QrScans;
 use gerfaut_core::input::{ImportOptions, ParsedInput, ScriptKind};
 use gerfaut_core::live::LiveEvent;
 use gerfaut_core::live::LiveTx;
@@ -231,7 +232,8 @@ pub async fn parse_backend(input: String) -> String {
 /// Assembles the QR frames scanned so far (plain text, UR, BBQr) from a
 /// JSON array of strings. Returns the serialized `QrProgress`: feed the
 /// growing list until `complete` is true, then pass `text` to
-/// [`parse_input`].
+/// [`parse_input`]. The scanner sends each frame once to a scan the
+/// core holds instead ([`push_qr_frame`]).
 pub async fn assemble_qr(frames_json: String) -> String {
     let frames: Vec<String> = try_json!(
         serde_json::from_str(&frames_json)
@@ -241,6 +243,36 @@ pub async fn assemble_qr(frames_json: String) -> String {
         Ok(progress) => to_json(&progress),
         Err(e) => core_error_json(&e),
     }
+}
+
+/// The scans the scanner screen holds, bounded in number and size by
+/// the core.
+static QR_SCANS: LazyLock<QrScans> = LazyLock::new(QrScans::default);
+
+/// Opens a scan the core holds while the scanner screen is up. Returns
+/// the number its frames go under.
+///
+/// The three scan calls are plain functions, which the bridge runs on its
+/// pool of worker threads: the decoding of a frame, and the freeing of
+/// what a long animated scan held, never hold up the async runtime that
+/// Live and the syncs run on.
+pub fn open_qr_scan() -> u32 {
+    QR_SCANS.open()
+}
+
+/// One new frame of an open scan. Returns the serialized `QrProgress`
+/// after it, as [`assemble_qr`] says of every frame so far. A scan that
+/// answers with its text or a refusal starts again empty.
+pub fn push_qr_frame(scan: u32, frame: String) -> String {
+    match QR_SCANS.push(scan, &frame) {
+        Ok(progress) => to_json(&progress),
+        Err(e) => core_error_json(&e),
+    }
+}
+
+/// Lets the core drop a scan: the scanner screen went, done or not.
+pub fn close_qr_scan(scan: u32) {
+    QR_SCANS.close(scan);
 }
 
 // --- wallet lifecycle --------------------------------------------------
@@ -1112,6 +1144,25 @@ mod tests {
         let progress: Value = serde_json::from_str(&assemble_qr(frames).await).unwrap();
         assert!(progress.get("error").is_none(), "{progress}");
         assert_eq!(progress["total"], 2);
+
+        // Frame by frame, in a scan the core holds, the same.
+        let scan = open_qr_scan();
+        assert_eq!(
+            kind_of(&push_qr_frame(scan, frame_of(5_001))),
+            "too_many_parts"
+        );
+        let first = "ur:bytes/1-2/lpadaocfadaxcywenbpljkhdcahkadaemej".to_owned();
+        let progress: Value = serde_json::from_str(&push_qr_frame(scan, first)).unwrap();
+        assert_eq!(progress["total"], 2);
+        let progress: Value =
+            serde_json::from_str(&push_qr_frame(scan, frame_of(4_294_967_294))).unwrap();
+        assert!(progress.get("error").is_none(), "{progress}");
+        assert_eq!(progress["total"], 2);
+        close_qr_scan(scan);
+        assert_eq!(
+            kind_of(&push_qr_frame(scan, frame_of(5_001))),
+            "invalid_input"
+        );
     }
 
     /// A release build writes nothing to logcat: what the Electrum

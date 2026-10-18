@@ -124,8 +124,9 @@ Stream<T> endsWithItsCall<T>(Stream<T> stream) async* {
 /// did not hold. The core alone names such a failure (`false_proof`);
 /// its own words name a server and a layer, these say what happened.
 const String falseProofMessage =
-    'This server sent a false proof of a confirmation. Gerfaut stopped '
-    'trusting it and asked another.';
+    'A server sent a false proof of a confirmation, so Gerfaut stopped '
+    'trusting its answer. No other server answered in its place. Try again '
+    'later, or use your own node.';
 
 /// What a wallet's freshness line says of a failed sync: the core's own
 /// words, except for a false proof, which has a sentence of its own.
@@ -133,6 +134,12 @@ String syncFailure(Object error) =>
     error is BridgeException && error.kind == 'false_proof'
     ? falseProofMessage
     : '$error';
+
+/// The same, for a failure the core hands over as data, by its code and
+/// in its words: a wallet a sync of all of them could not sync, or a
+/// sync the live watch ran.
+String reportedFailure(String kind, String message) =>
+    syncFailure(BridgeException(kind, message));
 
 /// What the page says when the core refuses wallet material handed to
 /// it: pasted, scanned, read from a file or from a backup.
@@ -166,8 +173,21 @@ abstract class GerfautBridge {
 
   /// Assembles the distinct QR frames scanned so far (plain text, UR,
   /// BBQr). Feed the growing list until [QrProgress.complete], then
-  /// hand [QrProgress.text] to [parseInput].
+  /// hand [QrProgress.text] to [parseInput]. The scanner uses a scan the
+  /// core holds instead: [openQrScan], [pushQrFrame], [closeQrScan].
   Future<QrProgress> assembleQr(List<String> frames);
+
+  /// Opens a scan the core holds while the scanner is up, and gives the
+  /// number its frames go under.
+  Future<int> openQrScan();
+
+  /// Sends one new frame to an open scan: where it stands after it, as
+  /// [assembleQr] says of every frame so far. Once it answers with its
+  /// text or a refusal, the core starts the scan again empty.
+  Future<QrProgress> pushQrFrame(int scan, String frame);
+
+  /// Lets the core drop a scan; one already closed stays closed.
+  Future<void> closeQrScan(int scan);
 
   /// Reads a server address scanned or pasted into the backend form:
   /// the Electrum one-liner `host:port:s|t` node dashboards print, an
@@ -429,6 +449,18 @@ class RustBridge implements GerfautBridge {
     final raw = await rust.assembleQr(framesJson: jsonEncode(frames));
     return QrProgress.fromJson(_object(raw));
   }
+
+  @override
+  Future<int> openQrScan() => rust.openQrScan();
+
+  @override
+  Future<QrProgress> pushQrFrame(int scan, String frame) async {
+    final raw = await rust.pushQrFrame(scan: scan, frame: frame);
+    return QrProgress.fromJson(_object(raw));
+  }
+
+  @override
+  Future<void> closeQrScan(int scan) => rust.closeQrScan(scan: scan);
 
   @override
   Future<ScannedBackend> parseBackend(String input) async {

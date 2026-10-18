@@ -21,8 +21,10 @@ class SyncIndicator extends ConsumerWidget {
   final SyncStamp? stamp;
   final bool syncing;
 
-  /// Last sync failure. The reason shows under the line, truncated;
-  /// long-press shows it in full.
+  /// Last sync failure. The reason shows under the line, on three lines
+  /// at most: Gerfaut's own sentences fit, such as the one for a false
+  /// proof, and a server's long words are cut. Long-press shows it in
+  /// full.
   final String? error;
 
   @override
@@ -70,7 +72,7 @@ class SyncIndicator extends ConsumerWidget {
             Text(
               error!,
               style: tokens.label.copyWith(color: tokens.textMuted),
-              maxLines: 1,
+              maxLines: 3,
               overflow: TextOverflow.ellipsis,
             ),
           ],

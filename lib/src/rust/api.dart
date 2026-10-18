@@ -66,9 +66,29 @@ Future<String> parseBackend({required String input}) =>
 /// Assembles the QR frames scanned so far (plain text, UR, BBQr) from a
 /// JSON array of strings. Returns the serialized `QrProgress`: feed the
 /// growing list until `complete` is true, then pass `text` to
-/// [`parse_input`].
+/// [`parse_input`]. The scanner sends each frame once to a scan the
+/// core holds instead ([`push_qr_frame`]).
 Future<String> assembleQr({required String framesJson}) =>
     RustLib.instance.api.crateApiAssembleQr(framesJson: framesJson);
+
+/// Opens a scan the core holds while the scanner screen is up. Returns
+/// the number its frames go under.
+///
+/// The three scan calls are plain functions, which the bridge runs on its
+/// pool of worker threads: the decoding of a frame, and the freeing of
+/// what a long animated scan held, never hold up the async runtime that
+/// Live and the syncs run on.
+Future<int> openQrScan() => RustLib.instance.api.crateApiOpenQrScan();
+
+/// One new frame of an open scan. Returns the serialized `QrProgress`
+/// after it, as [`assemble_qr`] says of every frame so far. A scan that
+/// answers with its text or a refusal starts again empty.
+Future<String> pushQrFrame({required int scan, required String frame}) =>
+    RustLib.instance.api.crateApiPushQrFrame(scan: scan, frame: frame);
+
+/// Lets the core drop a scan: the scanner screen went, done or not.
+Future<void> closeQrScan({required int scan}) =>
+    RustLib.instance.api.crateApiCloseQrScan(scan: scan);
 
 /// Adds a wallet from a `ParsedInput` JSON on an explicit network.
 /// Returns the new wallet's metadata.
