@@ -73,6 +73,11 @@ Future<String> assembleQr({required String framesJson}) =>
 
 /// Opens a scan the core holds while the scanner screen is up. Returns
 /// the number its frames go under.
+///
+/// The three scan calls are plain functions, which the bridge runs on its
+/// pool of worker threads: the decoding of a frame, and the freeing of
+/// what a long animated scan held, never hold up the async runtime that
+/// Live and the syncs run on.
 Future<int> openQrScan() => RustLib.instance.api.crateApiOpenQrScan();
 
 /// One new frame of an open scan. Returns the serialized `QrProgress`

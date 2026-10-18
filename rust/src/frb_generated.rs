@@ -353,7 +353,7 @@ fn wire__crate__api__close_qr_scan_impl(
     rust_vec_len_: i32,
     data_len_: i32,
 ) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "close_qr_scan",
             port: Some(port_),
@@ -371,16 +371,13 @@ fn wire__crate__api__close_qr_scan_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_scan = <u32>::sse_decode(&mut deserializer);
             deserializer.end();
-            move |context| async move {
-                transform_result_sse::<_, ()>(
-                    (move || async move {
-                        let output_ok = Result::<_, ()>::Ok({
-                            crate::api::close_qr_scan(api_scan).await;
-                        })?;
-                        Ok(output_ok)
-                    })()
-                    .await,
-                )
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok({
+                        crate::api::close_qr_scan(api_scan);
+                    })?;
+                    Ok(output_ok)
+                })())
             }
         },
     )
@@ -1201,7 +1198,7 @@ fn wire__crate__api__open_qr_scan_impl(
     rust_vec_len_: i32,
     data_len_: i32,
 ) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "open_qr_scan",
             port: Some(port_),
@@ -1218,14 +1215,11 @@ fn wire__crate__api__open_qr_scan_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             deserializer.end();
-            move |context| async move {
-                transform_result_sse::<_, ()>(
-                    (move || async move {
-                        let output_ok = Result::<_, ()>::Ok(crate::api::open_qr_scan().await)?;
-                        Ok(output_ok)
-                    })()
-                    .await,
-                )
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok(crate::api::open_qr_scan())?;
+                    Ok(output_ok)
+                })())
             }
         },
     )
@@ -1501,7 +1495,7 @@ fn wire__crate__api__push_qr_frame_impl(
     rust_vec_len_: i32,
     data_len_: i32,
 ) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "push_qr_frame",
             port: Some(port_),
@@ -1520,16 +1514,12 @@ fn wire__crate__api__push_qr_frame_impl(
             let api_scan = <u32>::sse_decode(&mut deserializer);
             let api_frame = <String>::sse_decode(&mut deserializer);
             deserializer.end();
-            move |context| async move {
-                transform_result_sse::<_, ()>(
-                    (move || async move {
-                        let output_ok = Result::<_, ()>::Ok(
-                            crate::api::push_qr_frame(api_scan, api_frame).await,
-                        )?;
-                        Ok(output_ok)
-                    })()
-                    .await,
-                )
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok =
+                        Result::<_, ()>::Ok(crate::api::push_qr_frame(api_scan, api_frame))?;
+                    Ok(output_ok)
+                })())
             }
         },
     )

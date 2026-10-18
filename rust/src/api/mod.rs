@@ -251,14 +251,19 @@ static QR_SCANS: LazyLock<QrScans> = LazyLock::new(QrScans::default);
 
 /// Opens a scan the core holds while the scanner screen is up. Returns
 /// the number its frames go under.
-pub async fn open_qr_scan() -> u32 {
+///
+/// The three scan calls are plain functions, which the bridge runs on its
+/// pool of worker threads: the decoding of a frame, and the freeing of
+/// what a long animated scan held, never hold up the async runtime that
+/// Live and the syncs run on.
+pub fn open_qr_scan() -> u32 {
     QR_SCANS.open()
 }
 
 /// One new frame of an open scan. Returns the serialized `QrProgress`
 /// after it, as [`assemble_qr`] says of every frame so far. A scan that
 /// answers with its text or a refusal starts again empty.
-pub async fn push_qr_frame(scan: u32, frame: String) -> String {
+pub fn push_qr_frame(scan: u32, frame: String) -> String {
     match QR_SCANS.push(scan, &frame) {
         Ok(progress) => to_json(&progress),
         Err(e) => core_error_json(&e),
@@ -266,7 +271,7 @@ pub async fn push_qr_frame(scan: u32, frame: String) -> String {
 }
 
 /// Lets the core drop a scan: the scanner screen went, done or not.
-pub async fn close_qr_scan(scan: u32) {
+pub fn close_qr_scan(scan: u32) {
     QR_SCANS.close(scan);
 }
 
@@ -1141,21 +1146,21 @@ mod tests {
         assert_eq!(progress["total"], 2);
 
         // Frame by frame, in a scan the core holds, the same.
-        let scan = open_qr_scan().await;
+        let scan = open_qr_scan();
         assert_eq!(
-            kind_of(&push_qr_frame(scan, frame_of(5_001)).await),
+            kind_of(&push_qr_frame(scan, frame_of(5_001))),
             "too_many_parts"
         );
         let first = "ur:bytes/1-2/lpadaocfadaxcywenbpljkhdcahkadaemej".to_owned();
-        let progress: Value = serde_json::from_str(&push_qr_frame(scan, first).await).unwrap();
+        let progress: Value = serde_json::from_str(&push_qr_frame(scan, first)).unwrap();
         assert_eq!(progress["total"], 2);
         let progress: Value =
-            serde_json::from_str(&push_qr_frame(scan, frame_of(4_294_967_294)).await).unwrap();
+            serde_json::from_str(&push_qr_frame(scan, frame_of(4_294_967_294))).unwrap();
         assert!(progress.get("error").is_none(), "{progress}");
         assert_eq!(progress["total"], 2);
-        close_qr_scan(scan).await;
+        close_qr_scan(scan);
         assert_eq!(
-            kind_of(&push_qr_frame(scan, frame_of(5_001)).await),
+            kind_of(&push_qr_frame(scan, frame_of(5_001))),
             "invalid_input"
         );
     }
