@@ -150,9 +150,10 @@ class _LockScreenState extends ConsumerState<LockScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (_offersBiometrics) ...[
-                  GhostButton(
+                  SecondaryButton(
                     label: 'Use fingerprint or face',
                     icon: LucideIcons.fingerprint,
+                    expand: true,
                     onPressed: _tryBiometrics,
                   ),
                   const SizedBox(height: GerfautSpacing.sm),
@@ -160,7 +161,8 @@ class _LockScreenState extends ConsumerState<LockScreen> {
                 PrimaryButton(
                   label: _checking ? 'Unlocking…' : 'Unlock',
                   expand: true,
-                  onPressed: blocked || _checking ? null : _unlock,
+                  busy: _checking,
+                  onPressed: blocked ? null : _unlock,
                 ),
               ],
             ),

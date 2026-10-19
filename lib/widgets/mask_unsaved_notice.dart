@@ -36,7 +36,7 @@ class MaskUnsavedNotice extends ConsumerWidget {
             'Gerfaut could not save the change. Until it is saved, the '
             'widget and notifications may still show amounts.',
         actionsBelow: true,
-        action: GhostButton(
+        action: PrimaryButton(
           label: 'Try again',
           onPressed: () => ref.read(maskedProvider.notifier).retry(),
         ),

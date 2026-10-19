@@ -13,7 +13,6 @@ import '../../widgets/reorder.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/setting_switch.dart';
 import '../../widgets/status_pill.dart';
-import '../../widgets/tap_target.dart';
 import '../../widgets/wallet_icon.dart';
 import 'fields.dart';
 import '../../widgets/toast.dart';
@@ -472,10 +471,9 @@ class _LivePinsState extends ConsumerState<_LivePins> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          GhostButton(
+          DisclosureButton(
             label: label,
-            icon: _open ? LucideIcons.chevronUp : LucideIcons.chevronDown,
-            expanded: _open,
+            open: _open,
             onPressed: () => setState(() => _open = !_open),
           ),
           if (_open) ...[
@@ -730,13 +728,14 @@ class _WalletRow extends StatelessWidget {
               // confirmation, and the way out sits beside it — or
               // above it, once the text is too large for one line.
               action: ConfirmActions(
-                cancel: GhostButton(
+                cancel: SecondaryButton(
                   label: 'Cancel',
                   onPressed: removing ? null : onCancel,
                 ),
                 confirm: DangerButton(
                   label: 'Remove wallet',
-                  onPressed: removing ? null : onRemoveConfirm,
+                  busy: removing,
+                  onPressed: onRemoveConfirm,
                 ),
               ),
             ),
@@ -744,14 +743,18 @@ class _WalletRow extends StatelessWidget {
             const SizedBox(height: GerfautSpacing.xs),
             // Four actions do not fit one line on a narrow phone: the
             // last ones flow under the others rather than overflowing.
+            // Secondary, all four: the list repeats them on every row,
+            // and in blue it would become a wall of buttons.
             Wrap(
+              spacing: GerfautSpacing.sm,
+              runSpacing: GerfautSpacing.sm,
               children: [
-                GhostButton(
+                SecondaryButton(
                   label: 'Rename',
                   icon: LucideIcons.pencil,
                   onPressed: busy ? null : onRenameStart,
                 ),
-                GhostButton(
+                SecondaryButton(
                   label: 'Icon',
                   icon: LucideIcons.shapes,
                   onPressed: busy ? null : onPickIcon,
@@ -761,12 +764,15 @@ class _WalletRow extends StatelessWidget {
                 // or a descriptor also used by another wallet that went
                 // further — only turn up by scanning again from the first
                 // address.
-                GhostButton(
+                SecondaryButton(
                   label: rescanning ? 'Rescanning…' : 'Rescan',
                   icon: LucideIcons.scanSearch,
+                  busy: rescanning,
                   onPressed: busy ? null : onRescan,
                 ),
-                _AlertGhostButton(
+                // It only opens the confirmation: neutral, the red
+                // waits for the yes.
+                SecondaryButton(
                   label: 'Remove',
                   icon: LucideIcons.trash2,
                   onPressed: busy ? null : onRemoveStart,
@@ -775,52 +781,6 @@ class _WalletRow extends StatelessWidget {
             ),
           ],
         ],
-      ),
-    );
-  }
-}
-
-/// Ghost button in the alert color: the entry point of a destructive
-/// confirmation, mirroring the desktop design amendment.
-class _AlertGhostButton extends StatelessWidget {
-  const _AlertGhostButton({
-    required this.label,
-    required this.icon,
-    required this.onPressed,
-  });
-
-  final String label;
-  final IconData icon;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    return TapTarget(
-      child: SizedBox(
-        height: GerfautTouch.control,
-        child: TextButton(
-          style: TextButton.styleFrom(
-            foregroundColor: tokens.alert,
-            padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.md),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(GerfautRadius.md),
-            ),
-            textStyle: tokens.bodySmall.copyWith(
-              fontWeight: FontWeight.w500,
-              fontVariations: const [FontVariation('wght', 500)],
-            ),
-          ),
-          onPressed: onPressed,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 14),
-              const SizedBox(width: GerfautSpacing.xs),
-              Text(label),
-            ],
-          ),
-        ),
       ),
     );
   }

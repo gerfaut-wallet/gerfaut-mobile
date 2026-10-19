@@ -183,7 +183,8 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
     final snapshot = ref.watch(snapshotProvider(widget.walletId)).valueOrNull;
     final total = snapshot?.txs.length ?? 0;
     final selected = snapshot?.txs.where(_passes).length ?? 0;
-    final ready = snapshot != null && selected > 0 && !_exporting;
+    final chosen = snapshot != null && selected > 0;
+    final ready = chosen && !_exporting;
 
     return Scaffold(
       appBar: GerfautAppBar.text('Export'),
@@ -295,7 +296,8 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                           label: _exporting ? 'Exporting…' : 'Save file',
                           icon: LucideIcons.save,
                           expand: true,
-                          onPressed: ready
+                          busy: _exporting,
+                          onPressed: chosen
                               ? () => _export(snapshot, _Destination.file)
                               : null,
                         ),

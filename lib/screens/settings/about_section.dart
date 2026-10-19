@@ -103,9 +103,10 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
             'signing device, and report anything that looks wrong.',
             style: tokens.bodySmall.copyWith(color: tokens.textMuted),
           ),
+          const SizedBox(height: GerfautSpacing.sm),
           Align(
             alignment: Alignment.centerLeft,
-            child: GhostButton(
+            child: PrimaryButton(
               label: 'Report a problem',
               icon: LucideIcons.messageSquareWarning,
               onPressed: () => launchUrl(
@@ -153,11 +154,22 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
               ),
               const SizedBox(width: GerfautSpacing.sm),
             ],
-            SecondaryButton(
-              label: _checkingUpdate ? 'Checking…' : 'Check for updates',
-              icon: LucideIcons.refreshCw,
-              onPressed: _checkingUpdate ? null : _checkForUpdates,
-            ),
+            // Beside "Get" it is the second choice; alone, the action
+            // of the line.
+            if (newer != null)
+              SecondaryButton(
+                label: _checkingUpdate ? 'Checking…' : 'Check for updates',
+                icon: LucideIcons.refreshCw,
+                busy: _checkingUpdate,
+                onPressed: _checkForUpdates,
+              )
+            else
+              PrimaryButton(
+                label: _checkingUpdate ? 'Checking…' : 'Check for updates',
+                icon: LucideIcons.refreshCw,
+                busy: _checkingUpdate,
+                onPressed: _checkForUpdates,
+              ),
           ],
         ),
         const SizedBox(height: GerfautSpacing.md),
@@ -175,7 +187,7 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
         const SizedBox(height: GerfautSpacing.sm),
         Align(
           alignment: Alignment.centerLeft,
-          child: GhostButton(
+          child: PrimaryButton(
             label: 'Show the welcome tour',
             icon: LucideIcons.compass,
             onPressed: () {

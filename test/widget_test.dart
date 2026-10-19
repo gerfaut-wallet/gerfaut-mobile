@@ -224,7 +224,7 @@ void main() {
       );
       expect(top('Cold storage'), lessThan(top('Spending')));
       expect(
-        tester.getSize(find.widgetWithText(GhostButton, 'Try again')).height,
+        tester.getSize(find.widgetWithText(PrimaryButton, 'Try again')).height,
         GerfautTouch.target,
       );
 

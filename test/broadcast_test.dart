@@ -1293,10 +1293,10 @@ void main() {
               .height,
           GerfautTouch.target,
         );
-        // And it is the only one: leaving the screen is a navigation, so
-        // Done steps back to a ghost rather than competing with it.
+        // And it is the only one: leaving is the way out beside it, so
+        // Done is secondary rather than competing with it.
         expect(find.byType(PrimaryButton), findsOneWidget);
-        expect(find.widgetWithText(GhostButton, 'Done'), findsOneWidget);
+        expect(find.widgetWithText(SecondaryButton, 'Done'), findsOneWidget);
       },
     );
   }

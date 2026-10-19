@@ -249,7 +249,11 @@ void main() {
               label: 'Secondary',
               onPressed: () => pressed.add('s'),
             ),
-            GhostButton(label: 'Ghost', onPressed: () => pressed.add('g')),
+            DisclosureButton(
+              label: 'Disclosure',
+              open: false,
+              onPressed: () => pressed.add('g'),
+            ),
             DangerButton(label: 'Danger', onPressed: () => pressed.add('d')),
           ],
         ),
@@ -258,7 +262,7 @@ void main() {
     for (final (type, label) in [
       (PrimaryButton, 'Primary'),
       (SecondaryButton, 'Secondary'),
-      (GhostButton, 'Ghost'),
+      (DisclosureButton, 'Disclosure'),
       (DangerButton, 'Danger'),
     ]) {
       final target = tester.getRect(find.byType(type));

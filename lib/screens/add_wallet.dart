@@ -452,15 +452,18 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
           style: tokens.bodySmall.copyWith(color: tokens.textMuted),
         ),
         const SizedBox(height: GerfautSpacing.md),
-        Row(
+        // Two other ways in, side by side: equal choices, so neither
+        // takes the blue Continue holds.
+        Wrap(
+          spacing: GerfautSpacing.sm,
+          runSpacing: GerfautSpacing.sm,
           children: [
-            GhostButton(
+            SecondaryButton(
               label: 'Import a file',
               icon: LucideIcons.fileUp,
               onPressed: _importFile,
             ),
-            const SizedBox(width: GerfautSpacing.sm),
-            GhostButton(
+            SecondaryButton(
               label: 'Scan',
               icon: LucideIcons.scanLine,
               onPressed: _scan,
@@ -575,10 +578,9 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
           const SizedBox(height: GerfautSpacing.sm),
           Align(
             alignment: Alignment.centerLeft,
-            child: GhostButton(
+            child: DisclosureButton(
               label: 'Advanced',
-              icon: _advanced ? LucideIcons.chevronUp : LucideIcons.chevronDown,
-              expanded: _advanced,
+              open: _advanced,
               onPressed: () => setState(() => _advanced = !_advanced),
             ),
           ),
@@ -696,15 +698,14 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
         const SizedBox(height: GerfautSpacing.lg),
         Row(
           children: [
-            GhostButton(label: 'Back', onPressed: _back),
+            SecondaryButton(label: 'Back', onPressed: _back),
             const SizedBox(width: GerfautSpacing.sm),
             Expanded(
               child: PrimaryButton(
                 label: _adding ? 'Adding…' : 'Add wallet',
                 expand: true,
-                onPressed: _nameController.text.trim().isEmpty || _adding
-                    ? null
-                    : _submit,
+                busy: _adding,
+                onPressed: _nameController.text.trim().isEmpty ? null : _submit,
               ),
             ),
           ],

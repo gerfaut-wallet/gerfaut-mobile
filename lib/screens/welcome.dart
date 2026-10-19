@@ -104,7 +104,12 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.all(GerfautSpacing.sm),
+              // Filled, Back and Skip line up with Next below them
+              // rather than hug the edges of the screen.
+              padding: const EdgeInsets.symmetric(
+                horizontal: GerfautSpacing.md,
+                vertical: GerfautSpacing.sm,
+              ),
               child: Row(
                 children: [
                   // A page one can only leave or pass is re-read by
@@ -112,12 +117,12 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                   // the button is what makes it visible. It takes the
                   // left of the row Skip has to itself on the first page.
                   if (_index > 0)
-                    GhostButton(
+                    SecondaryButton(
                       label: 'Back',
                       onPressed: () => _goTo(context, _index - 1),
                     ),
                   const Spacer(),
-                  GhostButton(label: 'Skip', onPressed: _done),
+                  SecondaryButton(label: 'Skip', onPressed: _done),
                 ],
               ),
             ),

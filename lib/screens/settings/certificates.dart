@@ -156,10 +156,9 @@ class UnknownCertificateDialog extends StatelessWidget {
         ),
       ),
       actions: [
-        TextButton(
-          style: TextButton.styleFrom(foregroundColor: tokens.textMuted),
+        SecondaryButton(
+          label: 'Cancel',
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
         ),
         PrimaryButton(
           label: 'Accept and save',
@@ -256,10 +255,9 @@ class _ChangedCertificateDialogState extends State<ChangedCertificateDialog> {
       ),
       actions: _confirming
           ? [
-              TextButton(
-                style: TextButton.styleFrom(foregroundColor: tokens.textMuted),
+              SecondaryButton(
+                label: 'Cancel',
                 onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
               ),
               DangerButton(
                 label: 'Trust it anyway',
@@ -267,10 +265,11 @@ class _ChangedCertificateDialogState extends State<ChangedCertificateDialog> {
               ),
             ]
           : [
-              TextButton(
-                style: TextButton.styleFrom(foregroundColor: tokens.alert),
+              // The first of two deliberate steps, and only a step:
+              // neutral, while backing out holds the blue.
+              SecondaryButton(
+                label: 'Trust the new certificate',
                 onPressed: () => setState(() => _confirming = true),
-                child: const Text('Trust the new certificate'),
               ),
               PrimaryButton(
                 label: 'Cancel',
@@ -337,25 +336,20 @@ class CertificateRow extends StatelessWidget {
               style: tokens.bodySmall.copyWith(color: tokens.textMuted),
             ),
             const SizedBox(height: GerfautSpacing.sm),
-            // A Wrap: at a large text size the way out goes under the
-            // deed rather than past the edge of the card.
-            Wrap(
-              spacing: GerfautSpacing.sm,
-              runSpacing: GerfautSpacing.sm,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                SecondaryButton(
-                  label: 'Forget certificate',
-                  onPressed: onForgetConfirm,
-                ),
-                GhostButton(label: 'Cancel', onPressed: onCancel),
-              ],
+            ConfirmActions(
+              cancel: SecondaryButton(label: 'Cancel', onPressed: onCancel),
+              confirm: DangerButton(
+                label: 'Forget certificate',
+                onPressed: onForgetConfirm,
+              ),
             ),
           ] else ...[
             const SizedBox(height: GerfautSpacing.xs),
             Align(
               alignment: Alignment.centerLeft,
-              child: GhostButton(
+              // It only opens the confirmation: neutral, the red waits
+              // for the yes.
+              child: SecondaryButton(
                 label: 'Forget',
                 icon: LucideIcons.trash2,
                 onPressed: onForgetStart,

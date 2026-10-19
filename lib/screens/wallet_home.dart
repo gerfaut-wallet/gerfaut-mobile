@@ -456,13 +456,14 @@ class _RenameDialogState extends State<_RenameDialog> {
         ],
       ),
       actions: [
-        GhostButton(
+        SecondaryButton(
           label: 'Cancel',
           onPressed: _saving ? null : () => Navigator.of(context).pop(false),
         ),
         PrimaryButton(
           label: _saving ? 'Saving…' : 'Save',
-          onPressed: _saving ? null : _save,
+          busy: _saving,
+          onPressed: _save,
         ),
       ],
     );
@@ -605,7 +606,8 @@ class _TxList extends ConsumerWidget {
                 SecondaryButton(
                   label: loading ? 'Fetching…' : 'Load older transactions',
                   icon: LucideIcons.chevronDown,
-                  onPressed: loading ? null : () => _loadOlder(context, ref),
+                  busy: loading,
+                  onPressed: () => _loadOlder(context, ref),
                 ),
                 if (olderFailure != null) ...[
                   const SizedBox(height: GerfautSpacing.sm),
