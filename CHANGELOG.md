@@ -32,8 +32,8 @@ Gerfaut watches bitcoin wallets it cannot spend from. There is no key generation
 #### Talking to the chain
 
 - Public servers by default, or your own node over Electrum or Esplora. A self-signed certificate is shown and trusted once, then refused if it ever changes.
-- A Tor client built in, so a `.onion` backend works with no Orbot installed. While "Test the connection" starts it, the Tor card shows its progress.
-- A sync downloads only what a wallet lacks, so a payment that Live notices costs a few kilobytes. Gerfaut reads a wallet in full when the vault opens and once a day.
+- A Tor client built in, so a `.onion` backend works with no Orbot installed. While "Test the connection" starts it, the Tor card shows its progress. When a `.onion` server stays silent for 30 seconds, the built-in Tor opens a second route to it alongside the first one, and Gerfaut uses whichever answers.
+- A sync downloads only what a wallet lacks, so a payment that Live notices costs a few kilobytes. Gerfaut reads a wallet in full when the vault opens and once a day. Past the last used address, a sync asks the server about as many unused addresses as the gap limit, and no more.
 - A "This is my node" switch under the address of your own server, in Settings › Network. Turned on, it lets Live follow up to 20,000 addresses, against 2,000 otherwise. Leave it off for a server you do not run: it would refuse most of them and learn every one.
 - With Live on and the Automatic backend, syncs, transaction previews and broadcasts go first to the operator Live talks to, Blockstream on mainnet, so a single operator sees your addresses. When Gerfaut opens, the first sync waits up to 20 seconds for Live to connect.
 - A preview or a broadcast moves to another server only when one cannot be reached. When a node refuses a transaction, Gerfaut asks no other and shows the node's own words.
