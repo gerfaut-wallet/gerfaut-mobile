@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/tokens.dart';
+import 'buttons.dart';
 
 /// How loud the note is allowed to be. One question decides it, and it
 /// is never re-argued case by case:
@@ -69,7 +70,7 @@ class GerfautNotice extends StatelessWidget {
   /// this matters, the glyph only says what it is about.
   final IconData? icon;
 
-  /// What to do about it, if anything: a ghost button, a link. Centred
+  /// What to do about it, if anything: a button, a link. Centred
   /// on the panel because it answers the whole note, not its first line.
   final Widget? action;
 
@@ -152,6 +153,11 @@ class GerfautNotice extends StatelessWidget {
       ],
     );
 
+    // Its buttons sit on the tint: a secondary takes white and a
+    // hairline there, where Givre would read as a dirty grey.
+    final action = this.action == null
+        ? null
+        : TintedSurface(child: this.action!);
     final Widget body;
     if (action == null) {
       body = words;
@@ -170,7 +176,7 @@ class GerfautNotice extends StatelessWidget {
         children: [
           Expanded(child: words),
           const SizedBox(width: GerfautSpacing.sm),
-          action!,
+          action,
         ],
       );
     }

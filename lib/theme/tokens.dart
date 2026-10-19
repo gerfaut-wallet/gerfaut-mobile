@@ -73,7 +73,10 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
     required this.textMuted,
     required this.primary,
     required this.onPrimary,
+    required this.primaryPressed,
     required this.alert,
+    required this.onAlert,
+    required this.alertPressed,
     required this.alertSurface,
     required this.confirmed,
     required this.confirmedSurface,
@@ -111,14 +114,25 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
   /// Metadata, labels, timestamps. The floor for text contrast.
   final Color textMuted;
 
-  /// Action and selection only. One primary action per screen.
+  /// Action and selection only: the fill of every button that stands on
+  /// its own, and what is chosen.
   final Color primary;
 
   /// Text on [primary].
   final Color onPrimary;
 
+  /// A [primary] button under the finger: darker in light, lighter in
+  /// dark, where every relief brightens.
+  final Color primaryPressed;
+
   /// Strictly reserved for an unexpected outflow or monitoring anomaly.
   final Color alert;
+
+  /// Text on [alert]: the yes of a destructive confirmation.
+  final Color onAlert;
+
+  /// An [alert] button under the finger, as [primaryPressed].
+  final Color alertPressed;
 
   /// Tinted surface behind [alert] content.
   final Color alertSurface;
@@ -189,7 +203,10 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
     textMuted: const Color(0xFF55636F),
     primary: const Color(0xFF0E7490),
     onPrimary: const Color(0xFFFFFFFF),
+    primaryPressed: const Color(0xFF0A5D75),
     alert: const Color(0xFFB3261E),
+    onAlert: const Color(0xFFFFFFFF),
+    alertPressed: const Color(0xFF8F1E18),
     alertSurface: const Color(0xFFFDE7E7),
     confirmed: const Color(0xFF116B41),
     confirmedSurface: const Color(0xFFDCF5E6),
@@ -222,7 +239,10 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
     textMuted: const Color(0xFF8A98A6),
     primary: const Color(0xFF7DD3E8),
     onPrimary: const Color(0xFF06232B),
+    primaryPressed: const Color(0xFFA5E1F0),
     alert: const Color(0xFFFF706D),
+    onAlert: const Color(0xFF0B0F14),
+    alertPressed: const Color(0xFFFF8F8C),
     alertSurface: const Color(0xFF161E27),
     confirmed: const Color(0xFF50B771),
     confirmedSurface: const Color(0xFF161E27),
@@ -373,7 +393,10 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
     Color? textMuted,
     Color? primary,
     Color? onPrimary,
+    Color? primaryPressed,
     Color? alert,
+    Color? onAlert,
+    Color? alertPressed,
     Color? alertSurface,
     Color? confirmed,
     Color? confirmedSurface,
@@ -399,7 +422,10 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
       textMuted: textMuted ?? this.textMuted,
       primary: primary ?? this.primary,
       onPrimary: onPrimary ?? this.onPrimary,
+      primaryPressed: primaryPressed ?? this.primaryPressed,
       alert: alert ?? this.alert,
+      onAlert: onAlert ?? this.onAlert,
+      alertPressed: alertPressed ?? this.alertPressed,
       alertSurface: alertSurface ?? this.alertSurface,
       confirmed: confirmed ?? this.confirmed,
       confirmedSurface: confirmedSurface ?? this.confirmedSurface,
@@ -430,7 +456,10 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
       textMuted: Color.lerp(textMuted, other.textMuted, t)!,
       primary: Color.lerp(primary, other.primary, t)!,
       onPrimary: Color.lerp(onPrimary, other.onPrimary, t)!,
+      primaryPressed: Color.lerp(primaryPressed, other.primaryPressed, t)!,
       alert: Color.lerp(alert, other.alert, t)!,
+      onAlert: Color.lerp(onAlert, other.onAlert, t)!,
+      alertPressed: Color.lerp(alertPressed, other.alertPressed, t)!,
       alertSurface: Color.lerp(alertSurface, other.alertSurface, t)!,
       confirmed: Color.lerp(confirmed, other.confirmed, t)!,
       confirmedSurface: Color.lerp(
