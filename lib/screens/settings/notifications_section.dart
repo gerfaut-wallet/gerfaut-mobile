@@ -89,7 +89,7 @@ class NotificationsSection extends ConsumerWidget {
           ),
           Align(
             alignment: AlignmentDirectional.centerStart,
-            child: GhostButton(
+            child: PrimaryButton(
               label: 'Open system settings',
               icon: LucideIcons.externalLink,
               onPressed: () => _openSystemSettings(ref),
@@ -265,7 +265,7 @@ class _LiveStatusState extends ConsumerState<_LiveStatus> {
                 ),
               ),
               const SizedBox(width: GerfautSpacing.sm),
-              GhostButton(
+              PrimaryButton(
                 label: 'Fix',
                 onPressed: () =>
                     ref.read(liveProvider.notifier).requestBatteryExemption(),

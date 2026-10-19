@@ -355,6 +355,7 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
       action: PrimaryButton(
         label: _opening ? 'Opening…' : 'Open backup',
         expand: true,
+        busy: _opening,
         onPressed: ready ? _open : null,
       ),
       children: [

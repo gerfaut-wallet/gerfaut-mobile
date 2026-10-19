@@ -191,16 +191,21 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
         ),
         if (lock != null) ...[
           const SizedBox(height: GerfautSpacing.sm),
-          Row(
+          // Locking is the everyday gesture, changing the secret a
+          // rare one: one filled action, its counterpart beside it. A
+          // Wrap, so a large text size puts them on two lines.
+          Wrap(
+            spacing: GerfautSpacing.sm,
+            runSpacing: GerfautSpacing.sm,
             children: [
-              GhostButton(
+              SecondaryButton(
                 label: lock.kind == LockKind.pin
                     ? 'Change PIN'
                     : 'Change password',
                 icon: LucideIcons.pencil,
                 onPressed: () => _setLock(kind: lock.kind),
               ),
-              GhostButton(
+              PrimaryButton(
                 label: 'Lock now',
                 icon: LucideIcons.lock,
                 onPressed: ref.read(lockProvider.notifier).lockNow,
@@ -593,8 +598,9 @@ class DisguiseSheet extends StatelessWidget {
               onPressed: () => Navigator.of(context).pop(true),
             ),
             const SizedBox(height: GerfautSpacing.sm),
-            GhostButton(
+            SecondaryButton(
               label: 'Cancel',
+              expand: true,
               onPressed: () => Navigator.of(context).pop(false),
             ),
           ],

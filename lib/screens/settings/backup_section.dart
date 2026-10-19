@@ -28,9 +28,13 @@ class BackupSection extends StatelessWidget {
           style: tokens.bodySmall.copyWith(color: tokens.textMuted),
         ),
         const SizedBox(height: GerfautSpacing.md),
-        Row(
+        // Exporting is the habit, restoring happens once on a new
+        // phone: one filled action, its counterpart beside it.
+        Wrap(
+          spacing: GerfautSpacing.sm,
+          runSpacing: GerfautSpacing.sm,
           children: [
-            SecondaryButton(
+            PrimaryButton(
               label: 'Export…',
               icon: LucideIcons.upload,
               onPressed: () => Navigator.of(context).push(
@@ -39,7 +43,6 @@ class BackupSection extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: GerfautSpacing.sm),
             SecondaryButton(
               label: 'Restore…',
               icon: LucideIcons.download,

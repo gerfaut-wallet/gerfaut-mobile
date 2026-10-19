@@ -8,8 +8,8 @@ import '../theme/tokens.dart';
 import 'notice.dart';
 import 'buttons.dart';
 
-/// The "View on mempool.space" row: a full touch target around a
-/// one-line link, behind the privacy warning.
+/// "View on mempool.space", behind the privacy warning. A secondary
+/// button: a list of broadcasts repeats it on every row.
 class ExplorerLink extends ConsumerWidget {
   const ExplorerLink({super.key, required this.url});
 
@@ -17,26 +17,12 @@ class ExplorerLink extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tokens = Theme.of(context).extension<GerfautTokens>()!;
     return Align(
       alignment: Alignment.centerLeft,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(GerfautRadius.sm),
-        onTap: () => openExplorer(context, ref, url),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: GerfautTouch.target),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'View on mempool.space',
-                style: tokens.bodySmall.copyWith(color: tokens.primary),
-              ),
-              const SizedBox(width: GerfautSpacing.xs),
-              Icon(LucideIcons.externalLink, size: 14, color: tokens.primary),
-            ],
-          ),
-        ),
+      child: SecondaryButton(
+        label: 'View on mempool.space',
+        icon: LucideIcons.externalLink,
+        onPressed: () => openExplorer(context, ref, url),
       ),
     );
   }
@@ -140,10 +126,9 @@ void openExplorer(BuildContext context, WidgetRef ref, String url) {
               ),
             ),
             actions: [
-              TextButton(
-                style: TextButton.styleFrom(foregroundColor: tokens.textMuted),
+              SecondaryButton(
+                label: 'Cancel',
                 onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('Cancel'),
               ),
               PrimaryButton(
                 label: 'Open explorer',

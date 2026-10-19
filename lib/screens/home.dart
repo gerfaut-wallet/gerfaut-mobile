@@ -361,13 +361,13 @@ class _WalletListState extends ConsumerState<_WalletList> {
                   detail: stale ? null : refused.reason,
                   actionsBelow: true,
                   action: stale
-                      ? GhostButton(label: 'Dismiss', onPressed: _dismiss)
+                      ? SecondaryButton(label: 'Dismiss', onPressed: _dismiss)
                       : ConfirmActions(
-                          cancel: GhostButton(
+                          cancel: SecondaryButton(
                             label: 'Dismiss',
                             onPressed: _dismiss,
                           ),
-                          confirm: GhostButton(
+                          confirm: PrimaryButton(
                             label: 'Try again',
                             onPressed: _retry,
                           ),

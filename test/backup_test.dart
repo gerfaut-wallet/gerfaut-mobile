@@ -155,11 +155,13 @@ void main() {
       expect(find.text('Save file'), findsOneWidget);
       expect(find.text('Share'), findsOneWidget);
       expect(find.text('Show QR code'), findsOneWidget);
-      // The backup is made: leaving is the one primary action left, and
-      // it reads as a button, full width, not as a line of text.
-      final done = find.widgetWithText(PrimaryButton, 'Done');
+      // The backup is made: leaving is secondary like the two ways out
+      // above it, so the blue does not ask to close before either is
+      // used. It still reads as a button, full width.
+      final done = find.widgetWithText(SecondaryButton, 'Done');
       expect(done, findsOneWidget);
-      expect(tester.widget<PrimaryButton>(done).expand, isTrue);
+      expect(tester.widget<SecondaryButton>(done).expand, isTrue);
+      expect(find.byType(PrimaryButton), findsNothing);
       expect(
         tester.getRect(done).width,
         closeTo(

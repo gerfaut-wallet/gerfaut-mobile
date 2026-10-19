@@ -196,11 +196,13 @@ class _LiveSheetState extends ConsumerState<LiveSheet> {
       PrimaryButton(
         label: _busy ? 'Turning on…' : 'Turn on Live',
         expand: true,
-        onPressed: _busy ? null : _turnOn,
+        busy: _busy,
+        onPressed: _turnOn,
       ),
       const SizedBox(height: GerfautSpacing.sm),
-      GhostButton(
+      SecondaryButton(
         label: 'Not now',
+        expand: true,
         onPressed: _busy ? null : () => Navigator.of(context).pop(false),
       ),
     ];
@@ -248,7 +250,11 @@ class _LiveSheetState extends ConsumerState<LiveSheet> {
         onPressed: _busy ? null : _askBattery,
       ),
       const SizedBox(height: GerfautSpacing.sm),
-      GhostButton(label: 'Not now', onPressed: _busy ? null : _afterBattery),
+      SecondaryButton(
+        label: 'Not now',
+        expand: true,
+        onPressed: _busy ? null : _afterBattery,
+      ),
     ];
   }
 
@@ -318,8 +324,9 @@ class _LiveSheetState extends ConsumerState<LiveSheet> {
         onPressed: () => Navigator.of(context).pop(true),
       ),
       const SizedBox(height: GerfautSpacing.sm),
-      GhostButton(
+      SecondaryButton(
         label: 'Open dontkillmyapp.com',
+        expand: true,
         icon: LucideIcons.externalLink,
         onPressed: () => launchUrl(
           Uri.parse(brand.helpUrl),

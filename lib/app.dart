@@ -631,22 +631,18 @@ class _StartupErrorScreenState extends State<_StartupErrorScreen> {
                   spacing: GerfautSpacing.sm,
                   runSpacing: GerfautSpacing.sm,
                   children: [
-                    // Trying again is the whole answer to a vault held
-                    // elsewhere, so it is the screen's primary action.
-                    if (inUse)
-                      PrimaryButton(
-                        label: 'Try again',
-                        icon: LucideIcons.refreshCw,
-                        onPressed: widget.onRetry,
-                      )
-                    else
-                      SecondaryButton(
-                        label: 'Try again',
-                        icon: LucideIcons.refreshCw,
-                        onPressed: widget.onRetry,
-                      ),
+                    // Trying again comes first whatever the cause: the
+                    // whole answer to a vault held elsewhere, and the
+                    // first thing to do after a restart.
+                    PrimaryButton(
+                      label: 'Try again',
+                      icon: LucideIcons.refreshCw,
+                      onPressed: widget.onRetry,
+                    ),
+                    // It only opens the confirmation below: neutral, the
+                    // red waits for the yes.
                     if (keyGone && widget.onStartOver != null)
-                      GhostButton(
+                      SecondaryButton(
                         label: 'Start over…',
                         icon: LucideIcons.archiveRestore,
                         onPressed: _confirmingStartOver
@@ -668,7 +664,7 @@ class _StartupErrorScreenState extends State<_StartupErrorScreen> {
                     liveRegion: true,
                     actionsBelow: true,
                     action: ConfirmActions(
-                      cancel: GhostButton(
+                      cancel: SecondaryButton(
                         label: 'Cancel',
                         onPressed: () =>
                             setState(() => _confirmingStartOver = false),

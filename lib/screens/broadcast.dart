@@ -373,15 +373,17 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                 ],
               ),
               const SizedBox(height: GerfautSpacing.md),
-              Row(
+              // Two other ways in: equal choices, neither in blue.
+              Wrap(
+                spacing: GerfautSpacing.sm,
+                runSpacing: GerfautSpacing.sm,
                 children: [
-                  GhostButton(
+                  SecondaryButton(
                     label: 'Import a file',
                     icon: LucideIcons.fileUp,
                     onPressed: _decoding ? null : _importFile,
                   ),
-                  const SizedBox(width: GerfautSpacing.sm),
-                  GhostButton(
+                  SecondaryButton(
                     label: 'Scan a QR code',
                     icon: LucideIcons.scanLine,
                     onPressed: _decoding ? null : _scan,
@@ -409,9 +411,8 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
           child: PrimaryButton(
             label: _decoding ? 'Decoding…' : 'Preview',
             expand: true,
-            onPressed: _inputController.text.trim().isEmpty || _decoding
-                ? null
-                : _decode,
+            busy: _decoding,
+            onPressed: _inputController.text.trim().isEmpty ? null : _decode,
           ),
         ),
       ],
@@ -503,7 +504,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
               if (sent == null)
                 Row(
                   children: [
-                    GhostButton(
+                    SecondaryButton(
                       label: 'Back',
                       onPressed: _sending ? null : _back,
                     ),
@@ -513,8 +514,9 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                         label: _sending ? 'Sending…' : 'Broadcast',
                         icon: LucideIcons.radio,
                         expand: true,
+                        busy: _sending,
                         // The state the pill reads, not a second one.
-                        onPressed: preview.readiness.sendable && !_sending
+                        onPressed: preview.readiness.sendable
                             ? () => _confirmAndSend(preview)
                             : null,
                       ),
@@ -524,10 +526,9 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
               else
                 Row(
                   children: [
-                    // Leaving is a navigation, not the point of the
-                    // screen: it steps back so the one primary here is
-                    // the same shape as every other primary action.
-                    GhostButton(
+                    // Leaving is the way out beside the screen's
+                    // action: secondary, so the blue stays with it.
+                    SecondaryButton(
                       label: 'Done',
                       onPressed: () => Navigator.of(context).pop(),
                     ),
@@ -1385,10 +1386,9 @@ class _ConfirmDialog extends ConsumerWidget {
         ],
       ),
       actions: [
-        TextButton(
-          style: TextButton.styleFrom(foregroundColor: tokens.textMuted),
+        SecondaryButton(
+          label: 'Cancel',
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
         ),
         PrimaryButton(
           label: 'Broadcast',
@@ -1695,10 +1695,9 @@ class _ForgetDialog extends StatelessWidget {
         ),
       ),
       actions: [
-        TextButton(
-          style: TextButton.styleFrom(foregroundColor: tokens.textMuted),
+        SecondaryButton(
+          label: 'Cancel',
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
         ),
         DangerButton(
           label: 'Forget',

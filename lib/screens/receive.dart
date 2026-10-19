@@ -345,7 +345,7 @@ class _AddressBlock extends StatelessWidget {
               ),
               if (offset > 0) ...[
                 const SizedBox(width: GerfautSpacing.sm),
-                GhostButton(
+                SecondaryButton(
                   label: 'First unused',
                   icon: LucideIcons.rotateCcw,
                   onPressed: onFirst,
@@ -588,12 +588,9 @@ class _AddressCardState extends State<_AddressCard> {
               ),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: GhostButton(
+                child: DisclosureButton(
                   label: _expanded ? 'Show less' : 'Show all ${rows.length}',
-                  icon: _expanded
-                      ? LucideIcons.chevronUp
-                      : LucideIcons.chevronDown,
-                  expanded: _expanded,
+                  open: _expanded,
                   onPressed: () => setState(() => _expanded = !_expanded),
                 ),
               ),

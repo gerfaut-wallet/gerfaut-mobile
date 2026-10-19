@@ -710,7 +710,9 @@ void main() {
       // their own under it, the way out first and the destructive one at
       // the end.
       final words = tester.getRect(find.text(sentence));
-      final cancel = tester.getRect(find.widgetWithText(GhostButton, 'Cancel'));
+      final cancel = tester.getRect(
+        find.widgetWithText(SecondaryButton, 'Cancel'),
+      );
       final remove = tester.getRect(
         find.widgetWithText(DangerButton, 'Remove wallet'),
       );
@@ -761,7 +763,9 @@ void main() {
     await tester.tap(find.text('Remove'));
     await tester.pumpAndSettle();
 
-    final cancel = tester.getRect(find.widgetWithText(GhostButton, 'Cancel'));
+    final cancel = tester.getRect(
+      find.widgetWithText(SecondaryButton, 'Cancel'),
+    );
     final remove = tester.getRect(
       find.widgetWithText(DangerButton, 'Remove wallet'),
     );
@@ -2570,9 +2574,12 @@ void main() {
   });
 
   group('rescan', () {
-    TextButton button(WidgetTester tester, String label) {
-      return tester.widget<TextButton>(
-        find.ancestor(of: find.text(label), matching: find.byType(TextButton)),
+    ButtonStyleButton button(WidgetTester tester, String label) {
+      return tester.widget<ButtonStyleButton>(
+        find.ancestor(
+          of: find.text(label),
+          matching: find.bySubtype<ButtonStyleButton>(),
+        ),
       );
     }
 

@@ -55,7 +55,7 @@ class LoadFailure extends StatelessWidget {
             ),
           ],
           const SizedBox(height: GerfautSpacing.sm),
-          GhostButton(
+          PrimaryButton(
             label: 'Try again',
             icon: LucideIcons.refreshCw,
             onPressed: onRetry,

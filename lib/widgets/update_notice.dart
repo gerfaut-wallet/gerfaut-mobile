@@ -89,7 +89,7 @@ class UpdateNotice extends ConsumerWidget {
                 children: [
                   _Hinted(
                     hint: 'Hides this notice until the next release',
-                    child: GhostButton(
+                    child: SecondaryButton(
                       label: 'Later',
                       onPressed: updates.dismiss,
                     ),

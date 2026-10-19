@@ -203,10 +203,11 @@ class _TorSectionState extends ConsumerState<TorSection> {
         const SizedBox(height: GerfautSpacing.md),
         Align(
           alignment: Alignment.centerLeft,
-          child: SecondaryButton(
+          child: PrimaryButton(
             label: _connecting ? 'Connecting…' : 'Test the connection',
             icon: LucideIcons.plug,
-            onPressed: _connecting ? null : _connect,
+            busy: _connecting,
+            onPressed: _connect,
           ),
         ),
       ],

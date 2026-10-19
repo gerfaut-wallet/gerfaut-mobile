@@ -502,7 +502,9 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    // Not settled: Save turns its spinner for as long as the core
+    // writes.
+    await tester.pump(const Duration(milliseconds: 500));
 
     gate.complete();
     await tester.pumpAndSettle();

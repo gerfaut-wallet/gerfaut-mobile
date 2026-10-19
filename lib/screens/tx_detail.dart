@@ -282,7 +282,7 @@ class _Hero extends ConsumerWidget {
             alignment: Alignment.centerLeft,
             // Still behind the privacy warning: what moved up is the
             // button, never the question it asks first.
-            child: SecondaryButton(
+            child: PrimaryButton(
               label: 'View on mempool.space',
               icon: LucideIcons.externalLink,
               onPressed: () => openExplorer(context, ref, explorer),

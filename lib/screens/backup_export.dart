@@ -250,6 +250,7 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
       action: PrimaryButton(
         label: _creating ? 'Creating…' : 'Create backup',
         expand: true,
+        busy: _creating,
         onPressed: ready ? _create : null,
       ),
       children: [
@@ -392,6 +393,7 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
               child: SecondaryButton(
                 label: _trip == _Trip.save ? 'Saving…' : 'Save file',
                 icon: LucideIcons.save,
+                busy: _trip == _Trip.save,
                 onPressed: _trip == null ? () => _saveFile(bundle) : null,
               ),
             ),
@@ -400,6 +402,7 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
               child: SecondaryButton(
                 label: _trip == _Trip.share ? 'Sharing…' : 'Share',
                 icon: LucideIcons.share2,
+                busy: _trip == _Trip.share,
                 onPressed: _trip == null ? () => _share(bundle) : null,
               ),
             ),
@@ -430,10 +433,10 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
           style: tokens.bodySmall.copyWith(color: tokens.textMuted),
         ),
         const SizedBox(height: GerfautSpacing.md),
-        // The backup exists and the ways out are secondary: leaving is
-        // what this state of the screen is for, so it gets the one
-        // primary button, full width, where the thumb is.
-        PrimaryButton(
+        // Secondary like the two ways out of the backup above it: in
+        // blue it would ask to close before either is used. Full
+        // width, where the thumb is.
+        SecondaryButton(
           label: 'Done',
           expand: true,
           onPressed: () => Navigator.of(context).pop(),
