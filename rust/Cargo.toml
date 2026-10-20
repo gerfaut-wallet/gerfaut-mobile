@@ -8,7 +8,7 @@ publish = false
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
-flutter_rust_bridge = "=2.12.0"
+flutter_rust_bridge = "=2.13.0"
 # The built-in Tor client: a phone rarely runs a Tor daemon, and Orbot
 # is a second app to install.
 gerfaut-core = { path = "../../gerfaut-core", features = ["embedded-tor"] }
