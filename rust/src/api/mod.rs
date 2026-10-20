@@ -28,7 +28,7 @@ use gerfaut_core::store::VaultKey;
 use gerfaut_core::wallet::meta::WalletIcon;
 use gerfaut_core::wallet::snapshot::SyncReport;
 use gerfaut_core::{CoreError, Network, WalletManager};
-use rand::TryRngCore;
+use rand::TryRng;
 use serde_json::json;
 use std::panic::AssertUnwindSafe;
 use std::sync::LazyLock;
@@ -172,7 +172,7 @@ pub async fn fresh_vault_key() -> String {
     let drawn = FRESH_KEY
         .get_or_try_init(|| async {
             let mut bytes = [0u8; 32];
-            rand::rngs::OsRng
+            rand::rngs::SysRng
                 .try_fill_bytes(&mut bytes)
                 .map_err(|e| error_json("random", format!("no randomness to draw a key: {e}")))?;
             Ok::<String, String>(bytes.iter().map(|b| format!("{b:02x}")).collect())
