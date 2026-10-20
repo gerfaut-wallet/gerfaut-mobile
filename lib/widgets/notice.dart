@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/tokens.dart';
@@ -209,7 +210,8 @@ class GerfautNotice extends StatelessWidget {
 /// node the server's words as its text and kept the role and the message
 /// as a hint that neither `uiautomator` nor the announcement carried.
 /// There the words are read as plain text instead, after the message,
-/// in the region's own node; they still select on screen.
+/// in the region's own node, which a screen reader can still copy them
+/// from; they still select on screen.
 class _Detail extends StatelessWidget {
   const _Detail(
     this.text, {
@@ -230,8 +232,10 @@ class _Detail extends StatelessWidget {
       style: tokens.data.copyWith(fontSize: 12, color: tokens.textMuted),
     );
     if (!spokenWithTitle) return words;
+    // Copy is offered on the region instead, as the field offered it.
     return Semantics(
       label: text,
+      onCopy: () => Clipboard.setData(ClipboardData(text: text)),
       child: ExcludeSemantics(child: words),
     );
   }

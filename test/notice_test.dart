@@ -1,4 +1,7 @@
+import 'dart:ui' show SemanticsAction;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/theme/tokens.dart';
@@ -284,6 +287,47 @@ void main() {
       expect(region.value, isEmpty);
       // Still selectable on screen.
       expect(find.byType(SelectableText), findsOneWidget);
+      handle.dispose();
+    });
+
+    testWidgets('the words can still be copied from the region', (
+      tester,
+    ) async {
+      String? copied;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied = (call.arguments as Map)['text'] as String?;
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        host(
+          const GerfautNotice(
+            tone: NoticeTone.info,
+            message: message,
+            detail: refusal,
+            liveRegion: true,
+          ),
+        ),
+      );
+
+      // The field that offered Copy is gone from the tree: the region
+      // offers it, with the other system's words alone.
+      final region = tester.getSemantics(find.byType(GerfautNotice));
+      expect(region.getSemanticsData().hasAction(SemanticsAction.copy), isTrue);
+      region.owner!.performAction(region.id, SemanticsAction.copy);
+      await tester.pump();
+      expect(copied, refusal);
       handle.dispose();
     });
 
