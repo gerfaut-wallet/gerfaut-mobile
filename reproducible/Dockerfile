@@ -24,14 +24,14 @@ ARG ANDROID_CMDLINE_TOOLS_SHA256=0877a1d048fe4a24efe2eff536ca4223f7adeb58648bb81
 ARG ANDROID_PLATFORMS="android-36 android-35 android-34"
 # The default build-tools revision of Android Gradle Plugin 9.4.1.
 ARG ANDROID_BUILD_TOOLS=36.0.0
-# The NDK Flutter 3.47.1 defaults to, which every native part builds
+# The NDK Flutter 3.47.7 defaults to, which every native part builds
 # with since flutter_zxing 3 stopped pinning an older one.
 ARG ANDROID_NDKS="28.2.13676358"
 # flutter_zxing and jni build their native code through CMake.
 ARG ANDROID_CMAKE=3.22.1
-ARG FLUTTER_VERSION=3.47.1
-ARG FLUTTER_COMMIT=6655482ec06e547f90abf8ae7590466f4415978d
-ARG RUST_VERSION=1.97.0
+ARG FLUTTER_VERSION=3.47.7
+ARG FLUTTER_COMMIT=abaf9c523780a608bd46686fd5e53740a07077f8
+ARG RUST_VERSION=1.99.1
 # rustup-init 1.29.1, the installer of the toolchain above, fetched as a
 # binary and checked against the checksum rustup publishes beside it
 # (rustup-init.sha256), never piped from a script into a shell.
