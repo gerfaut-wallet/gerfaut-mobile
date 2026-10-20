@@ -432,10 +432,12 @@ final relativeClockProvider = NotifierProvider<RelativeClock, int>(
 /// hint.
 class PriceNotifier extends AsyncNotifier<PriceQuote?> {
   Timer? _timer;
+  int _builds = 0;
 
   @override
   Future<PriceQuote?> build() async {
     _timer?.cancel();
+    final build = ++_builds;
     final enabled = ref.watch(fiatEnabledProvider);
     // Asked again when the pair changes, which the screens only take
     // once the vault stored it: the core prices by what it stored.
@@ -459,6 +461,9 @@ class PriceNotifier extends AsyncNotifier<PriceQuote?> {
     }
     ref.onDispose(() => _timer?.cancel());
     final every = (await ref.read(priceTableProvider.future)).refresh;
+    // A newer build began during the wait: its clock is the one that
+    // runs, and what this one returns is dropped.
+    if (build != _builds) return state.value;
     // Scheduled before the fetch so failures retry on the same cadence.
     _timer = Timer(every, () => ref.invalidateSelf());
     return ref.read(bridgeProvider).fetchPrice();

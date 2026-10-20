@@ -406,10 +406,12 @@ final widgetSchedulerProvider = Provider<WidgetScheduler>(
 /// opt-in; nothing is fetched while none is placed.
 class WidgetPriceNotifier extends AsyncNotifier<PriceQuote?> {
   Timer? _timer;
+  int _builds = 0;
 
   @override
   Future<PriceQuote?> build() async {
     _timer?.cancel();
+    final build = ++_builds;
     final fiatOn = ref.watch(fiatEnabledProvider);
     final appQuote = ref.watch(priceProvider);
     // Asked again when the pair changes: the core prices by it.
@@ -417,6 +419,9 @@ class WidgetPriceNotifier extends AsyncNotifier<PriceQuote?> {
     ref.watch(fiatSourceProvider);
     final inFront = ref.watch(appInFrontProvider);
     final installed = await ref.watch(installedWidgetsProvider.future);
+    // A newer build began during a wait: it alone sets the clock, and
+    // what this one returns is dropped.
+    if (build != _builds) return state.value;
     if (!installed.contains(HomeWidgets.price)) return null;
     if (fiatOn) return appQuote.value;
     // Out of sight the widget is the periodic task's to refresh: no
@@ -424,6 +429,7 @@ class WidgetPriceNotifier extends AsyncNotifier<PriceQuote?> {
     if (!inFront) return state.value;
     ref.onDispose(() => _timer?.cancel());
     final every = (await ref.read(priceTableProvider.future)).refresh;
+    if (build != _builds) return state.value;
     // Scheduled before the fetch so failures retry on the same cadence
     // as the app's own quote.
     _timer = Timer(every, () => ref.invalidateSelf());
