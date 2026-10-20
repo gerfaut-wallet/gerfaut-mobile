@@ -1,66 +1,115 @@
-# gerfaut-mobile
+<div align="center">
 
-[Gerfaut](https://github.com/gerfaut-wallet) for Android, a Bitcoin watch-only wallet.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/images/logo-dark.svg">
+  <img src=".github/images/logo-light.svg" alt="Gerfaut" width="180">
+</picture>
 
-![Status: public beta](https://img.shields.io/badge/status-public%20beta-yellow) ![License: AGPL-3.0-only](https://img.shields.io/badge/license-AGPL--3.0--only-blue)
+<h3>The Bitcoin watch-only wallet for Android</h3>
 
-Watch your coins without ever exposing them: Gerfaut holds no private keys. It watches descriptors, shows balances and history, and alerts you when something moves.
+Follow every wallet you own from its descriptor or public key.<br>
+Gerfaut holds no private keys, so it can never spend your bitcoin.
 
-## Status: public beta
+[Download](https://gerfaut-wallet.com/download#android) · [Documentation](https://gerfaut-wallet.com/docs) · [Website](https://gerfaut-wallet.com) · [Desktop app](https://github.com/gerfaut-wallet/gerfaut-desktop)
 
-Gerfaut is in public beta. It never holds your private keys, so it cannot move your bitcoin, but it is new and has had little testing: check addresses and amounts on your signing device before you rely on them. Report anything that looks wrong in the [issues](https://github.com/gerfaut-wallet/gerfaut-mobile/issues). The [changelog](CHANGELOG.md) lists what the app does.
+[![CI](https://github.com/gerfaut-wallet/gerfaut-mobile/actions/workflows/ci.yml/badge.svg)](https://github.com/gerfaut-wallet/gerfaut-mobile/actions/workflows/ci.yml)
+[![License: AGPL-3.0-only](https://img.shields.io/badge/license-AGPL--3.0--only-blue)](LICENSE)
 
-## Scope
+</div>
 
-- Flutter app, Android first. An iOS version is planned for a later stage, and the codebase stays portable by construction.
-- Wallet logic delegated to [`gerfaut-core`](https://github.com/gerfaut-wallet/gerfaut-core) (Rust) via `flutter_rust_bridge`
-- Native code kept to what must be native: home-screen widgets, notifications, biometric unlock, and the foreground service behind Live watch. That service keeps a connection open to the backend your syncs already use, so Gerfaut hears of a transaction within seconds from an Electrum server, and later from an Esplora server, which can only be polled. No Gerfaut server and no Firebase are involved.
+<br>
 
-## Watch-only, by design
+<p align="center">
+  <img src=".github/images/wallets.webp" width="24%" alt="The home screen in the light theme: four wallets named Cold storage, Family vault, Savings and Inheritance, each with its icon and balance">
+  <img src=".github/images/wallet-dark.webp" width="24%" alt="A wallet opened in the dark theme: the balance, then the list of transactions with their dates and signed amounts">
+  <img src=".github/images/transaction.webp" width="24%" alt="A received transaction: the amount, its confirmation and block, then a diagram with two inputs on the left, one output on the right and the fee below">
+  <img src=".github/images/policy.webp" width="24%" alt="The Policy page of a timelock vault: key A can spend now, key B once a coin has waited three blocks, about 30 minutes, then both keys with their derivation paths">
+</p>
 
-The app contains no code to generate keys, handle seeds, or sign transactions. There is no "Send" button. See [CONTRIBUTING.md](CONTRIBUTING.md).
+> [!NOTE]
+> Gerfaut is in public beta. It cannot move your bitcoin, but it is new and has had little testing: check addresses and amounts on your signing device before you rely on them, and [open an issue](https://github.com/gerfaut-wallet/gerfaut-mobile/issues) when something looks wrong.
 
-## Project
+## Features
 
-| Repository | Role |
+- Watch any wallet you already have: an output descriptor (Miniscript included), an xpub, ypub or zpub, a single address, a multisig setup, a BSMS record, or a Sparrow or Coldcard export. Paste it, open the file or scan the QR code, animated ones included.
+- Get a notification when a transaction reaches the mempool, and another when it confirms, even after a reboot. They come through the backend you chose: there is no Gerfaut server and no Firebase.
+- Add widgets to your home screen for the bitcoin price, your balances and the block height, with amounts hidden until you turn them on.
+- Open a transaction to see its inputs, outputs and fee on one diagram, and find every UTXO in a list of its own.
+- Read a Miniscript policy in plain words: each spending path, with its timelock counted down to the block or the date it opens.
+- Connect to your own Electrum or Esplora server, or stay on a public one. An `.onion` backend needs no other app, because Gerfaut has a Tor client built in.
+- Lock Gerfaut with a PIN or a password and open it with biometrics, or disguise it as a working calculator. Locked, Gerfaut blocks screenshots and blanks itself in the recent apps.
+- Bring your wallets over from the [desktop app](https://github.com/gerfaut-wallet/gerfaut-desktop) by scanning the animated QR code of an encrypted backup.
+
+Gerfaut works on mainnet, signet, testnet4 and regtest, in a light or a dark theme. There is no code to generate keys, handle seeds or sign transactions, and no Send button.
+
+## Download
+
+Gerfaut runs on Android 7.0 or newer. Get the APK for your phone's processor from the [latest release](https://github.com/gerfaut-wallet/gerfaut-mobile/releases/latest):
+
+| File | For |
 |---|---|
-| [`gerfaut-core`](https://github.com/gerfaut-wallet/gerfaut-core) | Core Rust library |
-| `gerfaut-mobile` | Mobile app, this repository |
-| [`gerfaut-desktop`](https://github.com/gerfaut-wallet/gerfaut-desktop) | Desktop app (Tauri v2, for Linux, macOS, and Windows) |
-| [`gerfaut-web`](https://github.com/gerfaut-wallet/gerfaut-web) | Website, documentation, downloads |
+| `gerfaut-v<version>-android-arm64-v8a.apk` | Almost every phone sold since 2017. Take this one unless you know otherwise. |
+| `gerfaut-v<version>-android-armeabi-v7a.apk` | Older 32-bit phones |
+| `gerfaut-v<version>-android-x86_64.apk` | Emulators and Chromebooks |
 
-## Releases
+Open the file on your phone and allow the install when Android asks. [Install on Android](https://gerfaut-wallet.com/docs/getting-started/install-android) walks through it, updates included.
 
-Every `v*` tag makes CI build three APKs in a pinned container, one per processor architecture. They come out unsigned: the release key never leaves the author's machine, which signs them and publishes them on the [releases page](https://github.com/gerfaut-wallet/gerfaut-mobile/releases):
+### Verify your download
 
-| File | Architecture | For |
-|---|---|---|
-| `gerfaut-<version>-android-arm64-v8a.apk` | 64-bit ARM | almost every phone, take this one |
-| `gerfaut-<version>-android-armeabi-v7a.apk` | 32-bit ARM | older or entry-level devices |
-| `gerfaut-<version>-android-x86_64.apk` | Intel and AMD | emulators, Chromebooks |
-
-Every Android phone sold since roughly 2017 runs on 64-bit ARM, so `arm64-v8a` is the answer unless you know otherwise.
-
-Each release ships a `SHA256SUMS` manifest signed with the author's [minisign](https://jedisct1.github.io/minisign/) key:
+Every release ships a `SHA256SUMS` file signed with the author's [minisign](https://jedisct1.github.io/minisign/) key:
 
 ```
 RWTz3c4gUmglCX5Uvjthigz1ts3TS3ZSdhRNpFgOJRW/Wr4XjGlqTR3O
 ```
 
-Verify a download in two steps: `minisign -Vm SHA256SUMS -P <key>` proves the manifest comes from the author, then `sha256sum --check SHA256SUMS --ignore-missing` proves your file matches it. [Verify a download](https://gerfaut-wallet.com/docs/getting-started/verify-your-download) walks through both steps on Linux, macOS and Windows.
+Put `SHA256SUMS` and `SHA256SUMS.minisig` next to the APK, then run:
 
-Android checks the APK signature on its own. To check the signer yourself, `apksigner verify --print-certs` must print this SHA-256 certificate digest:
+```sh
+minisign -Vm SHA256SUMS -P RWTz3c4gUmglCX5Uvjthigz1ts3TS3ZSdhRNpFgOJRW/Wr4XjGlqTR3O
+sha256sum --check SHA256SUMS --ignore-missing   # macOS: shasum -a 256 --check SHA256SUMS --ignore-missing
+```
+
+The first command proves the list comes from the author, the second that your file matches it. For Windows, see [Verify a download](https://gerfaut-wallet.com/docs/getting-started/verify-your-download).
+
+Every APK is signed with the same certificate. `apksigner verify --print-certs`, from the Android SDK build tools, must print this SHA-256 digest:
 
 ```
 de91a0e0c151290a0c9b34507e58d0bd0e99cdd7db41adc65b60a7c68e0ff0a7
 ```
 
-## License
+## Build from source
 
-[AGPL-3.0-only](LICENSE). Commercial licensing: info@pandul.fr.
+You need git, Flutter, [rustup](https://rustup.rs) and the Android SDK with the NDK that Flutter asks for. The versions CI uses are pinned: Flutter in `.github/workflows/ci.yml`, Rust and its three Android targets in `rust/rust-toolchain.toml`.
 
-The Gerfaut name and logo are not covered by the code license. See [TRADEMARK.md](TRADEMARK.md).
+The app builds [gerfaut-core](https://github.com/gerfaut-wallet/gerfaut-core) from the folder next to its own, at the revision `reproducible/gerfaut-core.rev` names:
+
+```sh
+git clone https://github.com/gerfaut-wallet/gerfaut-mobile
+git clone https://github.com/gerfaut-wallet/gerfaut-core
+git -C gerfaut-core checkout "$(cat gerfaut-mobile/reproducible/gerfaut-core.rev)"
+cd gerfaut-mobile
+flutter build apk --debug   # build/app/outputs/flutter-apk/app-debug.apk
+```
+
+Release APKs come out of the pinned container in `reproducible/`. To build the three unsigned APKs the way the release workflow does, run `reproducible/build.sh`, which needs git and Docker.
+
+## Contributing
+
+Bug reports and pull requests are welcome. Open an issue before any change beyond a small fix, and read [CONTRIBUTING.md](CONTRIBUTING.md) first: it explains the license of contributions, how to regenerate the Rust bridge, and the one hard rule, which is that Gerfaut stays watch-only. Before you push, run what CI runs:
+
+```sh
+dart format --output=none --set-exit-if-changed lib test
+flutter analyze
+flutter test
+cd rust && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+```
 
 ## Security
 
-Report vulnerabilities privately. See [SECURITY.md](SECURITY.md).
+Do not report a vulnerability in a public issue. Use [private vulnerability reporting](https://github.com/gerfaut-wallet/gerfaut-mobile/security/advisories/new) or write to info@pandul.fr. [SECURITY.md](SECURITY.md) lists what is in scope and what to expect.
+
+## License
+
+Gerfaut is free software under the [GNU Affero General Public License v3.0 only](LICENSE). For a commercial license, write to info@pandul.fr.
+
+The Gerfaut name and logo are not covered by the code license. See [TRADEMARK.md](TRADEMARK.md).
