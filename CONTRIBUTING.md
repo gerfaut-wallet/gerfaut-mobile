@@ -35,7 +35,7 @@ cd gerfaut-mobile
 git -C ../gerfaut-core checkout "$(cat reproducible/gerfaut-core.rev)"
 ```
 
-You need Flutter 3.47.1, Rust 1.97.0 with the three Android targets listed in `rust/rust-toolchain.toml`, and the Android SDK with the NDK that Flutter asks for. Before you push, run what CI runs:
+You need Flutter 3.47.7, Rust 1.99.1 with the three Android targets listed in `rust/rust-toolchain.toml`, and the Android SDK with the NDK that Flutter asks for. Before you push, run what CI runs:
 
 ```
 dart format --output=none --set-exit-if-changed lib test
