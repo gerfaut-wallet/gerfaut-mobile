@@ -173,8 +173,7 @@ void main() {
     final bridge = FakeBridge()
       ..onPreview = (_, _) => throw coreFailure(
         'too_many_parts',
-        'invalid qr: this QR code announces 6000 parts, more than Gerfaut '
-            'reads',
+        'This QR code announces 6000 parts, more than Gerfaut reads.',
       );
     await tester.pumpWidget(broadcastApp(bridge));
     await tester.pumpAndSettle();

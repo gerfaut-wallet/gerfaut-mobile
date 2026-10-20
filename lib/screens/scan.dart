@@ -189,8 +189,8 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
           if (!mounted || _done) return;
           // Or to a collection already dropped meanwhile.
           if (collection != _collection) continue;
-          // The core refused what was collected: a PSBT or an envelope
-          // it cannot open starts over; a code past what Gerfaut reads
+          // The core refused what was collected: a type it does not read
+          // or a damaged code starts over; a code past what Gerfaut reads
           // stops the scan.
           if (e.kind == 'too_many_parts') {
             _stop(_tooManyParts);

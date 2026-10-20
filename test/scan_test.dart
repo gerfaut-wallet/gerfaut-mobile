@@ -23,7 +23,8 @@ const _caption =
 const _hint = 'Keep the camera on the animated code';
 const _notRead =
     'This QR code holds an executable file, which Gerfaut does not read. '
-    'Show the wallet export or the signed transaction instead.';
+    'Show the code this screen asks for instead, such as a wallet export or '
+    'a signed transaction.';
 const _tooManyParts =
     'This code has more parts than Gerfaut can read. If the wallet offers a '
     'denser QR code, show that one instead.';
@@ -190,8 +191,8 @@ void main() {
             )
           : throw coreFailure(
               'too_many_parts',
-              'invalid qr: 3 frames scanned without the code coming '
-                  'together, more than Gerfaut reads',
+              '3 frames were scanned without the code coming together, '
+                  'more than Gerfaut reads.',
             );
     final keeper = FakeScreenKeeper();
     final outcome = _Outcome();
@@ -359,8 +360,7 @@ void main() {
     final bridge = FakeBridge()
       ..onAssembleQr = (_) => throw coreFailure(
         'too_many_parts',
-        'invalid qr: this QR code announces 6000 parts, more than Gerfaut '
-            'reads',
+        'This QR code announces 6000 parts, more than Gerfaut reads.',
       );
     final outcome = _Outcome();
     final state = await _open(tester, bridge, outcome);
@@ -369,7 +369,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text(_tooManyParts), findsOneWidget);
-    expect(find.textContaining('invalid qr'), findsNothing);
+    expect(find.textContaining('announces 6000 parts'), findsNothing);
     expect(find.byKey(_camera), findsNothing);
     expect(outcome.pops, 0);
     expect(find.byType(ScanScreen), findsOneWidget);
@@ -430,7 +430,7 @@ void main() {
           lost = false;
           throw coreFailure(
             'invalid_input',
-            'invalid qr: this scan was closed: open the scanner again',
+            'This scan was closed. Open the scanner again.',
           );
         }
         return QrProgress(
