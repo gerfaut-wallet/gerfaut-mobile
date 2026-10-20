@@ -22,7 +22,7 @@ ARG ANDROID_CMDLINE_TOOLS_SHA256=0877a1d048fe4a24efe2eff536ca4223f7adeb58648bb81
 # android-36 is the app's compileSdk and targetSdk; 35 and 34 are what
 # some of the Flutter plugins compile against, and Gradle needs each one.
 ARG ANDROID_PLATFORMS="android-36 android-35 android-34"
-# The default build-tools revision of Android Gradle Plugin 9.1.0.
+# The default build-tools revision of Android Gradle Plugin 9.4.1.
 ARG ANDROID_BUILD_TOOLS=36.0.0
 # The NDK Flutter 3.47.1 defaults to, which every native part builds
 # with since flutter_zxing 3 stopped pinning an older one.
