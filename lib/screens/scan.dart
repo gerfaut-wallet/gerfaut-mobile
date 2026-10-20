@@ -50,7 +50,13 @@ class ScanScreen extends ConsumerStatefulWidget {
 /// one the core turns away by the count it announces, or by the frames
 /// it took without coming together (the core keeps count). The desktop
 /// app says the same.
-const String _tooManyParts = 'This code has more parts than Gerfaut can read.';
+const String _tooManyParts =
+    'This code has more parts than Gerfaut can read. If the wallet offers a '
+    'denser QR code, show that one instead.';
+
+/// A code whose parts all came and add up to nothing.
+const String _emptyCode =
+    'This code came through empty. Export it again from the wallet.';
 
 class ScanScreenState extends ConsumerState<ScanScreen> {
   /// The scan the core holds for this screen, opened with it and let go
@@ -200,7 +206,9 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
             _queue.addFirst(frame);
             continue;
           }
-          _startOver(e.message);
+          // The core's sentence says what it saw and what to show
+          // instead; a private key is said as at the import.
+          _startOver(materialRefusal(e));
           return;
         }
         if (!mounted || _done) return;
@@ -214,7 +222,7 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
             // that hands the caller an empty scan, which is exactly what
             // a scanner closing on its own looks like from the page
             // underneath.
-            _startOver('This code came out empty.');
+            _startOver(_emptyCode);
             return;
           }
           _done = true;
