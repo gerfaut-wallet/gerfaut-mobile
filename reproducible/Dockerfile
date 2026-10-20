@@ -24,9 +24,9 @@ ARG ANDROID_CMDLINE_TOOLS_SHA256=0877a1d048fe4a24efe2eff536ca4223f7adeb58648bb81
 ARG ANDROID_PLATFORMS="android-36 android-35 android-34"
 # The default build-tools revision of Android Gradle Plugin 9.1.0.
 ARG ANDROID_BUILD_TOOLS=36.0.0
-# Two NDKs: the one Flutter 3.47.1 defaults to, and the older revision
-# flutter_zxing pins for its native decoder.
-ARG ANDROID_NDKS="28.2.13676358 27.0.12077973"
+# The NDK Flutter 3.47.1 defaults to, which every native part builds
+# with since flutter_zxing 3 stopped pinning an older one.
+ARG ANDROID_NDKS="28.2.13676358"
 # flutter_zxing and jni build their native code through CMake.
 ARG ANDROID_CMAKE=3.22.1
 ARG FLUTTER_VERSION=3.47.1
