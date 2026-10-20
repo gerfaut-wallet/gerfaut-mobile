@@ -1227,9 +1227,15 @@ class FakeBridge implements GerfautBridge {
   /// Every forgotten host, in order, for assertions.
   final List<String> forgottenCertificates = [];
 
+  /// Holds every certificate check until completed: a server that
+  /// takes its time to answer.
+  Completer<void>? inspectGate;
+
   @override
   Future<CertificateReport> inspectCertificate(String url) async {
     inspectedCertificates.add(url);
+    final gate = inspectGate;
+    if (gate != null) await gate.future;
     final inspect = onInspectCertificate;
     return CertificateReport(
       host: _certificateKey(url),

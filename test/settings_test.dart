@@ -1761,6 +1761,159 @@ void main() {
         'ssl://bitcoin.lu.ke:50002',
       ]);
     });
+
+    group('leaving while the server is checked', () {
+      /// The Network page pushed from the root list, as the app opens
+      /// it, with a save of [bridge]'s Electrum server under way and the
+      /// server not answering yet.
+      Future<Completer<void>> checking(
+        WidgetTester tester,
+        FakeBridge bridge,
+      ) async {
+        useTallSurface(tester);
+        final gate = Completer<void>();
+        bridge.inspectGate = gate;
+        await tester.pumpWidget(settingsApp(bridge));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Network'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Save backend'));
+        // The spinner turns until the server answers: no settling.
+        await tester.pump(const Duration(milliseconds: 100));
+        return gate;
+      }
+
+      Future<void> pumpABit(WidgetTester tester) async {
+        for (var i = 0; i < 10; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+      }
+
+      testWidgets('the button says the server is being checked', (
+        tester,
+      ) async {
+        final bridge = ownElectrum();
+        final gate = await checking(tester, bridge);
+
+        final button = tester.widget<PrimaryButton>(
+          find.widgetWithText(PrimaryButton, 'Checking the server…'),
+        );
+        expect(button.busy, isTrue);
+        expect(find.text('Save backend'), findsNothing);
+
+        gate.complete();
+        await tester.pumpAndSettle();
+        expect(find.text('Save backend'), findsOneWidget);
+        expect(bridge.savedBackends, hasLength(1));
+      });
+
+      testWidgets('Back asks, and staying keeps the choice', (tester) async {
+        final bridge = ownElectrum();
+        final gate = await checking(tester, bridge);
+
+        // The system back, which the predictive gesture also is.
+        await tester.binding.handlePopRoute();
+        await pumpABit(tester);
+        expect(find.text('Leave without saving?'), findsOneWidget);
+        // Staying is the filled button.
+        expect(find.widgetWithText(PrimaryButton, 'Stay'), findsOneWidget);
+
+        await tester.tap(find.text('Stay'));
+        await pumpABit(tester);
+        expect(find.text('Leave without saving?'), findsNothing);
+        expect(find.byType(SettingsSectionScreen), findsOneWidget);
+
+        gate.complete();
+        await tester.pumpAndSettle();
+        expect(
+          (bridge.savedBackends[Network.mainnet]! as CustomElectrum).url,
+          'ssl://node.local:50002',
+        );
+        expect(find.text('Setting saved'), findsOneWidget);
+      });
+
+      testWidgets('leaving by the arrow saves nothing, ever', (tester) async {
+        final bridge = ownElectrum();
+        final gate = await checking(tester, bridge);
+
+        await tester.tap(find.byType(BackButton));
+        await pumpABit(tester);
+        expect(find.text('Leave without saving?'), findsOneWidget);
+        await tester.tap(find.text('Leave'));
+        await pumpABit(tester);
+        expect(find.byType(SettingsSectionScreen), findsNothing);
+
+        // The server answers after the page is gone.
+        gate.complete();
+        await tester.pumpAndSettle();
+        expect(bridge.savedBackends, isEmpty);
+        expect(find.text('Setting saved'), findsNothing);
+      });
+
+      testWidgets('an answer that comes while asking waits for the person', (
+        tester,
+      ) async {
+        final bridge = ownElectrum();
+        final gate = await checking(tester, bridge);
+
+        await tester.binding.handlePopRoute();
+        await pumpABit(tester);
+        gate.complete();
+        await pumpABit(tester);
+        // Nothing is written behind the question.
+        expect(bridge.savedBackends, isEmpty);
+        expect(find.text('Leave without saving?'), findsOneWidget);
+
+        await tester.tap(find.text('Leave'));
+        await tester.pumpAndSettle();
+        expect(bridge.savedBackends, isEmpty);
+        expect(find.byType(SettingsSectionScreen), findsNothing);
+      });
+
+      testWidgets('a certificate question waits for the answer too', (
+        tester,
+      ) async {
+        final bridge = ownElectrum();
+        bridge.onInspectCertificate = (_) => unknown;
+        final gate = await checking(tester, bridge);
+
+        await tester.binding.handlePopRoute();
+        await pumpABit(tester);
+        gate.complete();
+        await pumpABit(tester);
+        // One question at a time.
+        expect(
+          find.text('This server signs its own certificate'),
+          findsNothing,
+        );
+
+        await tester.tap(find.text('Stay'));
+        await pumpABit(tester);
+        expect(
+          find.text('This server signs its own certificate'),
+          findsOneWidget,
+        );
+        await tester.tap(find.text('Accept and save'));
+        await tester.pumpAndSettle();
+        expect(bridge.trustedCertificates, hasLength(1));
+        expect(bridge.savedBackends, hasLength(1));
+      });
+
+      testWidgets('with nothing under way, Back leaves at once', (
+        tester,
+      ) async {
+        useTallSurface(tester);
+        await tester.pumpWidget(settingsApp(ownElectrum()));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Network'));
+        await tester.pumpAndSettle();
+
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(find.text('Leave without saving?'), findsNothing);
+        expect(find.byType(SettingsSectionScreen), findsNothing);
+      });
+    });
   });
 
   group('this is my node', () {

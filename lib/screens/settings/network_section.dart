@@ -36,6 +36,22 @@ const List<({Network network, String hint})> _networkHints = [
   (network: Network.regtest, hint: 'Local development chain'),
 ];
 
+/// Where a press of Save backend stands.
+enum _BackendSave {
+  idle,
+
+  /// The server's certificate is being looked at, over the network:
+  /// nothing is written yet, and leaving drops the choice.
+  checking,
+
+  /// The server's certificate is on screen for the person to decide:
+  /// nothing turns while they read it.
+  asking,
+
+  /// The choice is on its way to the vault, a moment's work.
+  writing,
+}
+
 /// The Network section: which chain, which backend serves it, how Tor is
 /// reached, and the certificates accepted along the way.
 class NetworkSection extends ConsumerStatefulWidget {
@@ -69,7 +85,19 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
   /// Chosen public server id; null is the automatic rotation.
   String? _publicServer;
   Network? _seededFor;
-  bool _savingBackend = false;
+  _BackendSave _saving = _BackendSave.idle;
+
+  /// The question asked when the page is left while the server is
+  /// checked; its answer, once given, is true to leave. A save waits for
+  /// it before it writes anything.
+  Future<bool>? _leavePrompt;
+
+  /// Leaving without saving was chosen: nothing is written after that.
+  bool _left = false;
+
+  /// Back was pressed while the choice was being written: the page goes
+  /// once it is, and stays if the vault refuses it, with the reason.
+  bool _popWhenWritten = false;
 
   /// What the last save had to say about the server's certificate, when
   /// it is worth saying at all. Cleared at the start of the next save.
@@ -256,11 +284,13 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
   }
 
   Future<void> _saveBackend(Network network) async {
-    setState(() {
-      _savingBackend = true;
-      _certificateNote = null;
-      _saveError = null;
-    });
+    if (_saving != _BackendSave.idle) return;
+    // Held before the first await: the page can be gone by the time the
+    // vault answers, and `ref` goes with it. The toast is the app's, so
+    // it still shows on the page that comes back.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final bridge = ref.read(bridgeProvider);
+    final messenger = ScaffoldMessenger.of(context);
     final config = switch (_backendKind) {
       'custom_esplora' => CustomEsplora(
         url: _esploraController.text.trim(),
@@ -272,12 +302,22 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
       ),
       _ => PublicEsplora(server: _publicServer),
     };
+    final endpoint = _certificateEndpoint(config, network);
+    setState(() {
+      _saving = endpoint != null ? _BackendSave.checking : _BackendSave.writing;
+      _certificateNote = null;
+      _saveError = null;
+      _left = false;
+      _popWhenWritten = false;
+    });
     try {
-      final endpoint = _certificateEndpoint(config, network);
       if (endpoint != null && !await _settleCertificate(endpoint)) return;
-      await ref.read(bridgeProvider).setBackend(network, config);
-      ref.invalidate(settingsProvider);
-      if (mounted) _toast('Setting saved');
+      if (await _leftMeanwhile()) return;
+      setState(() => _saving = _BackendSave.writing);
+      await bridge.setBackend(network, config);
+      container.invalidate(settingsProvider);
+      messenger.showSnackBar(Toast('Setting saved'));
+      if (_popWhenWritten && mounted) _leavePage();
     } on BridgeException catch (error) {
       // Nothing was saved. A note about a certificate the check could
       // not look at says nothing next to an address that was refused.
@@ -288,8 +328,55 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
         });
       }
     } finally {
-      if (mounted) setState(() => _savingBackend = false);
+      if (mounted) setState(() => _saving = _BackendSave.idle);
     }
+  }
+
+  /// Whether the page was left while the server was checked. If the
+  /// question is still on screen, its answer is waited for: a check
+  /// that ends meanwhile writes nothing until the person has said to
+  /// stay. A page the lock took away is left too: no certificate
+  /// question opens over the lock.
+  Future<bool> _leftMeanwhile() async {
+    final asking = _leavePrompt;
+    if (asking != null) await asking;
+    return _left || !mounted || !(ModalRoute.of(context)?.isActive ?? false);
+  }
+
+  /// Pops this page, never the first route of the app.
+  void _leavePage() {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) navigator.pop();
+  }
+
+  /// Back, from the system, the gesture or the arrow, while a save is
+  /// under way. A check can take a minute against a server that answers
+  /// slowly, and leaving used to drop the choice without a word: the
+  /// person is asked, and staying is the default. Writing takes a
+  /// moment: the page goes once it is done.
+  void _onBlockedBack(bool didPop) {
+    if (didPop) return;
+    switch (_saving) {
+      case _BackendSave.idle:
+        // The save ended between the press and the next frame.
+        _leavePage();
+      case _BackendSave.writing:
+        _popWhenWritten = true;
+      case _BackendSave.checking || _BackendSave.asking:
+        _askBeforeLeaving();
+    }
+  }
+
+  Future<void> _askBeforeLeaving() async {
+    if (_leavePrompt != null) return;
+    final prompt = showDialog<bool>(
+      context: context,
+      builder: (_) => const _LeaveUnsavedDialog(),
+    ).then((leave) => _left = leave ?? false);
+    _leavePrompt = prompt;
+    final leave = await prompt;
+    _leavePrompt = null;
+    if (leave && mounted) _leavePage();
   }
 
   /// The server in the catalogue behind an identifier, or null when the
@@ -334,7 +421,7 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
       _certificateNote = _uncheckedNote;
       return true;
     }
-    if (!mounted) return false;
+    if (await _leftMeanwhile() || !mounted) return false;
     switch (report.status) {
       case TrustedCertificate():
       case PinnedCertificate():
@@ -349,21 +436,25 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
         _certificateNote = _uncheckedNote;
         return true;
       case UnknownCertificate(:final fingerprint) && final status:
+        setState(() => _saving = _BackendSave.asking);
         final accepted = await showDialog<bool>(
           context: context,
           builder: (_) =>
               UnknownCertificateDialog(host: report.host, status: status),
         );
-        if (accepted != true) return false;
+        if (accepted != true || !mounted) return false;
+        setState(() => _saving = _BackendSave.writing);
         await bridge.trustCertificate(url, fingerprint);
         return true;
       case ChangedCertificate(:final presented) && final status:
+        setState(() => _saving = _BackendSave.asking);
         final accepted = await showDialog<bool>(
           context: context,
           builder: (_) =>
               ChangedCertificateDialog(host: report.host, status: status),
         );
-        if (accepted != true) return false;
+        if (accepted != true || !mounted) return false;
+        setState(() => _saving = _BackendSave.writing);
         await bridge.trustCertificate(url, presented);
         return true;
     }
@@ -390,6 +481,19 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
     _seedBackendForm(settings);
     final network = settings.activeNetwork;
 
+    return PopScope(
+      canPop: _saving == _BackendSave.idle,
+      onPopInvokedWithResult: (didPop, _) => _onBlockedBack(didPop),
+      child: _sections(context, tokens, settings, network),
+    );
+  }
+
+  Widget _sections(
+    BuildContext context,
+    GerfautTokens tokens,
+    Settings settings,
+    Network network,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -613,10 +717,15 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
             Align(
               alignment: Alignment.centerLeft,
               child: PrimaryButton(
-                label: 'Save backend',
-                onPressed: _savingBackend || !_backendValid
-                    ? null
-                    : () => _saveBackend(network),
+                label: switch (_saving) {
+                  _BackendSave.idle || _BackendSave.asking => 'Save backend',
+                  _BackendSave.checking => 'Checking the server…',
+                  _BackendSave.writing => 'Saving…',
+                },
+                busy:
+                    _saving == _BackendSave.checking ||
+                    _saving == _BackendSave.writing,
+                onPressed: _backendValid ? () => _saveBackend(network) : null,
               ),
             ),
             if (_saveError != null) ...[
@@ -657,6 +766,41 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
                 ),
             ],
           ),
+      ],
+    );
+  }
+}
+
+/// Asked when the page is left while the server of a new backend is
+/// still being checked. Staying is the default: the primary button, and
+/// what Back or a tap outside answers.
+class _LeaveUnsavedDialog extends StatelessWidget {
+  const _LeaveUnsavedDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    return AlertDialog(
+      backgroundColor: tokens.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(GerfautRadius.lg),
+      ),
+      title: Text('Leave without saving?', style: tokens.h2),
+      content: Text(
+        'Gerfaut is still checking the server, which can take a minute '
+        'when it answers slowly. If you leave now, nothing is saved and '
+        'the backend in use stays the same.',
+        style: tokens.bodySmall,
+      ),
+      actions: [
+        SecondaryButton(
+          label: 'Leave',
+          onPressed: () => Navigator.of(context).pop(true),
+        ),
+        PrimaryButton(
+          label: 'Stay',
+          onPressed: () => Navigator.of(context).pop(false),
+        ),
       ],
     );
   }
