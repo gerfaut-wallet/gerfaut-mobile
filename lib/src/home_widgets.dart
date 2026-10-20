@@ -406,10 +406,12 @@ final widgetSchedulerProvider = Provider<WidgetScheduler>(
 /// opt-in; nothing is fetched while none is placed.
 class WidgetPriceNotifier extends AsyncNotifier<PriceQuote?> {
   Timer? _timer;
+  int _builds = 0;
 
   @override
   Future<PriceQuote?> build() async {
     _timer?.cancel();
+    final build = ++_builds;
     final fiatOn = ref.watch(fiatEnabledProvider);
     final appQuote = ref.watch(priceProvider);
     // Asked again when the pair changes: the core prices by it.
@@ -417,13 +419,17 @@ class WidgetPriceNotifier extends AsyncNotifier<PriceQuote?> {
     ref.watch(fiatSourceProvider);
     final inFront = ref.watch(appInFrontProvider);
     final installed = await ref.watch(installedWidgetsProvider.future);
+    // A newer build began during a wait: it alone sets the clock, and
+    // what this one returns is dropped.
+    if (build != _builds) return state.value;
     if (!installed.contains(HomeWidgets.price)) return null;
-    if (fiatOn) return appQuote.valueOrNull;
+    if (fiatOn) return appQuote.value;
     // Out of sight the widget is the periodic task's to refresh: no
     // minute clock runs behind the launcher.
-    if (!inFront) return state.valueOrNull;
+    if (!inFront) return state.value;
     ref.onDispose(() => _timer?.cancel());
     final every = (await ref.read(priceTableProvider.future)).refresh;
+    if (build != _builds) return state.value;
     // Scheduled before the fetch so failures retry on the same cadence
     // as the app's own quote.
     _timer = Timer(every, () => ref.invalidateSelf());
@@ -459,13 +465,13 @@ class WidgetFeed {
     _ref.listen(widgetBalancesProvider, republish);
     // A lock set or taken off changes what the balance widget may say.
     _ref.listen(settingsProvider, (previous, next) {
-      final before = previous?.valueOrNull?.appLock != null;
-      final now = next.valueOrNull?.appLock != null;
+      final before = previous?.value?.appLock != null;
+      final now = next.value?.appLock != null;
       if (next.hasValue && before != now) publish();
     });
     _ref.listen(installedWidgetsProvider, (_, next) {
       if (next.isLoading) return;
-      final installed = next.valueOrNull;
+      final installed = next.value;
       if (installed == null) return;
       // The background refresh runs only while something is there to
       // refresh; an empty home screen costs nothing.
@@ -498,7 +504,7 @@ class WidgetFeed {
       do {
         _again = false;
         await _publishOnce();
-      } while (_again);
+      } while (_again && _ref.mounted);
     } finally {
       _inFlight = null;
     }
@@ -511,7 +517,7 @@ class WidgetFeed {
   Future<void> _publishOnce() async {
     // Nothing to say before the vault has answered: an empty wallet
     // list would read as "no wallets yet" for a second.
-    final settings = _ref.read(settingsProvider).valueOrNull;
+    final settings = _ref.read(settingsProvider).value;
     if (settings == null) return;
     Set<String> installed;
     try {
@@ -519,9 +525,12 @@ class WidgetFeed {
     } catch (_) {
       return;
     }
-    final wallets = _ref.read(walletsProvider).valueOrNull ?? const [];
-    final quote = _ref.read(widgetPriceProvider).valueOrNull;
+    // Each wait is a chance for the app to have closed meanwhile.
+    if (!_ref.mounted) return;
+    final wallets = _ref.read(walletsProvider).value ?? const [];
+    final quote = _ref.read(widgetPriceProvider).value;
     final table = await _ref.read(priceTableProvider.future);
+    if (!_ref.mounted) return;
     await write(
       _ref.read(widgetBoardProvider),
       installed: installed,

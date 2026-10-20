@@ -48,6 +48,7 @@ Widget exportApp(
   FakeDocumentSaver? saver,
 }) {
   return ProviderScope(
+    retry: noRetry,
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
       csvSharerProvider.overrideWithValue(sharer),

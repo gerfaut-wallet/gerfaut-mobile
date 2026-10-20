@@ -68,6 +68,7 @@ Widget _app(
   Network network = Network.mainnet,
 }) {
   return ProviderScope(
+    retry: noRetry,
     overrides: [bridgeProvider.overrideWithValue(bridge)],
     child: creditedApp(
       theme: themeFrom(GerfautTokens.light, Brightness.light),

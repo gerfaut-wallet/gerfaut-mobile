@@ -159,6 +159,7 @@ Widget _settings(
   FakeDisguise? disguise,
 }) {
   return ProviderScope(
+    retry: noRetry,
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
       notificationServiceProvider.overrideWithValue(
@@ -904,6 +905,7 @@ void main() {
       bool disguised = false,
     }) {
       final container = ProviderContainer(
+        retry: noRetry,
         overrides: [
           bridgeProvider.overrideWithValue(bridge),
           notificationServiceProvider.overrideWithValue(notifications),
@@ -1890,6 +1892,7 @@ void main() {
       final disguise = FakeDisguise();
       final scheduled = <int>[];
       final container = ProviderContainer(
+        retry: noRetry,
         overrides: [
           bridgeProvider.overrideWithValue(bridge),
           livePlatformProvider.overrideWithValue(platform),
@@ -1923,6 +1926,7 @@ void main() {
     )..lockSecret = '1234';
     final platform = FakeLivePlatform();
     final container = ProviderContainer(
+      retry: noRetry,
       overrides: [
         bridgeProvider.overrideWithValue(bridge),
         livePlatformProvider.overrideWithValue(platform),
@@ -1951,6 +1955,7 @@ void main() {
     )..lockSecret = '1234';
     final platform = FakeLivePlatform(opensBatteryQuestion: false);
     final container = ProviderContainer(
+      retry: noRetry,
       overrides: [
         bridgeProvider.overrideWithValue(bridge),
         livePlatformProvider.overrideWithValue(platform),
@@ -1982,6 +1987,7 @@ void main() {
     )..lockSecret = '1234';
     final platform = FakeLivePlatform(batteryExempt: true);
     final container = ProviderContainer(
+      retry: noRetry,
       overrides: [
         bridgeProvider.overrideWithValue(bridge),
         livePlatformProvider.overrideWithValue(platform),
@@ -2012,6 +2018,7 @@ void main() {
   test('a failed sync of the watch is said by its code', () async {
     final bridge = _bridge();
     final container = ProviderContainer(
+      retry: noRetry,
       overrides: [
         bridgeProvider.overrideWithValue(bridge),
         livePlatformProvider.overrideWithValue(
@@ -2057,6 +2064,7 @@ void main() {
       FakeNotifications notices,
     ) {
       final container = ProviderContainer(
+        retry: noRetry,
         overrides: [
           bridgeProvider.overrideWithValue(bridge),
           livePlatformProvider.overrideWithValue(platform),
@@ -2198,9 +2206,8 @@ void main() {
       final platform = FakeLivePlatform();
       await _open(tester, _settings(bridge, platform: platform));
       ProviderScope.containerOf(tester.element(find.byType(SettingsScreen)))
-              .read(notificationsRefusedProvider.notifier)
-              .state =
-          true;
+          .read(notificationsRefusedProvider.notifier)
+          .put(true);
       await tester.pumpAndSettle();
 
       expect(
@@ -2216,6 +2223,7 @@ void main() {
   group('with no wallet to watch', () {
     ProviderContainer chosen(FakeBridge bridge, FakeLivePlatform platform) {
       final container = ProviderContainer(
+        retry: noRetry,
         overrides: [
           bridgeProvider.overrideWithValue(bridge),
           livePlatformProvider.overrideWithValue(platform),
@@ -2315,6 +2323,7 @@ void main() {
   group('the app and the service', () {
     ProviderContainer app(FakeBridge bridge, FakeLivePlatform platform) {
       final container = ProviderContainer(
+        retry: noRetry,
         overrides: [
           bridgeProvider.overrideWithValue(bridge),
           livePlatformProvider.overrideWithValue(platform),
@@ -2402,6 +2411,7 @@ void main() {
       final bridge = _bridge();
       final platform = FakeLivePlatform(running: true, wanted: true);
       final container = ProviderContainer(
+        retry: noRetry,
         overrides: [
           bridgeProvider.overrideWithValue(bridge),
           livePlatformProvider.overrideWithValue(platform),

@@ -56,8 +56,7 @@ class _LockScreenState extends ConsumerState<LockScreen> {
     final lock = ref.watch(lockProvider);
     return (lock.lock?.biometric ?? false) &&
         lock.biometricLapse == null &&
-        ref.watch(biometricSupportProvider).valueOrNull ==
-            BiometricSupport.strong;
+        ref.watch(biometricSupportProvider).value == BiometricSupport.strong;
   }
 
   Future<void> _tryBiometrics() async {

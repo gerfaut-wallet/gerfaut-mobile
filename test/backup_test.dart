@@ -48,6 +48,7 @@ Widget screen(
   ScreenKeeper? keeper,
 }) {
   return ProviderScope(
+    retry: noRetry,
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
       if (sharer != null) backupSharerProvider.overrideWithValue(sharer),

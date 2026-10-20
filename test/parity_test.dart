@@ -23,6 +23,7 @@ import 'menu.dart';
 
 Widget app(FakeBridge bridge, {Widget? home}) {
   return ProviderScope(
+    retry: noRetry,
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
       disguiseServiceProvider.overrideWithValue(FakeDisguise()),

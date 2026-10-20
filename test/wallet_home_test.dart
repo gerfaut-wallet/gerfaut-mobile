@@ -33,6 +33,7 @@ void main() {
     );
     await tester.pumpWidget(
       ProviderScope(
+        retry: noRetry,
         overrides: [bridgeProvider.overrideWithValue(bridge)],
         child: MaterialApp(
           theme: themeFrom(GerfautTokens.light, Brightness.light),
@@ -82,6 +83,7 @@ void main() {
           };
     await tester.pumpWidget(
       ProviderScope(
+        retry: noRetry,
         overrides: [bridgeProvider.overrideWithValue(bridge)],
         child: MaterialApp(
           theme: themeFrom(GerfautTokens.light, Brightness.light),
@@ -136,6 +138,7 @@ void main() {
         throw const BridgeException('sync', 'mempool.space: timed out');
     await tester.pumpWidget(
       ProviderScope(
+        retry: noRetry,
         overrides: [bridgeProvider.overrideWithValue(bridge)],
         child: MaterialApp(
           theme: themeFrom(GerfautTokens.light, Brightness.light),
@@ -178,6 +181,7 @@ void main() {
     );
     await tester.pumpWidget(
       ProviderScope(
+        retry: noRetry,
         overrides: [bridgeProvider.overrideWithValue(bridge)],
         child: MaterialApp(
           theme: themeFrom(GerfautTokens.light, Brightness.light),
@@ -202,6 +206,7 @@ void main() {
     );
     await tester.pumpWidget(
       ProviderScope(
+        retry: noRetry,
         overrides: [bridgeProvider.overrideWithValue(bridge)],
         child: MaterialApp(
           theme: themeFrom(GerfautTokens.light, Brightness.light),
@@ -268,6 +273,7 @@ void main() {
     bridge.snapshotGate = gate;
     await tester.pumpWidget(
       ProviderScope(
+        retry: noRetry,
         overrides: [bridgeProvider.overrideWithValue(bridge)],
         child: MaterialApp(
           theme: themeFrom(GerfautTokens.light, Brightness.light),
@@ -334,6 +340,7 @@ void main() {
     );
     await tester.pumpWidget(
       ProviderScope(
+        retry: noRetry,
         overrides: [bridgeProvider.overrideWithValue(bridge)],
         child: MaterialApp(
           theme: themeFrom(GerfautTokens.light, Brightness.light),
@@ -371,6 +378,7 @@ void main() {
     );
     await tester.pumpWidget(
       ProviderScope(
+        retry: noRetry,
         overrides: [bridgeProvider.overrideWithValue(bridge)],
         child: MaterialApp(
           theme: themeFrom(GerfautTokens.light, Brightness.light),
@@ -425,6 +433,7 @@ void main() {
     );
     await tester.pumpWidget(
       ProviderScope(
+        retry: noRetry,
         overrides: [bridgeProvider.overrideWithValue(bridge)],
         child: MaterialApp(
           theme: themeFrom(GerfautTokens.light, Brightness.light),
@@ -470,6 +479,7 @@ void main() {
     bridge.renameGate = gate;
     await tester.pumpWidget(
       ProviderScope(
+        retry: noRetry,
         overrides: [bridgeProvider.overrideWithValue(bridge)],
         child: MaterialApp(
           theme: themeFrom(GerfautTokens.light, Brightness.light),
@@ -495,6 +505,7 @@ void main() {
     // left to do is refresh a page that no longer exists.
     await tester.pumpWidget(
       ProviderScope(
+        retry: noRetry,
         overrides: [bridgeProvider.overrideWithValue(bridge)],
         child: MaterialApp(
           theme: themeFrom(GerfautTokens.light, Brightness.light),
@@ -522,6 +533,7 @@ void main() {
     );
     await tester.pumpWidget(
       ProviderScope(
+        retry: noRetry,
         overrides: [bridgeProvider.overrideWithValue(bridge)],
         child: MaterialApp(
           theme: themeFrom(GerfautTokens.light, Brightness.light),
@@ -572,6 +584,7 @@ void main() {
     bridge.syncGate = gate;
     await tester.pumpWidget(
       ProviderScope(
+        retry: noRetry,
         overrides: [bridgeProvider.overrideWithValue(bridge)],
         child: MaterialApp(
           theme: themeFrom(GerfautTokens.light, Brightness.light),
@@ -604,6 +617,7 @@ void main() {
     expect(find.byTooltip('Sync'), findsOneWidget);
   });
   Widget homeOf(FakeBridge bridge) => ProviderScope(
+    retry: noRetry,
     overrides: [bridgeProvider.overrideWithValue(bridge)],
     child: MaterialApp(
       theme: themeFrom(GerfautTokens.light, Brightness.light),
@@ -879,6 +893,7 @@ Future<_UtxoBridge> _openUtxos(
   )..fails = fails;
   await tester.pumpWidget(
     ProviderScope(
+      retry: noRetry,
       overrides: [bridgeProvider.overrideWithValue(bridge)],
       child: MaterialApp(
         theme: themeFrom(GerfautTokens.light, Brightness.light),

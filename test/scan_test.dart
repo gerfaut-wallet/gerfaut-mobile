@@ -39,6 +39,7 @@ class _Outcome {
 /// through [ScanScreenState.onFrame].
 Widget _app(FakeBridge bridge, _Outcome outcome, {ScreenKeeper? keeper}) {
   return ProviderScope(
+    retry: noRetry,
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
       if (keeper != null) screenKeeperProvider.overrideWithValue(keeper),

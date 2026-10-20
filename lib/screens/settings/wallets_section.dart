@@ -238,8 +238,8 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final settings = ref.watch(settingsProvider).valueOrNull;
-    final wallets = ref.watch(walletsProvider).valueOrNull ?? [];
+    final settings = ref.watch(settingsProvider).value;
+    final wallets = ref.watch(walletsProvider).value ?? [];
     ref.watch(syncProvider);
     final sync = ref.read(syncProvider.notifier);
     if (settings == null) {

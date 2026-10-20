@@ -88,11 +88,11 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
     final syncing = ref.watch(syncProvider.notifier).isSyncing(widget.walletId);
     ref.watch(syncProvider);
     final snapshot = ref.watch(snapshotProvider(widget.walletId));
-    final loaded = snapshot.valueOrNull;
+    final loaded = snapshot.value;
     final name = loaded?.meta.name;
     // Never masked — a policy is structure, not an amount — and absent
     // rather than pending while it loads: a menu never spins.
-    final policy = ref.watch(policyProvider(widget.walletId)).valueOrNull;
+    final policy = ref.watch(policyProvider(widget.walletId)).value;
     final digest = policy == null ? null : policyDigest(policy);
 
     return Scaffold(
@@ -303,10 +303,7 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                 child: _TabLabel(
                   label: 'UTXOs',
                   count:
-                      ref
-                          .watch(utxosProvider(widget.walletId))
-                          .valueOrNull
-                          ?.length ??
+                      ref.watch(utxosProvider(widget.walletId)).value?.length ??
                       0,
                 ),
               ),
@@ -530,9 +527,8 @@ class _TabLabel extends StatelessWidget {
 /// Why the last "Load older transactions" failed, per wallet, said
 /// under the button until the next try: a toast would be gone before
 /// it is read.
-final _olderFailureProvider = StateProvider.autoDispose.family<String?, String>(
-  (ref, walletId) => null,
-);
+final _olderFailureProvider = NotifierProvider.autoDispose
+    .family<Slot<String?>, String?, String>((walletId) => Slot(null));
 
 /// Transactions are list rows, never cards: they scan vertically.
 /// 48px rows, hairline separators, figures right-aligned.
@@ -555,7 +551,7 @@ class _TxList extends ConsumerWidget {
   Future<void> _loadOlder(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
     final failure = ref.read(_olderFailureProvider(walletId).notifier);
-    failure.state = null;
+    failure.put(null);
     try {
       final added = await ref.read(historyProvider.notifier).loadMore(walletId);
       if (added == null) return;
@@ -568,7 +564,7 @@ class _TxList extends ConsumerWidget {
       );
     } on BridgeException catch (error) {
       // The page may have gone meanwhile, and its note with it.
-      if (context.mounted) failure.state = error.message;
+      if (context.mounted) failure.put(error.message);
     }
   }
 
@@ -732,7 +728,7 @@ class _UtxoList extends ConsumerWidget {
     // Every sync reads the list again: the rows already on screen stay
     // there meanwhile, as the balance above does, rather than giving
     // way to a loading line each time.
-    final value = utxos.isLoading || !utxos.hasError ? utxos.valueOrNull : null;
+    final value = utxos.isLoading || !utxos.hasError ? utxos.value : null;
 
     if (value == null) {
       if (utxos.hasError) {

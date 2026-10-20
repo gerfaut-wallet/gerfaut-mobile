@@ -155,9 +155,9 @@ class _Hydrated extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.listen(settingsProvider, (_, next) {
-      final settings = next.valueOrNull;
+      final settings = next.value;
       if (settings != null && !ref.read(prefsHydratedProvider)) {
-        ref.read(prefsHydratedProvider.notifier).state = true;
+        ref.read(prefsHydratedProvider.notifier).put(true);
         final prefs = settings.appPrefs;
         ref.read(themeProvider.notifier).hydrate(prefs[Pref.theme]);
         ref.read(preferencesProvider.notifier).hydrate(settings.preferences);
@@ -201,10 +201,19 @@ class _Hydrated extends ConsumerWidget {
         if (first) _startUpdateSession(ref);
       }
     });
+    // The widget feed and Live follow the app's state for as long as it
+    // runs. A provider only read goes quiet in Riverpod 3: what it listens
+    // to is no longer rebuilt for it, and a widget placed meanwhile, a new
+    // quote or a first wallet would go unheard. Listened to here, they
+    // stay awake; not before the preferences are in, like the feed itself.
+    if (ref.watch(prefsHydratedProvider)) {
+      ref.listen(widgetFeedProvider, (_, _) {});
+      ref.listen(liveProvider, (_, _) {});
+    }
     // The platform may answer about the disguise after the vault has
     // answered about the lock: the same check, from the other side.
     ref.listen(disguiseProvider, (previous, next) {
-      final settings = ref.read(settingsProvider).valueOrNull;
+      final settings = ref.read(settingsProvider).value;
       if (settings != null) _dropOrphanDisguise(ref, settings);
       // The session waits for this answer when the vault gave its own
       // first: nothing about a release is said before the app knows
@@ -306,10 +315,10 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
       case AppLifecycleState.detached:
         lock.noteHidden();
         _wasAway = true;
-        ref.read(appInFrontProvider.notifier).state = false;
+        ref.read(appInFrontProvider.notifier).put(false);
       case AppLifecycleState.resumed:
         lock.noteResumed();
-        ref.read(appInFrontProvider.notifier).state = true;
+        ref.read(appInFrontProvider.notifier).put(true);
         // A fingerprint or a face may have been set up or removed in
         // Android's settings meanwhile: what the phone offers is asked
         // again, after a real trip away only.
@@ -376,7 +385,7 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
 
     // The tour only ever stands in front of an empty vault: someone
     // with wallets already knows what this is.
-    final wallets = ref.watch(walletsProvider).valueOrNull;
+    final wallets = ref.watch(walletsProvider).value;
     final hydrated = ref.watch(prefsHydratedProvider);
     final seen = ref.watch(onboardingSeenProvider);
     if (hydrated && !seen && wallets != null && wallets.isEmpty) {

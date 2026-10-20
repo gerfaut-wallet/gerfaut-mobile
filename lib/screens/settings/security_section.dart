@@ -170,8 +170,8 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     // The vault is the source of truth for what is set; the lock
     // provider only knows whether the screen is up right now.
-    final lock = ref.watch(settingsProvider).valueOrNull?.appLock;
-    final biometrics = ref.watch(biometricSupportProvider).valueOrNull;
+    final lock = ref.watch(settingsProvider).value?.appLock;
+    final biometrics = ref.watch(biometricSupportProvider).value;
     final weakOnly = biometrics == BiometricSupport.weakOnly;
     final disguised = ref.watch(disguiseProvider).disguised;
     final pinLock = lock?.kind == LockKind.pin;

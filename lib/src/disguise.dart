@@ -116,6 +116,8 @@ class DisguiseController extends Notifier<DisguiseState> {
     } catch (_) {
       // Unanswered is not disguised.
     }
+    // The app may have closed while the platform answered.
+    if (!ref.mounted) return;
     state = DisguiseState(disguised: disguised, loaded: true);
   }
 

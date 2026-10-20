@@ -453,8 +453,8 @@ class LiveController extends Notifier<LiveState> {
     // adding one gives it something again, the app on screen either
     // way. A list read again with the same answer changes nothing.
     ref.listen(walletsProvider, (previous, next) {
-      final had = previous?.valueOrNull?.isNotEmpty;
-      final has = next.valueOrNull?.isNotEmpty;
+      final had = previous?.value?.isNotEmpty;
+      final has = next.value?.isNotEmpty;
       if (had == null || has == null || had == has) return;
       unawaited(resume().catchError((Object _) {}));
     });

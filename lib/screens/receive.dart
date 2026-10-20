@@ -92,7 +92,7 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final meta = ref.watch(snapshotProvider(widget.walletId)).valueOrNull?.meta;
+    final meta = ref.watch(snapshotProvider(widget.walletId)).value?.meta;
     final single = meta?.isSingleAddress ?? false;
     final gapLimit = meta?.gapLimit ?? 20;
     // One more than the address on display: whether the core has a next
@@ -103,7 +103,7 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
         lookahead: min(_offset + 1, maxReceivePeek),
       )),
     );
-    final list = addresses.valueOrNull;
+    final list = addresses.value;
     final entry = list == null || list.isEmpty
         ? null
         : list[min(_offset, list.length - 1)];
@@ -164,7 +164,7 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
     bool single,
     Network? network,
   ) {
-    final list = audit.valueOrNull;
+    final list = audit.value;
     if (list == null && audit.hasError) {
       return [
         LoadFailure(

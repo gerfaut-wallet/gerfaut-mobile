@@ -26,6 +26,7 @@ Widget _page(Widget body) => MaterialApp(
 );
 
 Widget _screen(FakeBridge bridge, Widget home) => ProviderScope(
+  retry: noRetry,
   overrides: [
     bridgeProvider.overrideWithValue(bridge),
     disguiseServiceProvider.overrideWithValue(FakeDisguise()),
@@ -300,6 +301,7 @@ void main() {
       final handle = tester.ensureSemantics();
       await tester.pumpWidget(
         ProviderScope(
+          retry: noRetry,
           overrides: [
             bridgeProvider.overrideWithValue(_bridge()),
             disguiseServiceProvider.overrideWithValue(FakeDisguise()),

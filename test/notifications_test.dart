@@ -95,6 +95,7 @@ final Finder detailsSwitch = find.widgetWithText(
 
 Widget settingsApp(FakeBridge bridge, FakeNotifications service) {
   return ProviderScope(
+    retry: noRetry,
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
       notificationServiceProvider.overrideWithValue(service),
@@ -502,6 +503,7 @@ void main() {
       expect(const AppPrefs({Pref.notifyDetails: '0'}).notifyDetails, isFalse);
 
       final made = ProviderContainer(
+        retry: noRetry,
         overrides: [bridgeProvider.overrideWithValue(FakeBridge())],
       );
       addTearDown(made.dispose);
@@ -518,6 +520,7 @@ void main() {
     test('is kept in the vault, where every isolate reads it', () async {
       final bridge = FakeBridge();
       final made = ProviderContainer(
+        retry: noRetry,
         overrides: [bridgeProvider.overrideWithValue(bridge)],
       );
       addTearDown(made.dispose);
@@ -534,6 +537,7 @@ void main() {
   group('a sync says what it found', () {
     ProviderContainer container(FakeBridge bridge, FakeNotifications service) {
       final made = ProviderContainer(
+        retry: noRetry,
         overrides: [
           bridgeProvider.overrideWithValue(bridge),
           notificationServiceProvider.overrideWithValue(service),
@@ -641,7 +645,7 @@ void main() {
 
       await made.read(syncProvider.notifier).syncWallet('w1');
       await made.read(syncProvider.notifier).syncWallet('w1');
-      expect(made.read(walletsProvider).valueOrNull, isNull);
+      expect(made.read(walletsProvider).value, isNull);
       expect(service.posted, hasLength(1));
       expect(service.posted.single.body, 'tx1 · confirmed');
       expect(bridge.noticeAsks.single.context.names, isEmpty);

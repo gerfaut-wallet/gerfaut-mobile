@@ -125,7 +125,7 @@ class SettingsScreen extends ConsumerWidget {
   /// state the root already holds. Null while the vault has not
   /// answered.
   String? _summary(WidgetRef ref, SettingsSection section) {
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final settings = ref.watch(settingsProvider).value;
     switch (section) {
       case SettingsSection.general:
         final unit = ref.watch(unitProvider);
@@ -144,7 +144,7 @@ class SettingsScreen extends ConsumerWidget {
         };
         return '${network.label} · $backend';
       case SettingsSection.wallets:
-        final wallets = ref.watch(walletsProvider).valueOrNull;
+        final wallets = ref.watch(walletsProvider).value;
         if (settings == null || wallets == null) return null;
         final count = switch (wallets.length) {
           0 => 'No wallets',

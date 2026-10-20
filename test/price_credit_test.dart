@@ -18,6 +18,7 @@ void main() {
   late int asked;
 
   Widget credited(Widget home) => ProviderScope(
+    retry: noRetry,
     overrides: [
       priceTableProvider.overrideWith((ref) {
         asked++;
@@ -64,6 +65,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       ProviderScope(
+        retry: noRetry,
         overrides: [
           priceTableProvider.overrideWith((ref) => Future.value(kPriceTable)),
           windowGuardProvider.overrideWithValue(FakeWindowGuard()),

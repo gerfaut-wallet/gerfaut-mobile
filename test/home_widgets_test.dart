@@ -7,8 +7,10 @@ import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/home_widgets.dart';
+import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
+import 'package:gerfaut/src/window.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/setting_switch.dart';
 
@@ -82,6 +84,7 @@ Future<({ProviderContainer container, WidgetFeed feed})> _running(
   List<bool>? scheduled,
 }) async {
   final container = ProviderContainer(
+    retry: noRetry,
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
       widgetBoardProvider.overrideWithValue(board),
@@ -518,6 +521,40 @@ void main() {
       expect(board.updates, contains(HomeWidgets.network));
     });
 
+    testWidgets('the open app reads the placed widgets again on its own '
+        'when it comes back', (tester) async {
+      final board = FakeWidgetBoard(installed: {HomeWidgets.price});
+      await tester.pumpWidget(
+        ProviderScope(
+          retry: noRetry,
+          overrides: [
+            bridgeProvider.overrideWithValue(_bridge()),
+            widgetBoardProvider.overrideWithValue(board),
+            widgetSchedulerProvider.overrideWithValue((wanted) async {}),
+            disguiseServiceProvider.overrideWithValue(
+              FakeDisguise(disguised: false),
+            ),
+            biometricGateProvider.overrideWithValue(
+              FakeBiometrics(available: false),
+            ),
+            windowGuardProvider.overrideWithValue(FakeWindowGuard()),
+          ],
+          child: const GerfautApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(board.installedAsks, 1);
+      expect(board.data.containsKey(WidgetKeys.networkHeight), isFalse);
+
+      // A widget placed while the launcher had the screen.
+      board.installed.add(HomeWidgets.network);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(board.installedAsks, 2);
+      expect(board.data[WidgetKeys.networkHeight], isNotNull);
+    });
+
     test('the background refresh is scheduled only while a widget is '
         'placed', () async {
       final scheduled = <bool>[];
@@ -823,6 +860,7 @@ void main() {
       final board = FakeWidgetBoard(installed: {HomeWidgets.balance});
       await tester.pumpWidget(
         ProviderScope(
+          retry: noRetry,
           overrides: [
             bridgeProvider.overrideWithValue(bridge),
             widgetBoardProvider.overrideWithValue(board),
@@ -868,6 +906,7 @@ void main() {
       final board = FakeWidgetBoard(installed: {HomeWidgets.balance});
       await tester.pumpWidget(
         ProviderScope(
+          retry: noRetry,
           overrides: [
             bridgeProvider.overrideWithValue(bridge),
             widgetBoardProvider.overrideWithValue(board),
@@ -904,6 +943,7 @@ void main() {
     testWidgets('disguised, the card says the widgets are off', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noRetry,
           overrides: [
             bridgeProvider.overrideWithValue(_bridge()),
             widgetBoardProvider.overrideWithValue(FakeWidgetBoard()),

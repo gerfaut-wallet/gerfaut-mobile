@@ -13,6 +13,7 @@ import 'fakes.dart';
 
 Widget app(FakeBridge bridge) {
   return ProviderScope(
+    retry: noRetry,
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
       disguiseServiceProvider.overrideWithValue(FakeDisguise()),
@@ -107,6 +108,7 @@ void main() {
         );
       };
     final container = ProviderContainer(
+      retry: noRetry,
       overrides: [bridgeProvider.overrideWithValue(bridge)],
     );
     addTearDown(container.dispose);
@@ -119,13 +121,13 @@ void main() {
     expect(asked, 2);
 
     // Behind the launcher: the quote in hand stays, nothing is asked.
-    container.read(appInFrontProvider.notifier).state = false;
+    container.read(appInFrontProvider.notifier).put(false);
     await tester.pump();
     await tester.pump(const Duration(minutes: 10));
     expect(asked, 2);
-    expect(container.read(priceProvider).valueOrNull?.rate, 50000);
+    expect(container.read(priceProvider).value?.rate, 50000);
 
-    container.read(appInFrontProvider.notifier).state = true;
+    container.read(appInFrontProvider.notifier).put(true);
     await tester.pump(const Duration(milliseconds: 1));
     expect(asked, 3);
     container.dispose();
@@ -146,6 +148,7 @@ void main() {
         );
       };
     final container = ProviderContainer(
+      retry: noRetry,
       overrides: [bridgeProvider.overrideWithValue(bridge)],
     );
     addTearDown(container.dispose);
@@ -157,7 +160,7 @@ void main() {
     expect(container.read(priceProvider).hasError, isTrue);
 
     // Behind the launcher, the old quote does not come back as fresh.
-    container.read(appInFrontProvider.notifier).state = false;
+    container.read(appInFrontProvider.notifier).put(false);
     await tester.pump();
     await tester.pump(const Duration(minutes: 10));
     expect(container.read(priceProvider).hasError, isTrue);
@@ -419,6 +422,7 @@ void main() {
     tester,
   ) async {
     final container = ProviderContainer(
+      retry: noRetry,
       overrides: [bridgeProvider.overrideWithValue(FakeBridge())],
     );
     addTearDown(container.dispose);
@@ -427,14 +431,14 @@ void main() {
     await tester.pump(const Duration(seconds: 61));
     expect(ticks, 2);
 
-    container.read(appInFrontProvider.notifier).state = false;
+    container.read(appInFrontProvider.notifier).put(false);
     await tester.pump(const Duration(milliseconds: 1));
     final away = ticks;
     await tester.pump(const Duration(minutes: 10));
     expect(ticks, away);
 
     // Back on screen, the lines are drawn again at once.
-    container.read(appInFrontProvider.notifier).state = true;
+    container.read(appInFrontProvider.notifier).put(true);
     await tester.pump(const Duration(milliseconds: 1));
     expect(ticks, away + 1);
     container.dispose();

@@ -30,7 +30,7 @@ class PolicyScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final meta = ref.watch(snapshotProvider(walletId)).valueOrNull?.meta;
+    final meta = ref.watch(snapshotProvider(walletId)).value?.meta;
     final name = meta?.name;
     final policy = ref.watch(policyProvider(walletId));
 
@@ -60,7 +60,7 @@ class PolicyScreen extends ConsumerWidget {
               // policy, and a refresh under way still carries the last
               // snapshot, which is no reason to swap the cards for the
               // placeholder. Only a page that never had one waits.
-              AsyncValue(valueOrNull: final snapshot?) => _Loaded(
+              AsyncValue(value: final snapshot?) => _Loaded(
                 snapshot: snapshot,
                 wallet: meta?.kind,
               ),

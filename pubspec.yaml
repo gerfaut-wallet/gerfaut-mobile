@@ -33,23 +33,23 @@ dependencies:
 
   rust_lib_gerfaut:
     path: rust_builder
-  flutter_rust_bridge: 2.12.0
-  flutter_secure_storage: ^10.0.0
+  flutter_rust_bridge: 2.13.0
+  flutter_secure_storage: ^11.2.0
   path_provider: ^2.1.6
-  flutter_riverpod: ^2.6.1
-  lucide_icons_flutter: ^3.1.17
+  flutter_riverpod: ^3.4.3
+  lucide_icons_flutter: ^4.0.0
   url_launcher: ^6.3.2
   file_selector: ^1.1.0
   intl: ^0.20.3
   qr_flutter: ^4.1.0
-  flutter_zxing: ^2.3.0
+  flutter_zxing: ^3.1.0
   # Gerfaut drives the camera itself and hands each frame to the
   # decoder above; the package already pulls this one in.
   camera: ^0.12.0
   flutter_local_notifications: ^22.3.0
   workmanager: ^0.10.9
   wakelock_plus: ^1.8.0
-  home_widget: ^0.9.3
+  home_widget: ^0.10.0
 
 dev_dependencies:
   flutter_test:

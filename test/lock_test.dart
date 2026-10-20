@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/lock_screen.dart';
@@ -62,6 +63,7 @@ Widget app(
   FakeWindowGuard? guard,
 }) {
   return ProviderScope(
+    retry: noRetry,
     overrides: _overrides(bridge, biometrics, guard: guard),
     child: const GerfautApp(),
   );
@@ -81,7 +83,10 @@ Future<void> sendLifecycle(WidgetTester tester, AppLifecycleState state) {
 /// The lock as the vault hands it over: a PIN is set, so the screen
 /// is up and the test unlocks it the way the user would.
 ({ProviderContainer container, LockController lock}) lockedApp() {
-  final container = ProviderContainer(overrides: _overrides(locked(), null));
+  final container = ProviderContainer(
+    retry: noRetry,
+    overrides: _overrides(locked(), null),
+  );
   addTearDown(container.dispose);
   final lock = container.read(lockProvider.notifier);
   lock.syncFromSettings(pinLock);
@@ -92,6 +97,7 @@ Future<void> sendLifecycle(WidgetTester tester, AppLifecycleState state) {
 /// walks past the lock screen the way the user does.
 Future<ProviderContainer> pumpUnlocked(WidgetTester tester) async {
   final container = ProviderContainer(
+    retry: noRetry,
     overrides: _overrides(locked(wallets: [makeMeta()]), null),
   );
   addTearDown(container.dispose);
@@ -111,6 +117,7 @@ Widget settingsApp(
   SettingsSection section = SettingsSection.security,
 }) {
   return ProviderScope(
+    retry: noRetry,
     overrides: _overrides(bridge, biometrics),
     child: MaterialApp(
       theme: themeFrom(GerfautTokens.light, Brightness.light),
@@ -792,6 +799,7 @@ void main() {
     test('the window follows the lock as the settings change', () {
       final guard = FakeWindowGuard();
       final container = ProviderContainer(
+        retry: noRetry,
         overrides: _overrides(locked(), null, guard: guard),
       );
       addTearDown(container.dispose);
@@ -816,6 +824,7 @@ void main() {
     test('disguised, the window is plain while the calculator shows', () async {
       final guard = FakeWindowGuard();
       final container = ProviderContainer(
+        retry: noRetry,
         overrides: [
           bridgeProvider.overrideWithValue(locked()),
           biometricGateProvider.overrideWithValue(
@@ -1035,6 +1044,7 @@ void main() {
 
     test('with no lock set, nothing ever locks', () async {
       final container = ProviderContainer(
+        retry: noRetry,
         overrides: _overrides(FakeBridge(), null),
       );
       addTearDown(container.dispose);

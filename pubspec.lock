@@ -225,6 +225,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.9.3+6"
+  fixnum:
+    dependency: transitive
+    description:
+      name: fixnum
+      sha256: b6dc7065e46c974bc7c5f143080a6764ec7a4be6da1285ececdc37be96de53be
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.1"
   flutter:
     dependency: "direct main"
     description: flutter
@@ -290,34 +298,34 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_riverpod
-      sha256: "9532ee6db4a943a1ed8383072a2e3eeda041db5657cdf6d2acecf3c21ecbe7e1"
+      sha256: "2b7f9d2a3c730ac1a98221b420cef966b990fca7ab546ede324642ca57a533e3"
       url: "https://pub.dev"
     source: hosted
-    version: "2.6.1"
+    version: "3.4.3"
   flutter_rust_bridge:
     dependency: "direct main"
     description:
       name: flutter_rust_bridge
-      sha256: e87d6b9ee934dcd24a128ccb2bd91905d2d5fe5c06245d6a8f5477d4907a437a
+      sha256: ec69331e2335ab4d456c0a9fc700892c2c85b72b9c0cb39df3ecfe8833d5d5c8
       url: "https://pub.dev"
     source: hosted
-    version: "2.12.0"
+    version: "2.13.0"
   flutter_secure_storage:
     dependency: "direct main"
     description:
       name: flutter_secure_storage
-      sha256: fe638107c5f69119156ada2db5a57734385fac3f64430bd7252a00d3ead2ca4b
+      sha256: d4e1fb6b2cb524868929e78dc0282fa000554b22060fb53789dc481c9fc95bb8
       url: "https://pub.dev"
     source: hosted
-    version: "10.3.4"
+    version: "11.2.0"
   flutter_secure_storage_darwin:
     dependency: transitive
     description:
       name: flutter_secure_storage_darwin
-      sha256: "82329fa5cdf343773b1b6897dea959105a29f092454259edff92f9f6637e8149"
+      sha256: a031ceac9b070e62ef183cd7f7d1a8798ebde402d5049f0fe6eb3a51bd797a21
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.2"
+    version: "0.4.3"
   flutter_secure_storage_linux:
     dependency: transitive
     description:
@@ -364,18 +372,18 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_zxing
-      sha256: "2c1ed2d0b1eb70c95231da33e9dea80e5b2f8a4711974bdadf7d9c1813b7ad5e"
+      sha256: ee2b97bf69b01385b91497501c060f4e3b53686709892e005de10f3ad30eee98
       url: "https://pub.dev"
     source: hosted
-    version: "2.4.0"
+    version: "3.1.0"
   home_widget:
     dependency: "direct main"
     description:
       name: home_widget
-      sha256: b8d377e6a5aacc65193170addf252cce7868fa621b740cdd7b517a233871c185
+      sha256: "1dbfdfbb3b47de24639adfba352050d85d66af112b9cc3ec5bf7627a7813abcb"
       url: "https://pub.dev"
     source: hosted
-    version: "0.9.4"
+    version: "0.10.0"
   hooks:
     dependency: transitive
     description:
@@ -536,6 +544,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.1.0"
+  listen:
+    dependency: transitive
+    description:
+      name: listen
+      sha256: "47501a08016a43fcad79252439d723f50f14f88fa7bfd8a177e0a417e5c9e1f2"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.1"
   logging:
     dependency: transitive
     description:
@@ -548,10 +564,10 @@ packages:
     dependency: "direct main"
     description:
       name: lucide_icons_flutter
-      sha256: d350446fb7a7ab3ef8550e3cb5aab72f4e9da54d54111244ab09489bb8a2a1ff
+      sha256: d2a7db37aa98536dc65bd6b4384aaa12baa94423a7a57b186011cf695ec2beb2
       url: "https://pub.dev"
     source: hosted
-    version: "3.1.25"
+    version: "4.0.0"
   matcher:
     dependency: transitive
     description:
@@ -740,10 +756,10 @@ packages:
     dependency: transitive
     description:
       name: riverpod
-      sha256: "59062512288d3056b2321804332a13ffdd1bf16df70dcc8e506e411280a72959"
+      sha256: "484dfc873ea4c4f4240e5635444fa066f87b07862b7279ebd004a2b71fba4b7a"
       url: "https://pub.dev"
     source: hosted
-    version: "2.6.1"
+    version: "3.4.3"
   rust_lib_gerfaut:
     dependency: "direct main"
     description:
@@ -900,6 +916,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.1.6"
+  uuid:
+    dependency: transitive
+    description:
+      name: uuid
+      sha256: "9b129329f58692f6e6578329498a8fe9fbe98f090beb764ffbb8ee2eadd01dcd"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.6.0"
   vector_math:
     dependency: transitive
     description:

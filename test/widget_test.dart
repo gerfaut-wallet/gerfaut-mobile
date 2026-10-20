@@ -32,6 +32,7 @@ Widget app(
   FakeDisguise? disguise,
 }) {
   return ProviderScope(
+    retry: noRetry,
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
       disguiseServiceProvider.overrideWithValue(disguise ?? FakeDisguise()),
@@ -486,6 +487,7 @@ void main() {
   group('live coverage on the cards', () {
     Widget liveApp(FakeBridge bridge) {
       return ProviderScope(
+        retry: noRetry,
         overrides: [
           bridgeProvider.overrideWithValue(bridge),
           disguiseServiceProvider.overrideWithValue(FakeDisguise()),
@@ -637,6 +639,7 @@ void main() {
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
         ProviderScope(
+          retry: noRetry,
           overrides: [
             bridgeProvider.overrideWithValue(liveBridge(short)),
             livePlatformProvider.overrideWithValue(

@@ -180,7 +180,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final snapshot = ref.watch(snapshotProvider(widget.walletId)).valueOrNull;
+    final snapshot = ref.watch(snapshotProvider(widget.walletId)).value;
     final total = snapshot?.txs.length ?? 0;
     final selected = snapshot?.txs.where(_passes).length ?? 0;
     final chosen = snapshot != null && selected > 0;

@@ -15,6 +15,7 @@ import 'fakes.dart';
 void main() {
   ProviderContainer screens(FakeBridge bridge) {
     final container = ProviderContainer(
+      retry: noRetry,
       overrides: [bridgeProvider.overrideWithValue(bridge)],
     );
     addTearDown(container.dispose);
