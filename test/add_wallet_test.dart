@@ -28,6 +28,7 @@ Widget screen(
   CameraBuilder? cameraBuilder,
 }) {
   return ProviderScope(
+    retry: noRetry,
     overrides: [bridgeProvider.overrideWithValue(bridge)],
     child: MaterialApp(
       theme: themeFrom(GerfautTokens.light, Brightness.light),

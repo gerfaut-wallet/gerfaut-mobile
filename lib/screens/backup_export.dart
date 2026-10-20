@@ -102,7 +102,7 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
       setState(() => _error = problem);
       return;
     }
-    final active = ref.read(settingsProvider).valueOrNull?.activeNetwork;
+    final active = ref.read(settingsProvider).value?.activeNetwork;
     final ids = _scope == _Scope.all
         ? null
         : [
@@ -237,7 +237,7 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
 
   Widget _buildOptions(GerfautTokens tokens) {
     final all = _all;
-    final active = ref.watch(settingsProvider).valueOrNull?.activeNetwork;
+    final active = ref.watch(settingsProvider).value?.activeNetwork;
     final onNetwork = all == null || active == null
         ? null
         : all.where((w) => w.network == active).length;

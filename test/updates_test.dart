@@ -57,7 +57,7 @@ Future<void> _launch(
 }) async {
   await tester.pumpWidget(
     ProviderScope(
-      // A new scope each time: nothing in memory survives a launch.
+      retry: noRetry, // A new scope each time: nothing in memory survives a launch.
       key: UniqueKey(),
       overrides: [
         bridgeProvider.overrideWithValue(bridge),
@@ -348,6 +348,7 @@ void main() {
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
         ProviderScope(
+          retry: noRetry,
           overrides: [
             bridgeProvider.overrideWithValue(bridge),
             disguiseServiceProvider.overrideWithValue(FakeDisguise()),

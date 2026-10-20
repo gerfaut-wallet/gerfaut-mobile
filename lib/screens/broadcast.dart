@@ -112,7 +112,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
   }
 
   Future<void> _decode() async {
-    final network = ref.read(settingsProvider).valueOrNull?.activeNetwork;
+    final network = ref.read(settingsProvider).value?.activeNetwork;
     final input = _inputController.text.trim();
     if (network == null || input.isEmpty || _decoding) return;
     setState(() {
@@ -278,7 +278,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final network = ref.watch(settingsProvider).valueOrNull?.activeNetwork;
+    final network = ref.watch(settingsProvider).value?.activeNetwork;
     final preview = _preview;
     return Scaffold(
       appBar: GerfautAppBar.text('Broadcast'),
@@ -299,7 +299,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
 
   Widget _buildInputStep(GerfautTokens tokens, Network network) {
     final recent =
-        ref.watch(recentBroadcastsProvider(network)).valueOrNull ??
+        ref.watch(recentBroadcastsProvider(network)).value ??
         const <RecentBroadcast>[];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -313,10 +313,7 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
       final meta = await bridge.addWallet(name, parsed, network);
       // The workspace follows the wallet that was just added, otherwise
       // it would land invisible on another network.
-      final active = container
-          .read(settingsProvider)
-          .valueOrNull
-          ?.activeNetwork;
+      final active = container.read(settingsProvider).value?.activeNetwork;
       if (network != active) {
         // The wallet is in the vault whatever happens here: a switch
         // that fails must not read as a failed add, or adding again

@@ -194,7 +194,7 @@ class CreditFrame extends ConsumerWidget {
           final locked = shown.isNotEmpty && ref.watch(lockProvider).locked;
           final table = shown.isEmpty || locked
               ? null
-              : ref.watch(priceTableProvider).valueOrNull;
+              : ref.watch(priceTableProvider).value;
           return _framed(context, shown, table);
         },
       ),

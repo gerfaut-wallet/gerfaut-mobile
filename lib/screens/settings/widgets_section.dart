@@ -23,7 +23,7 @@ class WidgetsSection extends ConsumerWidget {
     // Under an app lock the balance widget names no wallet and shows no
     // amount, whatever this says: greyed meanwhile, and the line says
     // why. The choice comes back with the lock gone.
-    final locked = ref.watch(settingsProvider).valueOrNull?.appLock != null;
+    final locked = ref.watch(settingsProvider).value?.appLock != null;
 
     return SectionCard(
       icon: LucideIcons.layoutGrid,

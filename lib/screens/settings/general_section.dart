@@ -25,7 +25,7 @@ class GeneralSection extends ConsumerWidget {
     final currency = ref.watch(fiatCurrencyProvider);
     // What is on offer, in the core's order: the currencies with the
     // sources that quote each, and the sources by name.
-    final table = ref.watch(priceTableProvider).valueOrNull;
+    final table = ref.watch(priceTableProvider).value;
     final chosen = table?.entryOf(currency);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -209,7 +209,7 @@ class _RatePreview extends ConsumerWidget {
         style: tokens.bodySmall.copyWith(color: tokens.pending),
       );
     }
-    final quote = price.valueOrNull;
+    final quote = price.value;
     if (quote == null) {
       return Text(
         'Fetching the current price…',

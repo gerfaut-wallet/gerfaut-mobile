@@ -46,6 +46,7 @@ Future<void> _pumpPolicy(
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
     ProviderScope(
+      retry: noRetry,
       overrides: [
         bridgeProvider.overrideWithValue(bridge),
         if (clipboard != null)

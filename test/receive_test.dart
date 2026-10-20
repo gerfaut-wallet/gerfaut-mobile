@@ -20,6 +20,7 @@ Widget receiveApp(
   Brightness brightness = Brightness.light,
 }) {
   return ProviderScope(
+    retry: noRetry,
     overrides: [bridgeProvider.overrideWithValue(bridge)],
     child: creditedApp(
       theme: themeFrom(tokens ?? GerfautTokens.light, brightness),
@@ -144,6 +145,7 @@ void main() {
       );
       await tester.pumpWidget(
         ProviderScope(
+          retry: noRetry,
           overrides: [bridgeProvider.overrideWithValue(bridge)],
           child: MaterialApp(
             theme: themeFrom(GerfautTokens.light, Brightness.light),

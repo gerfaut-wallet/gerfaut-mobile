@@ -30,7 +30,7 @@ String? _fiatValueOf(WidgetRef ref, int sats, {required Network network}) {
     return null;
   }
   final price = ref.watch(priceProvider);
-  final quote = price.valueOrNull;
+  final quote = price.value;
   if (quote == null || price.hasError) return null;
   if (quote.currency != ref.watch(fiatCurrencyProvider)) return null;
   final priced = network == Network.mainnet ? sats : 0;
@@ -69,7 +69,7 @@ class FiatText extends ConsumerWidget {
     if (fiat == null) return const SizedBox.shrink();
     return CreditMark(
       source: network == Network.mainnet
-          ? ref.watch(priceProvider).valueOrNull?.source
+          ? ref.watch(priceProvider).value?.source
           : null,
       child: Padding(
         padding: EdgeInsets.only(top: top),

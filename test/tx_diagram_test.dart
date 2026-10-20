@@ -34,6 +34,7 @@ Widget diagramApp({
       ? GerfautTokens.dark
       : GerfautTokens.light;
   return ProviderScope(
+    retry: noRetry,
     overrides: [bridgeProvider.overrideWithValue(FakeBridge())],
     child: MaterialApp(
       theme: themeFrom(tokens, brightness),

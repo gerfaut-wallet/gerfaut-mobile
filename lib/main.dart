@@ -7,6 +7,7 @@ import 'app.dart';
 import 'src/background.dart';
 import 'src/live.dart';
 import 'src/quiet_errors.dart';
+import 'src/state.dart';
 import 'src/vault_key.dart';
 
 /// The entry point the Android Live service runs in an engine of its
@@ -25,5 +26,10 @@ void main() {
   // The scheduler only has to know how to wake the app; whether it ever
   // does is the background-check preference, applied from the settings.
   unawaited(initBackgroundChecks());
-  runApp(const ProviderScope(child: GerfautApp(bootstrap: bootstrapGerfaut)));
+  runApp(
+    const ProviderScope(
+      retry: noRetry,
+      child: GerfautApp(bootstrap: bootstrapGerfaut),
+    ),
+  );
 }

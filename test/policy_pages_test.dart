@@ -38,6 +38,7 @@ Future<List<String>> _readPage(WidgetTester tester, String json) async {
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
     ProviderScope(
+      retry: noRetry,
       overrides: [bridgeProvider.overrideWithValue(bridge)],
       child: MaterialApp(
         theme: themeFrom(GerfautTokens.light, Brightness.light),

@@ -82,6 +82,7 @@ Widget disguisedApp(
   FakeWindowGuard? guard,
 }) {
   return ProviderScope(
+    retry: noRetry,
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
       disguiseServiceProvider.overrideWithValue(
@@ -397,6 +398,7 @@ void main() {
     testWidgets('disguised but unlocked, the app is shown', (tester) async {
       final bridge = locked(wallets: [makeMeta()]);
       final container = ProviderContainer(
+        retry: noRetry,
         overrides: [
           bridgeProvider.overrideWithValue(bridge),
           disguiseServiceProvider.overrideWithValue(

@@ -37,6 +37,7 @@ Widget broadcastApp(
   Future<XFile?> Function()? filePicker,
 }) {
   return ProviderScope(
+    retry: noRetry,
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
       disguiseServiceProvider.overrideWithValue(FakeDisguise()),
@@ -310,7 +311,7 @@ void main() {
     // hand, not that the source failed to answer.
     expect(await container.read(priceProvider.future), isNotNull);
     await tester.pumpAndSettle();
-    expect(container.read(priceProvider).valueOrNull?.rate, 50000);
+    expect(container.read(priceProvider).value?.rate, 50000);
     expect(container.read(fiatCurrencyProvider), FiatCurrency('eur'));
 
     // The preview and the transaction detail are one page with two
@@ -842,6 +843,7 @@ void main() {
     // A container of the test's own: it outlives the screen, as the
     // app's does.
     final container = ProviderContainer(
+      retry: noRetry,
       overrides: [
         bridgeProvider.overrideWithValue(bridge),
         disguiseServiceProvider.overrideWithValue(FakeDisguise()),
@@ -1228,6 +1230,7 @@ void main() {
           ]);
     await tester.pumpWidget(
       ProviderScope(
+        retry: noRetry,
         overrides: [
           bridgeProvider.overrideWithValue(bridge),
           disguiseServiceProvider.overrideWithValue(FakeDisguise()),

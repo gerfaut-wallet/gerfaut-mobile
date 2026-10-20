@@ -135,7 +135,7 @@ class _LiveSheetState extends ConsumerState<LiveSheet> {
 
   List<Widget> _explain(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final settings = ref.watch(settingsProvider).value;
     final automatic =
         settings != null &&
         settings.activeNetwork == Network.mainnet &&

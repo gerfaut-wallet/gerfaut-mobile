@@ -31,6 +31,7 @@ import 'menu.dart';
 /// The settings opened on [section], or on the root list of sections.
 Widget settingsApp(FakeBridge bridge, {SettingsSection? section}) {
   return ProviderScope(
+    retry: noRetry,
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
       disguiseServiceProvider.overrideWithValue(FakeDisguise()),
@@ -80,6 +81,7 @@ void main() {
     );
     await tester.pumpWidget(
       ProviderScope(
+        retry: noRetry,
         overrides: [
           bridgeProvider.overrideWithValue(bridge),
           disguiseServiceProvider.overrideWithValue(FakeDisguise()),
@@ -223,6 +225,7 @@ void main() {
     );
     await tester.pumpWidget(
       ProviderScope(
+        retry: noRetry,
         overrides: [
           bridgeProvider.overrideWithValue(bridge),
           disguiseServiceProvider.overrideWithValue(FakeDisguise()),
@@ -2060,6 +2063,7 @@ void main() {
     /// lens does.
     Widget settingsWithCamera(FakeBridge bridge, String frame) {
       return ProviderScope(
+        retry: noRetry,
         overrides: [
           bridgeProvider.overrideWithValue(bridge),
           disguiseServiceProvider.overrideWithValue(FakeDisguise()),
@@ -2535,6 +2539,7 @@ void main() {
     ) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noRetry,
           overrides: [
             bridgeProvider.overrideWithValue(bridge()),
             disguiseServiceProvider.overrideWithValue(FakeDisguise()),

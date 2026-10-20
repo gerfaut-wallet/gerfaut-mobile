@@ -62,7 +62,7 @@ class _TorSectionState extends ConsumerState<TorSection> {
       _error = null;
       _route = null;
     });
-    final settings = ref.read(settingsProvider).valueOrNull;
+    final settings = ref.read(settingsProvider).value;
     try {
       await ref
           .read(bridgeProvider)
@@ -106,8 +106,8 @@ class _TorSectionState extends ConsumerState<TorSection> {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final tor = ref.watch(settingsProvider).valueOrNull?.tor;
-    final status = ref.watch(torStatusProvider).valueOrNull;
+    final tor = ref.watch(settingsProvider).value?.tor;
+    final status = ref.watch(torStatusProvider).value;
     if (tor == null) return const SizedBox.shrink();
     final embedded = status?.embeddedAvailable ?? false;
     final intro = embedded

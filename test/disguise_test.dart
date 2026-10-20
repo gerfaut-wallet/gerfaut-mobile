@@ -67,6 +67,7 @@ Widget _securityApp(
   _RecordingNotifications? notifications,
 }) {
   return ProviderScope(
+    retry: noRetry,
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
       disguiseServiceProvider.overrideWithValue(disguise),
@@ -159,6 +160,7 @@ void main() {
       final bridge = _locked();
       await tester.pumpWidget(
         ProviderScope(
+          retry: noRetry,
           overrides: [
             bridgeProvider.overrideWithValue(bridge),
             disguiseServiceProvider.overrideWithValue(disguise),
@@ -421,6 +423,7 @@ void main() {
       );
       await tester.pumpWidget(
         ProviderScope(
+          retry: noRetry,
           overrides: [
             bridgeProvider.overrideWithValue(bridge),
             disguiseServiceProvider.overrideWithValue(disguise),
@@ -445,6 +448,7 @@ void main() {
       final disguise = FakeDisguise(disguised: true);
       await tester.pumpWidget(
         ProviderScope(
+          retry: noRetry,
           overrides: [
             bridgeProvider.overrideWithValue(_locked()),
             disguiseServiceProvider.overrideWithValue(disguise),
@@ -468,6 +472,7 @@ void main() {
       final service = _RecordingNotifications();
       final bridge = FakeBridge(wallets: [makeMeta()])..syncedIds.add('w1');
       final container = ProviderContainer(
+        retry: noRetry,
         overrides: [
           bridgeProvider.overrideWithValue(bridge),
           disguiseServiceProvider.overrideWithValue(
@@ -503,6 +508,7 @@ void main() {
       final service = _RecordingNotifications();
       final bridge = FakeBridge(wallets: [makeMeta()])..syncedIds.add('w1');
       final container = ProviderContainer(
+        retry: noRetry,
         overrides: [
           bridgeProvider.overrideWithValue(bridge),
           disguiseServiceProvider.overrideWithValue(FakeDisguise()),

@@ -330,7 +330,7 @@ class SyncAnnouncer {
     // everything the disguise hides.
     if (_ref.read(disguiseProvider).disguised) return;
     try {
-      final listed = _ref.read(walletsProvider).valueOrNull;
+      final listed = _ref.read(walletsProvider).value;
       final names = await _namesOr(
         () async => listed ?? await _ref.read(bridgeProvider).listWallets(),
       );
@@ -370,7 +370,7 @@ class NotifyNewTxNotifier extends Notifier<bool> {
       final granted = await ref
           .read(notificationServiceProvider)
           .requestPermission();
-      ref.read(notificationsRefusedProvider.notifier).state = !granted;
+      ref.read(notificationsRefusedProvider.notifier).put(!granted);
       if (!granted) return;
     }
     // Read before the change: it rebuilds this notifier, whose ref
@@ -400,7 +400,7 @@ class NotifyNewTxNotifier extends Notifier<bool> {
   Future<void> checkSystem() async {
     final refused = ref.read(notificationsRefusedProvider.notifier);
     if (!state) {
-      refused.state = false;
+      refused.put(false);
       return;
     }
     final bool deliverable;
@@ -410,7 +410,7 @@ class NotifyNewTxNotifier extends Notifier<bool> {
       // Unanswered: what was last known stands.
       return;
     }
-    refused.state = !deliverable;
+    refused.put(!deliverable);
   }
 }
 
@@ -448,7 +448,9 @@ final notifyDetailsProvider = NotifierProvider<NotifyDetailsNotifier, bool>(
 
 /// The system refused notifications the last time it was asked, when
 /// the toggle went on or when the app last came back on screen.
-final notificationsRefusedProvider = StateProvider<bool>((ref) => false);
+final notificationsRefusedProvider = NotifierProvider<Slot<bool>, bool>(
+  () => Slot(false),
+);
 
 /// How Gerfaut looks for transactions while it is off screen. What the
 /// preference stores is [stored]: the seconds of a periodic check, or

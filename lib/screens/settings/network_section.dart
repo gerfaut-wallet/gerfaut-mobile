@@ -222,7 +222,7 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
       return;
     }
     if (!mounted) return;
-    final settings = ref.read(settingsProvider).valueOrNull;
+    final settings = ref.read(settingsProvider).value;
     final stored = settings?.backendFor(settings.activeNetwork);
     setState(() {
       _scanError = null;
@@ -296,7 +296,7 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
   /// list is not in yet or no longer carries it.
   PublicServer? _publicServerById(Network network, String? id) {
     if (id == null) return null;
-    final servers = ref.read(publicServersProvider(network)).valueOrNull;
+    final servers = ref.read(publicServersProvider(network)).value;
     for (final server in servers ?? const <PublicServer>[]) {
       if (server.id == id) return server;
     }
@@ -380,7 +380,7 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final settings = ref.watch(settingsProvider).value;
     if (settings == null) {
       return Text(
         'Loading…',
@@ -591,7 +591,7 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
               // hand looks exactly like a node of one's own.
               SettingSwitch(
                 title: 'This is my node',
-                hint: _ownNodeHint(ref.watch(liveLimitsProvider).valueOrNull),
+                hint: _ownNodeHint(ref.watch(liveLimitsProvider).value),
                 value: _ownNode,
                 onChanged: (on) => setState(() {
                   _ownNode = on;

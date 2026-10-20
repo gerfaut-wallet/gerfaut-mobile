@@ -15,6 +15,25 @@ import 'prefs.dart';
 /// The bridge to the core. Widget tests override this with a fake.
 final bridgeProvider = Provider<GerfautBridge>((ref) => const RustBridge());
 
+/// No provider asks again by itself after a failure: each one says it
+/// failed, at once, and is asked again by a person or by its own clock.
+/// Riverpod's own retries would reach a server again behind the
+/// screen's back, and hold a failure as "loading" for half a minute.
+Duration? noRetry(int retryCount, Object error) => null;
+
+/// A plain value the app sets from outside its provider: a flag, a
+/// note. Listeners hear of a new value only when it differs.
+class Slot<T> extends Notifier<T> {
+  Slot(this._initial);
+
+  final T _initial;
+
+  @override
+  T build() => _initial;
+
+  void put(T value) => state = value;
+}
+
 /// Vault settings. Invalidated after any mutation that touches them.
 final settingsProvider = FutureProvider<Settings>((ref) {
   return ref.watch(bridgeProvider).getSettings();
@@ -29,8 +48,11 @@ final publicServersProvider =
 
 /// Wallets of the active workspace network.
 final walletsProvider = FutureProvider<List<WalletMeta>>((ref) async {
+  // Watched before the wait: once the settings change, this build is
+  // over and its ref may no longer be used.
+  final bridge = ref.watch(bridgeProvider);
   final settings = await ref.watch(settingsProvider.future);
-  return ref.watch(bridgeProvider).listWallets(settings.activeNetwork);
+  return bridge.listWallets(settings.activeNetwork);
 });
 
 /// Full view of one wallet.
@@ -369,7 +391,7 @@ final priceTableProvider = FutureProvider<PriceTable>((ref) {
 /// launcher for as long as Live keeps the process, so what runs on a
 /// clock for the screen's sake watches this and stops while it is
 /// false. Kept by the gate, from the app's lifecycle.
-final appInFrontProvider = StateProvider<bool>((ref) => true);
+final appInFrontProvider = NotifierProvider<Slot<bool>, bool>(() => Slot(true));
 
 /// Ticks every 30 seconds while the app is on screen. The lines that
 /// say how long ago something was, "Synced 5 min ago", are worked out
@@ -433,7 +455,7 @@ class PriceNotifier extends AsyncNotifier<PriceQuote?> {
           kept.stackTrace ?? StackTrace.current,
         );
       }
-      return kept.valueOrNull;
+      return kept.value;
     }
     ref.onDispose(() => _timer?.cancel());
     final every = (await ref.read(priceTableProvider.future)).refresh;
@@ -450,10 +472,13 @@ final priceProvider = AsyncNotifierProvider<PriceNotifier, PriceQuote?>(
 /// The transactions this app sent on a network, newest first, as the
 /// vault keeps them, so the broadcast screen can check on them again
 /// after a restart.
-class RecentBroadcastsNotifier
-    extends FamilyAsyncNotifier<List<RecentBroadcast>, Network> {
+class RecentBroadcastsNotifier extends AsyncNotifier<List<RecentBroadcast>> {
+  RecentBroadcastsNotifier(this.network);
+
+  final Network network;
+
   @override
-  Future<List<RecentBroadcast>> build(Network network) =>
+  Future<List<RecentBroadcast>> build() =>
       ref.watch(bridgeProvider).recentBroadcasts(network);
 
   /// Reads the list again, once the vault has kept a transaction sent.
@@ -481,8 +506,12 @@ final recentBroadcastsProvider =
     >(RecentBroadcastsNotifier.new);
 
 /// One-shot guards: prefs hydration and the startup auto-sync.
-final prefsHydratedProvider = StateProvider<bool>((ref) => false);
-final autoSyncedProvider = StateProvider<bool>((ref) => false);
+final prefsHydratedProvider = NotifierProvider<Slot<bool>, bool>(
+  () => Slot(false),
+);
+final autoSyncedProvider = NotifierProvider<Slot<bool>, bool>(
+  () => Slot(false),
+);
 
 // --- sync --------------------------------------------------------------
 

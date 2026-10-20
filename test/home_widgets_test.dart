@@ -82,6 +82,7 @@ Future<({ProviderContainer container, WidgetFeed feed})> _running(
   List<bool>? scheduled,
 }) async {
   final container = ProviderContainer(
+    retry: noRetry,
     overrides: [
       bridgeProvider.overrideWithValue(bridge),
       widgetBoardProvider.overrideWithValue(board),
@@ -823,6 +824,7 @@ void main() {
       final board = FakeWidgetBoard(installed: {HomeWidgets.balance});
       await tester.pumpWidget(
         ProviderScope(
+          retry: noRetry,
           overrides: [
             bridgeProvider.overrideWithValue(bridge),
             widgetBoardProvider.overrideWithValue(board),
@@ -868,6 +870,7 @@ void main() {
       final board = FakeWidgetBoard(installed: {HomeWidgets.balance});
       await tester.pumpWidget(
         ProviderScope(
+          retry: noRetry,
           overrides: [
             bridgeProvider.overrideWithValue(bridge),
             widgetBoardProvider.overrideWithValue(board),
@@ -904,6 +907,7 @@ void main() {
     testWidgets('disguised, the card says the widgets are off', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noRetry,
           overrides: [
             bridgeProvider.overrideWithValue(_bridge()),
             widgetBoardProvider.overrideWithValue(FakeWidgetBoard()),

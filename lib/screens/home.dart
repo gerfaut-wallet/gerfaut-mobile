@@ -38,15 +38,15 @@ class HomeScreen extends ConsumerWidget {
   /// first builds — whatever feeds the home-screen widgets asks for it
   /// first — and a listener would wait for a change that never comes.
   void _autoSyncOnce(BuildContext context, WidgetRef ref) {
-    final wallets = ref.watch(walletsProvider).valueOrNull;
-    final network = ref.read(settingsProvider).valueOrNull?.activeNetwork;
+    final wallets = ref.watch(walletsProvider).value;
+    final network = ref.read(settingsProvider).value?.activeNetwork;
     if (wallets == null || wallets.isEmpty || network == null) return;
     if (ref.read(autoSyncedProvider)) return;
     // Off the frame: starting a sync moves provider state, which a
     // build in progress must not.
     Future.microtask(() {
       if (!context.mounted || ref.read(autoSyncedProvider)) return;
-      ref.read(autoSyncedProvider.notifier).state = true;
+      ref.read(autoSyncedProvider.notifier).put(true);
       ref.read(syncProvider.notifier).syncAll(network);
     });
   }
@@ -61,7 +61,7 @@ class HomeScreen extends ConsumerWidget {
     final masked = ref.watch(maskedProvider);
     ref.watch(syncProvider);
     final sync = ref.read(syncProvider.notifier);
-    final network = settings.valueOrNull?.activeNetwork;
+    final network = settings.value?.activeNetwork;
 
     return Scaffold(
       appBar: GerfautAppBar(
@@ -99,7 +99,7 @@ class HomeScreen extends ConsumerWidget {
           // turns for as long as any of them is still working.
           SyncButton(
             syncing: sync.syncingAny,
-            onPressed: network == null || (wallets.valueOrNull?.isEmpty ?? true)
+            onPressed: network == null || (wallets.value?.isEmpty ?? true)
                 ? null
                 : () => sync.syncAll(network),
           ),
