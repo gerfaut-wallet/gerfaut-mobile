@@ -201,6 +201,15 @@ class _Hydrated extends ConsumerWidget {
         if (first) _startUpdateSession(ref);
       }
     });
+    // The widget feed and Live follow the app's state for as long as it
+    // runs. A provider only read goes quiet in Riverpod 3: what it listens
+    // to is no longer rebuilt for it, and a widget placed meanwhile, a new
+    // quote or a first wallet would go unheard. Listened to here, they
+    // stay awake; not before the preferences are in, like the feed itself.
+    if (ref.watch(prefsHydratedProvider)) {
+      ref.listen(widgetFeedProvider, (_, _) {});
+      ref.listen(liveProvider, (_, _) {});
+    }
     // The platform may answer about the disguise after the vault has
     // answered about the lock: the same check, from the other side.
     ref.listen(disguiseProvider, (previous, next) {
