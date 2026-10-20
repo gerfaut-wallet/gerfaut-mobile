@@ -1191,8 +1191,13 @@ class FakeBridge implements GerfautBridge {
     _store(gapLimit: gapLimit);
   }
 
+  /// Holds every backend save until completed: a vault slow to write.
+  Completer<void>? setBackendGate;
+
   @override
   Future<void> setBackend(Network network, BackendConfig config) async {
+    final gate = setBackendGate;
+    if (gate != null) await gate.future;
     onSetBackend?.call(network, config);
     savedBackends[network] = config;
     _store(backends: {...settings.backends, network: config});

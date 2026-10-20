@@ -312,8 +312,10 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
     });
     try {
       if (endpoint != null && !await _settleCertificate(endpoint)) return;
-      if (await _leftMeanwhile()) return;
-      setState(() => _saving = _BackendSave.writing);
+      // A certificate accepted a moment ago is being written already:
+      // the backend goes with it, as the person asked.
+      if (_saving != _BackendSave.writing && await _leftMeanwhile()) return;
+      if (mounted) setState(() => _saving = _BackendSave.writing);
       await bridge.setBackend(network, config);
       container.invalidate(settingsProvider);
       messenger.showSnackBar(Toast('Setting saved'));
@@ -785,6 +787,9 @@ class _LeaveUnsavedDialog extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(GerfautRadius.lg),
       ),
+      // Large text on a small phone: the sentence scrolls, it does not
+      // spill over the buttons.
+      scrollable: true,
       title: Text('Leave without saving?', style: tokens.h2),
       content: Text(
         'Gerfaut is still checking the server, which can take a minute '

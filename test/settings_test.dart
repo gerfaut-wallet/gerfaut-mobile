@@ -1899,6 +1899,60 @@ void main() {
         expect(bridge.savedBackends, hasLength(1));
       });
 
+      testWidgets('the page taken away mid-check writes nothing', (
+        tester,
+      ) async {
+        final bridge = ownElectrum();
+        bridge.onInspectCertificate = (_) => unknown;
+        final gate = await checking(tester, bridge);
+
+        // What the app lock does: every route above the first one goes,
+        // past any PopScope.
+        tester
+            .state<NavigatorState>(find.byType(Navigator))
+            .popUntil((route) => route.isFirst);
+        await pumpABit(tester);
+        gate.complete();
+        await tester.pumpAndSettle();
+
+        // No certificate question opens over whatever is in front now.
+        expect(
+          find.text('This server signs its own certificate'),
+          findsNothing,
+        );
+        expect(bridge.trustedCertificates, isEmpty);
+        expect(bridge.savedBackends, isEmpty);
+      });
+
+      testWidgets('Back while the choice is written leaves once it is', (
+        tester,
+      ) async {
+        useTallSurface(tester);
+        final bridge = ownElectrum();
+        final writing = Completer<void>();
+        bridge.setBackendGate = writing;
+        await tester.pumpWidget(settingsApp(bridge));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Network'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Save backend'));
+        await pumpABit(tester);
+        expect(find.text('Saving…'), findsOneWidget);
+
+        // A moment's work: no question, the page waits for it.
+        await tester.binding.handlePopRoute();
+        await pumpABit(tester);
+        expect(find.text('Leave without saving?'), findsNothing);
+        expect(find.byType(SettingsSectionScreen), findsOneWidget);
+
+        writing.complete();
+        await tester.pumpAndSettle();
+        expect(find.byType(SettingsSectionScreen), findsNothing);
+        expect(bridge.savedBackends, hasLength(1));
+        // Said on the page that comes back.
+        expect(find.text('Setting saved'), findsOneWidget);
+      });
+
       testWidgets('with nothing under way, Back leaves at once', (
         tester,
       ) async {
