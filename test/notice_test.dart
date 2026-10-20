@@ -255,6 +255,82 @@ void main() {
     expect(detail.style?.fontFamily, GerfautTokens.light.data.fontFamily);
   });
 
+  group("a live note with another system's words", () {
+    const message = 'The network refused this transaction.';
+    const refusal = 'min relay fee not met, 1 < 141';
+
+    testWidgets('announces its role, its message and the words together', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        host(
+          const GerfautNotice(
+            tone: NoticeTone.info,
+            message: message,
+            detail: refusal,
+            liveRegion: true,
+          ),
+        ),
+      );
+
+      // One node, the region, holding every word in reading order. A
+      // read-only field there would take the node over: Android shows
+      // the field's words alone and hides the rest in a hint.
+      final region = tester.getSemantics(find.byType(GerfautNotice));
+      expect(region.flagsCollection.isLiveRegion, isTrue);
+      expect(region.flagsCollection.isTextField, isFalse);
+      expect(region.label, 'Note\n$message\n$refusal');
+      expect(region.value, isEmpty);
+      // Still selectable on screen.
+      expect(find.byType(SelectableText), findsOneWidget);
+      handle.dispose();
+    });
+
+    testWidgets('in either tone', (tester) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        host(
+          const GerfautNotice(
+            tone: NoticeTone.alert,
+            message: message,
+            detail: refusal,
+            liveRegion: true,
+          ),
+        ),
+      );
+
+      expect(
+        tester.getSemantics(find.byType(GerfautNotice)).label,
+        'Warning\n$message\n$refusal',
+      );
+      handle.dispose();
+    });
+
+    testWidgets('a note on the page all along keeps them as a field', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        host(
+          const GerfautNotice(
+            tone: NoticeTone.info,
+            message: message,
+            detail: refusal,
+          ),
+        ),
+      );
+
+      // Walked into rather than announced: the words are a node of
+      // their own that a screen reader can move through.
+      final words = tester.getSemantics(find.byType(SelectableText));
+      expect(words.flagsCollection.isTextField, isTrue);
+      expect(words.value, refusal);
+      expect(find.bySemanticsLabel(message), findsOneWidget);
+      handle.dispose();
+    });
+  });
+
   testWidgets('a trailing action rides along', (tester) async {
     var tapped = 0;
     await tester.pumpWidget(
