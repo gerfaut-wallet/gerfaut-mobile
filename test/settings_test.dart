@@ -10,6 +10,7 @@ import 'package:gerfaut/screens/settings.dart';
 import 'package:gerfaut/screens/settings/about_section.dart';
 import 'package:gerfaut/screens/settings/fields.dart';
 import 'package:gerfaut/screens/settings/network_section.dart';
+import 'package:gerfaut/screens/scan.dart';
 import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/disguise.dart';
@@ -2836,6 +2837,27 @@ void main() {
         ),
         findsOneWidget,
       );
+      expect(bridge.savedBackends, isEmpty);
+    });
+
+    testWidgets('the server scanner says a private key in its own words', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = ownElectrum()
+        ..onAssembleQr = (_) => throw coreFailure(
+          'private_material',
+          'input contains private key material and was rejected',
+        );
+      await tester.pumpWidget(
+        settingsWithCamera(bridge, 'ur:crypto-output/1-1/private'),
+      );
+      await tester.pumpAndSettle();
+
+      await scan(tester);
+
+      expect(find.byType(ScanScreen), findsOneWidget);
+      expect(find.text(privateKeyNotAServer), findsOneWidget);
       expect(bridge.savedBackends, isEmpty);
     });
 

@@ -12,6 +12,7 @@ import 'package:gerfaut/screens/backup_export.dart';
 import 'package:gerfaut/widgets/choice_group.dart';
 import 'package:gerfaut/screens/backup_qr.dart';
 import 'package:gerfaut/screens/backup_restore.dart';
+import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/screens/scan.dart';
 import 'package:gerfaut/src/documents.dart';
 import 'package:gerfaut/src/lock.dart';
@@ -955,6 +956,26 @@ void main() {
       expect(find.text('Backup read from the QR code'), findsOneWidget);
       expect(find.text('Type its password to open it.'), findsOneWidget);
       expect(passwordHasFocus(tester), isTrue);
+    });
+
+    testWidgets('the restore scanner says a private key in its own words', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = FakeBridge()
+        ..onAssembleQr = (_) => throw coreFailure(
+          'private_material',
+          'input contains private key material and was rejected',
+        );
+      await pushRestore(tester, bridge);
+      await tester.tap(find.text('Scan a QR code'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('frame'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ScanScreen), findsOneWidget);
+      expect(find.text(privateKeyNotABackup), findsOneWidget);
+      expect(find.textContaining('descriptor'), findsNothing);
     });
 
     testWidgets('a file lands the same way, under its own name', (
