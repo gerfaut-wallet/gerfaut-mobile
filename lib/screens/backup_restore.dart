@@ -174,6 +174,7 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
       MaterialPageRoute<QrProgress>(
         builder: (_) => ScanScreen(
           caption: BackupRestoreScreen.scanCaption,
+          privateKey: privateKeyNotABackup,
           // A test seam of ScanScreen; this screen only forwards its
           // own, which is null outside a test.
           // ignore: invalid_use_of_visible_for_testing_member

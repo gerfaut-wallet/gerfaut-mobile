@@ -8,6 +8,7 @@ import 'package:flutter_zxing/flutter_zxing.dart' as zxing;
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/backup_qr.dart' show frameInterval;
 import 'package:gerfaut/screens/scan.dart';
+import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/screen.dart';
 import 'package:gerfaut/src/state.dart';
@@ -21,8 +22,13 @@ const _caption =
     'Point the camera at a descriptor, extended public key, or address QR '
     'code: plain text, UR, or BBQr, animated or not.';
 const _hint = 'Keep the camera on the animated code';
-const _psbt = 'This QR code holds a PSBT, not a wallet to watch.';
-const _tooManyParts = 'This code has more parts than Gerfaut can read.';
+const _notRead =
+    'This QR code holds an executable file, which Gerfaut does not read. '
+    'Show the code this screen asks for instead, such as a wallet export or '
+    'a signed transaction.';
+const _tooManyParts =
+    'This code has more parts than Gerfaut can read. If the wallet offers a '
+    'denser QR code, show that one instead.';
 
 /// The camera stand-in, findable while the scan runs.
 const _camera = Key('camera');
@@ -37,7 +43,12 @@ class _Outcome {
 /// A launcher page in front of the scanner, so the popped value can be
 /// captured. The camera is replaced by an empty box; tests push frames
 /// through [ScanScreenState.onFrame].
-Widget _app(FakeBridge bridge, _Outcome outcome, {ScreenKeeper? keeper}) {
+Widget _app(
+  FakeBridge bridge,
+  _Outcome outcome, {
+  ScreenKeeper? keeper,
+  String? privateKey,
+}) {
   return ProviderScope(
     retry: noRetry,
     overrides: [
@@ -52,6 +63,7 @@ Widget _app(FakeBridge bridge, _Outcome outcome, {ScreenKeeper? keeper}) {
             final scanned = await Navigator.of(context).push<QrProgress>(
               MaterialPageRoute<QrProgress>(
                 builder: (_) => ScanScreen(
+                  privateKey: privateKey ?? privateMaterialMessage,
                   cameraBuilder: (_) => const SizedBox.expand(key: _camera),
                 ),
               ),
@@ -72,8 +84,11 @@ Future<ScanScreenState> _open(
   FakeBridge bridge,
   _Outcome outcome, {
   ScreenKeeper? keeper,
+  String? privateKey,
 }) async {
-  await tester.pumpWidget(_app(bridge, outcome, keeper: keeper));
+  await tester.pumpWidget(
+    _app(bridge, outcome, keeper: keeper, privateKey: privateKey),
+  );
   await tester.tap(find.text('Open scanner'));
   await tester.pumpAndSettle();
   return tester.state<ScanScreenState>(find.byType(ScanScreen));
@@ -186,8 +201,8 @@ void main() {
             )
           : throw coreFailure(
               'too_many_parts',
-              'invalid qr: 3 frames scanned without the code coming '
-                  'together, more than Gerfaut reads',
+              '3 frames were scanned without the code coming together, '
+                  'more than Gerfaut reads.',
             );
     final keeper = FakeScreenKeeper();
     final outcome = _Outcome();
@@ -243,10 +258,7 @@ void main() {
       if (i % 100 == 0) await tester.pump();
     }
     await tester.pumpAndSettle();
-    expect(
-      find.text('This code has more parts than Gerfaut can read.'),
-      findsNothing,
-    );
+    expect(find.text(_tooManyParts), findsNothing);
     expect(outcome.pops, 1);
     expect(outcome.text, 'cHNidP8B');
   });
@@ -305,11 +317,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('1 / 3'), findsOneWidget);
 
-    bridge.onAssembleQr = (_) => throw coreFailure('invalid_input', _psbt);
+    bridge.onAssembleQr = (_) => throw coreFailure('invalid_input', _notRead);
     state.onFrame('ur:crypto-psbt/1-2/part-one');
     await tester.pumpAndSettle();
 
-    expect(find.text(_psbt), findsOneWidget);
+    expect(find.text(_notRead), findsOneWidget);
     expect(find.text(_caption), findsNothing);
     expect(find.text(_hint), findsNothing);
     expect(find.byType(LinearProgressIndicator), findsNothing);
@@ -323,7 +335,53 @@ void main() {
     expect(bridge.assembleCalls.last, ['ur:crypto-output/1-3/part-one']);
     expect(find.text('1 / 3'), findsOneWidget);
     expect(find.text(_caption), findsOneWidget);
-    expect(find.text(_psbt), findsNothing);
+    expect(find.text(_notRead), findsNothing);
+  });
+
+  testWidgets('a code holding a private key says what to bring instead', (
+    tester,
+  ) async {
+    final bridge = FakeBridge()
+      ..onAssembleQr = (_) => throw coreFailure(
+        'private_material',
+        'input contains private key material and was rejected',
+      );
+    final outcome = _Outcome();
+    final state = await _open(tester, bridge, outcome);
+
+    state.onFrame('ur:crypto-output/1-1/private');
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'This holds a private key, and Gerfaut only watches: nothing was '
+        'saved. Bring the public descriptor or extended public key instead.',
+      ),
+      findsOneWidget,
+    );
+    expect(outcome.pops, 0);
+  });
+
+  testWidgets('a private key is said in the words of the screen', (
+    tester,
+  ) async {
+    final bridge = FakeBridge()
+      ..onAssembleQr = (_) => throw coreFailure(
+        'private_material',
+        'input contains private key material and was rejected',
+      );
+    final state = await _open(
+      tester,
+      bridge,
+      _Outcome(),
+      privateKey: privateKeyNotATransaction,
+    );
+
+    state.onFrame('ur:crypto-output/1-1/private');
+    await tester.pumpAndSettle();
+
+    expect(find.text(privateKeyNotATransaction), findsOneWidget);
+    expect(find.textContaining('descriptor'), findsNothing);
   });
 
   testWidgets('a code announcing more parts than Gerfaut reads says so', (
@@ -334,8 +392,7 @@ void main() {
     final bridge = FakeBridge()
       ..onAssembleQr = (_) => throw coreFailure(
         'too_many_parts',
-        'invalid qr: this QR code announces 6000 parts, more than Gerfaut '
-            'reads',
+        'This QR code announces 6000 parts, more than Gerfaut reads.',
       );
     final outcome = _Outcome();
     final state = await _open(tester, bridge, outcome);
@@ -344,7 +401,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text(_tooManyParts), findsOneWidget);
-    expect(find.textContaining('invalid qr'), findsNothing);
+    expect(find.textContaining('announces 6000 parts'), findsNothing);
     expect(find.byKey(_camera), findsNothing);
     expect(outcome.pops, 0);
     expect(find.byType(ScanScreen), findsOneWidget);
@@ -370,7 +427,7 @@ void main() {
 
   testWidgets('the same refused code is not handed back again', (tester) async {
     final bridge = FakeBridge()
-      ..onAssembleQr = (_) => throw coreFailure('invalid_input', _psbt);
+      ..onAssembleQr = (_) => throw coreFailure('invalid_input', _notRead);
     final outcome = _Outcome();
     final state = await _open(tester, bridge, outcome);
 
@@ -381,7 +438,7 @@ void main() {
     expect(bridge.assembleCalls, hasLength(2));
     expect(bridge.scansOpened, 3);
     expect(bridge.scansClosed, [1, 2]);
-    expect(find.text(_psbt), findsOneWidget);
+    expect(find.text(_notRead), findsOneWidget);
 
     // The refused code stays under the camera and decodes several times
     // a second. Asking again buys the same answer and nothing else.
@@ -391,7 +448,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(bridge.assembleCalls, hasLength(2));
-    expect(find.text(_psbt), findsOneWidget);
+    expect(find.text(_notRead), findsOneWidget);
     expect(outcome.pops, 0);
   });
 
@@ -405,7 +462,7 @@ void main() {
           lost = false;
           throw coreFailure(
             'invalid_input',
-            'invalid qr: this scan was closed: open the scanner again',
+            'This scan was closed. Open the scanner again.',
           );
         }
         return QrProgress(
@@ -448,7 +505,12 @@ void main() {
     // the page underneath: the scanner stays, and says so.
     expect(outcome.pops, 0);
     expect(find.byType(ScanScreen), findsOneWidget);
-    expect(find.text('This code came out empty.'), findsOneWidget);
+    expect(
+      find.text(
+        'This code came through empty. Export it again from the wallet.',
+      ),
+      findsOneWidget,
+    );
     expect(find.text(_caption), findsNothing);
   });
 

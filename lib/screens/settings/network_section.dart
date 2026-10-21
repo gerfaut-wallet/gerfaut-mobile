@@ -230,6 +230,7 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
       MaterialPageRoute<QrProgress>(
         builder: (_) => ScanScreen(
           caption: NetworkSection.backendScanCaption,
+          privateKey: privateKeyNotAServer,
           // A test seam of ScanScreen; this screen only forwards its
           // own, which is null outside a test.
           // ignore: invalid_use_of_visible_for_testing_member
@@ -245,8 +246,15 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
     } catch (error) {
       // Pointing the wrong QR at it is the likely slip, so the refusal
       // names what was read instead: a BridgeException prints the words
-      // the core refused it in.
-      if (mounted) setState(() => _scanError = '$error');
+      // the core refused it in; a private key in this screen's words.
+      if (mounted) {
+        setState(
+          () => _scanError =
+              error is BridgeException && error.kind == 'private_material'
+              ? privateKeyNotAServer
+              : '$error',
+        );
+      }
       return;
     }
     if (!mounted) return;
@@ -337,7 +345,9 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
       if (mounted) {
         setState(() {
           _certificateNote = null;
-          _saveError = error.message;
+          _saveError = error.kind == 'private_material'
+              ? privateKeyNotAServer
+              : error.message;
         });
       }
     } finally {

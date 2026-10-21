@@ -24,6 +24,7 @@ class ScanScreen extends ConsumerStatefulWidget {
   const ScanScreen({
     super.key,
     this.caption = walletCaption,
+    this.privateKey = privateMaterialMessage,
     @visibleForTesting this.cameraBuilder,
   });
 
@@ -39,6 +40,10 @@ class ScanScreen extends ConsumerStatefulWidget {
 
   final String caption;
 
+  /// What a code holding a private key is told on this screen; the
+  /// wallet import's words by default, as for the caption.
+  final String privateKey;
+
   /// Replaces the camera view; tests use it to push frames by hand.
   final CameraBuilder? cameraBuilder;
 
@@ -50,7 +55,13 @@ class ScanScreen extends ConsumerStatefulWidget {
 /// one the core turns away by the count it announces, or by the frames
 /// it took without coming together (the core keeps count). The desktop
 /// app says the same.
-const String _tooManyParts = 'This code has more parts than Gerfaut can read.';
+const String _tooManyParts =
+    'This code has more parts than Gerfaut can read. If the wallet offers a '
+    'denser QR code, show that one instead.';
+
+/// A code whose parts all came and add up to nothing.
+const String _emptyCode =
+    'This code came through empty. Export it again from the wallet.';
 
 class ScanScreenState extends ConsumerState<ScanScreen> {
   /// The scan the core holds for this screen, opened with it and let go
@@ -183,8 +194,8 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
           if (!mounted || _done) return;
           // Or to a collection already dropped meanwhile.
           if (collection != _collection) continue;
-          // The core refused what was collected: a PSBT or an envelope
-          // it cannot open starts over; a code past what Gerfaut reads
+          // The core refused what was collected: a type it does not read
+          // or a damaged code starts over; a code past what Gerfaut reads
           // stops the scan.
           if (e.kind == 'too_many_parts') {
             _stop(_tooManyParts);
@@ -200,7 +211,13 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
             _queue.addFirst(frame);
             continue;
           }
-          _startOver(e.message);
+          // The core's sentence says what it saw and what to show
+          // instead; a private key is said in the screen's words.
+          _startOver(
+            e.kind == 'private_material'
+                ? widget.privateKey
+                : materialRefusal(e),
+          );
           return;
         }
         if (!mounted || _done) return;
@@ -214,7 +231,7 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
             // that hands the caller an empty scan, which is exactly what
             // a scanner closing on its own looks like from the page
             // underneath.
-            _startOver('This code came out empty.');
+            _startOver(_emptyCode);
             return;
           }
           _done = true;
