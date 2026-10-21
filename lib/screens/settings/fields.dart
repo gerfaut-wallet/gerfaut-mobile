@@ -42,8 +42,11 @@ class MonoField extends StatelessWidget {
     required int characters,
     double atLeast = 0,
   }) {
+    // What the field draws in: the theme's body style under its own,
+    // as TextField merges them, letter spacing included.
+    final drawn = Theme.of(context).textTheme.bodyLarge!.merge(_style(tokens));
     final painter = TextPainter(
-      text: TextSpan(text: '0' * characters, style: _style(tokens)),
+      text: TextSpan(text: '0' * characters, style: drawn),
       textDirection: TextDirection.ltr,
       textScaler: MediaQuery.textScalerOf(context),
       maxLines: 1,

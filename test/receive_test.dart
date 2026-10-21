@@ -8,6 +8,7 @@ import 'package:gerfaut/screens/receive.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/address_chip.dart';
 import 'package:gerfaut/widgets/buttons.dart';
 import 'package:gerfaut/widgets/status_pill.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -511,8 +512,8 @@ void main() {
       );
       // Both rows keep one column for their addresses.
       expect(
-        tester.getRect(find.text('7')).left,
-        tester.getRect(find.text('123')).left,
+        tester.getRect(find.byType(AddressChip).at(0)).left,
+        tester.getRect(find.byType(AddressChip).at(1)).left,
       );
     });
 

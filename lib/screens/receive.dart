@@ -527,7 +527,7 @@ class _AddressCardState extends State<_AddressCard> {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final rows = widget.rows;
-    final indexDigits = _indexDigits(rows);
+    final indexSlot = _indexSlot(context, tokens, _indexDigits(rows));
     final shown = _expanded ? rows : rows.take(_collapsedRows).toList();
     return Container(
       padding: const EdgeInsets.symmetric(vertical: GerfautSpacing.md),
@@ -581,7 +581,7 @@ class _AddressCardState extends State<_AddressCard> {
               _AddressRowTile(
                 row: row,
                 network: widget.network,
-                indexDigits: indexDigits,
+                indexSlot: indexSlot,
               ),
             ],
           if (rows.length > _collapsedRows) ...[
@@ -638,14 +638,14 @@ class _AddressRowTile extends StatelessWidget {
   const _AddressRowTile({
     required this.row,
     required this.network,
-    required this.indexDigits,
+    required this.indexSlot,
   });
 
   final AddressRow row;
   final Network network;
 
-  /// Digits of the longest index in the list the row belongs to.
-  final int indexDigits;
+  /// Width of the index column, measured once for the whole list.
+  final double indexSlot;
 
   @override
   Widget build(BuildContext context) {
@@ -664,7 +664,7 @@ class _AddressRowTile extends StatelessWidget {
           // index stays on one line at any size and the address keeps
           // the rest.
           SizedBox(
-            width: _indexSlot(context, tokens, indexDigits),
+            width: indexSlot,
             child: Text(
               '${row.index}',
               style: tokens.figureOf(color: tokens.textMuted),
