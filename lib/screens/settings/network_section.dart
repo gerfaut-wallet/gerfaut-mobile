@@ -730,7 +730,7 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
               child: PrimaryButton(
                 label: switch (_saving) {
                   _BackendSave.idle || _BackendSave.asking => 'Save backend',
-                  _BackendSave.checking => 'Checking the server…',
+                  _BackendSave.checking => 'Checking the certificate…',
                   _BackendSave.writing => 'Saving…',
                 },
                 busy:

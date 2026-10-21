@@ -1798,7 +1798,7 @@ void main() {
         final gate = await checking(tester, bridge);
 
         final button = tester.widget<PrimaryButton>(
-          find.widgetWithText(PrimaryButton, 'Checking the server…'),
+          find.widgetWithText(PrimaryButton, 'Checking the certificate…'),
         );
         expect(button.busy, isTrue);
         expect(find.text('Save backend'), findsNothing);
