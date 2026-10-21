@@ -1427,7 +1427,7 @@ void main() {
     // one-line address: the core refuses it as private material at
     // every call. The page goes past the check of the certificate, as
     // for a server that did not answer, and says the refusal of the
-    // save in the core's words, never in the secret's.
+    // save in its own words, never in the secret's.
     for (final (what, typed, shown) in [
       (
         'a seed phrase',
@@ -1453,7 +1453,9 @@ void main() {
         await save(tester);
 
         expect(bridge.inspectedCertificates, ['ssl://$typed:50002']);
-        expect(find.text(private.message), findsOneWidget);
+        // The screen's own sentence, not the core's words.
+        expect(find.text(privateKeyNotAServer), findsOneWidget);
+        expect(find.text(private.message), findsNothing);
         // The field holds what was typed; nothing else on the page does.
         expect(find.textContaining(shown), findsOneWidget);
         expect(
