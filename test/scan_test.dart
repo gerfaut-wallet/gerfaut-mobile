@@ -62,16 +62,10 @@ Widget _app(
           onPressed: () async {
             final scanned = await Navigator.of(context).push<QrProgress>(
               MaterialPageRoute<QrProgress>(
-                builder: (_) => privateKey == null
-                    ? ScanScreen(
-                        cameraBuilder: (_) =>
-                            const SizedBox.expand(key: _camera),
-                      )
-                    : ScanScreen(
-                        privateKey: privateKey,
-                        cameraBuilder: (_) =>
-                            const SizedBox.expand(key: _camera),
-                      ),
+                builder: (_) => ScanScreen(
+                  privateKey: privateKey ?? privateMaterialMessage,
+                  cameraBuilder: (_) => const SizedBox.expand(key: _camera),
+                ),
               ),
             );
             outcome.pops += 1;

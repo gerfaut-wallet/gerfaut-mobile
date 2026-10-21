@@ -2813,6 +2813,32 @@ void main() {
       expect(find.text(reason), findsNothing);
     });
 
+    testWidgets('a private key is refused in the words of this screen', (
+      tester,
+    ) async {
+      useTallSurface(tester);
+      final bridge = ownElectrum();
+      bridge.onParseBackend = (_) => throw const BridgeException(
+        'private_material',
+        'input contains private key material and was rejected',
+      );
+      await tester.pumpWidget(
+        settingsWithCamera(bridge, 'xprv9s21ZrQH143Kexample'),
+      );
+      await tester.pumpAndSettle();
+
+      await scan(tester);
+
+      expect(
+        find.text(
+          'This holds a private key, not the address of a server. Gerfaut '
+          'never takes a key: show the QR code your node prints instead.',
+        ),
+        findsOneWidget,
+      );
+      expect(bridge.savedBackends, isEmpty);
+    });
+
     testWidgets('a scan that reads nothing leaves the form alone', (
       tester,
     ) async {
