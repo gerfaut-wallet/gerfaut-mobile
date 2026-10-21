@@ -640,11 +640,20 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
                 _ScanRefusal(reason: _scanError!, tokens: tokens),
               ],
               const SizedBox(height: GerfautSpacing.sm),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
+              // Five digits whole at any text size; the TLS switch goes
+              // under the port when the two no longer fit side by side.
+              Wrap(
+                spacing: GerfautSpacing.md,
+                runSpacing: GerfautSpacing.sm,
+                crossAxisAlignment: WrapCrossAlignment.end,
                 children: [
                   SizedBox(
-                    width: 120,
+                    width: MonoField.widthFor(
+                      context,
+                      tokens,
+                      characters: 5,
+                      atLeast: 120,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -663,12 +672,12 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
                       ],
                     ),
                   ),
-                  const SizedBox(width: GerfautSpacing.md),
                   Padding(
                     padding: const EdgeInsets.only(bottom: GerfautSpacing.sm),
                     // One node: the switch is read with its name.
                     child: MergeSemantics(
                       child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Switch(
                             value: _tls,

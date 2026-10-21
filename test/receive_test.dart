@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -488,6 +489,31 @@ void main() {
       expect(find.textContaining('0.00150000'), findsOneWidget);
       expect(find.text('€0.00'), findsOneWidget);
       expect(find.text('€75.00'), findsNothing);
+    });
+
+    testWidgets('an index of three digits stays on one line at twice the '
+        'text size', (tester) async {
+      tester.view.physicalSize = const Size(411, 3600);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearAllTestValues);
+      final bridge = bridgeWith(
+        AddressList(external: [row(7), row(123)], internal: const []),
+      );
+      await tester.pumpWidget(receiveApp(bridge));
+      await tester.pumpAndSettle();
+
+      final index = tester.renderObject<RenderParagraph>(find.text('123'));
+      expect(
+        index.getMaxIntrinsicWidth(double.infinity),
+        lessThanOrEqualTo(index.size.width),
+      );
+      // Both rows keep one column for their addresses.
+      expect(
+        tester.getRect(find.text('7')).left,
+        tester.getRect(find.text('123')).left,
+      );
     });
 
     testWidgets('external and change keychains sit in their own cards', (

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' show SemanticsAction, Tristate;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
@@ -19,6 +20,7 @@ import 'package:gerfaut/src/updates.dart' show isBetaVersion;
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/buttons.dart';
 import 'package:gerfaut/widgets/notice.dart';
+import 'package:gerfaut/widgets/section_card.dart';
 import 'package:gerfaut/widgets/select_field.dart';
 import 'package:gerfaut/widgets/setting_switch.dart';
 import 'package:gerfaut/widgets/wallet_icon.dart';
@@ -1968,6 +1970,112 @@ void main() {
         expect(find.byType(SettingsSectionScreen), findsNothing);
       });
     });
+  });
+
+  group('a number field holds its value whole', () {
+    /// The text an editable field shows, unscrolled: its widest line
+    /// fits the box it was given.
+    void expectWhole(WidgetTester tester, String text, String reason) {
+      final editable = tester.allRenderObjects
+          .whereType<RenderEditable>()
+          .firstWhere((r) => r.text?.toPlainText() == text);
+      expect(
+        editable.getMaxIntrinsicWidth(double.infinity),
+        lessThanOrEqualTo(editable.size.width),
+        reason: reason,
+      );
+    }
+
+    /// A hint, a paragraph of its own, drawn whole.
+    void expectHintWhole(WidgetTester tester, String hint, String reason) {
+      final paragraph = tester.renderObject<RenderParagraph>(find.text(hint));
+      expect(
+        paragraph.getMaxIntrinsicWidth(double.infinity),
+        lessThanOrEqualTo(paragraph.size.width),
+        reason: reason,
+      );
+    }
+
+    for (final width in [411.0, 320.0]) {
+      for (final scale in [1.0, 1.5, 2.0]) {
+        final at = '${width.round()} dp, text x$scale';
+
+        testWidgets('the port of an Electrum server, $at', (tester) async {
+          tester.view.physicalSize = Size(width, 3600);
+          tester.view.devicePixelRatio = 1;
+          tester.platformDispatcher.textScaleFactorTestValue = scale;
+          addTearDown(tester.view.reset);
+          addTearDown(tester.platformDispatcher.clearAllTestValues);
+          final bridge = FakeBridge(
+            settings: Settings(
+              preferences: kPreferences,
+              activeNetwork: Network.mainnet,
+              backends: const {
+                Network.mainnet: CustomElectrum(url: 'ssl://node.local:50005'),
+              },
+              appPrefs: const {},
+            ),
+          );
+          await tester.pumpWidget(
+            settingsApp(bridge, section: SettingsSection.network),
+          );
+          await tester.pumpAndSettle();
+
+          expectWhole(tester, '50005', at);
+          // The TLS switch stays on the card, beside the port or under it.
+          final tls = tester.getRect(find.text('TLS'));
+          final card = tester.getRect(
+            find.ancestor(
+              of: find.text('TLS'),
+              matching: find.byType(SectionCard),
+            ),
+          );
+          expect(tls.right, lessThanOrEqualTo(card.right), reason: at);
+
+          await tester.enterText(
+            find.descendant(
+              of: find.bySemanticsLabel('Port'),
+              matching: find.byType(EditableText),
+            ),
+            '',
+          );
+          await tester.pump();
+          expectHintWhole(tester, '50002', at);
+        });
+
+        testWidgets('the gap limit, $at', (tester) async {
+          tester.view.physicalSize = Size(width, 3600);
+          tester.view.devicePixelRatio = 1;
+          tester.platformDispatcher.textScaleFactorTestValue = scale;
+          addTearDown(tester.view.reset);
+          addTearDown(tester.platformDispatcher.clearAllTestValues);
+          final bridge = FakeBridge(
+            settings: Settings(
+              preferences: kPreferences,
+              activeNetwork: Network.mainnet,
+              backends: const {},
+              appPrefs: const {},
+              gapLimit: 500,
+            ),
+          );
+          await tester.pumpWidget(
+            settingsApp(bridge, section: SettingsSection.wallets),
+          );
+          await tester.pumpAndSettle();
+
+          expectWhole(tester, '500', at);
+          await tester.enterText(
+            find.descendant(
+              of: find.bySemanticsLabel('Gap limit'),
+              matching: find.byType(EditableText),
+            ),
+            '',
+          );
+          await tester.pump();
+          expectHintWhole(tester, '1-500', at);
+        });
+      }
+    }
   });
 
   group('this is my node', () {
