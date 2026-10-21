@@ -1423,6 +1423,54 @@ void main() {
       handle.dispose();
     });
 
+    // A key or a seed typed as the host, its port after it as in a
+    // one-line address: the core refuses it as private material at
+    // every call. The page goes past the check of the certificate, as
+    // for a server that did not answer, and says the refusal of the
+    // save in its own words, never in the secret's.
+    for (final (what, typed, shown) in [
+      (
+        'a seed phrase',
+        '${List.filled(11, 'abandon').join(' ')} about:50002',
+        'abandon',
+      ),
+      ('an extended private key', 'xprv9s21ZrQH143Kexample:50002', 'xprv'),
+    ]) {
+      testWidgets('$what typed as the host is refused, and never quoted', (
+        tester,
+      ) async {
+        useTallSurface(tester);
+        final bridge = ownElectrum();
+        final private = coreFailure('private_material');
+        bridge.onInspectCertificate = (_) => throw private;
+        bridge.onSetBackend = (_, _) => throw private;
+        await tester.pumpWidget(
+          settingsApp(bridge, section: SettingsSection.network),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextField).first, typed);
+        await tester.pumpAndSettle();
+        await save(tester);
+
+        expect(bridge.inspectedCertificates, ['ssl://$typed:50002']);
+        // The screen's own sentence, not the core's words.
+        expect(find.text(privateKeyNotAServer), findsOneWidget);
+        expect(find.text(private.message), findsNothing);
+        // The field holds what was typed; nothing else on the page does.
+        expect(find.textContaining(shown), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(TextField).first,
+            matching: find.textContaining(shown),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('Setting saved'), findsNothing);
+        expect(bridge.savedBackends, isEmpty);
+        expect(bridge.trustedCertificates, isEmpty);
+      });
+    }
+
     testWidgets('an unvouched certificate is shown before anything is saved', (
       tester,
     ) async {
