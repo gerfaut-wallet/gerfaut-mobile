@@ -1024,6 +1024,23 @@ void main() {
           .liveRegion,
       isTrue,
     );
+    // And the announcement carries the sentence with the node's words,
+    // not the words alone.
+    final handle = tester.ensureSemantics();
+    final region = tester.getSemantics(
+      find.ancestor(
+        of: find.text('The network refused this transaction.'),
+        matching: find.byType(GerfautNotice),
+      ),
+    );
+    expect(region.flagsCollection.isLiveRegion, isTrue);
+    expect(
+      region.label,
+      'Note\nThe network refused this transaction.\n'
+      'mempool.space refused the transaction: min relay fee not met, '
+      '1 < 141',
+    );
+    handle.dispose();
     // Nothing was recorded, and the transaction can be sent again.
     expect(bridge.keptBroadcasts, isEmpty);
     expect(primaryButton(tester, 'Broadcast').onPressed, isNotNull);

@@ -342,7 +342,13 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
           ),
           const SizedBox(width: GerfautSpacing.sm),
           SizedBox(
-            width: 72,
+            // "1-500", the hint, is the widest it holds.
+            width: MonoField.widthFor(
+              context,
+              tokens,
+              characters: 5,
+              atLeast: 72,
+            ),
             child: MonoField(
               label: 'Gap limit',
               controller: _gapLimitController,

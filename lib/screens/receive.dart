@@ -527,6 +527,7 @@ class _AddressCardState extends State<_AddressCard> {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final rows = widget.rows;
+    final indexSlot = _indexSlot(context, tokens, _indexDigits(rows));
     final shown = _expanded ? rows : rows.take(_collapsedRows).toList();
     return Container(
       padding: const EdgeInsets.symmetric(vertical: GerfautSpacing.md),
@@ -577,7 +578,11 @@ class _AddressCardState extends State<_AddressCard> {
           else
             for (final row in shown) ...[
               Divider(height: 1, thickness: 1, color: tokens.border),
-              _AddressRowTile(row: row, network: widget.network),
+              _AddressRowTile(
+                row: row,
+                network: widget.network,
+                indexSlot: indexSlot,
+              ),
             ],
           if (rows.length > _collapsedRows) ...[
             Divider(height: 1, thickness: 1, color: tokens.border),
@@ -602,13 +607,45 @@ class _AddressCardState extends State<_AddressCard> {
   }
 }
 
+/// How many digits the longest index of [rows] has, two at least.
+int _indexDigits(List<AddressRow> rows) {
+  var widest = 2;
+  for (final row in rows) {
+    final digits = '${row.index}'.length;
+    if (digits > widest) widest = digits;
+  }
+  return widest;
+}
+
+/// The width of the index column: [digits] digits in the figure style
+/// at the text size in force, and the gap before the address; 36 at
+/// least, the slot it had at the default size.
+double _indexSlot(BuildContext context, GerfautTokens tokens, int digits) {
+  final painter = TextPainter(
+    text: TextSpan(text: '0' * digits, style: tokens.figureOf()),
+    textDirection: TextDirection.ltr,
+    textScaler: MediaQuery.textScalerOf(context),
+    maxLines: 1,
+  )..layout();
+  final width = painter.width + GerfautSpacing.sm;
+  painter.dispose();
+  return width < 36 ? 36 : width;
+}
+
 /// One revealed address: index, chip, usage, balance. Never shorter than
 /// a touch target.
 class _AddressRowTile extends StatelessWidget {
-  const _AddressRowTile({required this.row, required this.network});
+  const _AddressRowTile({
+    required this.row,
+    required this.network,
+    required this.indexSlot,
+  });
 
   final AddressRow row;
   final Network network;
+
+  /// Width of the index column, measured once for the whole list.
+  final double indexSlot;
 
   @override
   Widget build(BuildContext context) {
@@ -621,10 +658,13 @@ class _AddressRowTile extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // The derivation index anchors the row; a fixed slot keeps
-          // the address column aligned.
+          // The derivation index anchors the row; a slot of one width
+          // keeps the address column aligned. It is measured for the
+          // longest index of the list at the text size in force, so an
+          // index stays on one line at any size and the address keeps
+          // the rest.
           SizedBox(
-            width: 36,
+            width: indexSlot,
             child: Text(
               '${row.index}',
               style: tokens.figureOf(color: tokens.textMuted),

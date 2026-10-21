@@ -69,7 +69,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -1932300022;
+  int get rustContentHash => 817113418;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -232,6 +232,13 @@ abstract class RustLibApi extends BaseApi {
     required String configJson,
   });
 
+  Future<String> crateApiSetBackendTrusting({
+    required String network,
+    required String configJson,
+    required String url,
+    required String fingerprint,
+  });
+
   Future<String> crateApiSetBiometricUnlock({
     required bool enabled,
     required String current,
@@ -266,11 +273,6 @@ abstract class RustLibApi extends BaseApi {
   Future<String> crateApiTransactionStatus({
     required String network,
     required String hex,
-  });
-
-  Future<String> crateApiTrustCertificate({
-    required String url,
-    required String fingerprint,
   });
 
   Future<String> crateApiTxDetail({required String id, required String txid});
@@ -1806,6 +1808,44 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
+  Future<String> crateApiSetBackendTrusting({
+    required String network,
+    required String configJson,
+    required String url,
+    required String fingerprint,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(network, serializer);
+          sse_encode_String(configJson, serializer);
+          sse_encode_String(url, serializer);
+          sse_encode_String(fingerprint, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 51,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSetBackendTrustingConstMeta,
+        argValues: [network, configJson, url, fingerprint],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSetBackendTrustingConstMeta => const TaskConstMeta(
+    debugName: "set_backend_trusting",
+    argNames: ["network", "configJson", "url", "fingerprint"],
+  );
+
+  @override
   Future<String> crateApiSetBiometricUnlock({
     required bool enabled,
     required String current,
@@ -1819,7 +1859,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 51,
+            funcId: 52,
             port: port_,
           );
         },
@@ -1849,7 +1889,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 52,
+            funcId: 53,
             port: port_,
           );
         },
@@ -1877,7 +1917,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 53,
+            funcId: 54,
             port: port_,
           );
         },
@@ -1907,7 +1947,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 54,
+            funcId: 55,
             port: port_,
           );
         },
@@ -1937,7 +1977,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 55,
+            funcId: 56,
             port: port_,
           );
         },
@@ -1971,7 +2011,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 56,
+            funcId: 57,
             port: port_,
           );
         },
@@ -2005,7 +2045,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 57,
+            funcId: 58,
             port: port_,
           );
         },
@@ -2036,7 +2076,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 58,
+            funcId: 59,
             port: port_,
           );
         },
@@ -2064,7 +2104,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 59,
+            funcId: 60,
             port: port_,
           );
         },
@@ -2091,7 +2131,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 60,
+            funcId: 61,
             port: port_,
           );
         },
@@ -2118,7 +2158,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 61,
+            funcId: 62,
             port: port_,
           );
         },
@@ -2150,7 +2190,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 62,
+            funcId: 63,
             port: port_,
           );
         },
@@ -2168,40 +2208,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiTransactionStatusConstMeta => const TaskConstMeta(
     debugName: "transaction_status",
     argNames: ["network", "hex"],
-  );
-
-  @override
-  Future<String> crateApiTrustCertificate({
-    required String url,
-    required String fingerprint,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_String(url, serializer);
-          sse_encode_String(fingerprint, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 63,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
-          decodeErrorData: null,
-        ),
-        constMeta: kCrateApiTrustCertificateConstMeta,
-        argValues: [url, fingerprint],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiTrustCertificateConstMeta => const TaskConstMeta(
-    debugName: "trust_certificate",
-    argNames: ["url", "fingerprint"],
   );
 
   @override

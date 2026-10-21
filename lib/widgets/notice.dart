@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/tokens.dart';
@@ -85,7 +86,9 @@ class GerfautNotice extends StatelessWidget {
   /// walked into. Off for a note that was on the page all along: a
   /// region that announces itself on every rebuild is noise. A live
   /// note is its own node, so it is announced once when it appears and
-  /// again only if its own words change.
+  /// again only if its own words change. Its role, its message and its
+  /// second line are that node's words, all three, so the announcement
+  /// carries the whole note.
   final bool liveRegion;
 
   @override
@@ -111,10 +114,7 @@ class GerfautNotice extends StatelessWidget {
     // another system's, verbatim in mono so it can be compared and
     // copied.
     final Widget? second = detail != null
-        ? SelectableText(
-            detail!,
-            style: tokens.data.copyWith(fontSize: 12, color: tokens.textMuted),
-          )
+        ? _Detail(detail!, tokens: tokens, spokenWithTitle: liveRegion)
         : hint != null
         ? Text(hint!, style: tokens.bodySmall.copyWith(color: tokens.textMuted))
         : null;
@@ -200,6 +200,44 @@ class GerfautNotice extends StatelessWidget {
     return liveRegion
         ? Semantics(container: true, liveRegion: true, child: panel)
         : panel;
+  }
+}
+
+/// Another system's words under a note's message: mono, selectable.
+///
+/// A selectable text is a read-only field to a screen reader. In a live
+/// region that field took the whole region over: Android then gave the
+/// node the server's words as its text and kept the role and the message
+/// as a hint that neither `uiautomator` nor the announcement carried.
+/// There the words are read as plain text instead, after the message,
+/// in the region's own node, which a screen reader can still copy them
+/// from; they still select on screen.
+class _Detail extends StatelessWidget {
+  const _Detail(
+    this.text, {
+    required this.tokens,
+    required this.spokenWithTitle,
+  });
+
+  final String text;
+  final GerfautTokens tokens;
+
+  /// The note is a live region: the words join its node.
+  final bool spokenWithTitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final words = SelectableText(
+      text,
+      style: tokens.data.copyWith(fontSize: 12, color: tokens.textMuted),
+    );
+    if (!spokenWithTitle) return words;
+    // Copy is offered on the region instead, as the field offered it.
+    return Semantics(
+      label: text,
+      onCopy: () => Clipboard.setData(ClipboardData(text: text)),
+      child: ExcludeSemantics(child: words),
+    );
   }
 }
 

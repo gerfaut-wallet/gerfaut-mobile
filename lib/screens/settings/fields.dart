@@ -31,6 +31,41 @@ class MonoField extends StatelessWidget {
   final FocusNode? focusNode;
   final VoidCallback? onSubmitted;
 
+  /// The width a field needs to show [characters] whole at the text
+  /// size in force: that many digits measured in the field's own style,
+  /// plus its padding and the caret, and never under [atLeast]. A width
+  /// fixed at one text size cut the value at a larger one ("50005" at
+  /// twice the size).
+  static double widthFor(
+    BuildContext context,
+    GerfautTokens tokens, {
+    required int characters,
+    double atLeast = 0,
+  }) {
+    // What the field draws in: the theme's body style under its own,
+    // as TextField merges them, letter spacing included.
+    final drawn = Theme.of(context).textTheme.bodyLarge!.merge(_style(tokens));
+    final painter = TextPainter(
+      text: TextSpan(text: '0' * characters, style: drawn),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final width = painter.width + 2 * (GerfautSpacing.md + _gap) + _caretRoom;
+    painter.dispose();
+    return width < atLeast ? atLeast : width;
+  }
+
+  /// The caret and the gap it keeps after the last character.
+  static const double _caretRoom = 6;
+
+  /// What Material adds inside an outlined field, each side, past the
+  /// content padding: the border's gap, given here so it is known.
+  static const double _gap = 4;
+
+  static TextStyle _style(GerfautTokens tokens) =>
+      tokens.data.copyWith(fontSize: tokens.body.fontSize);
+
   @override
   Widget build(BuildContext context) {
     return Semantics(label: label, child: _field());
@@ -48,15 +83,12 @@ class MonoField extends StatelessWidget {
       inputFormatters: numeric
           ? [FilteringTextInputFormatter.digitsOnly]
           : null,
-      style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
+      style: _style(tokens),
       onChanged: (_) => onChanged(),
       onSubmitted: onSubmitted == null ? null : (_) => onSubmitted!(),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: tokens.data.copyWith(
-          fontSize: tokens.body.fontSize,
-          color: tokens.textMuted,
-        ),
+        hintStyle: _style(tokens).copyWith(color: tokens.textMuted),
         filled: true,
         fillColor: tokens.surfaceSunken,
         contentPadding: const EdgeInsets.symmetric(
@@ -66,10 +98,12 @@ class MonoField extends StatelessWidget {
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(GerfautRadius.sm),
           borderSide: BorderSide.none,
+          gapPadding: _gap,
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(GerfautRadius.sm),
           borderSide: BorderSide(color: tokens.primary, width: 2),
+          gapPadding: _gap,
         ),
       ),
     );

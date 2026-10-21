@@ -1191,8 +1191,13 @@ class FakeBridge implements GerfautBridge {
     _store(gapLimit: gapLimit);
   }
 
+  /// Holds every backend save until completed: a vault slow to write.
+  Completer<void>? setBackendGate;
+
   @override
   Future<void> setBackend(Network network, BackendConfig config) async {
+    final gate = setBackendGate;
+    if (gate != null) await gate.future;
     onSetBackend?.call(network, config);
     savedBackends[network] = config;
     _store(backends: {...settings.backends, network: config});
@@ -1227,9 +1232,15 @@ class FakeBridge implements GerfautBridge {
   /// Every forgotten host, in order, for assertions.
   final List<String> forgottenCertificates = [];
 
+  /// Holds every certificate check until completed: a server that
+  /// takes its time to answer.
+  Completer<void>? inspectGate;
+
   @override
   Future<CertificateReport> inspectCertificate(String url) async {
     inspectedCertificates.add(url);
+    final gate = inspectGate;
+    if (gate != null) await gate.future;
     final inspect = onInspectCertificate;
     return CertificateReport(
       host: _certificateKey(url),
@@ -1237,10 +1248,39 @@ class FakeBridge implements GerfautBridge {
     );
   }
 
+  /// Both or neither, as the core: the save hook runs first, and a
+  /// refusal from it writes no certificate either.
   @override
-  Future<void> trustCertificate(String url, String fingerprint) async {
+  Future<void> setBackendTrusting(
+    Network network,
+    BackendConfig config,
+    String url,
+    String fingerprint,
+  ) async {
+    final gate = setBackendGate;
+    if (gate != null) await gate.future;
+    onSetBackend?.call(network, config);
+    // The core refuses a certificate for anything but this backend's
+    // Electrum server, and writes nothing then.
+    final server = switch (config) {
+      CustomElectrum(:final url) => url,
+      PublicEsplora(server: final id?) =>
+        (await publicServers(network))
+            .where((s) => s.id == id && s.protocol == ServerProtocol.electrum)
+            .map((s) => s.url)
+            .firstOrNull,
+      _ => null,
+    };
+    if (server == null || _certificateKey(server) != _certificateKey(url)) {
+      throw coreFailure(
+        'invalid_input',
+        'the certificate is not for the Electrum server of this backend',
+      );
+    }
     trustedCertificates.add((url: url, fingerprint: fingerprint));
+    savedBackends[network] = config;
     _store(
+      backends: {...settings.backends, network: config},
       electrumCerts: {
         ...settings.electrumCerts,
         _certificateKey(url): fingerprint,

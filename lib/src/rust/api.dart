@@ -206,6 +206,21 @@ Future<String> setBackend({
   configJson: configJson,
 );
 
+/// Sets the backend for a network and trusts the certificate the user
+/// accepted for its Electrum server, in one write: both or neither. A
+/// backend the core refuses leaves the certificate untrusted too.
+Future<String> setBackendTrusting({
+  required String network,
+  required String configJson,
+  required String url,
+  required String fingerprint,
+}) => RustLib.instance.api.crateApiSetBackendTrusting(
+  network: network,
+  configJson: configJson,
+  url: url,
+  fingerprint: fingerprint,
+);
+
 /// The public servers offered for a network, in settings order.
 /// Returns a serialized `Vec<PublicServer>`, empty on regtest, which
 /// has no public server by definition.
@@ -218,16 +233,6 @@ Future<String> publicServers({required String network}) =>
 /// against, plus the `status` the settings screen acts on.
 Future<String> inspectCertificate({required String url}) =>
     RustLib.instance.api.crateApiInspectCertificate(url: url);
-
-/// Remembers the certificate the user accepted for this server. That
-/// host must present exactly this one from then on.
-Future<String> trustCertificate({
-  required String url,
-  required String fingerprint,
-}) => RustLib.instance.api.crateApiTrustCertificate(
-  url: url,
-  fingerprint: fingerprint,
-);
 
 /// Drops an accepted certificate, keyed by `host:port`: the next
 /// connection to that host asks again.

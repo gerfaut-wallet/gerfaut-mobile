@@ -1,4 +1,7 @@
+import 'dart:ui' show SemanticsAction;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/theme/tokens.dart';
@@ -253,6 +256,123 @@ void main() {
     final detail = tester.widget<SelectableText>(find.byType(SelectableText));
     expect(detail.data, refusal);
     expect(detail.style?.fontFamily, GerfautTokens.light.data.fontFamily);
+  });
+
+  group("a live note with another system's words", () {
+    const message = 'The network refused this transaction.';
+    const refusal = 'min relay fee not met, 1 < 141';
+
+    testWidgets('announces its role, its message and the words together', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        host(
+          const GerfautNotice(
+            tone: NoticeTone.info,
+            message: message,
+            detail: refusal,
+            liveRegion: true,
+          ),
+        ),
+      );
+
+      // One node, the region, holding every word in reading order. A
+      // read-only field there would take the node over: Android shows
+      // the field's words alone and hides the rest in a hint.
+      final region = tester.getSemantics(find.byType(GerfautNotice));
+      expect(region.flagsCollection.isLiveRegion, isTrue);
+      expect(region.flagsCollection.isTextField, isFalse);
+      expect(region.label, 'Note\n$message\n$refusal');
+      expect(region.value, isEmpty);
+      // Still selectable on screen.
+      expect(find.byType(SelectableText), findsOneWidget);
+      handle.dispose();
+    });
+
+    testWidgets('the words can still be copied from the region', (
+      tester,
+    ) async {
+      String? copied;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied = (call.arguments as Map)['text'] as String?;
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        host(
+          const GerfautNotice(
+            tone: NoticeTone.info,
+            message: message,
+            detail: refusal,
+            liveRegion: true,
+          ),
+        ),
+      );
+
+      // The field that offered Copy is gone from the tree: the region
+      // offers it, with the other system's words alone.
+      final region = tester.getSemantics(find.byType(GerfautNotice));
+      expect(region.getSemanticsData().hasAction(SemanticsAction.copy), isTrue);
+      region.owner!.performAction(region.id, SemanticsAction.copy);
+      await tester.pump();
+      expect(copied, refusal);
+      handle.dispose();
+    });
+
+    testWidgets('in either tone', (tester) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        host(
+          const GerfautNotice(
+            tone: NoticeTone.alert,
+            message: message,
+            detail: refusal,
+            liveRegion: true,
+          ),
+        ),
+      );
+
+      expect(
+        tester.getSemantics(find.byType(GerfautNotice)).label,
+        'Warning\n$message\n$refusal',
+      );
+      handle.dispose();
+    });
+
+    testWidgets('a note on the page all along keeps them as a field', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        host(
+          const GerfautNotice(
+            tone: NoticeTone.info,
+            message: message,
+            detail: refusal,
+          ),
+        ),
+      );
+
+      // Walked into rather than announced: the words are a node of
+      // their own that a screen reader can move through.
+      final words = tester.getSemantics(find.byType(SelectableText));
+      expect(words.flagsCollection.isTextField, isTrue);
+      expect(words.value, refusal);
+      expect(find.bySemanticsLabel(message), findsOneWidget);
+      handle.dispose();
+    });
   });
 
   testWidgets('a trailing action rides along', (tester) async {

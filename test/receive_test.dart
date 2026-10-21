@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +8,7 @@ import 'package:gerfaut/screens/receive.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/address_chip.dart';
 import 'package:gerfaut/widgets/buttons.dart';
 import 'package:gerfaut/widgets/status_pill.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -488,6 +490,31 @@ void main() {
       expect(find.textContaining('0.00150000'), findsOneWidget);
       expect(find.text('€0.00'), findsOneWidget);
       expect(find.text('€75.00'), findsNothing);
+    });
+
+    testWidgets('an index of three digits stays on one line at twice the '
+        'text size', (tester) async {
+      tester.view.physicalSize = const Size(411, 3600);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearAllTestValues);
+      final bridge = bridgeWith(
+        AddressList(external: [row(7), row(123)], internal: const []),
+      );
+      await tester.pumpWidget(receiveApp(bridge));
+      await tester.pumpAndSettle();
+
+      final index = tester.renderObject<RenderParagraph>(find.text('123'));
+      expect(
+        index.getMaxIntrinsicWidth(double.infinity),
+        lessThanOrEqualTo(index.size.width),
+      );
+      // Both rows keep one column for their addresses.
+      expect(
+        tester.getRect(find.byType(AddressChip).at(0)).left,
+        tester.getRect(find.byType(AddressChip).at(1)).left,
+      );
     });
 
     testWidgets('external and change keychains sit in their own cards', (

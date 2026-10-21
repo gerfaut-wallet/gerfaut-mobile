@@ -500,6 +500,30 @@ pub async fn set_backend(network: String, config_json: String) -> String {
     }
 }
 
+/// Sets the backend for a network and trusts the certificate the user
+/// accepted for its Electrum server, in one write: both or neither. A
+/// backend the core refuses leaves the certificate untrusted too.
+pub async fn set_backend_trusting(
+    network: String,
+    config_json: String,
+    url: String,
+    fingerprint: String,
+) -> String {
+    let manager = try_json!(manager());
+    let network = try_json!(parse_network(&network));
+    let config: BackendConfig = try_json!(
+        serde_json::from_str(&config_json)
+            .map_err(|e| error_json("bad_json", format!("invalid BackendConfig JSON: {e}")))
+    );
+    match manager
+        .set_backend_trusting(network, config, &url, &fingerprint)
+        .await
+    {
+        Ok(()) => ok_json(),
+        Err(e) => core_error_json(&e),
+    }
+}
+
 /// The public servers offered for a network, in settings order.
 /// Returns a serialized `Vec<PublicServer>`, empty on regtest, which
 /// has no public server by definition.
@@ -518,16 +542,6 @@ pub async fn inspect_certificate(url: String) -> String {
     let manager = try_json!(manager());
     match manager.inspect_certificate(&url).await {
         Ok(report) => to_json(&report),
-        Err(e) => core_error_json(&e),
-    }
-}
-
-/// Remembers the certificate the user accepted for this server. That
-/// host must present exactly this one from then on.
-pub async fn trust_certificate(url: String, fingerprint: String) -> String {
-    let manager = try_json!(manager());
-    match manager.trust_certificate(&url, &fingerprint).await {
-        Ok(()) => ok_json(),
         Err(e) => core_error_json(&e),
     }
 }

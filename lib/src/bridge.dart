@@ -245,6 +245,18 @@ abstract class GerfautBridge {
   Future<void> setGapLimit(int gapLimit);
   Future<void> setBackend(Network network, BackendConfig config);
 
+  /// Sets the backend and trusts the certificate the user accepted for
+  /// its Electrum server at [url], in one write: both or neither. The
+  /// only way a certificate is trusted, so a backend the core refuses
+  /// never leaves its certificate behind. That host must present
+  /// exactly this one from then on.
+  Future<void> setBackendTrusting(
+    Network network,
+    BackendConfig config,
+    String url,
+    String fingerprint,
+  );
+
   /// Public servers offered for a network, in settings order. Empty on
   /// regtest, which has no public server.
   Future<List<PublicServer>> publicServers(Network network);
@@ -252,10 +264,6 @@ abstract class GerfautBridge {
   /// What an Electrum server's certificate amounts to right now, seen
   /// through the handshake a sync would open.
   Future<CertificateReport> inspectCertificate(String url);
-
-  /// Remembers the certificate the user accepted for this server. That
-  /// host must present exactly this one from then on.
-  Future<void> trustCertificate(String url, String fingerprint);
 
   /// Drops an accepted certificate, keyed by `host:port`: the next
   /// connection to that host asks again.
@@ -611,8 +619,20 @@ class RustBridge implements GerfautBridge {
   }
 
   @override
-  Future<void> trustCertificate(String url, String fingerprint) async {
-    _ok(await rust.trustCertificate(url: url, fingerprint: fingerprint));
+  Future<void> setBackendTrusting(
+    Network network,
+    BackendConfig config,
+    String url,
+    String fingerprint,
+  ) async {
+    _ok(
+      await rust.setBackendTrusting(
+        network: network.id,
+        configJson: jsonEncode(config.toJson()),
+        url: url,
+        fingerprint: fingerprint,
+      ),
+    );
   }
 
   @override
