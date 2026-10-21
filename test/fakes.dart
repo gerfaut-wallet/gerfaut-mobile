@@ -1248,10 +1248,22 @@ class FakeBridge implements GerfautBridge {
     );
   }
 
+  /// Both or neither, as the core: the save hook runs first, and a
+  /// refusal from it writes no certificate either.
   @override
-  Future<void> trustCertificate(String url, String fingerprint) async {
+  Future<void> setBackendTrusting(
+    Network network,
+    BackendConfig config,
+    String url,
+    String fingerprint,
+  ) async {
+    final gate = setBackendGate;
+    if (gate != null) await gate.future;
+    onSetBackend?.call(network, config);
     trustedCertificates.add((url: url, fingerprint: fingerprint));
+    savedBackends[network] = config;
     _store(
+      backends: {...settings.backends, network: config},
       electrumCerts: {
         ...settings.electrumCerts,
         _certificateKey(url): fingerprint,

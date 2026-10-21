@@ -311,12 +311,23 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
       _popWhenWritten = false;
     });
     try {
-      if (endpoint != null && !await _settleCertificate(endpoint)) return;
-      // A certificate accepted a moment ago is being written already:
-      // the backend goes with it, as the person asked.
+      String? accepted;
+      if (endpoint != null) {
+        final settled = await _settleCertificate(endpoint);
+        if (!settled.proceed) return;
+        accepted = settled.fingerprint;
+      }
+      // A certificate accepted a moment ago goes in with its backend, as
+      // the person asked, whatever happens to the page meanwhile.
       if (_saving != _BackendSave.writing && await _leftMeanwhile()) return;
       if (mounted) setState(() => _saving = _BackendSave.writing);
-      await bridge.setBackend(network, config);
+      if (accepted != null) {
+        // One write, both or neither: a backend the core refuses leaves
+        // its certificate untrusted, as Cancel would.
+        await bridge.setBackendTrusting(network, config, endpoint!, accepted);
+      } else {
+        await bridge.setBackend(network, config);
+      }
       container.invalidate(settingsProvider);
       messenger.showSnackBar(Toast('Setting saved'));
       if (_popWhenWritten && mounted) _leavePage();
@@ -410,9 +421,15 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
   }
 
   /// Settles what the server's certificate amounts to before the
-  /// backend is written. Returns false only when the user backed out:
-  /// nothing is saved, and nothing is trusted.
-  Future<bool> _settleCertificate(String url) async {
+  /// backend is written. Writes nothing: a certificate the person
+  /// accepts comes back as the fingerprint to write with the backend.
+  /// Stops only when they backed out or left: nothing is saved, and
+  /// nothing is trusted.
+  Future<({bool proceed, String? fingerprint})> _settleCertificate(
+    String url,
+  ) async {
+    const go = (proceed: true, fingerprint: null);
+    const stop = (proceed: false, fingerprint: null);
     final bridge = ref.read(bridgeProvider);
     final CertificateReport report;
     try {
@@ -421,22 +438,22 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
       // The check itself could not run. A server can be down, and the
       // choice of backend is still the user's.
       _certificateNote = _uncheckedNote;
-      return true;
+      return go;
     }
-    if (await _leftMeanwhile() || !mounted) return false;
+    if (await _leftMeanwhile() || !mounted) return stop;
     switch (report.status) {
       case TrustedCertificate():
       case PinnedCertificate():
       case TorCertificate():
-        return true;
+        return go;
       case NotTlsCertificate():
         _certificateNote =
             'Plain TCP, no certificate: what Gerfaut asks this server and '
             'what it answers travel in the clear.';
-        return true;
+        return go;
       case UnreachableCertificate():
         _certificateNote = _uncheckedNote;
-        return true;
+        return go;
       case UnknownCertificate(:final fingerprint) && final status:
         setState(() => _saving = _BackendSave.asking);
         final accepted = await showDialog<bool>(
@@ -444,10 +461,9 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
           builder: (_) =>
               UnknownCertificateDialog(host: report.host, status: status),
         );
-        if (accepted != true || !mounted) return false;
+        if (accepted != true || !mounted) return stop;
         setState(() => _saving = _BackendSave.writing);
-        await bridge.trustCertificate(url, fingerprint);
-        return true;
+        return (proceed: true, fingerprint: fingerprint);
       case ChangedCertificate(:final presented) && final status:
         setState(() => _saving = _BackendSave.asking);
         final accepted = await showDialog<bool>(
@@ -455,10 +471,9 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
           builder: (_) =>
               ChangedCertificateDialog(host: report.host, status: status),
         );
-        if (accepted != true || !mounted) return false;
+        if (accepted != true || !mounted) return stop;
         setState(() => _saving = _BackendSave.writing);
-        await bridge.trustCertificate(url, presented);
-        return true;
+        return (proceed: true, fingerprint: presented);
     }
   }
 

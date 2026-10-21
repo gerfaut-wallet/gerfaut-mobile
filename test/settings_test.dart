@@ -1687,6 +1687,83 @@ void main() {
       });
     });
 
+    group('a certificate is kept with its backend or not at all', () {
+      const reason = 'invalid server address: not a server name';
+
+      testWidgets('accepted, then the server refused: nothing trusted', (
+        tester,
+      ) async {
+        useTallSurface(tester);
+        final bridge = ownElectrum();
+        bridge.onInspectCertificate = (_) => unknown;
+        bridge.onSetBackend = (_, _) =>
+            throw coreFailure('invalid_input', reason);
+        await tester.pumpWidget(
+          settingsApp(bridge, section: SettingsSection.network),
+        );
+        await tester.pumpAndSettle();
+        await save(tester);
+        await tester.tap(find.text('Accept and save'));
+        await tester.pumpAndSettle();
+
+        expect(find.text(reason), findsOneWidget);
+        expect(bridge.savedBackends, isEmpty);
+        expect(bridge.trustedCertificates, isEmpty);
+        expect(bridge.settings.electrumCerts, isEmpty);
+        expect(find.text('Trusted certificates'), findsNothing);
+      });
+
+      testWidgets('a fingerprint trusted before stays the one trusted', (
+        tester,
+      ) async {
+        useTallSurface(tester);
+        final bridge = ownElectrum(
+          certs: const {'node.local:50002': _fingerprint},
+        );
+        bridge.onInspectCertificate = (_) => const ChangedCertificate(
+          stored: _fingerprint,
+          presented: _otherFingerprint,
+        );
+        bridge.onSetBackend = (_, _) =>
+            throw coreFailure('invalid_input', reason);
+        await tester.pumpWidget(
+          settingsApp(bridge, section: SettingsSection.network),
+        );
+        await tester.pumpAndSettle();
+        await save(tester);
+        await tester.tap(find.text('Trust the new certificate'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Trust it anyway'));
+        await tester.pumpAndSettle();
+
+        expect(find.text(reason), findsOneWidget);
+        expect(bridge.settings.electrumCerts, {
+          'node.local:50002': _fingerprint,
+        });
+      });
+
+      testWidgets('accepted and saved in one write', (tester) async {
+        useTallSurface(tester);
+        final bridge = ownElectrum();
+        bridge.onInspectCertificate = (_) => unknown;
+        // The certificate is written with the backend, never before it.
+        bridge.onSetBackend = (_, _) =>
+            expect(bridge.settings.electrumCerts, isEmpty);
+        await tester.pumpWidget(
+          settingsApp(bridge, section: SettingsSection.network),
+        );
+        await tester.pumpAndSettle();
+        await save(tester);
+        await tester.tap(find.text('Accept and save'));
+        await tester.pumpAndSettle();
+
+        expect(bridge.settings.electrumCerts, {
+          'node.local:50002': _fingerprint,
+        });
+        expect(bridge.savedBackends[Network.mainnet], isA<CustomElectrum>());
+      });
+    });
+
     testWidgets('accepted certificates are listed, and forgotten on request', (
       tester,
     ) async {
