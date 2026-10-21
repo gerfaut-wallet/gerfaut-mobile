@@ -1260,6 +1260,23 @@ class FakeBridge implements GerfautBridge {
     final gate = setBackendGate;
     if (gate != null) await gate.future;
     onSetBackend?.call(network, config);
+    // The core refuses a certificate for anything but this backend's
+    // Electrum server, and writes nothing then.
+    final server = switch (config) {
+      CustomElectrum(:final url) => url,
+      PublicEsplora(server: final id?) =>
+        (await publicServers(network))
+            .where((s) => s.id == id && s.protocol == ServerProtocol.electrum)
+            .map((s) => s.url)
+            .firstOrNull,
+      _ => null,
+    };
+    if (server == null || _certificateKey(server) != _certificateKey(url)) {
+      throw coreFailure(
+        'invalid_input',
+        'the certificate is not for the Electrum server of this backend',
+      );
+    }
     trustedCertificates.add((url: url, fingerprint: fingerprint));
     savedBackends[network] = config;
     _store(

@@ -1498,7 +1498,7 @@ void main() {
       expect(find.text('Trusted certificates'), findsNothing);
     });
 
-    testWidgets('accepting records the fingerprint, then saves', (
+    testWidgets('accepting saves the backend with the fingerprint', (
       tester,
     ) async {
       useTallSurface(tester);
@@ -1746,9 +1746,6 @@ void main() {
         useTallSurface(tester);
         final bridge = ownElectrum();
         bridge.onInspectCertificate = (_) => unknown;
-        // The certificate is written with the backend, never before it.
-        bridge.onSetBackend = (_, _) =>
-            expect(bridge.settings.electrumCerts, isEmpty);
         await tester.pumpWidget(
           settingsApp(bridge, section: SettingsSection.network),
         );
@@ -1757,10 +1754,38 @@ void main() {
         await tester.tap(find.text('Accept and save'));
         await tester.pumpAndSettle();
 
+        expect(bridge.trustedCertificates, [
+          (url: 'ssl://node.local:50002', fingerprint: _fingerprint),
+        ]);
         expect(bridge.settings.electrumCerts, {
           'node.local:50002': _fingerprint,
         });
         expect(bridge.savedBackends[Network.mainnet], isA<CustomElectrum>());
+      });
+
+      testWidgets('a public Electrum server keeps its certificate too', (
+        tester,
+      ) async {
+        useTallSurface(tester);
+        final bridge = FakeBridge();
+        bridge.onInspectCertificate = (_) => unknown;
+        await tester.pumpWidget(
+          settingsApp(bridge, section: SettingsSection.network),
+        );
+        await tester.pumpAndSettle();
+        serverField(tester).onChanged!('electrum:electrum.diynodes.com');
+        await tester.pumpAndSettle();
+        await save(tester);
+        await tester.tap(find.text('Accept and save'));
+        await tester.pumpAndSettle();
+
+        expect(
+          (bridge.savedBackends[Network.mainnet]! as PublicEsplora).server,
+          'electrum:electrum.diynodes.com',
+        );
+        expect(bridge.settings.electrumCerts, {
+          'electrum.diynodes.com:50022': _fingerprint,
+        });
       });
     });
 
@@ -2030,6 +2055,33 @@ void main() {
         expect(bridge.savedBackends, hasLength(1));
         // Said on the page that comes back.
         expect(find.text('Setting saved'), findsOneWidget);
+      });
+
+      testWidgets('Back while the choice is written stays if it is refused', (
+        tester,
+      ) async {
+        useTallSurface(tester);
+        const reason = 'invalid server address: not a server name';
+        final bridge = ownElectrum();
+        final writing = Completer<void>();
+        bridge.setBackendGate = writing;
+        bridge.onSetBackend = (_, _) =>
+            throw coreFailure('invalid_input', reason);
+        await tester.pumpWidget(settingsApp(bridge));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Network'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Save backend'));
+        await pumpABit(tester);
+        await tester.binding.handlePopRoute();
+        await pumpABit(tester);
+
+        writing.complete();
+        await tester.pumpAndSettle();
+        // The reason is on the page, which stays to say it.
+        expect(find.byType(SettingsSectionScreen), findsOneWidget);
+        expect(find.text(reason), findsOneWidget);
+        expect(bridge.savedBackends, isEmpty);
       });
 
       testWidgets('with nothing under way, Back leaves at once', (

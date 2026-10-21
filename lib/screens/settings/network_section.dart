@@ -353,13 +353,21 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
   Future<bool> _leftMeanwhile() async {
     final asking = _leavePrompt;
     if (asking != null) await asking;
-    return _left || !mounted || !(ModalRoute.of(context)?.isActive ?? false);
+    return _left || !mounted || !(ModalRoute.isActiveOf(context) ?? false);
   }
 
-  /// Pops this page, never the first route of the app.
+  /// Takes this page off, never the first route of the app. Popped
+  /// when it is in front; removed when something opened over it while
+  /// the choice was being written, so that something stays.
   void _leavePage() {
+    final route = ModalRoute.of(context);
+    if (route == null || !route.isActive || route.isFirst) return;
     final navigator = Navigator.of(context);
-    if (navigator.canPop()) navigator.pop();
+    if (route.isCurrent) {
+      navigator.pop();
+    } else {
+      navigator.removeRoute(route);
+    }
   }
 
   /// Back, from the system, the gesture or the arrow, while a save is
