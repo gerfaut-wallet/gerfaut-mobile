@@ -135,6 +135,8 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
         () => _inputError =
             error.kind == 'invalid_input' || error.kind == 'too_many_parts'
             ? (headline: _unreadableTransaction, detail: error.message)
+            : error.kind == 'private_material'
+            ? (headline: privateKeyNotATransaction, detail: null)
             : (headline: error.message, detail: null),
       );
     } catch (error) {
@@ -206,8 +208,10 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
   Future<void> _scan() async {
     final scanned = await Navigator.of(context).push<QrProgress>(
       MaterialPageRoute<QrProgress>(
-        builder: (_) =>
-            const ScanScreen(caption: ScanScreen.transactionCaption),
+        builder: (_) => const ScanScreen(
+          caption: ScanScreen.transactionCaption,
+          privateKey: privateKeyNotATransaction,
+        ),
       ),
     );
     final text = scanned?.text;

@@ -190,6 +190,30 @@ void main() {
     expect(find.textContaining('announces 6000 parts'), findsOneWidget);
   });
 
+  testWidgets('a private key is told apart from a signed transaction', (
+    tester,
+  ) async {
+    final bridge = FakeBridge()
+      ..onPreview = (_, _) => throw coreFailure(
+        'private_material',
+        'input contains private key material and was rejected',
+      );
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+
+    await preview(tester, 'ur:crypto-output/aaaa');
+
+    expect(
+      find.text(
+        'This holds a private key, not a signed transaction. Gerfaut never '
+        'takes a key: show the transaction your signing device signed '
+        'instead.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('descriptor'), findsNothing);
+  });
+
   testWidgets('the error goes as the text changes, in the slot of the hint', (
     tester,
   ) async {

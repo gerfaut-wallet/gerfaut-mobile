@@ -8,6 +8,7 @@ import 'package:flutter_zxing/flutter_zxing.dart' as zxing;
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/backup_qr.dart' show frameInterval;
 import 'package:gerfaut/screens/scan.dart';
+import 'package:gerfaut/src/bridge.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/screen.dart';
 import 'package:gerfaut/src/state.dart';
@@ -42,7 +43,12 @@ class _Outcome {
 /// A launcher page in front of the scanner, so the popped value can be
 /// captured. The camera is replaced by an empty box; tests push frames
 /// through [ScanScreenState.onFrame].
-Widget _app(FakeBridge bridge, _Outcome outcome, {ScreenKeeper? keeper}) {
+Widget _app(
+  FakeBridge bridge,
+  _Outcome outcome, {
+  ScreenKeeper? keeper,
+  String? privateKey,
+}) {
   return ProviderScope(
     retry: noRetry,
     overrides: [
@@ -56,9 +62,16 @@ Widget _app(FakeBridge bridge, _Outcome outcome, {ScreenKeeper? keeper}) {
           onPressed: () async {
             final scanned = await Navigator.of(context).push<QrProgress>(
               MaterialPageRoute<QrProgress>(
-                builder: (_) => ScanScreen(
-                  cameraBuilder: (_) => const SizedBox.expand(key: _camera),
-                ),
+                builder: (_) => privateKey == null
+                    ? ScanScreen(
+                        cameraBuilder: (_) =>
+                            const SizedBox.expand(key: _camera),
+                      )
+                    : ScanScreen(
+                        privateKey: privateKey,
+                        cameraBuilder: (_) =>
+                            const SizedBox.expand(key: _camera),
+                      ),
               ),
             );
             outcome.pops += 1;
@@ -77,8 +90,11 @@ Future<ScanScreenState> _open(
   FakeBridge bridge,
   _Outcome outcome, {
   ScreenKeeper? keeper,
+  String? privateKey,
 }) async {
-  await tester.pumpWidget(_app(bridge, outcome, keeper: keeper));
+  await tester.pumpWidget(
+    _app(bridge, outcome, keeper: keeper, privateKey: privateKey),
+  );
   await tester.tap(find.text('Open scanner'));
   await tester.pumpAndSettle();
   return tester.state<ScanScreenState>(find.byType(ScanScreen));
@@ -350,6 +366,28 @@ void main() {
       findsOneWidget,
     );
     expect(outcome.pops, 0);
+  });
+
+  testWidgets('a private key is said in the words of the screen', (
+    tester,
+  ) async {
+    final bridge = FakeBridge()
+      ..onAssembleQr = (_) => throw coreFailure(
+        'private_material',
+        'input contains private key material and was rejected',
+      );
+    final state = await _open(
+      tester,
+      bridge,
+      _Outcome(),
+      privateKey: privateKeyNotATransaction,
+    );
+
+    state.onFrame('ur:crypto-output/1-1/private');
+    await tester.pumpAndSettle();
+
+    expect(find.text(privateKeyNotATransaction), findsOneWidget);
+    expect(find.textContaining('descriptor'), findsNothing);
   });
 
   testWidgets('a code announcing more parts than Gerfaut reads says so', (

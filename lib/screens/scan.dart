@@ -24,6 +24,7 @@ class ScanScreen extends ConsumerStatefulWidget {
   const ScanScreen({
     super.key,
     this.caption = walletCaption,
+    this.privateKey = privateMaterialMessage,
     @visibleForTesting this.cameraBuilder,
   });
 
@@ -38,6 +39,10 @@ class ScanScreen extends ConsumerStatefulWidget {
       'crypto-psbt UR or BBQr, animated or not.';
 
   final String caption;
+
+  /// What a code holding a private key is told on this screen; the
+  /// wallet import's words by default, as for the caption.
+  final String privateKey;
 
   /// Replaces the camera view; tests use it to push frames by hand.
   final CameraBuilder? cameraBuilder;
@@ -207,8 +212,12 @@ class ScanScreenState extends ConsumerState<ScanScreen> {
             continue;
           }
           // The core's sentence says what it saw and what to show
-          // instead; a private key is said as at the import.
-          _startOver(materialRefusal(e));
+          // instead; a private key is said in the screen's words.
+          _startOver(
+            e.kind == 'private_material'
+                ? widget.privateKey
+                : materialRefusal(e),
+          );
           return;
         }
         if (!mounted || _done) return;

@@ -154,16 +154,31 @@ String materialRefusal(BridgeException error, {bool backup = false}) {
     'private_material' when backup =>
       'A wallet in this backup holds a private key, and Gerfaut only '
           'watches: nothing was restored.',
-    'private_material' =>
-      'This holds a private key, and Gerfaut only watches: nothing was '
-          'saved. Bring the public descriptor or extended public key '
-          'instead.',
+    'private_material' => privateMaterialMessage,
     'descriptor' =>
       'This descriptor could not be used: '
           '${error.message.replaceFirst('descriptor error: ', '')}',
     _ => error.message,
   };
 }
+
+/// What the wallet import says of a private key, pasted, opened or
+/// scanned.
+const String privateMaterialMessage =
+    'This holds a private key, and Gerfaut only watches: nothing was saved. '
+    'Bring the public descriptor or extended public key instead.';
+
+/// The same refusal on the screens that do not import a wallet: each
+/// says what it waited for instead. The same words as on the desktop.
+const String privateKeyNotATransaction =
+    'This holds a private key, not a signed transaction. Gerfaut never '
+    'takes a key: show the transaction your signing device signed instead.';
+const String privateKeyNotABackup =
+    'This holds a private key, not a Gerfaut backup. Gerfaut never takes a '
+    'key: show the backup code from the other device instead.';
+const String privateKeyNotAServer =
+    'This holds a private key, not the address of a server. Gerfaut never '
+    'takes a key: show the QR code your node prints instead.';
 
 /// Every operation the app can ask of the core.
 abstract class GerfautBridge {
