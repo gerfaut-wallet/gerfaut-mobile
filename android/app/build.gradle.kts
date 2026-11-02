@@ -84,4 +84,9 @@ dependencies {
     // The widgets' layout rules, held to real launcher sizes on the JVM
     // (src/test): nothing of it goes into the APK.
     testImplementation("junit:junit:4.13.2")
+    constraints {
+        // camera_android_camerax pulls in Guava 33.5.0, open to
+        // GHSA-xxph-c9ww-hj94 until 33.7.2.
+        implementation("com.google.guava:guava:33.7.2-android")
+    }
 }
