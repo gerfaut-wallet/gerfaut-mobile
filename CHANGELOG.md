@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- When the vault fails to save a setting, the switch goes back to the value the vault still holds, so the screen never shows a choice that nothing acts on. This covers new-transaction notifications, background checks, Live, notification details, widget balances and the theme. Live and the background check also wait until the vault has saved the setting before they start.
+
 ## [0.1.0] - 2026-10-21
 
 The first release: Gerfaut for Android, as a public beta.
