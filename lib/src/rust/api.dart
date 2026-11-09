@@ -187,17 +187,11 @@ Future<String> loadMoreHistory({required String id}) =>
 Future<String> syncAll({String? network}) =>
     RustLib.instance.api.crateApiSyncAll(network: network);
 
-/// Where the sync of each wallet of a network (or of all of them)
-/// stands: idle, syncing, or failed since its last good sync, whoever
-/// started it. Returns a serialized `Vec<WalletSync>`, in the order of
-/// the wallets. A failure the vault kept is still there after a
-/// restart, which is why the screens read this once when they start
-/// listening to [`sync_changes`].
-Future<String> walletSyncStates({String? network}) =>
-    RustLib.instance.api.crateApiWalletSyncStates(network: network);
-
-/// Subscribes this isolate to every change of where a wallet's sync
-/// stands, each a serialized `WalletSync`: the first sync of a wallet
+/// Subscribes this isolate to where each wallet's sync stands, each a
+/// serialized `WalletSync`: first where every wallet stands now, read
+/// once the subscription is in place so no change falls between the
+/// two (a failure the vault kept from before a restart among them);
+/// then every change: the first sync of a wallet
 /// that starts, from the app, a rescan, a sync of every wallet or the
 /// live watch, and where it stands once the last one ends. Returns once
 /// the listener is gone. A listener that lags loses the oldest changes,

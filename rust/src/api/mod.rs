@@ -461,20 +461,11 @@ pub async fn sync_all(network: Option<String>) -> String {
     to_json(&manager.sync_all(network).await)
 }
 
-/// Where the sync of each wallet of a network (or of all of them)
-/// stands: idle, syncing, or failed since its last good sync, whoever
-/// started it. Returns a serialized `Vec<WalletSync>`, in the order of
-/// the wallets. A failure the vault kept is still there after a
-/// restart, which is why the screens read this once when they start
-/// listening to [`sync_changes`].
-pub async fn wallet_sync_states(network: Option<String>) -> String {
-    let manager = try_json!(manager());
-    let network = try_json!(parse_network_opt(network));
-    to_json(&manager.sync_states(network).await)
-}
-
-/// Subscribes this isolate to every change of where a wallet's sync
-/// stands, each a serialized `WalletSync`: the first sync of a wallet
+/// Subscribes this isolate to where each wallet's sync stands, each a
+/// serialized `WalletSync`: first where every wallet stands now, read
+/// once the subscription is in place so no change falls between the
+/// two (a failure the vault kept from before a restart among them);
+/// then every change: the first sync of a wallet
 /// that starts, from the app, a rescan, a sync of every wallet or the
 /// live watch, and where it stands once the last one ends. Returns once
 /// the listener is gone. A listener that lags loses the oldest changes,
@@ -496,10 +487,11 @@ pub async fn sync_changes(sink: StreamSink<String>) {
     .await;
 }
 
-/// Sends each change of `changes` with `send`, until `send` says the
-/// listener is gone or the changes end. Changes lost to a lag are made
-/// up for with the whole of `states`: what a wallet stands at now says
-/// all that the lost ones would have.
+/// Sends the whole of `states`, then each change of `changes`, with
+/// `send`, until `send` says the listener is gone or the changes end.
+/// Changes lost to a lag are made up for with the whole of `states`
+/// again: what a wallet stands at now says all that the lost ones
+/// would have.
 async fn forward_sync_changes<States, Read>(
     mut changes: broadcast::Receiver<WalletSync>,
     states: States,
@@ -508,6 +500,11 @@ async fn forward_sync_changes<States, Read>(
     States: Fn() -> Read,
     Read: Future<Output = Vec<WalletSync>>,
 {
+    for state in states().await {
+        if !send(to_json(&state)) {
+            return;
+        }
+    }
     loop {
         match changes.recv().await {
             Ok(change) => {
@@ -1218,14 +1215,19 @@ mod tests {
         // Every change sent is in the channel's hands before it closes.
         drop(changes);
         forwarding.await;
-        assert_eq!(
-            sent,
-            [
-                json!({ "wallet_id": "w1", "state": "idle" }),
-                json!({ "wallet_id": "w2", "state": "syncing" }),
-                json!({ "wallet_id": "w1", "state": "idle" }),
-            ]
-        );
+        let now = [
+            json!({ "wallet_id": "w1", "state": "idle" }),
+            json!({ "wallet_id": "w2", "state": "syncing" }),
+        ];
+        // Where each wallet stands as the listener comes, again for
+        // what it lost, then the change it did not lose.
+        let expected: Vec<Value> = now
+            .iter()
+            .chain(now.iter())
+            .cloned()
+            .chain([json!({ "wallet_id": "w1", "state": "idle" })])
+            .collect();
+        assert_eq!(sent, expected);
     }
 
     /// A listener that went away ends the forwarding at the next change,

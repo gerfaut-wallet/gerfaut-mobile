@@ -240,16 +240,13 @@ abstract class GerfautBridge {
   Future<int> loadMoreHistory(String id);
   Future<SyncAllReport> syncAll([Network? network]);
 
-  /// Where the sync of each wallet of [network], or of every wallet,
-  /// stands, whoever started it. A failure the vault kept is still
-  /// there after a restart: the screens read this once when they start
-  /// listening to [syncChanges].
-  Future<List<WalletSync>> walletSyncStates([Network? network]);
-
-  /// Every change of where a wallet's sync stands, whoever started the
-  /// sync: the app, a rescan, a sync of every wallet, the live watch.
-  /// The first sync of a wallet to start says it syncs; the last one to
-  /// end says where it stands. Any number of isolates may listen.
+  /// Where each wallet's sync stands: first every wallet as it stands
+  /// now (a failure the vault kept from before a restart among them),
+  /// read once the core listens, so no change falls in between; then
+  /// every change, whoever started the sync: the app, a rescan, a sync
+  /// of every wallet, the live watch. The first sync of a wallet to
+  /// start says it syncs; the last one to end says where it stands.
+  /// Any number of isolates may listen.
   Stream<WalletSync> syncChanges();
   Future<void> renameWallet(String id, String name);
 
@@ -581,12 +578,6 @@ class RustBridge implements GerfautBridge {
     return SyncAllReport.fromJson(
       _object(await rust.syncAll(network: network?.id)),
     );
-  }
-
-  @override
-  Future<List<WalletSync>> walletSyncStates([Network? network]) async {
-    final raw = await rust.walletSyncStates(network: network?.id);
-    return [for (final json in _list(raw)) ?WalletSync.fromJson(json)];
   }
 
   @override

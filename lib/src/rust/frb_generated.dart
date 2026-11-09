@@ -69,7 +69,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 771220117;
+  int get rustContentHash => -383864731;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -292,8 +292,6 @@ abstract class RustLibApi extends BaseApi {
   Future<String> crateApiWalletPolicy({required String id});
 
   Future<String> crateApiWalletSnapshot({required String id});
-
-  Future<String> crateApiWalletSyncStates({String? network});
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -2473,36 +2471,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   TaskConstMeta get kCrateApiWalletSnapshotConstMeta =>
       const TaskConstMeta(debugName: "wallet_snapshot", argNames: ["id"]);
-
-  @override
-  Future<String> crateApiWalletSyncStates({String? network}) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_opt_String(network, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 73,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
-          decodeErrorData: null,
-        ),
-        constMeta: kCrateApiWalletSyncStatesConstMeta,
-        argValues: [network],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiWalletSyncStatesConstMeta => const TaskConstMeta(
-    debugName: "wallet_sync_states",
-    argNames: ["network"],
-  );
 
   @protected
   AnyhowException dco_decode_AnyhowException(dynamic raw) {

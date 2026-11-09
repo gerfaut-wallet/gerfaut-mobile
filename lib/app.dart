@@ -188,7 +188,7 @@ class _Hydrated extends ConsumerWidget {
         unawaited(_checkNoticesThenLive(ref));
         // Where each wallet's sync stands, from the core, whoever runs
         // it: a failure from before a restart shows from the start.
-        unawaited(ref.read(syncProvider.notifier).listen());
+        ref.read(syncProvider.notifier).listen();
         // A history or a backup shared last time, or by a session the
         // system ended, may still sit in the cache.
         unawaited(ref.read(csvSharerProvider).forgetCopies());
@@ -335,7 +335,7 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
         if (ref.read(prefsHydratedProvider)) {
           ref.read(widgetFeedProvider).resume();
           unawaited(_checkNoticesThenLive(ref));
-          unawaited(ref.read(syncProvider.notifier).listen());
+          ref.read(syncProvider.notifier).listen();
           _startUpdateSession(ref);
         }
       case AppLifecycleState.inactive:

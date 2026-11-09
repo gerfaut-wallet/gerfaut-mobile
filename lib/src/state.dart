@@ -681,9 +681,6 @@ class WalletSyncs {
 /// what the core tells of every sync, whoever started it.
 sealed class SyncChange {
   const SyncChange();
-
-  /// The wallets the change says something about.
-  Iterable<String> get walletIds;
 }
 
 /// This app starts a sync of one wallet, under [ticket].
@@ -692,9 +689,6 @@ final class SyncStarted extends SyncChange {
 
   final String walletId;
   final int ticket;
-
-  @override
-  Iterable<String> get walletIds => [walletId];
 }
 
 /// The answer of the sync this app started under [ticket]: [failure]
@@ -705,9 +699,6 @@ final class SyncEnded extends SyncChange {
   final String walletId;
   final int ticket;
   final String? failure;
-
-  @override
-  Iterable<String> get walletIds => [walletId];
 }
 
 /// This app starts a sync of every wallet of a network, under [ticket].
@@ -715,9 +706,6 @@ final class SyncAllStarted extends SyncChange {
   const SyncAllStarted(this.ticket);
 
   final int ticket;
-
-  @override
-  Iterable<String> get walletIds => const [];
 }
 
 /// The answer of the sync of every wallet started under [ticket]: for
@@ -727,9 +715,6 @@ final class SyncAllEnded extends SyncChange {
 
   final int ticket;
   final Map<String, String?> outcomes;
-
-  @override
-  Iterable<String> get walletIds => outcomes.keys;
 }
 
 /// The core says a sync of the wallet runs.
@@ -737,9 +722,6 @@ final class CoreSyncStarted extends SyncChange {
   const CoreSyncStarted(this.walletId);
 
   final String walletId;
-
-  @override
-  Iterable<String> get walletIds => [walletId];
 }
 
 /// The live watch says how a sync it ran ended: [failure] in the
@@ -751,9 +733,13 @@ final class LiveSyncHeard extends SyncChange {
 
   final String walletId;
   final String? failure;
+}
 
-  @override
-  Iterable<String> get walletIds => [walletId];
+/// The core's changes stopped coming: a wallet only the core said
+/// syncs goes back to where it stood before, since nothing would say
+/// where that sync ended; the next listener reads them all again.
+final class CoreSyncLost extends SyncChange {
+  const CoreSyncLost();
 }
 
 /// The core says where the wallet stands once no sync of it runs:
@@ -764,9 +750,6 @@ final class CoreSyncSettled extends SyncChange {
 
   final String walletId;
   final String? failure;
-
-  @override
-  Iterable<String> get walletIds => [walletId];
 }
 
 /// The one way the sync of a wallet moves.
@@ -783,7 +766,7 @@ WalletSyncs nextSyncs(WalletSyncs syncs, SyncChange change) {
       failure == null ? const WalletSyncIdle() : WalletSyncFailed(failure);
   switch (change) {
     case SyncStarted(:final walletId, :final ticket):
-      if (syncs.isSyncing(walletId)) return syncs;
+      if (syncs.of(walletId) case WalletSyncing(ticket: _?)) return syncs;
       return syncs._with({
         walletId: WalletSyncing(
           ticket: ticket,
@@ -809,6 +792,12 @@ WalletSyncs nextSyncs(WalletSyncs syncs, SyncChange change) {
       });
     case CoreSyncSettled(:final walletId, :final failure):
       return syncs._with({walletId: settled(failure)});
+    case CoreSyncLost():
+      return syncs._with({
+        for (final MapEntry(key: id, value: state) in syncs.wallets.entries)
+          if (state case WalletSyncing(ticket: null, :final previousFailure))
+            id: settled(previousFailure),
+      });
     case LiveSyncHeard(:final walletId, :final failure):
       if (syncs.of(walletId) is WalletSyncing) return syncs;
       return syncs._with({walletId: settled(failure)});
@@ -834,11 +823,6 @@ class SyncController extends Notifier<WalletSyncs> {
   /// The ticket of the last sync this app started.
   int _tickets = 0;
 
-  /// For each reading of where the core says every wallet stands, still
-  /// unanswered: the wallets moved since it was asked, which its answer,
-  /// older, must leave alone.
-  final List<Set<String>> _seeding = [];
-
   @override
   WalletSyncs build() {
     ref.onDispose(() {
@@ -848,15 +832,8 @@ class SyncController extends Notifier<WalletSyncs> {
     return const WalletSyncs();
   }
 
-  bool isSyncing(String walletId) => state.isSyncing(walletId);
-
-  bool get syncingAny => state.syncingAny;
-
   /// The only writer of the state.
   void _apply(SyncChange change) {
-    for (final moved in _seeding) {
-      moved.addAll(change.walletIds);
-    }
     state = nextSyncs(state, change);
   }
 
@@ -879,34 +856,28 @@ class SyncController extends Notifier<WalletSyncs> {
     ref.invalidate(receiveProvider);
   }
 
-  /// Listens to what the core says of every sync, whoever started it,
-  /// then reads once where it says each wallet stands now: a failure
-  /// the vault kept from before a restart shows at once. Called when the
+  /// Listens to where the core says each wallet's sync stands: every
+  /// wallet first, a failure the vault kept from before a restart among
+  /// them, then each change, whoever runs the sync. Called when the
   /// screens start listening to the core, and each time the app comes
   /// back on screen; nothing more while it already listens.
-  Future<void> listen() async {
+  void listen() {
     if (_changes != null) return;
-    final bridge = ref.read(bridgeProvider);
-    _changes = bridge.syncChanges().listen(
-      (told) => _apply(_toldBy(told)),
-      onError: (_) {},
-      // The core's side of it never ends but on a failure: the next
-      // time the app comes on screen listens anew, and reads again.
-      onDone: () => _changes = null,
-    );
-    final moved = <String>{};
-    _seeding.add(moved);
-    try {
-      final states = await bridge.walletSyncStates();
-      for (final told in states) {
-        if (!moved.contains(told.walletId)) _apply(_toldBy(told));
-      }
-    } catch (_) {
-      // The changes still come; a failure kept from before shows at the
-      // next reading.
-    } finally {
-      _seeding.remove(moved);
+    void lost() {
+      _changes = null;
+      _apply(const CoreSyncLost());
     }
+
+    _changes = ref
+        .read(bridgeProvider)
+        .syncChanges()
+        .listen(
+          (told) => _apply(_toldBy(told)),
+          onError: (_) {},
+          // The core's side never ends but on a failure: the next time
+          // the app comes on screen listens anew.
+          onDone: lost,
+        );
   }
 
   /// A sync that did not start here changed this wallet: the live
@@ -922,13 +893,14 @@ class SyncController extends Notifier<WalletSyncs> {
   /// Runs one wallet operation with the sync bookkeeping: the wallet is
   /// marked in flight under a ticket of its own, the answer settles it
   /// if that ticket is still the wallet's, and what the operation
-  /// changed is refreshed. Null when a sync already covers the wallet,
-  /// whoever started it, or a sync of every wallet runs.
+  /// changed is refreshed. Null when [refused] says a sync running now
+  /// stands in for it.
   Future<SyncReport?> _run(
     String id,
-    Future<SyncReport> Function(GerfautBridge bridge) operation,
-  ) async {
-    if (state.isSyncing(id)) return null;
+    Future<SyncReport> Function(GerfautBridge bridge) operation, {
+    required bool Function(WalletSyncs syncs) refused,
+  }) async {
+    if (refused(state)) return null;
     final ticket = ++_tickets;
     _apply(SyncStarted(id, ticket));
     String? failure;
@@ -949,13 +921,27 @@ class SyncController extends Notifier<WalletSyncs> {
 
   /// Syncs one wallet. Rethrows the core error after cleanup so the
   /// caller can show it; the failure also lands in [syncErrorsProvider].
-  Future<SyncReport?> syncWallet(String id) =>
-      _run(id, (bridge) => bridge.syncWallet(id));
+  Future<SyncReport?> syncWallet(String id) => _run(
+    id,
+    (bridge) => bridge.syncWallet(id),
+    // Any sync of the wallet, or of every wallet, reads what this
+    // one would.
+    refused: (syncs) => syncs.isSyncing(id),
+  );
 
   /// Scans one wallet again from its first address, with the same
   /// bookkeeping as [syncWallet].
-  Future<SyncReport?> rescanWallet(String id) =>
-      _run(id, (bridge) => bridge.rescanWallet(id));
+  Future<SyncReport?> rescanWallet(String id) => _run(
+    id,
+    (bridge) => bridge.rescanWallet(id),
+    // A rescan reads from the first address, which no routine sync
+    // does: only a sync or rescan this app already runs of the
+    // wallet stands in for it.
+    refused: (syncs) => switch (syncs.of(id)) {
+      WalletSyncing(ticket: _?) => true,
+      _ => false,
+    },
+  );
 
   /// Syncs every wallet of a network. Failures are reported per wallet
   /// inside the returned report, never thrown. Null while one already

@@ -71,20 +71,6 @@ class _HeldSyncAll extends FakeBridge {
   }
 }
 
-/// A reading of where every wallet stands held open until the test
-/// lets it answer.
-class _HeldStates extends FakeBridge {
-  _HeldStates() : super(wallets: [makeMeta()]);
-
-  final gate = Completer<void>();
-
-  @override
-  Future<List<WalletSync>> walletSyncStates([Network? network]) async {
-    await gate.future;
-    return super.walletSyncStates(network);
-  }
-}
-
 void main() {
   group('where the sync of each wallet stands', () {
     test("a sync the core says runs for one wallet is not another's", () async {
@@ -95,7 +81,8 @@ void main() {
         ],
       );
       final container = _container(bridge);
-      await container.read(syncProvider.notifier).listen();
+      container.read(syncProvider.notifier).listen();
+      await pumpEventQueue();
 
       bridge.syncChangesController.add(_told('w2', const CoreSyncRunning()));
       await pumpEventQueue();
@@ -158,7 +145,7 @@ void main() {
         ..syncStates = [failed];
       await tester.pumpWidget(_app(bridge));
       await tester.pumpAndSettle();
-      expect(bridge.walletSyncStatesCalls, greaterThan(0));
+      expect(bridge.syncChangesListened, greaterThan(0));
 
       await tester.tap(find.text('Cold storage'));
       await tester.pumpAndSettle();
@@ -175,7 +162,8 @@ void main() {
             throw const BridgeException('sync', 'connection refused');
       final container = _container(bridge);
       final sync = container.read(syncProvider.notifier);
-      await sync.listen();
+      sync.listen();
+      await pumpEventQueue();
 
       final ours = sync.syncWallet('w1');
       await pumpEventQueue();
@@ -204,7 +192,8 @@ void main() {
           ..syncGate = Completer<void>();
         final container = _container(bridge);
         final sync = container.read(syncProvider.notifier);
-        await sync.listen();
+        sync.listen();
+        await pumpEventQueue();
 
         final ours = sync.syncWallet('w1');
         await pumpEventQueue();
@@ -288,26 +277,35 @@ void main() {
       },
     );
 
-    test('a reading older than a change leaves that wallet alone', () async {
-      final bridge = _HeldStates()
-        ..syncStates = [
-          _told('w1', const CoreSyncFailed(message: 'refused', at: 1749999940)),
-        ];
+    test('a wallet only the core said syncs is not left syncing when '
+        'its changes stop', () async {
+      final bridge = FakeBridge(wallets: [makeMeta()]);
       final container = _container(bridge);
-      final listening = container.read(syncProvider.notifier).listen();
+      final sync = container.read(syncProvider.notifier)..listen();
       await pumpEventQueue();
+      bridge.syncChangesController.add(
+        _told('w1', const CoreSyncFailed(message: 'refused', at: 1749999940)),
+      );
+      bridge.syncChangesController.add(_told('w1', const CoreSyncRunning()));
+      await pumpEventQueue();
+      expect(container.read(syncProvider).of('w1'), isA<WalletSyncing>());
 
-      // The wallet syncs, and then succeeds, after the reading was
-      // asked and before it answers.
-      bridge.syncChangesController
-        ..add(_told('w1', const CoreSyncRunning()))
-        ..add(_told('w1', const CoreSyncIdle()));
+      await bridge.syncChangesController.close();
       await pumpEventQueue();
+      expect(container.read(syncProvider).of('w1'), isA<WalletSyncFailed>());
+      // A sync of its own goes through again.
+      expect(await sync.syncWallet('w1'), isNotNull);
+    });
+
+    test('a rescan asked during a sync of every wallet still runs', () async {
+      final bridge = _HeldSyncAll();
+      final container = _container(bridge);
+      final sync = container.read(syncProvider.notifier);
+      final all = sync.syncAll(Network.mainnet);
+      await pumpEventQueue();
+      expect(await sync.rescanWallet('w1'), isNotNull);
       bridge.gate.complete();
-      await listening;
-
-      expect(container.read(syncProvider).of('w1'), isA<WalletSyncIdle>());
-      expect(container.read(syncErrorsProvider), isEmpty);
+      await all;
     });
   });
 
