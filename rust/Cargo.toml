@@ -26,6 +26,11 @@ tokio = { version = "1", features = ["sync"] }
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
 
+# A lint silenced without a reason hides why, and the next reader keeps
+# it out of habit: every #[allow] says why in its `reason`.
+[lints.clippy]
+allow_attributes_without_reason = "warn"
+
 # Cargo only honours [patch] in the root manifest: the same pin as in
 # gerfaut-core, see the note there.
 [patch.crates-io]
