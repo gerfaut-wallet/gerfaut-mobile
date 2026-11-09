@@ -59,7 +59,7 @@ class HomeScreen extends ConsumerWidget {
     final settings = ref.watch(settingsProvider);
     final wallets = ref.watch(walletsProvider);
     final masked = ref.watch(maskedProvider);
-    ref.watch(syncProvider);
+    final syncs = ref.watch(syncProvider);
     final sync = ref.read(syncProvider.notifier);
     final network = settings.value?.activeNetwork;
 
@@ -98,7 +98,10 @@ class HomeScreen extends ConsumerWidget {
           // the bar: syncs every wallet of the network at once, and
           // turns for as long as any of them is still working.
           SyncButton(
-            syncing: sync.syncingAny,
+            syncing: syncs.syncingAnyOf([
+              for (final wallet in wallets.value ?? const <WalletMeta>[])
+                wallet.id,
+            ]),
             onPressed: network == null || (wallets.value?.isEmpty ?? true)
                 ? null
                 : () => sync.syncAll(network),
@@ -331,7 +334,7 @@ class _WalletListState extends ConsumerState<_WalletList> {
   @override
   Widget build(BuildContext context) {
     final shown = _inOrder();
-    final errors = ref.watch(syncErrorsProvider);
+    final syncs = ref.watch(syncProvider);
     final refused = _refused;
     // A refused drop whose list has changed since says so, and keeps
     // the way out alone: a "Try again" with nothing left to try would
@@ -385,7 +388,7 @@ class _WalletListState extends ConsumerState<_WalletList> {
             index: index,
             child: _WalletCard(
               wallet: wallet,
-              error: errors[wallet.id],
+              error: syncs.failureOf(wallet.id),
               // How much of it Live follows, only while Live runs and
               // cannot follow everything.
               coverage: ref.watch(walletCoverageProvider(wallet.id)),

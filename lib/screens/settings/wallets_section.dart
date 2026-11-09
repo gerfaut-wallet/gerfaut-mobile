@@ -240,8 +240,7 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final settings = ref.watch(settingsProvider).value;
     final wallets = ref.watch(walletsProvider).value ?? [];
-    ref.watch(syncProvider);
-    final sync = ref.read(syncProvider.notifier);
+    final syncs = ref.watch(syncProvider);
     if (settings == null) {
       return Padding(
         padding: const EdgeInsets.all(GerfautSpacing.md),
@@ -282,7 +281,7 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
                   proxyDecorator: liftedProxy,
                   itemCount: shown.length,
                   onReorderItem: (from, to) => _reorder(shown, from, to),
-                  itemBuilder: (context, index) => _row(shown, index, sync),
+                  itemBuilder: (context, index) => _row(shown, index, syncs),
                 ),
               if (_walletError != null)
                 SliverToBoxAdapter(
@@ -366,7 +365,7 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
   }
 
   /// The row of the wallet at [index] among those [shown].
-  Widget _row(List<WalletMeta> shown, int index, SyncController sync) {
+  Widget _row(List<WalletMeta> shown, int index, WalletSyncs syncs) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final wallet = shown[index];
     return _WalletRow(
@@ -404,7 +403,7 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
         });
       },
       rescanning: _rescanningId == wallet.id,
-      busy: sync.isSyncing(wallet.id),
+      busy: syncs.isSyncing(wallet.id),
       onRescan: () => _rescan(wallet.id),
     );
   }

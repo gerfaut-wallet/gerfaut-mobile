@@ -186,6 +186,9 @@ class _Hydrated extends ConsumerWidget {
         // when Android lets it start. Not before the notices are known
         // to get through: Live is there to say things.
         unawaited(_checkNoticesThenLive(ref));
+        // Where each wallet's sync stands, from the core, whoever runs
+        // it: a failure from before a restart shows from the start.
+        ref.read(syncProvider.notifier).listen();
         // A history or a backup shared last time, or by a session the
         // system ended, may still sit in the cache.
         unawaited(ref.read(csvSharerProvider).forgetCopies());
@@ -332,6 +335,7 @@ class _GateState extends ConsumerState<_Gate> with WidgetsBindingObserver {
         if (ref.read(prefsHydratedProvider)) {
           ref.read(widgetFeedProvider).resume();
           unawaited(_checkNoticesThenLive(ref));
+          ref.read(syncProvider.notifier).listen();
           _startUpdateSession(ref);
         }
       case AppLifecycleState.inactive:

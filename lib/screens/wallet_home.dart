@@ -49,7 +49,8 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
     try {
       await ref.read(syncProvider.notifier).syncWallet(widget.walletId);
     } catch (_) {
-      // The failure lands in syncErrorsProvider and the freshness line.
+      // The failure lands in the wallet's sync state and the freshness
+      // line.
     }
   }
 
@@ -85,8 +86,7 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final masked = ref.watch(maskedProvider);
-    final syncing = ref.watch(syncProvider.notifier).isSyncing(widget.walletId);
-    ref.watch(syncProvider);
+    final syncing = ref.watch(syncProvider).isSyncing(widget.walletId);
     final snapshot = ref.watch(snapshotProvider(widget.walletId));
     final loaded = snapshot.value;
     final name = loaded?.meta.name;
@@ -222,7 +222,7 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
 
   Widget _buildLoaded(WalletSnapshot snapshot, bool syncing) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final syncError = ref.watch(syncErrorsProvider)[widget.walletId];
+    final syncError = ref.watch(syncProvider).failureOf(widget.walletId);
     final note = _balanceNote(snapshot, syncError);
     final coverage = ref.watch(walletCoverageProvider(widget.walletId));
     // A note about the sync outranks the pending line: a figure whose

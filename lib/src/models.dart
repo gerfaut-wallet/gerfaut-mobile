@@ -384,6 +384,7 @@ class WalletMeta {
     required this.cachedTxCount,
     this.scanGap = 20,
     this.livePinned = false,
+    this.lastFailure,
   });
 
   factory WalletMeta.fromJson(Map<String, dynamic> json) {
@@ -409,6 +410,13 @@ class WalletMeta {
       cachedTxCount: cached['tx_count'] as int,
       // Left out by the core when false, and by every core before pins.
       livePinned: json['live_pinned'] as bool? ?? false,
+      // Left out while the last sync did not fail, and by every core
+      // that kept no failure.
+      lastFailure: json['last_failure'] == null
+          ? null
+          : SyncFailureStamp.fromJson(
+              json['last_failure'] as Map<String, dynamic>,
+            ),
     );
   }
 
@@ -435,6 +443,10 @@ class WalletMeta {
   /// every address. Off unless the user pinned it.
   final bool livePinned;
 
+  /// The failure of the last sync, kept by the vault until one
+  /// succeeds; null while the last one did not fail.
+  final SyncFailureStamp? lastFailure;
+
   bool get isSingleAddress => kind is SingleAddressKind;
 
   /// The same wallet with the name, the icon or the pin changed: what a
@@ -454,6 +466,7 @@ class WalletMeta {
       lastSync: lastSync,
       cachedBalance: cachedBalance,
       cachedTxCount: cachedTxCount,
+      lastFailure: lastFailure,
     );
   }
 }
@@ -1603,6 +1616,104 @@ class SyncFailure {
   final String walletId;
   final String message;
   final String kind;
+}
+
+/// When and why the last sync of a wallet failed, as the vault keeps it
+/// beside the wallet until a sync succeeds: a restart does not forget
+/// it.
+class SyncFailureStamp {
+  const SyncFailureStamp({
+    required this.at,
+    required this.message,
+    this.kind = 'sync',
+  });
+
+  factory SyncFailureStamp.fromJson(Map<String, dynamic> json) {
+    return SyncFailureStamp(
+      at: json['at'] as int,
+      message: json['message'] as String,
+      kind: json['kind'] as String? ?? 'sync',
+    );
+  }
+
+  /// Unix seconds.
+  final int at;
+
+  /// The core's words.
+  final String message;
+
+  /// The code of the failure, the one the app picks its sentence on.
+  final String kind;
+}
+
+/// Where the sync of a wallet stands, as the core says it: whoever
+/// started the sync, the app, a rescan, a sync of every wallet or the
+/// live watch.
+sealed class CoreSyncState {
+  const CoreSyncState();
+
+  /// Null for a state this build does not know: a newer core may say
+  /// more, and what is not understood is not acted on.
+  static CoreSyncState? fromJson(Map<String, dynamic> json) {
+    switch (json['state']) {
+      case 'idle':
+        return const CoreSyncIdle();
+      case 'syncing':
+        return const CoreSyncRunning();
+      case 'failed':
+        return CoreSyncFailed(
+          message: json['message'] as String,
+          kind: json['kind'] as String? ?? 'sync',
+          at: json['at'] as int,
+        );
+    }
+    return null;
+  }
+}
+
+/// No sync of the wallet runs, and the last one did not fail.
+final class CoreSyncIdle extends CoreSyncState {
+  const CoreSyncIdle();
+}
+
+/// A sync of the wallet runs.
+final class CoreSyncRunning extends CoreSyncState {
+  const CoreSyncRunning();
+}
+
+/// No sync of the wallet runs, and the last one failed: what the wallet
+/// shows is from its last good sync, if it ever had one.
+final class CoreSyncFailed extends CoreSyncState {
+  const CoreSyncFailed({
+    required this.message,
+    this.kind = 'sync',
+    required this.at,
+  });
+
+  /// The core's words.
+  final String message;
+
+  /// The code of the failure, the one the app picks its sentence on.
+  final String kind;
+
+  /// When it failed, Unix seconds.
+  final int at;
+}
+
+/// Where the sync of one wallet stands, beside its id: what the core
+/// lists for every wallet and sends at each change.
+class WalletSync {
+  const WalletSync({required this.walletId, required this.state});
+
+  /// Null for a state this build does not know.
+  static WalletSync? fromJson(Map<String, dynamic> json) {
+    final state = CoreSyncState.fromJson(json);
+    if (state == null) return null;
+    return WalletSync(walletId: json['wallet_id'] as String, state: state);
+  }
+
+  final String walletId;
+  final CoreSyncState state;
 }
 
 /// Protocol a public server speaks.

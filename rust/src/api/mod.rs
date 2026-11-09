@@ -23,6 +23,7 @@ use gerfaut_core::live::LiveEvent;
 use gerfaut_core::live::LiveTx;
 use gerfaut_core::live::notice;
 use gerfaut_core::lock::LockKind;
+use gerfaut_core::manager::WalletSync;
 use gerfaut_core::prefs::PreferencesChange;
 use gerfaut_core::store::VaultKey;
 use gerfaut_core::wallet::meta::WalletIcon;
@@ -458,6 +459,69 @@ pub async fn sync_all(network: Option<String>) -> String {
     let manager = try_json!(manager());
     let network = try_json!(parse_network_opt(network));
     to_json(&manager.sync_all(network).await)
+}
+
+/// Subscribes this isolate to where each wallet's sync stands, each a
+/// serialized `WalletSync`: first where every wallet stands now, read
+/// once the subscription is in place so no change falls between the
+/// two (a failure the vault kept from before a restart among them);
+/// then every change: the first sync of a wallet
+/// that starts, from the app, a rescan, a sync of every wallet or the
+/// live watch, and where it stands once the last one ends. Returns once
+/// the listener is gone. A listener that lags loses the oldest changes,
+/// and is then sent where every wallet stands now, so it never keeps a
+/// wallet syncing that no longer is.
+pub async fn sync_changes(sink: StreamSink<String>) {
+    let manager = match manager() {
+        Ok(manager) => manager,
+        Err(payload) => {
+            let _ = sink.add(payload);
+            return;
+        }
+    };
+    forward_sync_changes(
+        manager.sync_changes(),
+        || manager.sync_states(None),
+        |payload| sink.add(payload).is_ok(),
+    )
+    .await;
+}
+
+/// Sends the whole of `states`, then each change of `changes`, with
+/// `send`, until `send` says the listener is gone or the changes end.
+/// Changes lost to a lag are made up for with the whole of `states`
+/// again: what a wallet stands at now says all that the lost ones
+/// would have.
+async fn forward_sync_changes<States, Read>(
+    mut changes: broadcast::Receiver<WalletSync>,
+    states: States,
+    mut send: impl FnMut(String) -> bool,
+) where
+    States: Fn() -> Read,
+    Read: Future<Output = Vec<WalletSync>>,
+{
+    for state in states().await {
+        if !send(to_json(&state)) {
+            return;
+        }
+    }
+    loop {
+        match changes.recv().await {
+            Ok(change) => {
+                if !send(to_json(&change)) {
+                    return;
+                }
+            }
+            Err(broadcast::error::RecvError::Lagged(_)) => {
+                for state in states().await {
+                    if !send(to_json(&state)) {
+                        return;
+                    }
+                }
+            }
+            Err(broadcast::error::RecvError::Closed) => return,
+        }
+    }
 }
 
 // --- settings ----------------------------------------------------------
@@ -1084,6 +1148,7 @@ pub async fn set_update_automatic(automatic: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gerfaut_core::manager::WalletSyncState;
     use serde_json::Value;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -1114,6 +1179,79 @@ mod tests {
 
         let calm = then_always(async { 7 }, async {}).await;
         assert_eq!(calm, 7);
+    }
+
+    fn sync_of(wallet_id: &str, state: WalletSyncState) -> WalletSync {
+        WalletSync {
+            wallet_id: wallet_id.to_owned(),
+            state,
+        }
+    }
+
+    /// A listener of the sync changes that falls behind is not left
+    /// with a wallet syncing that no longer is: it is sent where every
+    /// wallet stands now, in place of what it lost, and the changes go
+    /// on after that until they end.
+    #[tokio::test]
+    async fn a_lagging_listener_of_the_sync_changes_is_told_where_each_wallet_stands() {
+        let (changes, listener) = broadcast::channel(1);
+        changes
+            .send(sync_of("w1", WalletSyncState::Syncing))
+            .unwrap();
+        changes.send(sync_of("w1", WalletSyncState::Idle)).unwrap();
+        let mut sent = Vec::new();
+        let now = vec![
+            sync_of("w1", WalletSyncState::Idle),
+            sync_of("w2", WalletSyncState::Syncing),
+        ];
+        let forwarding = forward_sync_changes(
+            listener,
+            || async { now.clone() },
+            |payload| {
+                sent.push(serde_json::from_str::<Value>(&payload).unwrap());
+                true
+            },
+        );
+        // Every change sent is in the channel's hands before it closes.
+        drop(changes);
+        forwarding.await;
+        let now = [
+            json!({ "wallet_id": "w1", "state": "idle" }),
+            json!({ "wallet_id": "w2", "state": "syncing" }),
+        ];
+        // Where each wallet stands as the listener comes, again for
+        // what it lost, then the change it did not lose.
+        let expected: Vec<Value> = now
+            .iter()
+            .chain(now.iter())
+            .cloned()
+            .chain([json!({ "wallet_id": "w1", "state": "idle" })])
+            .collect();
+        assert_eq!(sent, expected);
+    }
+
+    /// A listener that went away ends the forwarding at the next change,
+    /// rather than keep a subscription for nobody.
+    #[tokio::test]
+    async fn the_sync_changes_end_with_their_listener() {
+        let (changes, listener) = broadcast::channel(8);
+        changes
+            .send(sync_of("w1", WalletSyncState::Syncing))
+            .unwrap();
+        changes.send(sync_of("w1", WalletSyncState::Idle)).unwrap();
+        let mut tries = 0;
+        forward_sync_changes(
+            listener,
+            || async { Vec::new() },
+            |_| {
+                tries += 1;
+                false
+            },
+        )
+        .await;
+        assert_eq!(tries, 1);
+        // Still open on the core's side: the end was the listener's.
+        assert_eq!(changes.receiver_count(), 0);
     }
 
     /// A frame of a multi-part UR announcing `total` parts.

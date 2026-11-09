@@ -624,12 +624,13 @@ class LiveController extends Notifier<LiveState> {
   void _onEvent(LiveEvent event) {
     switch (event) {
       case LiveWalletSynced(:final report):
-        ref.read(syncErrorsProvider.notifier).clear(report.walletId);
-        ref.read(syncProvider.notifier).refreshed(report.walletId);
+        ref.read(syncProvider.notifier)
+          ..syncedElsewhere(report.walletId)
+          ..refreshed(report.walletId);
       case LiveSyncFailed(:final walletId, :final message, :final kind):
         ref
-            .read(syncErrorsProvider.notifier)
-            .set(walletId, reportedFailure(kind, message));
+            .read(syncProvider.notifier)
+            .syncedElsewhere(walletId, failure: reportedFailure(kind, message));
       case LiveStatusChanged(:final status):
         state = state.copyWith(
           status: status,

@@ -239,6 +239,15 @@ abstract class GerfautBridge {
   /// is complete.
   Future<int> loadMoreHistory(String id);
   Future<SyncAllReport> syncAll([Network? network]);
+
+  /// Where each wallet's sync stands: first every wallet as it stands
+  /// now (a failure the vault kept from before a restart among them),
+  /// read once the core listens, so no change falls in between; then
+  /// every change, whoever started the sync: the app, a rescan, a sync
+  /// of every wallet, the live watch. The first sync of a wallet to
+  /// start says it syncs; the last one to end says where it stands.
+  /// Any number of isolates may listen.
+  Stream<WalletSync> syncChanges();
   Future<void> renameWallet(String id, String name);
 
   /// Changes the glyph a wallet shows next to its name.
@@ -569,6 +578,30 @@ class RustBridge implements GerfautBridge {
     return SyncAllReport.fromJson(
       _object(await rust.syncAll(network: network?.id)),
     );
+  }
+
+  @override
+  Stream<WalletSync> syncChanges() async* {
+    await for (final raw in endsWithItsCall(rust.syncChanges())) {
+      final Object? decoded;
+      try {
+        decoded = jsonDecode(raw);
+      } on FormatException {
+        // One change that does not read must not end the stream.
+        continue;
+      }
+      if (decoded is! Map<String, dynamic>) continue;
+      // A manager not opened yet is said as the only payload: it ends
+      // the stream.
+      if (decoded['error'] is Map<String, dynamic>) _decode(raw);
+      final WalletSync? change;
+      try {
+        change = WalletSync.fromJson(decoded);
+      } catch (_) {
+        continue;
+      }
+      if (change != null) yield change;
+    }
   }
 
   @override
