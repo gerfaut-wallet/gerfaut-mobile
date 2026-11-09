@@ -365,23 +365,9 @@ final installedWidgetsProvider = FutureProvider<Set<String>>(
 
 // --- preferences -------------------------------------------------------
 
-class WidgetBalancesNotifier extends Notifier<bool> {
+class WidgetBalancesNotifier extends VaultPrefNotifier<bool> {
   @override
-  bool build() => false;
-
-  void hydrate(String? stored) {
-    // Only an explicit "1" shows them: a widget is read over the
-    // shoulder, so the amounts stay masked until asked for.
-    state = stored == '1';
-  }
-
-  void set(bool on) {
-    state = on;
-    ref
-        .read(bridgeProvider)
-        .setAppPref(Pref.widgetBalances, on ? '1' : '0')
-        .catchError((_) {});
-  }
+  VaultPref<bool> get pref => AppPref.widgetBalances;
 }
 
 /// Balances shown on the widgets, off by default, persisted as
@@ -682,7 +668,7 @@ Future<bool> refreshWidgets({
       balance: BalancePayload.of(
         wallets,
         unit: shared.unit,
-        masked: shared.masked || prefs[Pref.widgetBalances] != '1',
+        masked: shared.masked || !AppPrefs(prefs).widgetBalances,
         locked: settings.appLock != null,
         now: now,
       ),

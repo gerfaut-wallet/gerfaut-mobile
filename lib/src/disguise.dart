@@ -16,7 +16,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'live.dart';
 import 'notifications.dart';
+import 'state.dart';
 
 /// What the platform does for the disguise. Behind an interface so no
 /// test ever reaches the activity.
@@ -131,9 +133,15 @@ class DisguiseController extends Notifier<DisguiseState> {
       // with the app's name. It goes first, and the setting goes back
       // to a periodic check, which stays silent while disguised.
       if (ref.read(backgroundCheckProvider) == BackgroundCheck.live) {
-        await ref
+        final live = ref.read(liveProvider.notifier);
+        final shown = await ref
             .read(backgroundCheckProvider.notifier)
             .set(BackgroundCheck.quarterHour);
+        // Refused, the vault keeps Live as the choice, and the service
+        // stands down on its own at its next start, the app disguised:
+        // the one running now, which the choice kept up, is stopped
+        // here all the same.
+        if (shown == Shown.refused) await live.apply(wanted: false);
       }
       await service.setWidgetsEnabled(false);
       await service.setDisguised(true);

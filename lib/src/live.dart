@@ -837,7 +837,7 @@ class LiveRunner {
       final prefs = settings.appPrefs;
       final wanted =
           settings.preferences.notifyNewTx &&
-          prefs[Pref.background] == BackgroundCheck.live.stored;
+          AppPrefs(prefs).background == BackgroundCheck.live;
       if (!wanted || await isDisguised()) {
         await _tell('standDown');
         return false;

@@ -2,29 +2,24 @@
 // encrypted vault like every other, so a reinstall starts over and a
 // restore does not.
 
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'state.dart';
 import 'prefs.dart';
 
-class OnboardingNotifier extends Notifier<bool> {
+class OnboardingNotifier extends VaultPrefNotifier<bool> {
   @override
-  bool build() => false;
+  VaultPref<bool> get pref => AppPref.onboardingSeen;
 
-  void hydrate(String? stored) {
-    // Only an explicit "1" counts as seen: an unreadable preference
-    // shows the tour again rather than swallowing it.
-    state = stored == '1';
-  }
-
-  /// Marks the tour as seen, however it was left.
+  /// Marks the tour as seen, however it was left. A refusal leaves it
+  /// closed for this session: the vault brings it back at the next
+  /// launch, and putting it back now would open it again under the
+  /// hand that just closed it.
   void markSeen() {
     if (state) return;
-    state = true;
-    ref
-        .read(bridgeProvider)
-        .setAppPref(Pref.onboardingSeen, '1')
-        .catchError((_) {});
+    unawaited(persist(true));
   }
 
   /// Shows it again, from the settings.
