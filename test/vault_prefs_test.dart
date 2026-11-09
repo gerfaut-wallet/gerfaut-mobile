@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/src/home_widgets.dart';
 import 'package:gerfaut/src/live.dart';
+import 'package:gerfaut/src/format.dart';
 import 'package:gerfaut/src/notifications.dart';
 import 'package:gerfaut/src/onboarding.dart';
 import 'package:gerfaut/src/prefs.dart';
@@ -91,7 +92,7 @@ void main() {
       expect(bridge.preferences.notifyNewTx, isFalse);
       expect(made.read(notifyNewTxProvider), isFalse);
       expect(scheduled.where((seconds) => seconds > 0), isEmpty);
-      expect(platform.calls, isNot(contains('start')));
+      expect(platform.calls, isEmpty);
     });
 
     test('is in the vault before Live is asked to start', () async {
@@ -144,10 +145,10 @@ void main() {
           .read(backgroundCheckProvider.notifier)
           .set(BackgroundCheck.live);
 
-      // The task and Live follow what the vault holds.
+      // The task and Live stay as they were, with the vault.
       expect(made.read(backgroundCheckProvider), BackgroundCheck.hour);
-      expect(platform.calls, isNot(contains('start')));
-      expect(scheduled, [BackgroundCheck.hour.seconds]);
+      expect(platform.calls, isEmpty);
+      expect(scheduled, isEmpty);
     });
   });
 
@@ -164,9 +165,9 @@ void main() {
 
       await made.read(disguiseProvider.notifier).set(true);
 
-      // Its notification is headed with the app's name: whatever the
-      // refused choice kept up, the service ends stopped.
-      expect(platform.calls.last, 'stop');
+      // Its notification is headed with the app's name: it is never
+      // posted again, and the service ends stopped.
+      expect(platform.calls, ['stop']);
     });
   });
 
@@ -250,6 +251,59 @@ void main() {
       expect(made.read(notifyNewTxProvider), isTrue);
       expect(scheduled.last, BackgroundCheck.live.seconds);
       expect(platform.calls.last, 'start');
+    });
+  });
+
+  group('what the review of the queue found', () {
+    test('a refused fall back never starts Live again', () async {
+      final gate = _AppPrefsGate(wallets: [makeMeta()])
+        ..preferences = kPreferences.copyWith(notifyNewTx: true)
+        ..refusing = true;
+      final made = screens(gate);
+      made.read(backgroundCheckProvider.notifier).hydrate('live');
+
+      // What Live does when the service was stopped from its notice.
+      await made
+          .read(backgroundCheckProvider.notifier)
+          .set(BackgroundCheck.quarterHour);
+
+      expect(made.read(backgroundCheckProvider), BackgroundCheck.live);
+      expect(platform.calls, isNot(contains('start')));
+    });
+
+    test('a notice turned off while a cadence is on its way ends with '
+        'nothing scheduled', () async {
+      final gate = _AppPrefsGate(wallets: [makeMeta()])
+        ..preferences = kPreferences.copyWith(notifyNewTx: true);
+      final made = screens(gate);
+      made.read(backgroundCheckProvider.notifier).hydrate('3600');
+
+      final cadence = made
+          .read(backgroundCheckProvider.notifier)
+          .set(BackgroundCheck.quarterHour);
+      await pumpEventQueue();
+      // Written after the cadence, one queue for both.
+      final off = made.read(notifyNewTxProvider.notifier).set(false);
+      gate.release();
+      await Future.wait([cadence, off]);
+
+      expect(gate.appPrefs[Pref.background], '900');
+      expect(gate.preferences.notifyNewTx, isFalse);
+      expect(scheduled.last, 0);
+    });
+
+    test('a unit the vault refused goes back, as the notices read '
+        'it', () async {
+      final bridge = FakeBridge()
+        ..onSetPreferences = (_, _) => throw coreFailure('vault', 'disk full');
+      final made = screens(bridge);
+      final before = made.read(unitProvider);
+      final other = AmountUnit.values.firstWhere((unit) => unit != before);
+
+      made.read(unitProvider.notifier).set(other);
+      expect(made.read(unitProvider), other);
+      await pumpEventQueue();
+      expect(made.read(unitProvider), before);
     });
   });
 }

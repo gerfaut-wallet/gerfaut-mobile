@@ -163,10 +163,12 @@ enum Shown {
   overtaken,
 }
 
-/// Every preference write to the vault, the ones both apps keep and the
-/// ones of this app alone: one after the other, in the order they were
-/// asked, so that each answer is the vault after the change before it.
-/// The one way a change shown on screen settles.
+/// The preference writes of the screens, the ones both apps keep and
+/// the ones of this app alone: one after the other, in the order they
+/// were asked, so that each answer is the vault after the change before
+/// it. The one way a change shown on screen settles. What the app
+/// writes on its own, never shown as a choice (the biometric lack), goes
+/// around it.
 class VaultWrites {
   Future<void> _written = Future.value();
 
@@ -240,8 +242,8 @@ class PreferencesNotifier extends Notifier<Preferences> {
 
   /// Shows [change] at once and writes it through, a second time when
   /// the vault refuses the first. A refusal leaves the change on
-  /// screen: putting it back is the caller's to decide ([undo]), and
-  /// the mask stays, amounts never shown again under the eye. Completes
+  /// screen, which the mask needs: amounts never shown again under the
+  /// eye. Every other preference goes through [offer]. Completes
   /// with what became of it, for a caller that has to say the vault did
   /// not take it.
   ///
@@ -253,19 +255,19 @@ class PreferencesNotifier extends Notifier<Preferences> {
     return ref.read(vaultWritesProvider).persist(names, _writer(change));
   }
 
-  /// Puts the preferences [change] names back at what the vault holds,
-  /// after it refused the change, and answers the preferences on screen.
-  Preferences undo(PreferencesChange change) {
-    final stored = _stored;
-    return state = PreferencesChange(
-      unit: change.unit == null ? null : stored.unit,
-      masked: change.masked == null ? null : stored.masked,
-      fiat: change.fiat == null ? null : stored.fiat,
-      fiatCurrency: change.fiatCurrency == null ? null : stored.fiatCurrency,
-      priceSource: change.priceSource == null ? null : stored.priceSource,
-      notifyNewTx: change.notifyNewTx == null ? null : stored.notifyNewTx,
-      explorerAck: change.explorerAck == null ? null : stored.explorerAck,
-    ).applyTo(state);
+  /// What the vault last said it holds.
+  Preferences get stored => _stored;
+
+  /// Shows [change] and writes it, and puts it back at what the vault
+  /// holds when the vault refuses it twice: the background notices read
+  /// the vault, and a choice it does not hold would be on screen only.
+  /// Every preference but the mask, which stays on ([show]).
+  Future<Shown> offer(PreferencesChange change) async {
+    final shown = await show(change);
+    if (shown == Shown.refused && ref.mounted) {
+      state = change.heldIn(_stored).applyTo(state);
+    }
+    return shown;
   }
 
   /// Changes what the price is asked by, the currency or the source, and
@@ -300,6 +302,8 @@ abstract class VaultPrefNotifier<T> extends Notifier<T> {
   /// What the vault last said it holds: at start, then at each write it
   /// took.
   late T _stored;
+
+  T get stored => _stored;
 
   @override
   T build() => _stored = pref.decode(null);
@@ -381,7 +385,7 @@ class UnitNotifier extends Notifier<AmountUnit> {
 
   void set(AmountUnit unit) => ref
       .read(preferencesProvider.notifier)
-      .show(PreferencesChange(unit: unit));
+      .offer(PreferencesChange(unit: unit));
 }
 
 /// Display unit for every amount.
@@ -395,7 +399,7 @@ class FiatEnabledNotifier extends Notifier<bool> {
 
   void set(bool enabled) => ref
       .read(preferencesProvider.notifier)
-      .show(PreferencesChange(fiat: enabled));
+      .offer(PreferencesChange(fiat: enabled));
 }
 
 /// Fiat display.
@@ -443,7 +447,7 @@ class ExplorerAckNotifier extends Notifier<bool> {
 
   void set(bool acknowledged) => ref
       .read(preferencesProvider.notifier)
-      .show(PreferencesChange(explorerAck: acknowledged));
+      .offer(PreferencesChange(explorerAck: acknowledged));
 }
 
 /// External explorer warning acknowledged: the dialog is skipped when

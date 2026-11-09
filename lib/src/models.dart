@@ -2271,6 +2271,17 @@ class PreferencesChange {
     explorerAck: explorerAck,
   );
 
+  /// The fields this change names, at what [preferences] holds.
+  PreferencesChange heldIn(Preferences preferences) => PreferencesChange(
+    unit: unit == null ? null : preferences.unit,
+    masked: masked == null ? null : preferences.masked,
+    fiat: fiat == null ? null : preferences.fiat,
+    fiatCurrency: fiatCurrency == null ? null : preferences.fiatCurrency,
+    priceSource: priceSource == null ? null : preferences.priceSource,
+    notifyNewTx: notifyNewTx == null ? null : preferences.notifyNewTx,
+    explorerAck: explorerAck == null ? null : preferences.explorerAck,
+  );
+
   Map<String, dynamic> toJson() => {
     'unit': ?unit?.id,
     'masked': ?masked,

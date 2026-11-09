@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
-- When the vault fails to save a setting, the switch goes back to the value the vault still holds, so the screen never shows a choice that nothing acts on. This covers new-transaction notifications, background checks, Live, notification details, widget balances and the theme. Live and the background check also wait until the vault has saved the setting before they start.
+- When the vault fails to save a setting, the setting goes back to the value the vault still holds instead of showing a choice the background checks and Live never see. This covers new-transaction notifications, background checks, Live, notification details, widget balances, the unit, the fiat display and the theme. Hidden amounts stay hidden. Live and the background check also wait until the vault has saved the setting before they start.
 
 ## [0.1.0] - 2026-10-21
 

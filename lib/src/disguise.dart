@@ -139,8 +139,7 @@ class DisguiseController extends Notifier<DisguiseState> {
             .set(BackgroundCheck.quarterHour);
         // Refused, the vault keeps Live as the choice, and the service
         // stands down on its own at its next start, the app disguised:
-        // the one running now, which the choice kept up, is stopped
-        // here all the same.
+        // the one running now is stopped here all the same.
         if (shown == Shown.refused) await live.apply(wanted: false);
       }
       await service.setWidgetsEnabled(false);

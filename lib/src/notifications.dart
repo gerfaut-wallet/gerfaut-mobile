@@ -375,34 +375,23 @@ class NotifyNewTxNotifier extends Notifier<bool> {
     }
     // Read before the change: it rebuilds this notifier, whose ref
     // answers nothing until then.
-    final cadence = ref.read(backgroundCheckProvider);
+    final cadence = ref.read(backgroundCheckProvider.notifier);
     final scheduler = ref.read(backgroundSchedulerProvider);
     final live = ref.read(liveProvider.notifier);
     final preferences = ref.read(preferencesProvider.notifier);
-    final change = PreferencesChange(notifyNewTx: on);
-    // The periodic task and the Live service read the notice from the
-    // vault as they start: asked before the vault holds it, they would
-    // read the old one. Once it settles, they follow what the vault
-    // holds, the old notice after a refusal: a change overtaken before
-    // it may have left them on neither.
-    final bool notifying;
-    switch (await preferences.show(change)) {
-      case Shown.overtaken:
-        // The newer change, settled after this one, brings them in line.
-        return;
-      case Shown.kept:
-        notifying = on;
-      case Shown.refused:
-        notifying = preferences.undo(change).notifyNewTx;
-    }
-    await rescheduleBackgroundCheck(
+    final before = preferences.stored.notifyNewTx;
+    final shown = await preferences.offer(PreferencesChange(notifyNewTx: on));
+    // Overtaken, the newer change, settled after this one, brings the
+    // task and Live in line.
+    if (shown == Shown.overtaken) return;
+    final notifying = preferences.stored.notifyNewTx;
+    await followTheVault(
       scheduler,
+      live,
       notifying: notifying,
-      seconds: cadence.seconds,
+      cadence: cadence.stored,
+      changed: shown == Shown.kept || notifying != before,
     );
-    // With nothing to say there is nothing to watch for: Live follows
-    // the notice off, and back on.
-    await live.apply(wanted: notifying && cadence == BackgroundCheck.live);
   }
 
   /// Reads again whether Android lets the notices through, each time the
@@ -490,28 +479,49 @@ class BackgroundCheckNotifier extends VaultPrefNotifier<BackgroundCheck> {
   /// starts or stops the Live service to match. Choosing Live from the
   /// settings goes through the explanation sheet first; this is what
   /// the sheet calls once the user has said yes.
-  ///
-  /// The service reads the choice from the vault as it starts: asked
-  /// before the vault holds it, it would read the old one and stand
-  /// down. Once the choice settles, the task and Live follow what the
-  /// vault holds, the old choice after a refusal.
   @override
   Future<Shown> set(BackgroundCheck check) async {
-    final notifying = ref.read(notifyNewTxProvider);
     final scheduler = ref.read(backgroundSchedulerProvider);
     final live = ref.read(liveProvider.notifier);
+    final preferences = ref.read(preferencesProvider.notifier);
+    final before = stored;
     final shown = await super.set(check);
-    // Overtaken, the newer choice brings them in line.
+    // Overtaken, the newer choice brings the task and Live in line.
     if (shown == Shown.overtaken || !ref.mounted) return shown;
-    final held = state;
-    await rescheduleBackgroundCheck(
+    await followTheVault(
       scheduler,
-      notifying: notifying,
-      seconds: held.seconds,
+      live,
+      notifying: preferences.stored.notifyNewTx,
+      cadence: stored,
+      changed: shown == Shown.kept || stored != before,
     );
-    await live.apply(wanted: notifying && held == BackgroundCheck.live);
     return shown;
   }
+}
+
+/// Brings the periodic task and Live in line with what the vault holds,
+/// once a change of the notice or of the cadence settled. Both read the
+/// vault as they start: asked before it holds the change, they would
+/// read the old one, and Live would stand down. A change the vault
+/// refused leaves them as they were, in line with it already, unless a
+/// change overtaken meanwhile did land in the vault ([changed]): Live
+/// is never started again for a refusal alone, after its own Stop.
+Future<void> followTheVault(
+  BackgroundScheduler scheduler,
+  LiveController live, {
+  required bool notifying,
+  required BackgroundCheck cadence,
+  required bool changed,
+}) async {
+  if (!changed) return;
+  await rescheduleBackgroundCheck(
+    scheduler,
+    notifying: notifying,
+    seconds: cadence.seconds,
+  );
+  // With nothing to say there is nothing to watch for: Live follows
+  // the notice off, and back on.
+  await live.apply(wanted: notifying && cadence == BackgroundCheck.live);
 }
 
 /// The background cadence, off by default, persisted as
