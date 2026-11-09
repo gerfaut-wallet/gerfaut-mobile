@@ -1020,6 +1020,33 @@ class FakeBridge implements GerfautBridge {
     return load != null ? load(id) : 0;
   }
 
+  /// What [walletSyncStates] answers: where the core says each wallet's
+  /// sync stands, as a vault opened after a restart would. Empty unless
+  /// a test fills it.
+  List<WalletSync> syncStates = [];
+  int walletSyncStatesCalls = 0;
+
+  @override
+  Future<List<WalletSync>> walletSyncStates([Network? network]) async {
+    walletSyncStatesCalls += 1;
+    final ids = {
+      for (final wallet in wallets)
+        if (network == null || wallet.network == network) wallet.id,
+    };
+    return [
+      for (final state in syncStates)
+        if (network == null || ids.contains(state.walletId)) state,
+    ];
+  }
+
+  /// The fan-out of the core's sync changes: a test adds what the core
+  /// would say, and every listener gets it.
+  final StreamController<WalletSync> syncChangesController =
+      StreamController<WalletSync>.broadcast();
+
+  @override
+  Stream<WalletSync> syncChanges() => syncChangesController.stream;
+
   @override
   Future<SyncAllReport> syncAll([Network? network]) async {
     syncAllCalls += 1;

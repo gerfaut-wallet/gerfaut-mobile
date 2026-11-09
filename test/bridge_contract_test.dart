@@ -454,6 +454,7 @@ final Map<String, _Entry> _contract = {
   'WalletMeta': _reads(WalletMeta.fromJson),
   'WalletRef': _reads(WalletRef.fromJson),
   'WalletSnapshot': _reads(WalletSnapshot.fromJson),
+  'WalletSync': _reads(WalletSync.fromJson),
   'WatchLimits': _reads(WatchLimits.fromJson),
   'WatchLimitsChoice': _reads(WatchLimitsChoice.fromJson),
   'WatchState': _enum(WatchState.values, (v) => v.id, WatchState.fromId),

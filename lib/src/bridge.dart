@@ -239,6 +239,18 @@ abstract class GerfautBridge {
   /// is complete.
   Future<int> loadMoreHistory(String id);
   Future<SyncAllReport> syncAll([Network? network]);
+
+  /// Where the sync of each wallet of [network], or of every wallet,
+  /// stands, whoever started it. A failure the vault kept is still
+  /// there after a restart: the screens read this once when they start
+  /// listening to [syncChanges].
+  Future<List<WalletSync>> walletSyncStates([Network? network]);
+
+  /// Every change of where a wallet's sync stands, whoever started the
+  /// sync: the app, a rescan, a sync of every wallet, the live watch.
+  /// The first sync of a wallet to start says it syncs; the last one to
+  /// end says where it stands. Any number of isolates may listen.
+  Stream<WalletSync> syncChanges();
   Future<void> renameWallet(String id, String name);
 
   /// Changes the glyph a wallet shows next to its name.
@@ -569,6 +581,36 @@ class RustBridge implements GerfautBridge {
     return SyncAllReport.fromJson(
       _object(await rust.syncAll(network: network?.id)),
     );
+  }
+
+  @override
+  Future<List<WalletSync>> walletSyncStates([Network? network]) async {
+    final raw = await rust.walletSyncStates(network: network?.id);
+    return [for (final json in _list(raw)) ?WalletSync.fromJson(json)];
+  }
+
+  @override
+  Stream<WalletSync> syncChanges() async* {
+    await for (final raw in endsWithItsCall(rust.syncChanges())) {
+      final Object? decoded;
+      try {
+        decoded = jsonDecode(raw);
+      } on FormatException {
+        // One change that does not read must not end the stream.
+        continue;
+      }
+      if (decoded is! Map<String, dynamic>) continue;
+      // A manager not opened yet is said as the only payload: it ends
+      // the stream.
+      if (decoded['error'] is Map<String, dynamic>) _decode(raw);
+      final WalletSync? change;
+      try {
+        change = WalletSync.fromJson(decoded);
+      } catch (_) {
+        continue;
+      }
+      if (change != null) yield change;
+    }
   }
 
   @override
