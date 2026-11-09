@@ -965,6 +965,7 @@ void main() {
     // Polled every thirty seconds, until it confirms.
     bridge.onStatus = (_, _) => BroadcastStatus(
       txid: fakeTxid,
+      standing: BroadcastStanding.confirmed,
       found: true,
       confirmed: true,
       blockHeight: 850000,
@@ -1121,6 +1122,7 @@ void main() {
     bridge.onPreview = (_, _) => makePreview();
     bridge.onStatus = (_, _) => BroadcastStatus(
       txid: fakeTxid,
+      standing: BroadcastStanding.notSeen,
       found: false,
       confirmed: false,
       confirmations: 0,
@@ -1162,6 +1164,7 @@ void main() {
     bridge.onPreview = (_, _) => makePreview();
     bridge.onStatus = (_, _) => BroadcastStatus(
       txid: fakeTxid,
+      standing: BroadcastStanding.confirmed,
       found: true,
       confirmed: true,
       blockHeight: 4611010,
@@ -1190,6 +1193,7 @@ void main() {
     // And the count keeps its singular.
     bridge.onStatus = (_, _) => BroadcastStatus(
       txid: fakeTxid,
+      standing: BroadcastStanding.confirmed,
       found: true,
       confirmed: true,
       blockHeight: 4611010,

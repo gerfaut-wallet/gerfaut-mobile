@@ -255,6 +255,11 @@ final Map<String, _Entry> _contract = {
   'BranchState': _reads(BranchState.fromJson),
   'BranchTone': _enum(BranchTone.values, (v) => v.id, BranchTone.fromId),
   'BroadcastReport': _reads(BroadcastReport.fromJson),
+  'BroadcastStanding': _enum(
+    BroadcastStanding.values,
+    (v) => v.id,
+    BroadcastStanding.fromId,
+  ),
   'BroadcastStatus': _reads(BroadcastStatus.fromJson),
   'CachedTotals': const _Inside('WalletMeta', ['cached']),
   'CertificateReport': _reads(CertificateReport.fromJson),
@@ -473,8 +478,6 @@ const Map<String, String> _ignored = {
   'SyncStamp.server':
       'where the core starts the next sync of the wallet; the screens name '
       'the backend, which the stamp carries too',
-  'TxPreview.ready':
-      'the same as `readiness` being ready, which the page reads',
   'WalletMeta.complete_at':
       "when a sync last read every script: the core's own schedule of full "
       'reads',

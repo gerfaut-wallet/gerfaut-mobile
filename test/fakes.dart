@@ -1664,6 +1664,7 @@ class FakeBridge implements GerfautBridge {
     if (status != null) return status(network, hex);
     return BroadcastStatus(
       txid: fakeTxid,
+      standing: BroadcastStanding.inMempool,
       found: true,
       confirmed: false,
       confirmations: 0,
