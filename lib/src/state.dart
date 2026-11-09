@@ -171,6 +171,7 @@ enum Shown {
 /// around it.
 class VaultWrites {
   Future<void> _written = Future.value();
+  Future<void> _followed = Future.value();
 
   /// How many changes were asked, and the number of the last one asked
   /// of each preference, by its name.
@@ -181,6 +182,16 @@ class VaultWrites {
   Future<R> queue<R>(Future<R> Function() write) {
     final next = _written.then((_) => write());
     _written = next.then((_) {}, onError: (_) {});
+    return next;
+  }
+
+  /// Runs what follows a settled change, the periodic task and Live,
+  /// after what followed the changes settled before it: each step
+  /// awaits the platform, and two of them side by side could land a
+  /// start after the stop that came later.
+  Future<void> follow(Future<void> Function() step) {
+    final next = _followed.then((_) => step());
+    _followed = next.then((_) {}, onError: (_) {});
     return next;
   }
 

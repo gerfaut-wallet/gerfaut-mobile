@@ -378,19 +378,19 @@ class NotifyNewTxNotifier extends Notifier<bool> {
     final cadence = ref.read(backgroundCheckProvider.notifier);
     final scheduler = ref.read(backgroundSchedulerProvider);
     final live = ref.read(liveProvider.notifier);
+    final writes = ref.read(vaultWritesProvider);
     final preferences = ref.read(preferencesProvider.notifier);
     final before = preferences.stored.notifyNewTx;
     final shown = await preferences.offer(PreferencesChange(notifyNewTx: on));
-    // Overtaken, the newer change, settled after this one, brings the
-    // task and Live in line.
-    if (shown == Shown.overtaken) return;
     final notifying = preferences.stored.notifyNewTx;
     await followTheVault(
+      writes,
       scheduler,
       live,
+      shown: shown,
+      moved: notifying != before,
       notifying: notifying,
       cadence: cadence.stored,
-      changed: shown == Shown.kept || notifying != before,
     );
   }
 
@@ -483,45 +483,58 @@ class BackgroundCheckNotifier extends VaultPrefNotifier<BackgroundCheck> {
   Future<Shown> set(BackgroundCheck check) async {
     final scheduler = ref.read(backgroundSchedulerProvider);
     final live = ref.read(liveProvider.notifier);
+    final writes = ref.read(vaultWritesProvider);
     final preferences = ref.read(preferencesProvider.notifier);
     final before = stored;
     final shown = await super.set(check);
-    // Overtaken, the newer choice brings the task and Live in line.
-    if (shown == Shown.overtaken || !ref.mounted) return shown;
+    if (!ref.mounted) return shown;
     await followTheVault(
+      writes,
       scheduler,
       live,
+      shown: shown,
+      moved: stored != before,
       notifying: preferences.stored.notifyNewTx,
       cadence: stored,
-      changed: shown == Shown.kept || stored != before,
     );
     return shown;
   }
 }
 
 /// Brings the periodic task and Live in line with what the vault holds,
-/// once a change of the notice or of the cadence settled. Both read the
-/// vault as they start: asked before it holds the change, they would
-/// read the old one, and Live would stand down. A change the vault
-/// refused leaves them as they were, in line with it already, unless a
-/// change overtaken meanwhile did land in the vault ([changed]): Live
-/// is never started again for a refusal alone, after its own Stop.
+/// once a change of the notice or of the cadence settled ([shown]).
+/// Both read the vault as they start: asked before it holds the change,
+/// they would read the old one, and Live would stand down.
+///
+/// Overtaken, the newer change brings them in line. Refused, they stay
+/// as they were, in line with the vault already, unless a change
+/// overtaken meanwhile did land in it ([moved]): Live is never started
+/// again for a refusal alone, after its own Stop.
 Future<void> followTheVault(
+  VaultWrites writes,
   BackgroundScheduler scheduler,
   LiveController live, {
+  required Shown shown,
+  required bool moved,
   required bool notifying,
   required BackgroundCheck cadence,
-  required bool changed,
-}) async {
-  if (!changed) return;
-  await rescheduleBackgroundCheck(
-    scheduler,
-    notifying: notifying,
-    seconds: cadence.seconds,
-  );
-  // With nothing to say there is nothing to watch for: Live follows
-  // the notice off, and back on.
-  await live.apply(wanted: notifying && cadence == BackgroundCheck.live);
+}) {
+  final changed = switch (shown) {
+    Shown.kept => true,
+    Shown.refused => moved,
+    Shown.overtaken => false,
+  };
+  if (!changed) return Future.value();
+  return writes.follow(() async {
+    await rescheduleBackgroundCheck(
+      scheduler,
+      notifying: notifying,
+      seconds: cadence.seconds,
+    );
+    // With nothing to say there is nothing to watch for: Live follows
+    // the notice off, and back on.
+    await live.apply(wanted: notifying && cadence == BackgroundCheck.live);
+  });
 }
 
 /// The background cadence, off by default, persisted as

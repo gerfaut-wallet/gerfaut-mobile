@@ -513,7 +513,7 @@ class LiveController extends Notifier<LiveState> {
       return;
     }
     if (ref.read(disguiseProvider).disguised) {
-      await _fallBack();
+      await fallBack();
       return;
     }
     if (ref.read(notificationsRefusedProvider) || !await _hasWallets()) {
@@ -529,7 +529,7 @@ class LiveController extends Notifier<LiveState> {
       return;
     }
     if (!await platform.isWanted()) {
-      await _fallBack();
+      await fallBack();
       return;
     }
     if (!await platform.isRunning()) await platform.start();
@@ -610,10 +610,15 @@ class LiveController extends Notifier<LiveState> {
     return exempt;
   }
 
-  Future<void> _fallBack() async {
-    await ref
+  /// Live cannot run here, disguised or no longer wanted by the
+  /// platform: the cadence goes back to a periodic check, and the
+  /// service stops whatever the vault answers. Refused, the vault keeps
+  /// Live as the choice, and nothing would stop the one running.
+  Future<void> fallBack() async {
+    final shown = await ref
         .read(backgroundCheckProvider.notifier)
         .set(BackgroundCheck.quarterHour);
+    if (shown == Shown.refused) await apply(wanted: false);
   }
 
   void _onEvent(LiveEvent event) {
@@ -646,11 +651,10 @@ class LiveController extends Notifier<LiveState> {
   Future<void> _stopped() async {
     try {
       final settings = await ref.read(bridgeProvider).getSettings();
-      final stored = BackgroundCheck.fromStored(
-        settings.appPrefs[Pref.background],
-      );
-      if (stored != null && stored != ref.read(backgroundCheckProvider)) {
-        ref.read(backgroundCheckProvider.notifier).hydrate(stored.stored);
+      final stored = settings.appPrefs[Pref.background];
+      if (AppPref.background.decode(stored) !=
+          ref.read(backgroundCheckProvider)) {
+        ref.read(backgroundCheckProvider.notifier).hydrate(stored);
       }
     } catch (_) {
       // The next resume reads it again.
