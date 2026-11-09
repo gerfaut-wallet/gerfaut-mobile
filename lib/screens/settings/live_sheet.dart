@@ -68,9 +68,16 @@ class _LiveSheetState extends ConsumerState<LiveSheet> {
         setState(() => _step = _Step.notificationsRefused);
         return;
       }
-      await ref
+      final shown = await ref
           .read(backgroundCheckProvider.notifier)
           .set(BackgroundCheck.live);
+      if (!mounted) return;
+      // Refused, the setting is back at what the vault holds, and Live
+      // was never started: nothing is left to set up.
+      if (shown == Shown.refused) {
+        Navigator.of(context).pop(false);
+        return;
+      }
       final platform = ref.read(livePlatformProvider);
       final exempt = await platform.isBatteryExempt();
       _exempt = exempt;

@@ -105,7 +105,7 @@ Future<bool> runBackgroundCheck({
     // the service. While the watch runs it has everything covered, and
     // a full sync every quarter hour would only cost data and battery.
     // The watch lives in this same process, so the core can say.
-    if (prefs[Pref.background] == BackgroundCheck.live.stored &&
+    if (AppPrefs(prefs).background == BackgroundCheck.live &&
         (await bridge.liveStatus()).state != WatchState.off) {
       return true;
     }

@@ -375,20 +375,23 @@ class NotifyNewTxNotifier extends Notifier<bool> {
     }
     // Read before the change: it rebuilds this notifier, whose ref
     // answers nothing until then.
-    final cadence = ref.read(backgroundCheckProvider);
+    final cadence = ref.read(backgroundCheckProvider.notifier);
     final scheduler = ref.read(backgroundSchedulerProvider);
     final live = ref.read(liveProvider.notifier);
-    ref
-        .read(preferencesProvider.notifier)
-        .show(PreferencesChange(notifyNewTx: on));
-    await rescheduleBackgroundCheck(
+    final writes = ref.read(vaultWritesProvider);
+    final preferences = ref.read(preferencesProvider.notifier);
+    final before = preferences.stored.notifyNewTx;
+    final shown = await preferences.offer(PreferencesChange(notifyNewTx: on));
+    final notifying = preferences.stored.notifyNewTx;
+    await followTheVault(
+      writes,
       scheduler,
-      notifying: on,
-      seconds: cadence.seconds,
+      live,
+      shown: shown,
+      moved: notifying != before,
+      notifying: notifying,
+      cadence: cadence.stored,
     );
-    // With nothing to say there is nothing to watch for: Live follows
-    // the notice off, and back on.
-    await live.apply(wanted: on && cadence == BackgroundCheck.live);
   }
 
   /// Reads again whether Android lets the notices through, each time the
@@ -419,25 +422,11 @@ final notifyNewTxProvider = NotifierProvider<NotifyNewTxNotifier, bool>(
   NotifyNewTxNotifier.new,
 );
 
-class NotifyDetailsNotifier extends Notifier<bool> {
-  @override
-  bool build() => true;
-
-  void hydrate(String? stored) {
-    // On unless turned off: nothing stored, an install from before the
-    // switch included, names the wallet and says the amount.
-    state = stored != '0';
-  }
-
+class NotifyDetailsNotifier extends VaultPrefNotifier<bool> {
   /// Read fresh by every isolate at its next notice: nothing to start,
   /// stop or reschedule.
-  void set(bool on) {
-    state = on;
-    ref
-        .read(bridgeProvider)
-        .setAppPref(Pref.notifyDetails, on ? '1' : '0')
-        .catchError((_) {});
-  }
+  @override
+  VaultPref<bool> get pref => AppPref.notifyDetails;
 }
 
 /// The wallet's name and the amount in a notification, app lock or
@@ -482,35 +471,70 @@ enum BackgroundCheck {
   }
 }
 
-class BackgroundCheckNotifier extends Notifier<BackgroundCheck> {
+class BackgroundCheckNotifier extends VaultPrefNotifier<BackgroundCheck> {
   @override
-  BackgroundCheck build() => BackgroundCheck.off;
+  VaultPref<BackgroundCheck> get pref => AppPref.background;
 
-  void hydrate(String? stored) {
-    final check = BackgroundCheck.fromStored(stored);
-    if (check != null) state = check;
-  }
-
-  /// Persists the choice, brings the periodic task in line, and starts
-  /// or stops the Live service to match. Choosing Live from the settings
-  /// goes through the explanation sheet first; this is what the sheet
-  /// calls once the user has said yes.
-  Future<void> set(BackgroundCheck check) async {
-    state = check;
-    ref
-        .read(bridgeProvider)
-        .setAppPref(Pref.background, check.stored)
-        .catchError((_) {});
-    final notifying = ref.read(notifyNewTxProvider);
-    await rescheduleBackgroundCheck(
-      ref.read(backgroundSchedulerProvider),
-      notifying: notifying,
-      seconds: check.seconds,
+  /// Persists the choice, then brings the periodic task in line, and
+  /// starts or stops the Live service to match. Choosing Live from the
+  /// settings goes through the explanation sheet first; this is what
+  /// the sheet calls once the user has said yes.
+  @override
+  Future<Shown> set(BackgroundCheck check) async {
+    final scheduler = ref.read(backgroundSchedulerProvider);
+    final live = ref.read(liveProvider.notifier);
+    final writes = ref.read(vaultWritesProvider);
+    final preferences = ref.read(preferencesProvider.notifier);
+    final before = stored;
+    final shown = await super.set(check);
+    if (!ref.mounted) return shown;
+    await followTheVault(
+      writes,
+      scheduler,
+      live,
+      shown: shown,
+      moved: stored != before,
+      notifying: preferences.stored.notifyNewTx,
+      cadence: stored,
     );
-    await ref
-        .read(liveProvider.notifier)
-        .apply(wanted: notifying && check == BackgroundCheck.live);
+    return shown;
   }
+}
+
+/// Brings the periodic task and Live in line with what the vault holds,
+/// once a change of the notice or of the cadence settled ([shown]).
+/// Both read the vault as they start: asked before it holds the change,
+/// they would read the old one, and Live would stand down.
+///
+/// Overtaken, the newer change brings them in line. Refused, they stay
+/// as they were, in line with the vault already, unless a change
+/// overtaken meanwhile did land in it ([moved]): Live is never started
+/// again for a refusal alone, after its own Stop.
+Future<void> followTheVault(
+  VaultWrites writes,
+  BackgroundScheduler scheduler,
+  LiveController live, {
+  required Shown shown,
+  required bool moved,
+  required bool notifying,
+  required BackgroundCheck cadence,
+}) {
+  final changed = switch (shown) {
+    Shown.kept => true,
+    Shown.refused => moved,
+    Shown.overtaken => false,
+  };
+  if (!changed) return Future.value();
+  return writes.follow(() async {
+    await rescheduleBackgroundCheck(
+      scheduler,
+      notifying: notifying,
+      seconds: cadence.seconds,
+    );
+    // With nothing to say there is nothing to watch for: Live follows
+    // the notice off, and back on.
+    await live.apply(wanted: notifying && cadence == BackgroundCheck.live);
+  });
 }
 
 /// The background cadence, off by default, persisted as

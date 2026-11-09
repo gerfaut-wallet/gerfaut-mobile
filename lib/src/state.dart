@@ -127,21 +127,9 @@ enum ThemePref {
   }
 }
 
-class ThemeNotifier extends Notifier<ThemePref> {
+class ThemeNotifier extends VaultPrefNotifier<ThemePref> {
   @override
-  ThemePref build() => ThemePref.light;
-
-  void hydrate(String? stored) {
-    final pref = ThemePref.fromId(stored);
-    if (pref != null) state = pref;
-  }
-
-  void set(ThemePref pref) {
-    state = pref;
-    // Persisted in the encrypted vault; a write failure only loses the
-    // preference, never the UI change.
-    ref.read(bridgeProvider).setAppPref(Pref.theme, pref.id).catchError((_) {});
-  }
+  VaultPref<ThemePref> get pref => AppPref.theme;
 }
 
 final themeProvider = NotifierProvider<ThemeNotifier, ThemePref>(
@@ -175,49 +163,50 @@ enum Shown {
   overtaken,
 }
 
-/// The preferences both apps keep, as the screens show them. The core
-/// holds them, with their defaults and their rules; this holds what is
-/// on screen, and writes each change through, after the ones before it.
-class PreferencesNotifier extends Notifier<Preferences> {
-  /// The writes in flight, one after the other in the order they were
-  /// made, so that each answer is the vault after the change before it.
+/// The preference writes of the screens, the ones both apps keep and
+/// the ones of this app alone: one after the other, in the order they
+/// were asked, so that each answer is the vault after the change before
+/// it. The one way a change shown on screen settles. What the app
+/// writes on its own, never shown as a choice (the biometric lack), goes
+/// around it.
+class VaultWrites {
   Future<void> _written = Future.value();
+  Future<void> _followed = Future.value();
 
-  /// How many changes were shown, and the number of the last one asked
-  /// of each preference, by its name on the bridge.
+  /// How many changes were asked, and the number of the last one asked
+  /// of each preference, by its name.
   int _changes = 0;
   final Map<String, int> _lastAsked = {};
 
-  @override
-  Preferences build() => _untilTheVaultAnswers;
-
-  void hydrate(Preferences stored) => state = stored;
-
-  /// Writes [change] after the writes already on their way, and answers
-  /// what the vault holds then.
-  Future<Preferences> write(PreferencesChange change) {
-    final bridge = ref.read(bridgeProvider);
-    final next = _written.then((_) => bridge.setPreferences(change));
+  /// Runs [write] after the writes already on their way.
+  Future<R> queue<R>(Future<R> Function() write) {
+    final next = _written.then((_) => write());
     _written = next.then((_) {}, onError: (_) {});
     return next;
   }
 
-  /// Shows [change] at once and writes it through, a second time when
-  /// the vault refuses the first. A refusal only loses the preference,
-  /// never the change on screen: putting it back would undo what was
-  /// asked, amounts shown again under the eye. Completes with what
-  /// became of it, for a caller that has to say the vault did not take
-  /// it.
+  /// Runs what follows a settled change, the periodic task and Live,
+  /// after what followed the changes settled before it: each step
+  /// awaits the platform, and two of them side by side could land a
+  /// start after the stop that came later.
+  Future<void> follow(Future<void> Function() step) {
+    final next = _followed.then((_) => step());
+    _followed = next.then((_) {}, onError: (_) {});
+    return next;
+  }
+
+  /// Writes a change of the preferences [names] after the writes on
+  /// their way, a second time when the vault refuses the first, and
+  /// says what became of it.
   ///
   /// A change a newer one of the same preference overtook is never
   /// asked again: written after the newer one, it would undo it in the
-  /// vault while the screen shows the newer. Every change shown names
-  /// one preference; one that named more would be overtaken by a newer
-  /// change of any of them.
-  Future<Shown> show(PreferencesChange change) async {
-    state = change.applyTo(state);
+  /// vault while the screen shows the newer.
+  Future<Shown> persist(
+    List<String> names,
+    Future<void> Function() write,
+  ) async {
     final number = ++_changes;
-    final names = change.toJson().keys;
     for (final name in names) {
       _lastAsked[name] = number;
     }
@@ -225,13 +214,71 @@ class PreferencesNotifier extends Notifier<Preferences> {
     for (var attempt = 0; attempt < 2; attempt++) {
       if (attempt > 0 && overtaken()) return Shown.overtaken;
       try {
-        await write(change);
+        await queue(write);
         return overtaken() ? Shown.overtaken : Shown.kept;
       } catch (_) {
         // Asked once more; the second refusal is the caller's to say.
       }
     }
     return overtaken() ? Shown.overtaken : Shown.refused;
+  }
+}
+
+final vaultWritesProvider = Provider<VaultWrites>((ref) => VaultWrites());
+
+/// The preferences both apps keep, as the screens show them. The core
+/// holds them, with their defaults and their rules; this holds what is
+/// on screen, and writes each change through, after the ones before it.
+class PreferencesNotifier extends Notifier<Preferences> {
+  /// What the vault last said it holds: at start, then at each write
+  /// it took. A change it refused is put back at this.
+  Preferences _stored = _untilTheVaultAnswers;
+
+  @override
+  Preferences build() => _untilTheVaultAnswers;
+
+  void hydrate(Preferences stored) => state = _stored = stored;
+
+  /// Writes [change] after the writes already on their way, and answers
+  /// what the vault holds then.
+  Future<Preferences> write(PreferencesChange change) {
+    final write = _writer(change);
+    return ref.read(vaultWritesProvider).queue(write);
+  }
+
+  Future<Preferences> Function() _writer(PreferencesChange change) {
+    final bridge = ref.read(bridgeProvider);
+    return () async => _stored = await bridge.setPreferences(change);
+  }
+
+  /// Shows [change] at once and writes it through, a second time when
+  /// the vault refuses the first. A refusal leaves the change on
+  /// screen, which the mask needs: amounts never shown again under the
+  /// eye. Every other preference goes through [offer]. Completes
+  /// with what became of it, for a caller that has to say the vault did
+  /// not take it.
+  ///
+  /// Every change shown names one preference; one that named more would
+  /// be overtaken by a newer change of any of them.
+  Future<Shown> show(PreferencesChange change) {
+    state = change.applyTo(state);
+    final names = change.toJson().keys.toList();
+    return ref.read(vaultWritesProvider).persist(names, _writer(change));
+  }
+
+  /// What the vault last said it holds.
+  Preferences get stored => _stored;
+
+  /// Shows [change] and writes it, and puts it back at what the vault
+  /// holds when the vault refuses it twice: the background notices read
+  /// the vault, and a choice it does not hold would be on screen only.
+  /// Every preference but the mask, which stays on ([show]).
+  Future<Shown> offer(PreferencesChange change) async {
+    final shown = await show(change);
+    if (shown == Shown.refused && ref.mounted) {
+      state = change.heldIn(_stored).applyTo(state);
+    }
+    return shown;
   }
 
   /// Changes what the price is asked by, the currency or the source, and
@@ -252,6 +299,45 @@ class PreferencesNotifier extends Notifier<Preferences> {
       fiatCurrency: stored.fiatCurrency,
       priceSource: stored.priceSource,
     );
+  }
+}
+
+/// A preference of this app alone, as the screens show it. Each change
+/// is shown at once and written through; one the vault refuses twice
+/// goes back to what the vault holds. The periodic task, Live and the
+/// widgets read the vault, not the screen: a switch the vault does not
+/// hold would promise what none of them does.
+abstract class VaultPrefNotifier<T> extends Notifier<T> {
+  VaultPref<T> get pref;
+
+  /// What the vault last said it holds: at start, then at each write it
+  /// took.
+  late T _stored;
+
+  T get stored => _stored;
+
+  @override
+  T build() => _stored = pref.decode(null);
+
+  void hydrate(String? stored) => state = _stored = pref.decode(stored);
+
+  /// Shows [value] and writes it, and answers what became of it: a
+  /// refusal puts the screen back at what the vault holds.
+  Future<Shown> set(T value) async {
+    final shown = await persist(value);
+    if (shown == Shown.refused && ref.mounted) state = _stored;
+    return shown;
+  }
+
+  /// Shows [value] and writes it, and leaves it on screen whatever the
+  /// vault answers.
+  Future<Shown> persist(T value) {
+    state = value;
+    final bridge = ref.read(bridgeProvider);
+    return ref.read(vaultWritesProvider).persist([pref.key], () async {
+      await bridge.setAppPref(pref.key, pref.encode(value));
+      _stored = value;
+    });
   }
 }
 
@@ -310,7 +396,7 @@ class UnitNotifier extends Notifier<AmountUnit> {
 
   void set(AmountUnit unit) => ref
       .read(preferencesProvider.notifier)
-      .show(PreferencesChange(unit: unit));
+      .offer(PreferencesChange(unit: unit));
 }
 
 /// Display unit for every amount.
@@ -324,7 +410,7 @@ class FiatEnabledNotifier extends Notifier<bool> {
 
   void set(bool enabled) => ref
       .read(preferencesProvider.notifier)
-      .show(PreferencesChange(fiat: enabled));
+      .offer(PreferencesChange(fiat: enabled));
 }
 
 /// Fiat display.
@@ -372,7 +458,7 @@ class ExplorerAckNotifier extends Notifier<bool> {
 
   void set(bool acknowledged) => ref
       .read(preferencesProvider.notifier)
-      .show(PreferencesChange(explorerAck: acknowledged));
+      .offer(PreferencesChange(explorerAck: acknowledged));
 }
 
 /// External explorer warning acknowledged: the dialog is skipped when
