@@ -20,11 +20,19 @@ import 'tap_target.dart';
 /// decoder keeps up and at most fifteen times a second, the way the
 /// desktop scanner already works.
 class QrCamera extends StatefulWidget {
-  const QrCamera({super.key, required this.onFrame});
+  const QrCamera({
+    super.key,
+    required this.onFrame,
+    this.device = const QrCameraDevice(),
+  });
 
   /// Called with the text of each decoded frame, repeats included: the
   /// caller decides what to make of a frame it has already seen.
   final ValueChanged<String> onFrame;
+
+  /// Where the camera and the decoder come from: the phone's own, or a
+  /// stand-in that lets a test hold a start halfway.
+  final QrCameraDevice device;
 
   /// 1080p. A dense descriptor code carries around a hundred modules
   /// per side; 720p leaves too few pixels on each of them to survive a
@@ -70,6 +78,34 @@ class QrCamera extends StatefulWidget {
   State<QrCamera> createState() => _QrCameraState();
 }
 
+/// The phone's camera and decoder, opened the way the scanner needs
+/// them. The scanner reaches the hardware through this alone, so a test
+/// can stand in for it and drive starts, refusals and lifecycle changes
+/// without a sensor.
+class QrCameraDevice {
+  const QrCameraDevice();
+
+  /// Prepares the decoder for a stream of frames.
+  Future<void> startDecoder() => zxing.zx.startCameraProcessing();
+
+  /// Lets the decoder go.
+  void stopDecoder() => zxing.zx.stopCameraProcessing();
+
+  /// The cameras the phone offers.
+  Future<List<CameraDescription>> cameras() => availableCameras();
+
+  /// A controller for [camera], not yet initialized.
+  CameraController controller(CameraDescription camera) => CameraController(
+    camera,
+    QrCamera.resolution,
+    enableAudio: false,
+    // Named rather than left to the platform: the decoder reads a
+    // luminance plane, and a device streaming anything else would
+    // hand it bytes it cannot make sense of.
+    imageFormatGroup: ImageFormatGroup.yuv420,
+  );
+}
+
 /// What the camera is doing, and why it may be showing nothing.
 enum _Feed { starting, running, denied, unavailable }
 
@@ -94,6 +130,11 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
   /// app can be resumed before the previous start has finished.
   bool _starting = false;
 
+  /// A start was asked for while another was under way. The one under
+  /// way may be letting its sensor go because the app left; if the app
+  /// came back meanwhile, nothing else would open the camera again.
+  bool _startAgain = false;
+
   /// The app is in front. A start runs across several awaits, and the
   /// app may leave during any of them: a start that finds it gone lets
   /// the sensor go instead of streaming behind the launcher.
@@ -117,7 +158,7 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
     _closed = true;
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_stop());
-    zxing.zx.stopCameraProcessing();
+    widget.device.stopDecoder();
     super.dispose();
   }
 
@@ -143,11 +184,19 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
   bool get _abandoned => _closed || !mounted || !_inFront;
 
   Future<void> _start() async {
-    if (_starting || _abandoned) return;
+    if (_abandoned) return;
+    if (_starting) {
+      _startAgain = true;
+      return;
+    }
     _starting = true;
+    // The controller this start opened, until the scanner holds it. Any
+    // other way out of the start lets it go, below, so a failed or
+    // abandoned start never keeps the sensor.
+    CameraController? opened;
     try {
-      await zxing.zx.startCameraProcessing();
-      final cameras = await availableCameras();
+      await widget.device.startDecoder();
+      final cameras = await widget.device.cameras();
       if (_abandoned) return;
       if (cameras.isEmpty) {
         setState(() => _feed = _Feed.unavailable);
@@ -157,25 +206,12 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
         (camera) => camera.lensDirection == CameraLensDirection.back,
         orElse: () => cameras.first,
       );
-      final controller = CameraController(
-        back,
-        QrCamera.resolution,
-        enableAudio: false,
-        // Named rather than left to the platform: the decoder reads a
-        // luminance plane, and a device streaming anything else would
-        // hand it bytes it cannot make sense of.
-        imageFormatGroup: ImageFormatGroup.yuv420,
-      );
+      final controller = opened = widget.device.controller(back);
       await controller.initialize();
-      if (_abandoned) {
-        await controller.dispose();
-        return;
-      }
+      if (_abandoned) return;
       await controller.startImageStream(_onImage);
-      if (_abandoned) {
-        await controller.dispose();
-        return;
-      }
+      if (_abandoned) return;
+      opened = null;
       setState(() {
         _controller = controller;
         _torch = false;
@@ -192,7 +228,20 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
       if (_closed || !mounted) return;
       setState(() => _feed = _Feed.unavailable);
     } finally {
+      try {
+        await opened?.dispose();
+      } catch (_) {
+        // A controller the platform already tore down: nothing to let
+        // go, and the start must still end.
+      }
       _starting = false;
+      // Read once the start is over, when the wish still holds: a start
+      // that opened the camera has nothing left to do, one that let the
+      // sensor go starts over.
+      if (_startAgain) {
+        _startAgain = false;
+        if (_controller == null) unawaited(_start());
+      }
     }
   }
 
