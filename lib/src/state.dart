@@ -606,18 +606,242 @@ final autoSyncedProvider = NotifierProvider<Slot<bool>, bool>(
 
 // --- sync --------------------------------------------------------------
 
-/// Sentinel id marking a sync-all in progress.
-const String syncAllId = '*';
+/// Where the sync of one wallet stands, as the screens show it.
+sealed class WalletSyncState {
+  const WalletSyncState();
+}
 
-/// Tracks which wallets are syncing and invalidates what a sync changes.
-class SyncController extends Notifier<Set<String>> {
-  @override
-  Set<String> build() => const {};
+/// No sync of the wallet runs, and the last one did not fail.
+final class WalletSyncIdle extends WalletSyncState {
+  const WalletSyncIdle();
+}
 
+/// A sync of the wallet runs.
+final class WalletSyncing extends WalletSyncState {
+  const WalletSyncing({this.ticket, this.previousFailure});
+
+  /// The ticket this app gave the sync it started, which its answer
+  /// must still match to be heard; null for a sync the core said runs,
+  /// which only the core settles.
+  final int? ticket;
+
+  /// The failure the wallet showed before this sync: until it ends, the
+  /// figure on screen is still the one that failure left.
+  final String? previousFailure;
+}
+
+/// No sync of the wallet runs, and the last one failed, in these words.
+final class WalletSyncFailed extends WalletSyncState {
+  const WalletSyncFailed(this.message);
+
+  final String message;
+}
+
+/// Where the sync of every wallet stands, and the sync of every wallet
+/// this app runs, when one runs.
+class WalletSyncs {
+  const WalletSyncs({this.wallets = const {}, this.syncingAll});
+
+  /// By wallet id; a wallet not in it is idle.
+  final Map<String, WalletSyncState> wallets;
+
+  /// The ticket of the sync of every wallet this app runs, or null.
+  final int? syncingAll;
+
+  WalletSyncState of(String walletId) =>
+      wallets[walletId] ?? const WalletSyncIdle();
+
+  /// Whether a sync covers the wallet: one of its own, from any source,
+  /// or a sync of every wallet.
   bool isSyncing(String walletId) =>
-      state.contains(walletId) || state.contains(syncAllId);
+      syncingAll != null || of(walletId) is WalletSyncing;
 
-  bool get syncingAny => state.isNotEmpty;
+  /// Whether any sync runs at all.
+  bool get syncingAny =>
+      syncingAll != null || wallets.values.any((s) => s is WalletSyncing);
+
+  /// The failure the wallet shows: its last sync's, still shown while a
+  /// new one runs. Null when the last one did not fail.
+  String? failureOf(String walletId) => switch (of(walletId)) {
+    WalletSyncFailed(:final message) => message,
+    WalletSyncing(:final previousFailure) => previousFailure,
+    WalletSyncIdle() => null,
+  };
+
+  WalletSyncs _with(
+    Map<String, WalletSyncState> changed, {
+    int? Function()? syncingAll,
+  }) => WalletSyncs(
+    wallets: {...wallets, ...changed},
+    syncingAll: syncingAll == null ? this.syncingAll : syncingAll(),
+  );
+}
+
+/// What moves the sync of a wallet: a sync this app starts or ends, and
+/// what the core tells of every sync, whoever started it.
+sealed class SyncChange {
+  const SyncChange();
+
+  /// The wallets the change says something about.
+  Iterable<String> get walletIds;
+}
+
+/// This app starts a sync of one wallet, under [ticket].
+final class SyncStarted extends SyncChange {
+  const SyncStarted(this.walletId, this.ticket);
+
+  final String walletId;
+  final int ticket;
+
+  @override
+  Iterable<String> get walletIds => [walletId];
+}
+
+/// The answer of the sync this app started under [ticket]: [failure]
+/// in the screens' words, or null when it succeeded.
+final class SyncEnded extends SyncChange {
+  const SyncEnded(this.walletId, this.ticket, this.failure);
+
+  final String walletId;
+  final int ticket;
+  final String? failure;
+
+  @override
+  Iterable<String> get walletIds => [walletId];
+}
+
+/// This app starts a sync of every wallet of a network, under [ticket].
+final class SyncAllStarted extends SyncChange {
+  const SyncAllStarted(this.ticket);
+
+  final int ticket;
+
+  @override
+  Iterable<String> get walletIds => const [];
+}
+
+/// The answer of the sync of every wallet started under [ticket]: for
+/// each wallet it synced, its failure in the screens' words, or null.
+final class SyncAllEnded extends SyncChange {
+  const SyncAllEnded(this.ticket, this.outcomes);
+
+  final int ticket;
+  final Map<String, String?> outcomes;
+
+  @override
+  Iterable<String> get walletIds => outcomes.keys;
+}
+
+/// The core says a sync of the wallet runs.
+final class CoreSyncStarted extends SyncChange {
+  const CoreSyncStarted(this.walletId);
+
+  final String walletId;
+
+  @override
+  Iterable<String> get walletIds => [walletId];
+}
+
+/// The core says where the wallet stands once no sync of it runs:
+/// [failure] in the screens' words, or null when the last one did not
+/// fail.
+final class CoreSyncSettled extends SyncChange {
+  const CoreSyncSettled(this.walletId, this.failure);
+
+  final String walletId;
+  final String? failure;
+
+  @override
+  Iterable<String> get walletIds => [walletId];
+}
+
+/// The one way the sync of a wallet moves.
+///
+/// The core sees every sync, the app's own included, so what it tells
+/// wins: a sync it says runs takes the place of the app's ticket, and
+/// where it says a wallet stands settles it. The answer of a sync this
+/// app started is heard only while its ticket is still the wallet's;
+/// once replaced, it is stale and changes nothing. The answer of a
+/// sync of every wallet leaves alone a wallet whose own sync runs: that
+/// one says where it ends.
+WalletSyncs nextSyncs(WalletSyncs syncs, SyncChange change) {
+  WalletSyncState settled(String? failure) =>
+      failure == null ? const WalletSyncIdle() : WalletSyncFailed(failure);
+  switch (change) {
+    case SyncStarted(:final walletId, :final ticket):
+      if (syncs.isSyncing(walletId)) return syncs;
+      return syncs._with({
+        walletId: WalletSyncing(
+          ticket: ticket,
+          previousFailure: syncs.failureOf(walletId),
+        ),
+      });
+    case SyncEnded(:final walletId, :final ticket, :final failure):
+      final current = syncs.of(walletId);
+      if (current is! WalletSyncing || current.ticket != ticket) return syncs;
+      return syncs._with({walletId: settled(failure)});
+    case SyncAllStarted(:final ticket):
+      if (syncs.syncingAll != null) return syncs;
+      return syncs._with(const {}, syncingAll: () => ticket);
+    case SyncAllEnded(:final ticket, :final outcomes):
+      if (syncs.syncingAll != ticket) return syncs;
+      return syncs._with({
+        for (final MapEntry(key: id, value: failure) in outcomes.entries)
+          if (syncs.of(id) is! WalletSyncing) id: settled(failure),
+      }, syncingAll: () => null);
+    case CoreSyncStarted(:final walletId):
+      return syncs._with({
+        walletId: WalletSyncing(previousFailure: syncs.failureOf(walletId)),
+      });
+    case CoreSyncSettled(:final walletId, :final failure):
+      return syncs._with({walletId: settled(failure)});
+  }
+}
+
+/// The change a word of the core makes, its failure in the screens'
+/// words.
+SyncChange _toldBy(WalletSync told) => switch (told.state) {
+  CoreSyncRunning() => CoreSyncStarted(told.walletId),
+  CoreSyncIdle() => CoreSyncSettled(told.walletId, null),
+  CoreSyncFailed(:final kind, :final message) => CoreSyncSettled(
+    told.walletId,
+    reportedFailure(kind, message),
+  ),
+};
+
+/// Where the sync of each wallet stands, and the syncs this app runs;
+/// invalidates what a sync changes.
+class SyncController extends Notifier<WalletSyncs> {
+  StreamSubscription<WalletSync>? _changes;
+
+  /// The ticket of the last sync this app started.
+  int _tickets = 0;
+
+  /// For each reading of where the core says every wallet stands, still
+  /// unanswered: the wallets moved since it was asked, which its answer,
+  /// older, must leave alone.
+  final List<Set<String>> _seeding = [];
+
+  @override
+  WalletSyncs build() {
+    ref.onDispose(() {
+      _changes?.cancel();
+      _changes = null;
+    });
+    return const WalletSyncs();
+  }
+
+  bool isSyncing(String walletId) => state.isSyncing(walletId);
+
+  bool get syncingAny => state.syncingAny;
+
+  /// The only writer of the state.
+  void _apply(SyncChange change) {
+    for (final moved in _seeding) {
+      moved.addAll(change.walletIds);
+    }
+    state = nextSyncs(state, change);
+  }
 
   void _invalidateWallet(String? id) {
     ref.invalidate(walletsProvider);
@@ -638,32 +862,70 @@ class SyncController extends Notifier<Set<String>> {
     ref.invalidate(receiveProvider);
   }
 
+  /// Listens to what the core says of every sync, whoever started it,
+  /// then reads once where it says each wallet stands now: a failure
+  /// the vault kept from before a restart shows at once. Called when the
+  /// screens start listening to the core, and each time the app comes
+  /// back on screen; nothing more while it already listens.
+  Future<void> listen() async {
+    if (_changes != null) return;
+    final bridge = ref.read(bridgeProvider);
+    _changes = bridge.syncChanges().listen(
+      (told) => _apply(_toldBy(told)),
+      onError: (_) {},
+      // The core's side of it never ends but on a failure: the next
+      // time the app comes on screen listens anew, and reads again.
+      onDone: () => _changes = null,
+    );
+    final moved = <String>{};
+    _seeding.add(moved);
+    try {
+      final states = await bridge.walletSyncStates();
+      for (final told in states) {
+        if (!moved.contains(told.walletId)) _apply(_toldBy(told));
+      }
+    } catch (_) {
+      // The changes still come; a failure kept from before shows at the
+      // next reading.
+    } finally {
+      _seeding.remove(moved);
+    }
+  }
+
   /// A sync that did not start here changed this wallet: the live
   /// watch saw it move and synced it in the core.
   void refreshed(String walletId) => _invalidateWallet(walletId);
 
+  /// A sync that did not start here ended: the live watch saw the
+  /// wallet move and synced it in the core. [failure] is its failure in
+  /// the screens' words, or null when it succeeded.
+  void syncedElsewhere(String walletId, {String? failure}) =>
+      _apply(CoreSyncSettled(walletId, failure));
+
   /// Runs one wallet operation with the sync bookkeeping: the wallet is
-  /// marked in flight, its last failure is recorded or cleared, and
-  /// what the operation changed is refreshed. Null when one is already
-  /// running for that wallet.
+  /// marked in flight under a ticket of its own, the answer settles it
+  /// if that ticket is still the wallet's, and what the operation
+  /// changed is refreshed. Null when a sync already covers the wallet,
+  /// whoever started it, or a sync of every wallet runs.
   Future<SyncReport?> _run(
     String id,
     Future<SyncReport> Function(GerfautBridge bridge) operation,
   ) async {
-    if (state.contains(id)) return null;
-    state = {...state, id};
+    if (state.isSyncing(id)) return null;
+    final ticket = ++_tickets;
+    _apply(SyncStarted(id, ticket));
+    String? failure;
     try {
       final report = await operation(ref.read(bridgeProvider));
-      ref.read(syncErrorsProvider.notifier).clear(id);
       // Said after the fact, never in place of it: a notification that
       // cannot be posted must not look like a failed sync.
       await ref.read(syncAnnouncerProvider).announce([report]);
       return report;
     } catch (error) {
-      ref.read(syncErrorsProvider.notifier).set(id, syncFailure(error));
+      failure = syncFailure(error);
       rethrow;
     } finally {
-      state = {...state}..remove(id);
+      _apply(SyncEnded(id, ticket, failure));
       _invalidateWallet(id);
     }
   }
@@ -679,32 +941,30 @@ class SyncController extends Notifier<Set<String>> {
       _run(id, (bridge) => bridge.rescanWallet(id));
 
   /// Syncs every wallet of a network. Failures are reported per wallet
-  /// inside the returned report, never thrown.
+  /// inside the returned report, never thrown. Null while one already
+  /// runs.
   Future<SyncAllReport?> syncAll(Network network) async {
-    if (state.contains(syncAllId)) return null;
-    state = {...state, syncAllId};
+    if (state.syncingAll != null) return null;
+    final ticket = ++_tickets;
+    _apply(SyncAllStarted(ticket));
+    var outcomes = const <String, String?>{};
     try {
       final report = await ref.read(bridgeProvider).syncAll(network);
-      final errors = ref.read(syncErrorsProvider.notifier);
-      for (final sync in report.reports) {
-        errors.clear(sync.walletId);
-      }
-      for (final failure in report.failures) {
-        errors.set(
-          failure.walletId,
-          reportedFailure(failure.kind, failure.message),
-        );
-      }
+      outcomes = {
+        for (final sync in report.reports) sync.walletId: null,
+        for (final failure in report.failures)
+          failure.walletId: reportedFailure(failure.kind, failure.message),
+      };
       await ref.read(syncAnnouncerProvider).announce(report.reports);
       return report;
     } finally {
-      state = {...state}..remove(syncAllId);
+      _apply(SyncAllEnded(ticket, outcomes));
       _invalidateWallet(null);
     }
   }
 }
 
-final syncProvider = NotifierProvider<SyncController, Set<String>>(
+final syncProvider = NotifierProvider<SyncController, WalletSyncs>(
   SyncController.new,
 );
 
@@ -735,24 +995,11 @@ final historyProvider = NotifierProvider<HistoryController, Set<String>>(
   HistoryController.new,
 );
 
-/// Last sync failure per wallet id, cleared on the next success.
-/// A failed sync is stated with its reason: silence would look like
-/// health.
-class SyncErrorsNotifier extends Notifier<Map<String, String>> {
-  @override
-  Map<String, String> build() => const {};
-
-  void set(String walletId, String message) {
-    state = {...state, walletId: message};
-  }
-
-  void clear(String walletId) {
-    if (!state.containsKey(walletId)) return;
-    state = {...state}..remove(walletId);
-  }
-}
-
-final syncErrorsProvider =
-    NotifierProvider<SyncErrorsNotifier, Map<String, String>>(
-      SyncErrorsNotifier.new,
-    );
+/// Last sync failure per wallet id, cleared on the next success, and
+/// still there while a new sync runs. A failed sync is stated with its
+/// reason: silence would look like health. Read from [syncProvider],
+/// which alone writes it.
+final syncErrorsProvider = Provider<Map<String, String>>((ref) {
+  final syncs = ref.watch(syncProvider);
+  return {for (final id in syncs.wallets.keys) id: ?syncs.failureOf(id)};
+});
