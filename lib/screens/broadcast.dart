@@ -79,6 +79,49 @@ const String _unreadableTransaction =
 /// the core's words when it had any.
 typedef _InputError = ({String headline, String? detail});
 
+/// Where the screen stands, from the input to the transaction sent. One
+/// value, so the steps cannot overlap: a preview is never on screen
+/// under a refusal of the input, nor a send under a decoding.
+sealed class _BroadcastFlow {
+  const _BroadcastFlow();
+}
+
+/// The input, and what was wrong with the last one when something was.
+final class _Composing extends _BroadcastFlow {
+  const _Composing([this.error]);
+
+  final _InputError? error;
+}
+
+/// The core is reading the input.
+final class _Decoding extends _BroadcastFlow {
+  const _Decoding();
+}
+
+/// The preview, with the node's refusal, verbatim, when a send failed.
+final class _Previewing extends _BroadcastFlow {
+  const _Previewing(this.preview, [this.refusal]);
+
+  final TxPreview preview;
+  final String? refusal;
+}
+
+/// The transaction is on its way to the backend.
+final class _Sending extends _BroadcastFlow {
+  const _Sending(this.preview);
+
+  final TxPreview preview;
+}
+
+/// The backend took it: the preview stays, under the card that follows
+/// it.
+final class _Sent extends _BroadcastFlow {
+  const _Sent(this.preview, this.record);
+
+  final TxPreview preview;
+  final RecentBroadcast record;
+}
+
 /// Broadcast a transaction somebody else signed: paste, import or scan
 /// it, read what it does, then hand it to the network of the workspace.
 /// Gerfaut never signs and never edits the transaction; the preview
@@ -96,14 +139,13 @@ class BroadcastScreen extends ConsumerStatefulWidget {
 
 class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
   final _inputController = TextEditingController();
-  bool _decoding = false;
-  _InputError? _inputError;
-  TxPreview? _preview;
-  bool _sending = false;
+  _BroadcastFlow _flow = const _Composing();
 
-  /// The node's refusal, verbatim.
-  String? _sendError;
-  RecentBroadcast? _sent;
+  /// Taken by every move the user makes. An answer from the core comes
+  /// back with the ticket of the move that asked for it, and lands only
+  /// if the user has not moved since: a preview or a send the user left
+  /// behind never comes back on screen.
+  int _ticket = 0;
 
   @override
   void dispose() {
@@ -111,40 +153,45 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     super.dispose();
   }
 
+  /// The one way the screen moves. A move of the user's takes a new
+  /// ticket; an answer passes the ticket it was asked under as
+  /// [answering], and is dropped once another move came after.
+  void _go(_BroadcastFlow next, {int? answering}) {
+    if (!mounted || (answering != null && answering != _ticket)) return;
+    setState(() {
+      if (answering == null) _ticket += 1;
+      _flow = next;
+    });
+  }
+
+  /// What was wrong with the input, said under the field.
+  void _refuseInput(String headline) =>
+      _go(_Composing((headline: headline, detail: null)));
+
   Future<void> _decode() async {
     final network = ref.read(settingsProvider).value?.activeNetwork;
     final input = _inputController.text.trim();
-    if (network == null || input.isEmpty || _decoding) return;
-    setState(() {
-      _decoding = true;
-      _inputError = null;
-    });
+    if (network == null || input.isEmpty || _flow is! _Composing) return;
+    _go(const _Decoding());
+    final ticket = _ticket;
     try {
       final preview = await ref
           .read(bridgeProvider)
           .previewTransaction(input, network);
-      if (!mounted) return;
-      setState(() {
-        _preview = preview;
-        _sendError = null;
-        _sent = null;
-      });
+      _go(_Previewing(preview), answering: ticket);
     } on BridgeException catch (error) {
-      if (!mounted) return;
-      setState(
-        () => _inputError =
-            error.kind == 'invalid_input' || error.kind == 'too_many_parts'
-            ? (headline: _unreadableTransaction, detail: error.message)
-            : error.kind == 'private_material'
-            ? (headline: privateKeyNotATransaction, detail: null)
-            : (headline: error.message, detail: null),
+      _go(
+        _Composing(
+          error.kind == 'invalid_input' || error.kind == 'too_many_parts'
+              ? (headline: _unreadableTransaction, detail: error.message)
+              : error.kind == 'private_material'
+              ? (headline: privateKeyNotATransaction, detail: null)
+              : (headline: error.message, detail: null),
+        ),
+        answering: ticket,
       );
     } catch (error) {
-      if (mounted) {
-        setState(() => _inputError = (headline: '$error', detail: null));
-      }
-    } finally {
-      if (mounted) setState(() => _decoding = false);
+      _go(_Composing((headline: '$error', detail: null)), answering: ticket);
     }
   }
 
@@ -168,20 +215,11 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
         cameUp: (error) => error is FileReadException,
       );
     } on FileReadException catch (error) {
-      if (mounted) {
-        setState(() => _inputError = (headline: error.message, detail: null));
-      }
+      _refuseInput(error.message);
       return;
     } catch (_) {
       // No picker came up.
-      if (mounted) {
-        setState(
-          () => _inputError = (
-            headline: 'No app on this phone can open a file to read.',
-            detail: null,
-          ),
-        );
-      }
+      _refuseInput('No app on this phone can open a file to read.');
       return;
     }
     if (file == null) return;
@@ -189,14 +227,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     // further than that: a larger file comes with its size and nothing
     // else.
     if (await file.length() > _maxTransactionBytes) {
-      if (mounted) {
-        setState(
-          () => _inputError = (
-            headline: 'This file is too large to be a transaction.',
-            detail: null,
-          ),
-        );
-      }
+      _refuseInput('This file is too large to be a transaction.');
       return;
     }
     final text = transactionTextOf(await file.readAsBytes());
@@ -222,16 +253,16 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
 
   Future<void> _confirmAndSend(TxPreview preview) async {
     final hex = preview.hex;
-    if (hex == null || _sending) return;
+    if (hex == null || _flow is! _Previewing) return;
+    final asked = _ticket;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => _ConfirmDialog(preview: preview),
     );
-    if (confirmed != true || !mounted) return;
-    setState(() {
-      _sending = true;
-      _sendError = null;
-    });
+    // A yes counts for the preview it was asked about, on screen still.
+    if (confirmed != true || !mounted || asked != _ticket) return;
+    _go(_Sending(preview));
+    final ticket = _ticket;
     // Held before the await: the vault keeps a transaction sent while
     // the lock took the screen away, and the list is read again all the
     // same, so its status is followed. `ref` dies with the screen.
@@ -248,42 +279,27 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
         at: report.at,
       );
       recent.reload();
-      if (!mounted) return;
-      setState(() => _sent = record);
+      _go(_Sent(preview, record), answering: ticket);
     } on BridgeException catch (error) {
-      if (mounted) setState(() => _sendError = error.message);
+      _go(_Previewing(preview, error.message), answering: ticket);
     } catch (error) {
-      if (mounted) setState(() => _sendError = '$error');
-    } finally {
-      if (mounted) setState(() => _sending = false);
+      _go(_Previewing(preview, '$error'), answering: ticket);
     }
   }
 
   /// Back to the input, keeping the text so it can be corrected.
-  void _back() {
-    setState(() {
-      _preview = null;
-      _sendError = null;
-      _sent = null;
-    });
-  }
+  void _back() => _go(const _Composing());
 
   /// A fresh start after a broadcast.
   void _another() {
     _inputController.clear();
-    setState(() {
-      _preview = null;
-      _inputError = null;
-      _sendError = null;
-      _sent = null;
-    });
+    _go(const _Composing());
   }
 
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final network = ref.watch(settingsProvider).value?.activeNetwork;
-    final preview = _preview;
     return Scaffold(
       appBar: GerfautAppBar.text('Broadcast'),
       body: SafeArea(
@@ -294,9 +310,21 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                   style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                 ),
               )
-            : preview == null
-            ? _buildInputStep(tokens, network)
-            : _buildPreviewStep(tokens, preview),
+            : switch (_flow) {
+                _Composing() || _Decoding() => _buildInputStep(tokens, network),
+                _Previewing(:final preview, :final refusal) =>
+                  _buildPreviewStep(tokens, preview, refusal: refusal),
+                _Sending(:final preview) => _buildPreviewStep(
+                  tokens,
+                  preview,
+                  sending: true,
+                ),
+                _Sent(:final preview, :final record) => _buildPreviewStep(
+                  tokens,
+                  preview,
+                  sent: record,
+                ),
+              },
       ),
     );
   }
@@ -305,6 +333,11 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     final recent =
         ref.watch(recentBroadcastsProvider(network)).value ??
         const <RecentBroadcast>[];
+    final decoding = _flow is _Decoding;
+    final inputError = switch (_flow) {
+      _Composing(:final error) => error,
+      _ => null,
+    };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -331,7 +364,10 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                   style: tokens.data.copyWith(fontSize: tokens.body.fontSize),
                   // Typing again answers a refusal: it goes at the first
                   // keystroke, and the hint comes back in its place.
-                  onChanged: (_) => setState(() => _inputError = null),
+                  // The rebuild also wakes Preview once there is text.
+                  onChanged: (_) {
+                    if (_flow is _Composing) _go(const _Composing());
+                  },
                   decoration: InputDecoration(
                     hintText: 'cHNidP8B… (base64) or 02000000… (hex)',
                     hintStyle: tokens.data.copyWith(
@@ -361,7 +397,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
               Stack(
                 children: [
                   Visibility(
-                    visible: _inputError == null,
+                    visible: inputError == null,
                     maintainSize: true,
                     maintainAnimation: true,
                     maintainState: true,
@@ -372,7 +408,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                       style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                     ),
                   ),
-                  if (_inputError case final error?)
+                  if (inputError case final error?)
                     _InputErrorLine(error: error, tokens: tokens),
                 ],
               ),
@@ -385,12 +421,12 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                   SecondaryButton(
                     label: 'Import a file',
                     icon: LucideIcons.fileUp,
-                    onPressed: _decoding ? null : _importFile,
+                    onPressed: decoding ? null : _importFile,
                   ),
                   SecondaryButton(
                     label: 'Scan a QR code',
                     icon: LucideIcons.scanLine,
-                    onPressed: _decoding ? null : _scan,
+                    onPressed: decoding ? null : _scan,
                   ),
                 ],
               ),
@@ -413,9 +449,9 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
         Padding(
           padding: const EdgeInsets.all(GerfautSpacing.md),
           child: PrimaryButton(
-            label: _decoding ? 'Decoding…' : 'Preview',
+            label: decoding ? 'Decoding…' : 'Preview',
             expand: true,
-            busy: _decoding,
+            busy: decoding,
             onPressed: _inputController.text.trim().isEmpty ? null : _decode,
           ),
         ),
@@ -423,8 +459,13 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     );
   }
 
-  Widget _buildPreviewStep(GerfautTokens tokens, TxPreview preview) {
-    final sent = _sent;
+  Widget _buildPreviewStep(
+    GerfautTokens tokens,
+    TxPreview preview, {
+    String? refusal,
+    bool sending = false,
+    RecentBroadcast? sent,
+  }) {
     // A coin nobody confirmed leaves every figure resting on it the
     // PSBT's word: the inputs total and the fee wear the mark, so the
     // number is never read as the chain's.
@@ -501,8 +542,8 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (_sendError != null) ...[
-                _RefusalBlock(message: _sendError!, tokens: tokens),
+              if (refusal != null) ...[
+                _RefusalBlock(message: refusal, tokens: tokens),
                 const SizedBox(height: GerfautSpacing.md),
               ],
               if (sent == null)
@@ -510,15 +551,15 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                   children: [
                     SecondaryButton(
                       label: 'Back',
-                      onPressed: _sending ? null : _back,
+                      onPressed: sending ? null : _back,
                     ),
                     const SizedBox(width: GerfautSpacing.sm),
                     Expanded(
                       child: PrimaryButton(
-                        label: _sending ? 'Sending…' : 'Broadcast',
+                        label: sending ? 'Sending…' : 'Broadcast',
                         icon: LucideIcons.radio,
                         expand: true,
-                        busy: _sending,
+                        busy: sending,
                         // The state the pill reads, not a second one.
                         onPressed: preview.readiness.sendable
                             ? () => _confirmAndSend(preview)
@@ -1425,10 +1466,75 @@ class _StatusCard extends ConsumerStatefulWidget {
   ConsumerState<_StatusCard> createState() => _StatusCardState();
 }
 
+/// Where the card's checks stand. The answer before a check stays on
+/// screen while the next one runs, and a failure keeps the last answer
+/// so it can say what that answer was, and when.
+sealed class _CheckState {
+  const _CheckState();
+
+  /// The last thing the backend said, if it ever answered.
+  BroadcastStatus? get lastKnown;
+}
+
+/// A check on its way, over what the card showed before it: nothing
+/// before the first answer.
+final class _Checking extends _CheckState {
+  const _Checking([this.previous]);
+
+  final _Settled? previous;
+
+  @override
+  BroadcastStatus? get lastKnown => previous?.lastKnown;
+}
+
+/// Where a check ended: what the card shows between two checks, and
+/// under the next one.
+sealed class _Settled extends _CheckState {
+  const _Settled();
+}
+
+/// The backend's answer to the latest check.
+final class _Known extends _Settled {
+  const _Known(this.status);
+
+  final BroadcastStatus status;
+
+  @override
+  BroadcastStatus? get lastKnown => status;
+}
+
+/// The latest check failed: why, in the words of the error, and the
+/// answer before it, when there was one.
+final class _Failed extends _Settled {
+  const _Failed(this.error, this.last);
+
+  final String error;
+  final BroadcastStatus? last;
+
+  @override
+  BroadcastStatus? get lastKnown => last;
+}
+
+/// The answer a failed check leaves behind, dated, in the words of the
+/// pill it would have worn.
+String _lastAnswer(BroadcastStatus last) {
+  final when = 'Last answer ${relativeTime(last.at)}';
+  return switch (last.standing) {
+    BroadcastStanding.confirmed =>
+      '$when: confirmed, ${groupThousands('${last.confirmations}')} '
+          'confirmation${last.confirmations == 1 ? '' : 's'}.',
+    BroadcastStanding.inMempool => '$when: waiting to be mined.',
+    BroadcastStanding.notSeen =>
+      '$when: ${last.backend} did not have this transaction.',
+  };
+}
+
 class _StatusCardState extends ConsumerState<_StatusCard> {
-  BroadcastStatus? _status;
-  String? _error;
-  bool _checking = true;
+  _CheckState _state = const _Checking();
+
+  /// Taken by every check that starts: an answer that comes back under
+  /// an older one was overtaken, and is dropped.
+  int _ticket = 0;
   Timer? _timer;
 
   @override
@@ -1443,36 +1549,43 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
     super.dispose();
   }
 
-  Future<void> _check() async {
-    _timer?.cancel();
-    if (mounted && !_checking) setState(() => _checking = true);
-    try {
-      final status = await ref
-          .read(bridgeProvider)
-          .transactionStatus(widget.record.network, widget.record.hex);
-      if (!mounted) return;
-      setState(() {
-        _status = status;
-        _error = null;
-      });
-    } on BridgeException catch (error) {
-      if (mounted) setState(() => _error = error.message);
-    } catch (error) {
-      if (mounted) setState(() => _error = '$error');
-    } finally {
-      if (mounted) {
-        setState(() => _checking = false);
-        _arm();
-      }
-    }
+  /// The one way the card moves, and only for the check holding the
+  /// current ticket.
+  void _go(_CheckState next, {required int ticket}) {
+    if (!mounted || ticket != _ticket) return;
+    setState(() => _state = next);
   }
 
-  /// Schedules the next check unless the transaction has settled.
+  Future<void> _check() async {
+    _timer?.cancel();
+    final ticket = ++_ticket;
+    // The card is born checking, with nothing before it to keep.
+    if (_state case final _Settled settled) {
+      _go(_Checking(settled), ticket: ticket);
+    }
+    _Settled answer;
+    try {
+      answer = _Known(
+        await ref
+            .read(bridgeProvider)
+            .transactionStatus(widget.record.network, widget.record.hex),
+      );
+    } on BridgeException catch (error) {
+      answer = _Failed(error.message, _state.lastKnown);
+    } catch (error) {
+      answer = _Failed('$error', _state.lastKnown);
+    }
+    _go(answer, ticket: ticket);
+    if (mounted && ticket == _ticket) _arm();
+  }
+
+  /// Schedules the next check unless the transaction has settled, by
+  /// the last answer the backend gave: a failure does not unsettle it.
   void _arm() {
     _timer?.cancel();
-    final status = _status;
+    final status = _state.lastKnown;
     if (status != null &&
-        status.confirmed &&
+        status.standing == BroadcastStanding.confirmed &&
         status.confirmations >= _settledConfirmations) {
       return;
     }
@@ -1500,8 +1613,10 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
     ref.watch(relativeClockProvider);
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final record = widget.record;
-    final status = _status;
-    final error = _error;
+    final shown = switch (_state) {
+      _Checking(:final previous) => previous,
+      final _Settled settled => settled,
+    };
     // The pill says where the transaction stands, in a word or three;
     // the lines under it say what that means, when a word is not
     // enough. Which host holds it, that the mempool is where it sits
@@ -1516,59 +1631,59 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
       IconData icon,
       String label,
       List<String> lines,
-    ) = switch (status) {
-      null when error != null => (
-        _Tone.pending,
-        LucideIcons.triangleAlert,
-        'Could not check',
-        [error],
-      ),
+    ) = switch (shown) {
       null => (
         _Tone.neutral,
         LucideIcons.hourglass,
         'Checking…',
         const <String>[],
       ),
-      BroadcastStatus(
-        confirmed: true,
-        :final blockHeight,
-        :final confirmations,
-        :final at,
-      ) =>
-        (
+      // A failed check never wears the last answer's pill: that read as
+      // a transaction still waiting while nobody could tell. The last
+      // answer comes after the error, dated, so it is read as past.
+      _Failed(:final error, :final last) => (
+        _Tone.pending,
+        LucideIcons.triangleAlert,
+        'Could not check',
+        [error, if (last != null) _lastAnswer(last)],
+      ),
+      _Known(:final status) => switch (status.standing) {
+        BroadcastStanding.confirmed => (
           _Tone.confirmed,
           LucideIcons.check,
           'Confirmed',
           [
-            if (blockHeight != null)
-              'Mined in block ${groupThousands('$blockHeight')}',
-            '${groupThousands('$confirmations')} '
-                'confirmation${confirmations == 1 ? '' : 's'} '
-                'as of ${relativeTime(at)}',
+            if (status.blockHeight case final height?)
+              'Mined in block ${groupThousands('$height')}',
+            '${groupThousands('${status.confirmations}')} '
+                'confirmation${status.confirmations == 1 ? '' : 's'} '
+                'as of ${relativeTime(status.at)}',
           ],
         ),
-      BroadcastStatus(found: false, :final backend) => (
-        _Tone.pending,
-        LucideIcons.eyeOff,
-        'Not seen',
-        [
-          '$backend does not have this transaction. It may not have '
-              'been relayed, or it was dropped or replaced. Broadcasting '
-              'it again does no harm.',
-        ],
-      ),
-      _ => (
-        _Tone.pending,
-        LucideIcons.hourglass,
-        'Waiting to be mined',
-        const <String>[],
-      ),
+        BroadcastStanding.notSeen => (
+          _Tone.pending,
+          LucideIcons.eyeOff,
+          'Not seen',
+          [
+            '${status.backend} does not have this transaction. It may not '
+                'have been relayed, or it was dropped or replaced. '
+                'Broadcasting it again does no harm.',
+          ],
+        ),
+        BroadcastStanding.inMempool => (
+          _Tone.pending,
+          LucideIcons.hourglass,
+          'Waiting to be mined',
+          const <String>[],
+        ),
+      },
     };
     final explorer = explorerTxUrl(record.network, record.txid);
-    final checked = _checking
+    final lastKnown = _state.lastKnown;
+    final checked = _state is _Checking
         ? 'Checking…'
-        : status != null
-        ? 'Checked ${relativeTime(status.at)}'
+        : lastKnown != null
+        ? 'Checked ${relativeTime(lastKnown.at)}'
         : 'Not checked yet';
 
     // A card like every other card. The state lives in the pill, not in
@@ -1634,7 +1749,7 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
               ),
               IconButton(
                 tooltip: 'Check again',
-                onPressed: _checking ? null : _check,
+                onPressed: _state is _Checking ? null : _check,
                 iconSize: 16,
                 color: tokens.textMuted,
                 icon: const Icon(LucideIcons.refreshCw),

@@ -2754,8 +2754,7 @@ class TxPreview {
   final bool rbf;
 
   /// Where it stands: the one thing the readiness pill and the Broadcast
-  /// button both read. The core also sends `ready`, derived from it,
-  /// which the app leaves alone.
+  /// button both read.
   final TxReadiness readiness;
   final List<TxWarning> warnings;
 
@@ -2788,10 +2787,28 @@ class BroadcastReport {
   final int at;
 }
 
+/// Where a sent transaction stands, as the core reads the backend's
+/// answer: one value, so no screen works it out again from [found] and
+/// [confirmed].
+enum BroadcastStanding {
+  /// The backend does not know it: never relayed, dropped or replaced.
+  notSeen('not_seen'),
+  inMempool('in_mempool'),
+  confirmed('confirmed');
+
+  const BroadcastStanding(this.id);
+
+  final String id;
+
+  static BroadcastStanding fromId(String id) =>
+      BroadcastStanding.values.firstWhere((s) => s.id == id);
+}
+
 /// Where a broadcast transaction stands, as the backend sees it.
 class BroadcastStatus {
   const BroadcastStatus({
     required this.txid,
+    required this.standing,
     required this.found,
     required this.confirmed,
     required this.confirmations,
@@ -2803,6 +2820,7 @@ class BroadcastStatus {
   factory BroadcastStatus.fromJson(Map<String, dynamic> json) {
     return BroadcastStatus(
       txid: json['txid'] as String,
+      standing: BroadcastStanding.fromId(json['standing'] as String),
       found: json['found'] as bool,
       confirmed: json['confirmed'] as bool,
       blockHeight: json['block_height'] as int?,
@@ -2813,6 +2831,10 @@ class BroadcastStatus {
   }
 
   final String txid;
+
+  /// What the pill says. The core keeps it in step with the fields
+  /// below, which are read for the details only.
+  final BroadcastStanding standing;
 
   /// Whether the backend knows the transaction at all: it can drop out
   /// of the mempool, evicted or replaced.
