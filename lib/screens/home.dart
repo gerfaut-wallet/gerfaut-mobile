@@ -98,7 +98,10 @@ class HomeScreen extends ConsumerWidget {
           // the bar: syncs every wallet of the network at once, and
           // turns for as long as any of them is still working.
           SyncButton(
-            syncing: syncs.syncingAny,
+            syncing: syncs.syncingAnyOf([
+              for (final wallet in wallets.value ?? const <WalletMeta>[])
+                wallet.id,
+            ]),
             onPressed: network == null || (wallets.value?.isEmpty ?? true)
                 ? null
                 : () => sync.syncAll(network),

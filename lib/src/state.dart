@@ -656,9 +656,10 @@ class WalletSyncs {
   bool isSyncing(String walletId) =>
       syncingAll != null || of(walletId) is WalletSyncing;
 
-  /// Whether any sync runs at all.
-  bool get syncingAny =>
-      syncingAll != null || wallets.values.any((s) => s is WalletSyncing);
+  /// Whether a sync covers any of `walletIds`, the wallets on screen:
+  /// the core also says the syncs of other networks' wallets.
+  bool syncingAnyOf(Iterable<String> walletIds) =>
+      syncingAll != null || walletIds.any(isSyncing);
 
   /// The failure the wallet shows: its last sync's, still shown while a
   /// new one runs. Null when the last one did not fail.

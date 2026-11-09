@@ -90,7 +90,7 @@ void main() {
       final syncs = container.read(syncProvider);
       expect(syncs.isSyncing('w2'), isTrue);
       expect(syncs.isSyncing('w1'), isFalse);
-      expect(syncs.syncingAny, isTrue);
+      expect(syncs.syncingAnyOf(['w1', 'w2']), isTrue);
       // Running from the core, w1 can still be synced on its own; w2
       // cannot, whoever started its sync.
       expect(
@@ -105,7 +105,25 @@ void main() {
 
       bridge.syncChangesController.add(_told('w2', const CoreSyncIdle()));
       await pumpEventQueue();
-      expect(container.read(syncProvider).syncingAny, isFalse);
+      expect(container.read(syncProvider).syncingAnyOf(['w1', 'w2']), isFalse);
+    });
+
+    test('a sync of a wallet of another network does not turn the sync '
+        'button of this one', () async {
+      final bridge = FakeBridge(
+        wallets: [makeMeta(id: 'w1', name: 'Savings')],
+      );
+      final container = _container(bridge);
+      container.read(syncProvider.notifier).listen();
+      await pumpEventQueue();
+
+      // w9 lives on another network: the core says its syncs all the same.
+      bridge.syncChangesController.add(_told('w9', const CoreSyncRunning()));
+      await pumpEventQueue();
+
+      final syncs = container.read(syncProvider);
+      expect(syncs.isSyncing('w9'), isTrue);
+      expect(syncs.syncingAnyOf(['w1']), isFalse);
     });
 
     testWidgets("the page of a wallet does not say another wallet's sync", (
@@ -233,7 +251,7 @@ void main() {
 
         final syncs = container.read(syncProvider);
         expect(syncs.syncingAll, isNotNull);
-        expect(syncs.syncingAny, isTrue);
+        expect(syncs.syncingAnyOf(const ['w1']), isTrue);
         expect(syncs.wallets, isEmpty);
         expect(syncs.isSyncing('w1'), isTrue);
         expect(
@@ -243,7 +261,10 @@ void main() {
 
         bridge.gate.complete();
         await all;
-        expect(container.read(syncProvider).syncingAny, isFalse);
+        expect(
+          container.read(syncProvider).syncingAnyOf(const ['w1']),
+          isFalse,
+        );
         expect(container.read(syncProvider).syncingAll, isNull);
       },
     );
