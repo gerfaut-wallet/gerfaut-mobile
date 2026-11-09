@@ -59,6 +59,9 @@ class _FakeController extends CameraController {
 
   @override
   Future<void> stopImageStream() async {
+    if (_device.streamStopFails) {
+      throw CameraException('stopImageStream', 'no session');
+    }
     value = value.copyWith(isStreamingImages: false);
   }
 
@@ -91,6 +94,12 @@ class _FakeDevice extends QrCameraDevice {
   /// takes its time to release a sensor.
   Completer<void>? disposal;
 
+  /// Every stream stop fails, as on a session the platform tore down.
+  bool streamStopFails = false;
+
+  /// The next decoder start fails, as an isolate that would not spawn.
+  bool decoderFails = false;
+
   /// The error code the next controller's start fails with.
   String? refusal;
 
@@ -109,6 +118,10 @@ class _FakeDevice extends QrCameraDevice {
   Future<void> startDecoder() async {
     decoderStarts += 1;
     await decoderHold?.future;
+    if (decoderFails) {
+      decoderFails = false;
+      throw StateError('no isolate');
+    }
     decoderUsers += 1;
   }
 
@@ -234,6 +247,55 @@ void main() {
       expect(device.controllers, hasLength(2));
       expect(device.live.single, same(device.controllers.last));
       expect(find.text(_unavailable), findsNothing);
+    });
+
+    // The app comes back while the start in flight still waits on the
+    // platform, which then fails it: the sensor was busy while the app
+    // was away. The return was turned away as a second start, so the
+    // failure must not be the last word.
+    testWidgets('tries once more when a start fails after the app came '
+        'back', (tester) async {
+      final device = _FakeDevice()
+        ..hold = Completer<void>()
+        ..refusal = 'CameraAccessRestricted';
+      await _show(tester, device);
+      device.refusal = null;
+
+      await _lifecycle(tester, AppLifecycleState.inactive);
+      await _lifecycle(tester, AppLifecycleState.resumed);
+      device.hold!.complete();
+      device.hold = null;
+      await tester.pumpAndSettle();
+
+      expect(device.controllers, hasLength(2));
+      expect(device.live.single, same(device.controllers.last));
+    });
+
+    testWidgets('lets the sensor go even when its stream will not stop', (
+      tester,
+    ) async {
+      final device = _FakeDevice();
+      await _show(tester, device);
+
+      device.streamStopFails = true;
+      await _lifecycle(tester, AppLifecycleState.inactive);
+      expect(device.controllers.single.disposed, isTrue);
+    });
+
+    testWidgets('a decoder that failed to start is started again on the way '
+        'back', (tester) async {
+      final device = _FakeDevice()..decoderFails = true;
+      await _show(tester, device);
+      expect(find.text(_unavailable), findsOneWidget);
+
+      await _lifecycle(tester, AppLifecycleState.inactive);
+      await _lifecycle(tester, AppLifecycleState.resumed);
+      expect(device.decoderStarts, 2);
+      expect(device.live, hasLength(1));
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+      expect(device.decoderUsers, 0);
     });
 
     testWidgets('a start that comes back while the app is still away opens '
