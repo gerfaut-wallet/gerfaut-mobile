@@ -263,12 +263,50 @@ void main() {
 
       await _lifecycle(tester, AppLifecycleState.inactive);
       await _lifecycle(tester, AppLifecycleState.resumed);
+      final first = device.hold!;
+      device.hold = Completer<void>();
+      first.complete();
+      await tester.pumpAndSettle();
+
+      // The second try is under way: it says so, rather than the first
+      // one's failure, which would send the user to paste the code.
+      expect(device.controllers, hasLength(2));
+      expect(find.text(_starting), findsOneWidget);
+      expect(find.text(_unavailable), findsNothing);
+
       device.hold!.complete();
       device.hold = null;
       await tester.pumpAndSettle();
-
-      expect(device.controllers, hasLength(2));
       expect(device.live.single, same(device.controllers.last));
+    });
+
+    // Refused once, then granted in the system settings: the return
+    // starts the camera, and a trip to the notification shade during
+    // that start must not be read as the old refusal.
+    testWidgets('a refusal granted since does not hold back a later '
+        'return', (tester) async {
+      final device = _FakeDevice()..refusal = 'CameraAccessDenied';
+      await _show(tester, device);
+      expect(find.text(_denied), findsOneWidget);
+
+      device.refusal = null;
+      device.hold = Completer<void>();
+      await _lifecycle(tester, AppLifecycleState.inactive);
+      await _lifecycle(tester, AppLifecycleState.resumed);
+      expect(device.controllers, hasLength(2));
+
+      await _lifecycle(tester, AppLifecycleState.inactive);
+      device.disposal = Completer<void>();
+      device.hold!.complete();
+      device.hold = null;
+      await tester.pumpAndSettle();
+      await _lifecycle(tester, AppLifecycleState.resumed);
+      device.disposal!.complete();
+      device.disposal = null;
+      await tester.pumpAndSettle();
+
+      expect(device.live, hasLength(1));
+      expect(find.byKey(_preview), findsOneWidget);
     });
 
     testWidgets('lets the sensor go even when its stream will not stop', (

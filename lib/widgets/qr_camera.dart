@@ -218,8 +218,12 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
     // other way out of the start lets it go, below, so a failed or
     // abandoned start never keeps the sensor.
     CameraController? opened;
+    // Whatever an earlier start ended on, this one is starting: its own
+    // outcome, not a past refusal, decides what the screen says next.
+    if (_feed != _Feed.starting) setState(() => _feed = _Feed.starting);
     try {
       await _released;
+      if (_abandoned) return;
       final decoder = _decoder ??= _device.startDecoder();
       try {
         await decoder;
