@@ -434,7 +434,7 @@ void main() {
   });
 
   group('TxPreview.fromJson', () {
-    Map<String, dynamic> wire(bool ready, [String? readiness]) => {
+    Map<String, dynamic> wire([String? readiness]) => {
       'txid': 'ab' * 32,
       'source': 'raw_transaction',
       'network': 'signet',
@@ -450,24 +450,20 @@ void main() {
       'amounts_listed': false,
       'fee_rate_basis': 'exact',
       'fee_unknown_reason': null,
-      'ready': ready,
       'readiness': ?readiness,
     };
 
     test('takes where the transaction stands from the core', () {
       expect(
-        TxPreview.fromJson(wire(false, 'refused')).readiness,
+        TxPreview.fromJson(wire('refused')).readiness,
         TxReadiness.refused,
       );
       expect(
-        TxPreview.fromJson(wire(false, 'unsigned')).readiness,
+        TxPreview.fromJson(wire('unsigned')).readiness,
         TxReadiness.unsigned,
       );
-      expect(
-        TxPreview.fromJson(wire(true, 'ready')).readiness,
-        TxReadiness.ready,
-      );
-      final waiting = TxPreview.fromJson(wire(true, 'in_mempool'));
+      expect(TxPreview.fromJson(wire('ready')).readiness, TxReadiness.ready);
+      final waiting = TxPreview.fromJson(wire('in_mempool'));
       expect(waiting.readiness, TxReadiness.inMempool);
       expect(waiting.readiness.sendable, isTrue);
       expect(TxReadiness.refused.sendable, isFalse);
@@ -475,7 +471,7 @@ void main() {
     });
 
     test('a state this build does not know is refused', () {
-      expect(() => TxPreview.fromJson(wire(true, 'maybe')), throwsStateError);
+      expect(() => TxPreview.fromJson(wire('maybe')), throwsStateError);
     });
   });
 
