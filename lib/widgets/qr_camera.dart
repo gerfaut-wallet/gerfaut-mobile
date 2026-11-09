@@ -130,10 +130,16 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
   /// app can be resumed before the previous start has finished.
   bool _starting = false;
 
-  /// A start was asked for while another was under way. The one under
-  /// way may be letting its sensor go because the app left; if the app
-  /// came back meanwhile, nothing else would open the camera again.
-  bool _startAgain = false;
+  /// The decoder's start, made once for the scanner's whole life. The
+  /// decoder counts its callers and only lets its worker go when every
+  /// start has had its stop: one start per camera start would outlive
+  /// the scanner after a single trip away from the app.
+  late final Future<void> _decoder;
+
+  /// The last release of a sensor, by a stop or a start that gave up. A
+  /// start waits for it: the platform may still hold the sensor, and
+  /// opening it meanwhile meets a camera in use.
+  Future<void> _released = Future<void>.value();
 
   /// The app is in front. A start runs across several awaits, and the
   /// app may leave during any of them: a start that finds it gone lets
@@ -150,6 +156,7 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _decoder = widget.device.startDecoder();
     unawaited(_start());
   }
 
@@ -158,7 +165,10 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
     _closed = true;
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_stop());
-    widget.device.stopDecoder();
+    // Once the start is through, so the stop is not spent before it.
+    unawaited(
+      _decoder.then((_) => widget.device.stopDecoder(), onError: (_) {}),
+    );
     super.dispose();
   }
 
@@ -184,20 +194,20 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
   bool get _abandoned => _closed || !mounted || !_inFront;
 
   Future<void> _start() async {
-    if (_abandoned) return;
-    if (_starting) {
-      _startAgain = true;
-      return;
-    }
+    if (_starting || _abandoned) return;
     _starting = true;
     // The controller this start opened, until the scanner holds it. Any
     // other way out of the start lets it go, below, so a failed or
     // abandoned start never keeps the sensor.
     CameraController? opened;
+    // This start gave up on seeing the scanner closed or the app gone.
+    var gaveUp = false;
+    bool abandon() => gaveUp = _abandoned;
     try {
-      await widget.device.startDecoder();
+      await _released;
+      await _decoder;
       final cameras = await widget.device.cameras();
-      if (_abandoned) return;
+      if (abandon()) return;
       if (cameras.isEmpty) {
         setState(() => _feed = _Feed.unavailable);
         return;
@@ -208,9 +218,9 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
       );
       final controller = opened = widget.device.controller(back);
       await controller.initialize();
-      if (_abandoned) return;
+      if (abandon()) return;
       await controller.startImageStream(_onImage);
-      if (_abandoned) return;
+      if (abandon()) return;
       opened = null;
       setState(() {
         _controller = controller;
@@ -218,30 +228,26 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
         _feed = _Feed.running;
       });
     } on CameraException catch (error) {
+      final denied = error.code == 'CameraAccessDenied';
+      // Any other failure while the app is away may be the app in front
+      // holding the sensor: no fault of the camera, so the start gives
+      // up like one that saw the app leave. A refusal stands wherever
+      // it lands.
+      if (!denied && abandon()) return;
       if (_closed || !mounted) return;
-      setState(
-        () => _feed = error.code == 'CameraAccessDenied'
-            ? _Feed.denied
-            : _Feed.unavailable,
-      );
+      setState(() => _feed = denied ? _Feed.denied : _Feed.unavailable);
     } catch (_) {
-      if (_closed || !mounted) return;
+      if (abandon()) return;
       setState(() => _feed = _Feed.unavailable);
     } finally {
-      try {
-        await opened?.dispose();
-      } catch (_) {
-        // A controller the platform already tore down: nothing to let
-        // go, and the start must still end.
-      }
+      final release = opened;
+      if (release != null) await (_released = _release(release));
       _starting = false;
-      // Read once the start is over, when the wish still holds: a start
-      // that opened the camera has nothing left to do, one that let the
-      // sensor go starts over.
-      if (_startAgain) {
-        _startAgain = false;
-        if (_controller == null) unawaited(_start());
-      }
+      // A start that gave up because the app left, and finds it back in
+      // front: the return came while it was letting the sensor go, and
+      // was turned away as a second start. Nothing else opens the camera
+      // again. A start that failed is not retried: the refusal stands.
+      if (gaveUp && !_abandoned && _controller == null) unawaited(_start());
     }
   }
 
@@ -250,14 +256,19 @@ class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
     if (controller == null) return;
     _controller = null;
     if (mounted && !_closed) setState(() => _feed = _Feed.starting);
+    await (_released = _release(controller));
+  }
+
+  /// Stops [controller]'s stream and lets its sensor go.
+  static Future<void> _release(CameraController controller) async {
     try {
       if (controller.value.isStreamingImages) {
         await controller.stopImageStream();
       }
+      await controller.dispose();
     } catch (_) {
-      // A controller the platform already tore down: nothing to stop.
+      // A controller the platform already tore down: nothing to let go.
     }
-    await controller.dispose();
   }
 
   Future<void> _onImage(CameraImage image) async {

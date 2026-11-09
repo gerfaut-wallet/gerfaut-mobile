@@ -95,13 +95,27 @@ class _FakeDevice extends QrCameraDevice {
   String? refusal;
 
   List<CameraDescription> cameraList = const [_back];
-  int decoderStops = 0;
+
+  /// Holds the decoder's start until completed.
+  Completer<void>? decoderHold;
+
+  /// Starts of the decoder not yet matched by a stop. The decoder counts
+  /// its callers, as zxing does, and only lets its worker go at zero; a
+  /// stop with nothing started does nothing.
+  int decoderUsers = 0;
+  int decoderStarts = 0;
 
   @override
-  Future<void> startDecoder() async {}
+  Future<void> startDecoder() async {
+    decoderStarts += 1;
+    await decoderHold?.future;
+    decoderUsers += 1;
+  }
 
   @override
-  void stopDecoder() => decoderStops += 1;
+  void stopDecoder() {
+    if (decoderUsers > 0) decoderUsers -= 1;
+  }
 
   @override
   Future<List<CameraDescription>> cameras() async => cameraList;
@@ -196,6 +210,32 @@ void main() {
       expect(find.text(_starting), findsNothing);
     });
 
+    // The app in front may hold the sensor while this one is away, and
+    // the start in flight fails on it. That is no fault of the camera:
+    // the return to the front opens it.
+    testWidgets('opens the camera on the way back after a start failed while '
+        'the app was away', (tester) async {
+      final device = _FakeDevice()
+        ..hold = Completer<void>()
+        ..refusal = 'CameraAccessRestricted';
+      await _show(tester, device);
+      device.refusal = null;
+
+      await _lifecycle(tester, AppLifecycleState.inactive);
+      device.disposal = Completer<void>();
+      device.hold!.complete();
+      device.hold = null;
+      await tester.pumpAndSettle();
+      await _lifecycle(tester, AppLifecycleState.resumed);
+      device.disposal!.complete();
+      device.disposal = null;
+      await tester.pumpAndSettle();
+
+      expect(device.controllers, hasLength(2));
+      expect(device.live.single, same(device.controllers.last));
+      expect(find.text(_unavailable), findsNothing);
+    });
+
     testWidgets('a start that comes back while the app is still away opens '
         'nothing', (tester) async {
       final device = _FakeDevice()..hold = Completer<void>();
@@ -222,7 +262,78 @@ void main() {
 
       expect(device.controllers.single.disposed, isTrue);
       expect(device.live, isEmpty);
-      expect(device.decoderStops, 1);
+      expect(device.decoderUsers, 0);
+    });
+
+    testWidgets('closing the scanner while the decoder starts lets the '
+        'decoder go', (tester) async {
+      final device = _FakeDevice()..decoderHold = Completer<void>();
+      await _show(tester, device);
+
+      await tester.pumpWidget(const SizedBox());
+      device.decoderHold!.complete();
+      await tester.pumpAndSettle();
+
+      expect(device.decoderUsers, 0);
+      expect(device.controllers, isEmpty);
+    });
+
+    testWidgets('starts the decoder once, however often the app comes back', (
+      tester,
+    ) async {
+      final device = _FakeDevice();
+      await _show(tester, device);
+      for (var i = 0; i < 3; i += 1) {
+        await _lifecycle(tester, AppLifecycleState.inactive);
+        await _lifecycle(tester, AppLifecycleState.resumed);
+      }
+      expect(device.controllers, hasLength(4));
+      expect(device.decoderStarts, 1);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+      expect(device.decoderUsers, 0);
+    });
+
+    // Pulling the notification shade down and up again: the camera is
+    // still being released when the app comes back. Opening it again
+    // before the platform let it go meets a sensor still in use.
+    testWidgets('waits for the sensor to be released before opening it '
+        'again', (tester) async {
+      final device = _FakeDevice();
+      await _show(tester, device);
+
+      device.disposal = Completer<void>();
+      await _lifecycle(tester, AppLifecycleState.inactive);
+      await _lifecycle(tester, AppLifecycleState.resumed);
+      expect(device.controllers, hasLength(1));
+
+      device.disposal!.complete();
+      device.disposal = null;
+      await tester.pumpAndSettle();
+      expect(device.controllers, hasLength(2));
+      expect(device.live.single, same(device.controllers.last));
+      expect(find.byKey(_preview), findsOneWidget);
+    });
+
+    // The permission prompt makes the app inactive; a refusal brings it
+    // back. The refusal stands: asking again at once would put the
+    // prompt the user just answered back on screen.
+    testWidgets('a refusal answered from the permission prompt is not asked '
+        'again', (tester) async {
+      final device = _FakeDevice()
+        ..hold = Completer<void>()
+        ..refusal = 'CameraAccessDenied';
+      await _show(tester, device);
+
+      await _lifecycle(tester, AppLifecycleState.inactive);
+      await _lifecycle(tester, AppLifecycleState.resumed);
+      device.hold!.complete();
+      device.hold = null;
+      await tester.pumpAndSettle();
+
+      expect(device.controllers, hasLength(1));
+      expect(find.text(_denied), findsOneWidget);
     });
 
     testWidgets('says the camera access was refused', (tester) async {
