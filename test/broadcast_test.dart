@@ -1155,6 +1155,164 @@ void main() {
     );
   });
 
+  // A check that fails after an answer: the pill says the check failed,
+  // then why, then what the backend last said and when. The old pill
+  // alone read as a transaction still waiting, and the error showed
+  // nowhere.
+  for (final (standing, found, confirmations, lastAnswer) in [
+    (
+      BroadcastStanding.inMempool,
+      true,
+      0,
+      'Last answer just now: waiting to be mined.',
+    ),
+    (
+      BroadcastStanding.confirmed,
+      true,
+      3,
+      'Last answer just now: confirmed, 3 confirmations.',
+    ),
+    (
+      BroadcastStanding.confirmed,
+      true,
+      1,
+      'Last answer just now: confirmed, 1 confirmation.',
+    ),
+    (
+      BroadcastStanding.notSeen,
+      false,
+      0,
+      'Last answer just now: mempool.space did not have this transaction.',
+    ),
+  ]) {
+    testWidgets('a check that fails after a known status says so '
+        '(${standing.id}, $confirmations)', (tester) async {
+      useTallSurface(tester);
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final confirmed = standing == BroadcastStanding.confirmed;
+      final bridge = FakeBridge()
+        ..onPreview = ((_, _) => makePreview())
+        ..onStatus = ((_, _) => BroadcastStatus(
+          txid: fakeTxid,
+          standing: standing,
+          found: found,
+          confirmed: confirmed,
+          blockHeight: confirmed ? 850000 : null,
+          confirmations: confirmations,
+          backend: 'mempool.space',
+          at: now,
+        ));
+      await tester.pumpWidget(broadcastApp(bridge));
+      await tester.pumpAndSettle();
+      await preview(tester);
+      await tester.tap(find.widgetWithText(FilledButton, 'Broadcast'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Broadcast').last);
+      await tester.pumpAndSettle();
+
+      bridge.onStatus = (_, _) => throw coreFailure(
+        'backend_unavailable',
+        'mempool.space did not answer',
+      );
+      await tester.tap(find.byTooltip('Check again'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Could not check'), findsOneWidget);
+      expect(find.byIcon(LucideIcons.triangleAlert), findsOneWidget);
+      expect(
+        tester.widget<Text>(find.text('Could not check')).style!.color,
+        GerfautTokens.light.pending,
+      );
+      for (final stale in [
+        'Waiting to be mined',
+        'Confirmed',
+        'Not seen',
+        'Checking…',
+      ]) {
+        expect(find.text(stale), findsNothing);
+      }
+      // The error first, then the last answer, dated.
+      final error = find.text('mempool.space did not answer');
+      final last = find.text(lastAnswer);
+      expect(error, findsOneWidget);
+      expect(last, findsOneWidget);
+      expect(tester.getTopLeft(error).dy, lessThan(tester.getTopLeft(last).dy));
+    });
+  }
+
+  testWidgets('a check under way keeps the failure it follows', (tester) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge()..onPreview = (_, _) => makePreview();
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+    await preview(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Broadcast'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Broadcast').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Waiting to be mined'), findsOneWidget);
+
+    bridge.onStatus = (_, _) => throw coreFailure(
+      'backend_unavailable',
+      'mempool.space did not answer',
+    );
+    await tester.tap(find.byTooltip('Check again'));
+    await tester.pumpAndSettle();
+
+    final answer = Completer<BroadcastStatus>();
+    bridge.onStatus = (_, _) => answer.future;
+    await tester.tap(find.byTooltip('Check again'));
+    await tester.pump();
+
+    // Asking again does not bring back the answer that came before the
+    // failure: the failure stays until a new answer replaces it.
+    expect(find.text('Checking…'), findsOneWidget);
+    expect(find.text('Could not check'), findsOneWidget);
+    expect(find.text('mempool.space did not answer'), findsOneWidget);
+    expect(find.textContaining('Last answer'), findsOneWidget);
+    expect(find.text('Waiting to be mined'), findsNothing);
+
+    answer.complete(
+      BroadcastStatus(
+        txid: fakeTxid,
+        standing: BroadcastStanding.inMempool,
+        found: true,
+        confirmed: false,
+        confirmations: 0,
+        backend: 'mempool.space',
+        at: 1755000100,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Waiting to be mined'), findsOneWidget);
+    expect(find.text('Could not check'), findsNothing);
+    expect(find.textContaining('Last answer'), findsNothing);
+  });
+
+  testWidgets('a first check that fails says why', (tester) async {
+    useTallSurface(tester);
+    final bridge = FakeBridge()
+      ..onPreview = ((_, _) => makePreview())
+      ..onStatus = ((_, _) => throw coreFailure(
+        'backend_unavailable',
+        'mempool.space did not answer',
+      ));
+    await tester.pumpWidget(broadcastApp(bridge));
+    await tester.pumpAndSettle();
+    await preview(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Broadcast'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Broadcast').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not check'), findsOneWidget);
+    expect(find.byIcon(LucideIcons.triangleAlert), findsOneWidget);
+    expect(find.text('mempool.space did not answer'), findsOneWidget);
+    // Nothing came back before, so there is no last answer to date.
+    expect(find.textContaining('Last answer'), findsNothing);
+    expect(find.text('Not checked yet'), findsOneWidget);
+  });
+
   testWidgets('a mined transaction states its block apart from its count', (
     tester,
   ) async {

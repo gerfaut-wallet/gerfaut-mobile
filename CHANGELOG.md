@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- On the Broadcast screen, a status check that fails after an earlier answer now says "Could not check", with the error and the time and content of the last answer. It used to keep the previous status, such as "Waiting to be mined", and show the error nowhere.
+
 ## [0.1.0] - 2026-10-21
 
 The first release: Gerfaut for Android, as a public beta.

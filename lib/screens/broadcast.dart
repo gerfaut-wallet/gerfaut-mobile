@@ -1425,10 +1425,75 @@ class _StatusCard extends ConsumerStatefulWidget {
   ConsumerState<_StatusCard> createState() => _StatusCardState();
 }
 
+/// Where the card's checks stand. The answer before a check stays on
+/// screen while the next one runs, and a failure keeps the last answer
+/// so it can say what that answer was, and when.
+sealed class _CheckState {
+  const _CheckState();
+
+  /// The last thing the backend said, if it ever answered.
+  BroadcastStatus? get lastKnown;
+}
+
+/// A check on its way, over what the card showed before it: nothing
+/// before the first answer.
+final class _Checking extends _CheckState {
+  const _Checking([this.previous]);
+
+  final _Settled? previous;
+
+  @override
+  BroadcastStatus? get lastKnown => previous?.lastKnown;
+}
+
+/// Where a check ended: what the card shows between two checks, and
+/// under the next one.
+sealed class _Settled extends _CheckState {
+  const _Settled();
+}
+
+/// The backend's answer to the latest check.
+final class _Known extends _Settled {
+  const _Known(this.status);
+
+  final BroadcastStatus status;
+
+  @override
+  BroadcastStatus? get lastKnown => status;
+}
+
+/// The latest check failed: why, in the words of the error, and the
+/// answer before it, when there was one.
+final class _Failed extends _Settled {
+  const _Failed(this.error, this.last);
+
+  final String error;
+  final BroadcastStatus? last;
+
+  @override
+  BroadcastStatus? get lastKnown => last;
+}
+
+/// The answer a failed check leaves behind, dated, in the words of the
+/// pill it would have worn.
+String _lastAnswer(BroadcastStatus last) {
+  final when = 'Last answer ${relativeTime(last.at)}';
+  return switch (last.standing) {
+    BroadcastStanding.confirmed =>
+      '$when: confirmed, ${groupThousands('${last.confirmations}')} '
+          'confirmation${last.confirmations == 1 ? '' : 's'}.',
+    BroadcastStanding.inMempool => '$when: waiting to be mined.',
+    BroadcastStanding.notSeen =>
+      '$when: ${last.backend} did not have this transaction.',
+  };
+}
+
 class _StatusCardState extends ConsumerState<_StatusCard> {
-  BroadcastStatus? _status;
-  String? _error;
-  bool _checking = true;
+  _CheckState _state = const _Checking();
+
+  /// Taken by every check that starts: an answer that comes back under
+  /// an older one was overtaken, and is dropped.
+  int _ticket = 0;
   Timer? _timer;
 
   @override
@@ -1443,36 +1508,43 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
     super.dispose();
   }
 
-  Future<void> _check() async {
-    _timer?.cancel();
-    if (mounted && !_checking) setState(() => _checking = true);
-    try {
-      final status = await ref
-          .read(bridgeProvider)
-          .transactionStatus(widget.record.network, widget.record.hex);
-      if (!mounted) return;
-      setState(() {
-        _status = status;
-        _error = null;
-      });
-    } on BridgeException catch (error) {
-      if (mounted) setState(() => _error = error.message);
-    } catch (error) {
-      if (mounted) setState(() => _error = '$error');
-    } finally {
-      if (mounted) {
-        setState(() => _checking = false);
-        _arm();
-      }
-    }
+  /// The one way the card moves, and only for the check holding the
+  /// current ticket.
+  void _go(_CheckState next, {required int ticket}) {
+    if (!mounted || ticket != _ticket) return;
+    setState(() => _state = next);
   }
 
-  /// Schedules the next check unless the transaction has settled.
+  Future<void> _check() async {
+    _timer?.cancel();
+    final ticket = ++_ticket;
+    // The card is born checking, with nothing before it to keep.
+    if (_state case final _Settled settled) {
+      _go(_Checking(settled), ticket: ticket);
+    }
+    _Settled answer;
+    try {
+      answer = _Known(
+        await ref
+            .read(bridgeProvider)
+            .transactionStatus(widget.record.network, widget.record.hex),
+      );
+    } on BridgeException catch (error) {
+      answer = _Failed(error.message, _state.lastKnown);
+    } catch (error) {
+      answer = _Failed('$error', _state.lastKnown);
+    }
+    _go(answer, ticket: ticket);
+    if (mounted && ticket == _ticket) _arm();
+  }
+
+  /// Schedules the next check unless the transaction has settled, by
+  /// the last answer the backend gave: a failure does not unsettle it.
   void _arm() {
     _timer?.cancel();
-    final status = _status;
+    final status = _state.lastKnown;
     if (status != null &&
-        status.confirmed &&
+        status.standing == BroadcastStanding.confirmed &&
         status.confirmations >= _settledConfirmations) {
       return;
     }
@@ -1500,8 +1572,10 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
     ref.watch(relativeClockProvider);
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final record = widget.record;
-    final status = _status;
-    final error = _error;
+    final shown = switch (_state) {
+      _Checking(:final previous) => previous,
+      final _Settled settled => settled,
+    };
     // The pill says where the transaction stands, in a word or three;
     // the lines under it say what that means, when a word is not
     // enough. Which host holds it, that the mempool is where it sits
@@ -1516,59 +1590,59 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
       IconData icon,
       String label,
       List<String> lines,
-    ) = switch (status) {
-      null when error != null => (
-        _Tone.pending,
-        LucideIcons.triangleAlert,
-        'Could not check',
-        [error],
-      ),
+    ) = switch (shown) {
       null => (
         _Tone.neutral,
         LucideIcons.hourglass,
         'Checking…',
         const <String>[],
       ),
-      BroadcastStatus(
-        confirmed: true,
-        :final blockHeight,
-        :final confirmations,
-        :final at,
-      ) =>
-        (
+      // A failed check never wears the last answer's pill: that read as
+      // a transaction still waiting while nobody could tell. The last
+      // answer comes after the error, dated, so it is read as past.
+      _Failed(:final error, :final last) => (
+        _Tone.pending,
+        LucideIcons.triangleAlert,
+        'Could not check',
+        [error, if (last != null) _lastAnswer(last)],
+      ),
+      _Known(:final status) => switch (status.standing) {
+        BroadcastStanding.confirmed => (
           _Tone.confirmed,
           LucideIcons.check,
           'Confirmed',
           [
-            if (blockHeight != null)
-              'Mined in block ${groupThousands('$blockHeight')}',
-            '${groupThousands('$confirmations')} '
-                'confirmation${confirmations == 1 ? '' : 's'} '
-                'as of ${relativeTime(at)}',
+            if (status.blockHeight case final height?)
+              'Mined in block ${groupThousands('$height')}',
+            '${groupThousands('${status.confirmations}')} '
+                'confirmation${status.confirmations == 1 ? '' : 's'} '
+                'as of ${relativeTime(status.at)}',
           ],
         ),
-      BroadcastStatus(found: false, :final backend) => (
-        _Tone.pending,
-        LucideIcons.eyeOff,
-        'Not seen',
-        [
-          '$backend does not have this transaction. It may not have '
-              'been relayed, or it was dropped or replaced. Broadcasting '
-              'it again does no harm.',
-        ],
-      ),
-      _ => (
-        _Tone.pending,
-        LucideIcons.hourglass,
-        'Waiting to be mined',
-        const <String>[],
-      ),
+        BroadcastStanding.notSeen => (
+          _Tone.pending,
+          LucideIcons.eyeOff,
+          'Not seen',
+          [
+            '${status.backend} does not have this transaction. It may not '
+                'have been relayed, or it was dropped or replaced. '
+                'Broadcasting it again does no harm.',
+          ],
+        ),
+        BroadcastStanding.inMempool => (
+          _Tone.pending,
+          LucideIcons.hourglass,
+          'Waiting to be mined',
+          const <String>[],
+        ),
+      },
     };
     final explorer = explorerTxUrl(record.network, record.txid);
-    final checked = _checking
+    final lastKnown = _state.lastKnown;
+    final checked = _state is _Checking
         ? 'Checking…'
-        : status != null
-        ? 'Checked ${relativeTime(status.at)}'
+        : lastKnown != null
+        ? 'Checked ${relativeTime(lastKnown.at)}'
         : 'Not checked yet';
 
     // A card like every other card. The state lives in the pill, not in
@@ -1634,7 +1708,7 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
               ),
               IconButton(
                 tooltip: 'Check again',
-                onPressed: _checking ? null : _check,
+                onPressed: _state is _Checking ? null : _check,
                 iconSize: 16,
                 color: tokens.textMuted,
                 icon: const Icon(LucideIcons.refreshCw),
