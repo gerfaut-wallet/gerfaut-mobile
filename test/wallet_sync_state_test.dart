@@ -310,4 +310,19 @@ void main() {
       expect(container.read(syncErrorsProvider), isEmpty);
     });
   });
+
+  test('what the live watch says is heard only while no sync runs', () {
+    var syncs = nextSyncs(
+      const WalletSyncs(),
+      const LiveSyncHeard('w1', 'timed out'),
+    );
+    syncs = nextSyncs(syncs, const CoreSyncStarted('w1'));
+    // Late, from another channel: the sync that runs is not over.
+    syncs = nextSyncs(syncs, const LiveSyncHeard('w1', null));
+    expect(syncs.of('w1'), isA<WalletSyncing>());
+    expect(syncs.failureOf('w1'), 'timed out');
+    syncs = nextSyncs(syncs, const CoreSyncSettled('w1', null));
+    syncs = nextSyncs(syncs, const LiveSyncHeard('w1', 'refused'));
+    expect(syncs.failureOf('w1'), 'refused');
+  });
 }

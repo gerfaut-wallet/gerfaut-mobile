@@ -742,6 +742,20 @@ final class CoreSyncStarted extends SyncChange {
   Iterable<String> get walletIds => [walletId];
 }
 
+/// The live watch says how a sync it ran ended: [failure] in the
+/// screens' words, or null for a good one. It comes apart from the
+/// core's own changes, in no set order with them, and never says
+/// whether a sync runs: heard only while none of the wallet does.
+final class LiveSyncHeard extends SyncChange {
+  const LiveSyncHeard(this.walletId, this.failure);
+
+  final String walletId;
+  final String? failure;
+
+  @override
+  Iterable<String> get walletIds => [walletId];
+}
+
 /// The core says where the wallet stands once no sync of it runs:
 /// [failure] in the screens' words, or null when the last one did not
 /// fail.
@@ -794,6 +808,9 @@ WalletSyncs nextSyncs(WalletSyncs syncs, SyncChange change) {
         walletId: WalletSyncing(previousFailure: syncs.failureOf(walletId)),
       });
     case CoreSyncSettled(:final walletId, :final failure):
+      return syncs._with({walletId: settled(failure)});
+    case LiveSyncHeard(:final walletId, :final failure):
+      if (syncs.of(walletId) is WalletSyncing) return syncs;
       return syncs._with({walletId: settled(failure)});
   }
 }
@@ -900,7 +917,7 @@ class SyncController extends Notifier<WalletSyncs> {
   /// wallet move and synced it in the core. [failure] is its failure in
   /// the screens' words, or null when it succeeded.
   void syncedElsewhere(String walletId, {String? failure}) =>
-      _apply(CoreSyncSettled(walletId, failure));
+      _apply(LiveSyncHeard(walletId, failure));
 
   /// Runs one wallet operation with the sync bookkeeping: the wallet is
   /// marked in flight under a ticket of its own, the answer settles it
