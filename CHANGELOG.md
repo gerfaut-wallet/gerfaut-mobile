@@ -6,8 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- When you move through the app with a keyboard, every control shows a 2 px focus ring. Tooltips now use the app's own colours.
+- On the last step of Add a wallet, Back and Add wallet stay at the bottom of the screen, above the keyboard.
+- Hints that repeated a title or the line next to them are gone, so the screens carry less text.
+
 ### Fixed
 
+- The Network, Wallets and Security settings show "Loading…" until the settings are read, and "Try again" if the read fails. On a locked phone, the app lock switch no longer reads off for a moment.
+- The Policy page and the CSV export say when their data could not be loaded, and offer "Try again".
+- The Broadcast page no longer shows raw app errors, and its "Ready to broadcast" pill goes away once the transaction is sent.
 - On the Broadcast screen, a status check that fails after an earlier answer now says "Could not check", with the error and the time and content of the last answer. It used to keep the previous status, such as "Waiting to be mined", and show the error nowhere.
 - When the vault fails to save a setting, the setting goes back to the value the vault still holds instead of showing a choice the background checks and Live never see. This covers new-transaction notifications, background checks, Live, notification details, widget balances, the unit, the fiat display and the theme. Hidden amounts stay hidden. Live and the background check also wait until the vault has saved the setting before they start.
 - A wallet whose last sync failed still says so after Gerfaut restarts, instead of "Synced" with an old time. A sync that Live starts on its own shows "Syncing…" while it runs.
