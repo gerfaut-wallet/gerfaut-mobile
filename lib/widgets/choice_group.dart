@@ -102,8 +102,10 @@ class _ChoiceRow<T> extends StatelessWidget {
       label: option.label,
       excludeSemantics: true,
       child: TapTarget(
-        // The ring stands in the gap between two rows, clear of both.
+        // Inside the row's edge: a full-width row in a scroll view
+        // would lose the sides of a ring drawn outside it.
         child: FocusRing(
+          gap: 0,
           child: Material(
             color: selected ? tokens.primary : tokens.surfaceSunken,
             borderRadius: BorderRadius.circular(GerfautRadius.md),

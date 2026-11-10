@@ -185,8 +185,10 @@ class DisclosureButton extends StatelessWidget {
             // No fill at rest; Givre, whole, under the finger. Material's
             // own overlay would lay it at a tenth of its strength, which
             // vanishes on a card. The keyboard gets the ring instead of
-            // a tint.
+            // a tint, inside its edge: it often sits flush with the side of
+            // a scroll view, which would clip a ring drawn outside.
             child: FocusRing(
+              gap: 0,
               child: TextButton(
                 style:
                     TextButton.styleFrom(
