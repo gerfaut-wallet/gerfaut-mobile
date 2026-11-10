@@ -881,50 +881,57 @@ class _NetworkCard extends StatelessWidget {
         button: true,
         inMutuallyExclusiveGroup: true,
         selected: selected,
-        // The fill and the edge are the Material's own: a decorated
-        // box under the InkWell would hide its ripple.
-        child: Material(
-          color: selected ? tokens.surfaceSunken : tokens.surface,
+        // The ripple is drawn on a Material over the box: on the page
+        // under it, the box's fill would hide it.
+        child: Container(
           clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
+          decoration: BoxDecoration(
+            color: selected ? tokens.surfaceSunken : tokens.surface,
             borderRadius: BorderRadius.circular(GerfautRadius.md),
-            side: BorderSide(color: selected ? tokens.primary : tokens.border),
+            border: Border.all(
+              color: selected ? tokens.primary : tokens.border,
+            ),
           ),
-          child: InkWell(
-            onTap: selected ? null : onTap,
-            child: Padding(
-              padding: const EdgeInsets.all(
-                GerfautSpacing.sm + GerfautSpacing.xs,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          entry.network.label,
-                          style: tokens.bodySmall.copyWith(
-                            color: selected ? tokens.primary : tokens.text,
-                            fontWeight: FontWeight.w500,
-                            fontVariations: const [FontVariation('wght', 500)],
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              onTap: selected ? null : onTap,
+              child: Padding(
+                padding: const EdgeInsets.all(
+                  GerfautSpacing.sm + GerfautSpacing.xs,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            entry.network.label,
+                            style: tokens.bodySmall.copyWith(
+                              color: selected ? tokens.primary : tokens.text,
+                              fontWeight: FontWeight.w500,
+                              fontVariations: const [
+                                FontVariation('wght', 500),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                      if (selected)
-                        Icon(
-                          LucideIcons.check,
-                          size: 15,
-                          color: tokens.primary,
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    entry.hint,
-                    style: tokens.label.copyWith(color: tokens.textMuted),
-                  ),
-                ],
+                        if (selected)
+                          Icon(
+                            LucideIcons.check,
+                            size: 15,
+                            color: tokens.primary,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      entry.hint,
+                      style: tokens.label.copyWith(color: tokens.textMuted),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

@@ -430,29 +430,32 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
           style: tokens.figureOf(size: 14, weight: FontWeight.w500),
         ),
         const SizedBox(height: GerfautSpacing.md),
-        // A Material and not a decorated box: the rows' ripple is drawn
-        // on it, and would be hidden under a box's fill.
-        Material(
-          color: tokens.surface,
+        // The rows' ripple is drawn on a Material over the box: on the
+        // page under it, the box's fill would hide it.
+        Container(
           clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
+          decoration: BoxDecoration(
+            color: tokens.surface,
             borderRadius: BorderRadius.circular(GerfautRadius.lg),
-            side: BorderSide(color: tokens.border),
+            border: Border.all(color: tokens.border),
           ),
-          child: Column(
-            children: [
-              for (final (position, wallet) in preview.wallets.indexed) ...[
-                if (position > 0)
-                  Divider(height: 1, thickness: 1, color: tokens.border),
-                _WalletRow(
-                  wallet: wallet,
-                  chosen: _chosen.contains(wallet.index),
-                  onChanged: wallet.outOfReach
-                      ? null
-                      : (chosen) => _toggle(wallet.index, chosen),
-                ),
+          child: Material(
+            type: MaterialType.transparency,
+            child: Column(
+              children: [
+                for (final (position, wallet) in preview.wallets.indexed) ...[
+                  if (position > 0)
+                    Divider(height: 1, thickness: 1, color: tokens.border),
+                  _WalletRow(
+                    wallet: wallet,
+                    chosen: _chosen.contains(wallet.index),
+                    onChanged: wallet.outOfReach
+                        ? null
+                        : (chosen) => _toggle(wallet.index, chosen),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
         if (preview.hasSettings) ...[

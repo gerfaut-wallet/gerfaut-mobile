@@ -85,35 +85,38 @@ class SettingsScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.all(GerfautSpacing.md),
           children: [
-            // A Material and not a decorated box: the rows' ripple is
-            // drawn on it, and would be hidden under a box's fill.
-            Material(
-              color: tokens.surface,
+            // The rows' ripple is drawn on a Material over the box: on
+            // the page under it, the box's fill would hide it.
+            Container(
               clipBehavior: Clip.antiAlias,
-              shape: RoundedRectangleBorder(
+              decoration: BoxDecoration(
+                color: tokens.surface,
                 borderRadius: BorderRadius.circular(GerfautRadius.lg),
-                side: BorderSide(color: tokens.border),
+                border: Border.all(color: tokens.border),
               ),
-              child: Column(
-                children: [
-                  for (final (index, section)
-                      in SettingsSection.values.indexed) ...[
-                    if (index > 0)
-                      Divider(height: 1, thickness: 1, color: tokens.border),
-                    _SectionRow(
-                      section: section,
-                      summary: _summary(ref, section),
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => SettingsSectionScreen(
-                            section: section,
-                            cameraBuilder: cameraBuilder,
+              child: Material(
+                type: MaterialType.transparency,
+                child: Column(
+                  children: [
+                    for (final (index, section)
+                        in SettingsSection.values.indexed) ...[
+                      if (index > 0)
+                        Divider(height: 1, thickness: 1, color: tokens.border),
+                      _SectionRow(
+                        section: section,
+                        summary: _summary(ref, section),
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => SettingsSectionScreen(
+                              section: section,
+                              cameraBuilder: cameraBuilder,
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
             const SizedBox(height: GerfautSpacing.lg),
