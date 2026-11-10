@@ -451,7 +451,7 @@ class RustBridge implements GerfautBridge {
       final error = decoded['error'] as Map<String, dynamic>;
       throw BridgeException(
         error['kind'] as String? ?? 'internal',
-        error['message'] as String? ?? internalFailure,
+        error['message'] as String? ?? 'unknown error',
       );
     }
     return decoded;

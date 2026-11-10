@@ -190,7 +190,8 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
         ),
         answering: ticket,
       );
-    } catch (_) {
+    } catch (error, stack) {
+      debugPrint('broadcast: $error\n$stack');
       // Not the core's refusal: a fault in the app, with no words fit
       // for a screen of its own.
       _go(
@@ -287,7 +288,8 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
       _go(_Sent(preview, record), answering: ticket);
     } on BridgeException catch (error) {
       _go(_Previewing(preview, error.message), answering: ticket);
-    } catch (_) {
+    } catch (error, stack) {
+      debugPrint('broadcast: $error\n$stack');
       _go(_Previewing(preview, internalFailure), answering: ticket);
     }
   }
@@ -1584,7 +1586,8 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
       );
     } on BridgeException catch (error) {
       answer = _Failed(error.message, _state.lastKnown);
-    } catch (_) {
+    } catch (error, stack) {
+      debugPrint('broadcast: $error\n$stack');
       answer = _Failed(internalFailure, _state.lastKnown);
     }
     _go(answer, ticket: ticket);
