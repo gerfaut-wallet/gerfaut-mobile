@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/format.dart';
 import '../theme/tokens.dart';
+import 'focus_ring.dart';
 
 /// Address or txid shown inline: Givre surface, mono 13px, truncated in
 /// the middle only. Tap copies the full value with explicit feedback —
@@ -160,50 +161,54 @@ class _AddressChipState extends State<AddressChip> {
             alignment: Alignment.centerLeft,
             widthFactor: 1,
             heightFactor: 1,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(GerfautRadius.sm),
-              onTap: _copy,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: GerfautSpacing.sm,
-                  vertical: GerfautSpacing.xs,
-                ),
-                decoration: BoxDecoration(
-                  color: widget.emphasis
-                      ? tokens.primary.withValues(alpha: 0.10)
-                      : tokens.surfaceSunken,
-                  borderRadius: BorderRadius.circular(GerfautRadius.sm),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Flexible on the outside so a narrow parent can still
-                    // squeeze the chip; the cap on the inside is what keeps
-                    // the confirmation from widening it.
-                    Flexible(
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(maxWidth: maxValueWidth),
-                        child: LayoutBuilder(
-                          builder: (context, constraints) => Text(
-                            _fitted(constraints.maxWidth, valueStyle, scaler),
-                            style: valueStyle,
-                            overflow: TextOverflow.fade,
-                            softWrap: false,
+            child: FocusRing(
+              radius: GerfautRadius.sm,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                focusColor: Colors.transparent,
+                onTap: _copy,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: GerfautSpacing.sm,
+                    vertical: GerfautSpacing.xs,
+                  ),
+                  decoration: BoxDecoration(
+                    color: widget.emphasis
+                        ? tokens.primary.withValues(alpha: 0.10)
+                        : tokens.surfaceSunken,
+                    borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Flexible on the outside so a narrow parent can still
+                      // squeeze the chip; the cap on the inside is what keeps
+                      // the confirmation from widening it.
+                      Flexible(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: maxValueWidth),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) => Text(
+                              _fitted(constraints.maxWidth, valueStyle, scaler),
+                              style: valueStyle,
+                              overflow: TextOverflow.fade,
+                              softWrap: false,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: GerfautSpacing.xs),
-                    Icon(
-                      _copied ? LucideIcons.check : LucideIcons.copy,
-                      size: 14,
-                      color: tokens.textMuted,
-                    ),
-                    if (_copied) ...[
                       const SizedBox(width: GerfautSpacing.xs),
-                      Text('Copied', style: copiedStyle),
+                      Icon(
+                        _copied ? LucideIcons.check : LucideIcons.copy,
+                        size: 14,
+                        color: tokens.textMuted,
+                      ),
+                      if (_copied) ...[
+                        const SizedBox(width: GerfautSpacing.xs),
+                        Text('Copied', style: copiedStyle),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),

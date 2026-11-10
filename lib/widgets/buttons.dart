@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/tokens.dart';
+import 'focus_ring.dart';
 import 'tap_target.dart';
 
 // Every labelled button is filled: a word alone, with no fill and no
@@ -181,24 +182,38 @@ class DisclosureButton extends StatelessWidget {
         child: TapTarget(
           child: SizedBox(
             height: GerfautTouch.control,
-            child: TextButton(
-              style: TextButton.styleFrom(
-                foregroundColor: tokens.textMuted,
-                overlayColor: tokens.surfaceSunken,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: GerfautSpacing.md,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(GerfautRadius.md),
-                ),
-                textStyle: _labelStyle(tokens),
-              ),
-              onPressed: onPressed,
-              child: _Content(
-                label: label,
-                leading: Icon(
-                  open ? LucideIcons.chevronUp : LucideIcons.chevronDown,
-                  size: _glyph,
+            // No fill at rest; Givre, whole, under the finger. Material's
+            // own overlay would lay it at a tenth of its strength, which
+            // vanishes on a card. The keyboard gets the ring instead of
+            // a tint.
+            child: FocusRing(
+              child: TextButton(
+                style:
+                    TextButton.styleFrom(
+                      foregroundColor: tokens.textMuted,
+                      overlayColor: Colors.transparent,
+                      splashFactory: NoSplash.splashFactory,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: GerfautSpacing.md,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(GerfautRadius.md),
+                      ),
+                      textStyle: _labelStyle(tokens),
+                    ).copyWith(
+                      backgroundColor: WidgetStateProperty.resolveWith(
+                        (states) => states.contains(WidgetState.pressed)
+                            ? tokens.surfaceSunken
+                            : Colors.transparent,
+                      ),
+                    ),
+                onPressed: onPressed,
+                child: _Content(
+                  label: label,
+                  leading: Icon(
+                    open ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+                    size: _glyph,
+                  ),
                 ),
               ),
             ),
@@ -396,7 +411,7 @@ class _FilledActionState extends State<_FilledAction>
         FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
     Widget button = CustomPaint(
       foregroundPainter: ring
-          ? _FocusRing(color: tokens.primary, radius: GerfautRadius.md)
+          ? FocusRingPainter(color: tokens.primary, radius: GerfautRadius.md)
           : null,
       child: Listener(
         onPointerDown: live ? (_) => press(true) : null,
@@ -455,33 +470,4 @@ class _Content extends StatelessWidget {
       ],
     );
   }
-}
-
-/// The keyboard focus ring, drawn outside the button so it does not
-/// move the layout.
-class _FocusRing extends CustomPainter {
-  const _FocusRing({required this.color, required this.radius});
-
-  final Color color;
-  final double radius;
-
-  static const double _width = 2;
-  static const double _gap = 2;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final out = _gap + _width / 2;
-    final rect = (Offset.zero & size).inflate(out);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(rect, Radius.circular(radius + out)),
-      Paint()
-        ..color = color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = _width,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_FocusRing old) =>
-      old.color != color || old.radius != radius;
 }

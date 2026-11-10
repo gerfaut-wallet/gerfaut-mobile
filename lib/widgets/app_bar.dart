@@ -5,9 +5,8 @@ import '../theme/tokens.dart';
 /// The one header of the app.
 ///
 /// A page with a back arrow puts its title against the arrow: what the
-/// title gives up on the left, the actions take on the right, and every
-/// action of the page fits in the bar instead of hiding under a menu. A
-/// root page, which has no arrow, opens at the page margin like its own
+/// title gives up on the left, the actions take on the right. A root
+/// page, which has no arrow, opens at the page margin like its own
 /// content does.
 ///
 /// Material's default adds 16px after the leading whatever the page is,

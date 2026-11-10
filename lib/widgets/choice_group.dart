@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/tokens.dart';
+import 'focus_ring.dart';
 import 'tap_target.dart';
 
 /// One option of a [ChoiceGroup].
@@ -101,38 +102,42 @@ class _ChoiceRow<T> extends StatelessWidget {
       label: option.label,
       excludeSemantics: true,
       child: TapTarget(
-        child: Material(
-          color: selected ? tokens.primary : tokens.surfaceSunken,
-          borderRadius: BorderRadius.circular(GerfautRadius.md),
-          child: InkWell(
+        // The ring stands in the gap between two rows, clear of both.
+        child: FocusRing(
+          child: Material(
+            color: selected ? tokens.primary : tokens.surfaceSunken,
             borderRadius: BorderRadius.circular(GerfautRadius.md),
-            onTap: onTap,
-            child: Container(
-              height: GerfautTouch.control,
-              padding: const EdgeInsets.symmetric(
-                horizontal: GerfautSpacing.md,
-              ),
-              alignment: Alignment.center,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (option.icon != null) ...[
-                    Icon(option.icon, size: 15, color: color),
-                    const SizedBox(width: 6),
-                  ],
-                  Flexible(
-                    child: Text(
-                      option.label,
-                      style: tokens.bodySmall.copyWith(
-                        color: color,
-                        fontWeight: FontWeight.w500,
-                        fontVariations: const [FontVariation('wght', 500)],
+            child: InkWell(
+              borderRadius: BorderRadius.circular(GerfautRadius.md),
+              focusColor: Colors.transparent,
+              onTap: onTap,
+              child: Container(
+                height: GerfautTouch.control,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: GerfautSpacing.md,
+                ),
+                alignment: Alignment.center,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (option.icon != null) ...[
+                      Icon(option.icon, size: 16, color: color),
+                      const SizedBox(width: GerfautSpacing.sm),
+                    ],
+                    Flexible(
+                      child: Text(
+                        option.label,
+                        style: tokens.bodySmall.copyWith(
+                          color: color,
+                          fontWeight: FontWeight.w500,
+                          fontVariations: const [FontVariation('wght', 500)],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

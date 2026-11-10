@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/tokens.dart';
+import 'focus_ring.dart';
 
 /// A setting that is a switch: its name, what it does under the name,
 /// and the switch at the end of the row.
@@ -74,13 +75,17 @@ class SettingSwitch extends StatelessWidget {
           // of every disabled control, it reads as out of reach.
           Opacity(
             opacity: onChanged == null ? 0.45 : 1,
-            child: Switch(
-              value: value,
-              activeThumbColor: tokens.onPrimary,
-              activeTrackColor: tokens.primary,
-              inactiveThumbColor: tokens.textMuted,
-              inactiveTrackColor: tokens.surfaceSunken,
-              onChanged: onChanged,
+            child: FocusRing(
+              radius: GerfautRadius.full,
+              child: Switch(
+                value: value,
+                activeThumbColor: tokens.onPrimary,
+                activeTrackColor: tokens.primary,
+                inactiveThumbColor: tokens.textMuted,
+                inactiveTrackColor: tokens.surfaceSunken,
+                focusColor: Colors.transparent,
+                onChanged: onChanged,
+              ),
             ),
           ),
         ],
