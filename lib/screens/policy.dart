@@ -51,8 +51,9 @@ class PolicyScreen extends ConsumerWidget {
               const SizedBox(height: GerfautSpacing.sm),
             ],
             switch (policy) {
-              // A read that failed says so, whatever it carried before.
-              AsyncError(:final error) => LoadFailure(
+              // A read that failed says so, whatever it carried before;
+              // once Try again is under way, the placeholder shows it.
+              AsyncError(:final error, isLoading: false) => LoadFailure(
                 what: 'The policy',
                 error: error,
                 centered: false,

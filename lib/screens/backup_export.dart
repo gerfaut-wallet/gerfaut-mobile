@@ -66,12 +66,14 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
   ({String message, String? detail})? _failure;
 
   /// Every wallet on every network, fetched once: the choice counts
-  /// them, and the network option lists their ids.
-  List<WalletMeta>? _all;
+  /// them, and the network option lists their ids. Without the list the
+  /// button stays off, and a failed read says why.
+  _WalletList _wallets = const _ListLoading();
 
-  /// Why the wallet list could not be read, while it could not: without
-  /// the list the button stays off, and the page says why.
-  Object? _walletsError;
+  List<WalletMeta>? get _all => switch (_wallets) {
+    _ListLoaded(:final wallets) => wallets,
+    _ => null,
+  };
 
   @override
   void initState() {
@@ -85,10 +87,10 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
         .listWallets()
         .then(
           (wallets) {
-            if (mounted) setState(() => _all = wallets);
+            if (mounted) setState(() => _wallets = _ListLoaded(wallets));
           },
           onError: (Object error) {
-            if (mounted) setState(() => _walletsError = error);
+            if (mounted) setState(() => _wallets = _ListFailed(error));
           },
         );
   }
@@ -279,13 +281,13 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
         const SizedBox(height: GerfautSpacing.md),
         FieldLabel('Wallets', tokens: tokens),
         const SizedBox(height: GerfautSpacing.sm),
-        if (_walletsError != null)
+        if (_wallets case _ListFailed(:final error))
           LoadFailure(
             what: 'The wallet list',
-            error: _walletsError,
+            error: error,
             centered: false,
             onRetry: () {
-              setState(() => _walletsError = null);
+              setState(() => _wallets = const _ListLoading());
               _loadWallets();
             },
           )
@@ -465,4 +467,25 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
       ],
     );
   }
+}
+
+/// Where the read of the wallet list stands.
+sealed class _WalletList {
+  const _WalletList();
+}
+
+final class _ListLoading extends _WalletList {
+  const _ListLoading();
+}
+
+final class _ListLoaded extends _WalletList {
+  const _ListLoaded(this.wallets);
+
+  final List<WalletMeta> wallets;
+}
+
+final class _ListFailed extends _WalletList {
+  const _ListFailed(this.error);
+
+  final Object error;
 }
