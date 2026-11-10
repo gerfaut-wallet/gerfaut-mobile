@@ -189,7 +189,6 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
       if (single)
         _AddressCard(
           title: 'Watched address',
-          hint: 'The one address this wallet watches.',
           rows: list.external,
           network: network,
         )
@@ -275,7 +274,7 @@ class _AddressBlock extends StatelessWidget {
           children: [
             Semantics(
               button: true,
-              label: 'Address QR code, tap to enlarge',
+              label: 'Enlarge the address QR code',
               child: InkWell(
                 borderRadius: BorderRadius.circular(GerfautRadius.lg),
                 onTap: onEnlarge,
@@ -454,7 +453,7 @@ class _QrDialog extends StatelessWidget {
         autofocus: true,
         child: Semantics(
           button: true,
-          label: 'Address QR code, tap to close',
+          label: 'Close the address QR code',
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => Navigator.of(context).pop(),
@@ -502,14 +501,16 @@ class _QrDialog extends StatelessWidget {
 class _AddressCard extends StatefulWidget {
   const _AddressCard({
     required this.title,
-    required this.hint,
     required this.rows,
     required this.network,
+    this.hint,
     this.emptyText,
   });
 
   final String title;
-  final String hint;
+
+  /// What the keychain is, when its name alone does not say.
+  final String? hint;
   final List<AddressRow> rows;
   final Network network;
 
@@ -556,11 +557,13 @@ class _AddressCardState extends State<_AddressCard> {
                     ],
                   ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  widget.hint,
-                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                ),
+                if (widget.hint != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    widget.hint!,
+                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                  ),
+                ],
               ],
             ),
           ),

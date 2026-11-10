@@ -13,7 +13,7 @@ import 'package:gerfaut/src/policy_text.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/address_chip.dart';
-import 'package:gerfaut/widgets/notice.dart';
+import 'package:gerfaut/widgets/load_failure.dart';
 import 'package:gerfaut/widgets/status_pill.dart';
 
 import 'core_fixtures.dart';
@@ -799,7 +799,7 @@ void main() {
           throw coreFailure('descriptor', 'the policy cannot be read: bad');
       await _pumpPolicy(tester, failing);
       await tester.pumpAndSettle();
-      expect(find.byType(GerfautNotice), findsOneWidget);
+      expect(find.byType(LoadFailure), findsOneWidget);
       expect(find.text('the policy cannot be read: bad'), findsOneWidget);
     });
 

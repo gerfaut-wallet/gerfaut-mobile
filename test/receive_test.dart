@@ -220,7 +220,6 @@ void main() {
       // A single watched address has no derivation path to show.
       expect(find.text('DERIVATION PATH'), findsNothing);
       // One card, no keychain vocabulary.
-      expect(find.text('The one address this wallet watches.'), findsOneWidget);
       expect(find.text('EXTERNAL'), findsNothing);
       expect(find.text('CHANGE'), findsNothing);
       expect(find.text('No change addresses revealed yet.'), findsNothing);

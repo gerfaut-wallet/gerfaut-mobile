@@ -16,6 +16,7 @@ import '../widgets/explorer_link.dart';
 import '../widgets/facts.dart';
 import '../widgets/load_failure.dart';
 import '../widgets/status_pill.dart';
+import '../widgets/toast.dart';
 import '../widgets/tx_diagram.dart';
 
 /// Transaction detail, read in the order the questions come: how much
@@ -706,6 +707,7 @@ class _RawTransactionState extends State<_RawTransaction> {
     await Clipboard.setData(ClipboardData(text: widget.hex));
     if (!mounted) return;
     setState(() => _copied = true);
+    ScaffoldMessenger.of(context).showSnackBar(Toast('Copied'));
     await Future<void>.delayed(const Duration(milliseconds: 1500));
     if (mounted) setState(() => _copied = false);
   }

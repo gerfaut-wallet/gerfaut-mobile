@@ -281,10 +281,7 @@ void main() {
     // Adding uses the re-parsed material on the network kept.
     await tester.enterText(find.byType(TextField), 'Hot');
     await tester.pumpAndSettle();
-    // The selectable preview address scrolls on its own: drag the
-    // step's list rather than any scrollable.
-    await tester.drag(find.byType(ListView), const Offset(0, -600));
-    await tester.pumpAndSettle();
+    // The step's actions are pinned under the form.
     await tester.ensureVisible(find.text('Add wallet'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Add wallet'));
@@ -399,8 +396,6 @@ void main() {
       expect(find.text('tb1q0testnet0preview'), findsNothing);
 
       await tester.enterText(find.byType(TextField), 'Lab');
-      await tester.pumpAndSettle();
-      await tester.drag(find.byType(ListView), const Offset(0, -600));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Add wallet'));
       await tester.pumpAndSettle();
@@ -607,7 +602,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Scan'));
+    await tester.tap(find.text('Scan a QR code'));
     await tester.pumpAndSettle();
     camera!('ur:crypto-output/payload');
     await tester.pumpAndSettle();
