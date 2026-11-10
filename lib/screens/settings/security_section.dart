@@ -16,6 +16,7 @@ import '../../widgets/notice.dart';
 import '../../widgets/password_field.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/setting_switch.dart';
+import 'fields.dart';
 
 /// Why "Unlock with biometrics" is greyed on a phone whose only
 /// biometric is a weak one.
@@ -170,7 +171,17 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     // The vault is the source of truth for what is set; the lock
     // provider only knows whether the screen is up right now.
-    final lock = ref.watch(settingsProvider).value?.appLock;
+    final settings = ref.watch(settingsProvider).value;
+    // Until the vault has answered, no lock switch is drawn: it would
+    // read "off" on a phone that is locked.
+    if (settings == null) {
+      return const SectionCard(
+        icon: LucideIcons.lock,
+        title: 'Security',
+        children: [SettingsPending(what: 'The security settings')],
+      );
+    }
+    final lock = settings.appLock;
     final biometrics = ref.watch(biometricSupportProvider).value;
     final weakOnly = biometrics == BiometricSupport.weakOnly;
     final disguised = ref.watch(disguiseProvider).disguised;
@@ -335,86 +346,89 @@ class _SetLockSheetState extends State<_SetLockSheet> {
         top: GerfautSpacing.md,
         bottom: MediaQuery.viewInsetsOf(context).bottom + GerfautSpacing.md,
       ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              widget.asksCurrent
-                  ? 'Change the app lock'
-                  : 'Turn on the app lock',
-              style: tokens.h2,
-            ),
-            const SizedBox(height: GerfautSpacing.md),
-            if (widget.kind == null) ...[
-              ChoiceGroup<LockKind>(
-                label: 'Kind',
-                value: _kind,
-                options: const [
-                  ChoiceOption(value: LockKind.pin, label: 'PIN'),
-                  ChoiceOption(value: LockKind.password, label: 'Password'),
-                ],
-                onChanged: (kind) => setState(() {
-                  _kind = kind;
-                  _problem = null;
-                }),
-              ),
-              const SizedBox(height: GerfautSpacing.xs),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               Text(
-                _kind == LockKind.pin
-                    ? '4 to 12 digits'
-                    : 'At least 8 characters',
-                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                widget.asksCurrent
+                    ? 'Change the app lock'
+                    : 'Turn on the app lock',
+                style: tokens.h2,
               ),
               const SizedBox(height: GerfautSpacing.md),
-            ],
-            if (widget.asksCurrent) ...[
+              if (widget.kind == null) ...[
+                ChoiceGroup<LockKind>(
+                  label: 'Kind',
+                  value: _kind,
+                  options: const [
+                    ChoiceOption(value: LockKind.pin, label: 'PIN'),
+                    ChoiceOption(value: LockKind.password, label: 'Password'),
+                  ],
+                  onChanged: (kind) => setState(() {
+                    _kind = kind;
+                    _problem = null;
+                  }),
+                ),
+                const SizedBox(height: GerfautSpacing.xs),
+                Text(
+                  _kind == LockKind.pin
+                      ? '4 to 12 digits'
+                      : 'At least 8 characters',
+                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                ),
+                const SizedBox(height: GerfautSpacing.md),
+              ],
+              if (widget.asksCurrent) ...[
+                PasswordField(
+                  key: const Key('lock.current'),
+                  label: _kind == LockKind.pin
+                      ? 'Current PIN'
+                      : 'Current password',
+                  pin: _kind == LockKind.pin,
+                  controller: _currentController,
+                  onChanged: () => setState(() => _problem = null),
+                ),
+                const SizedBox(height: GerfautSpacing.md),
+              ],
               PasswordField(
-                key: const Key('lock.current'),
-                label: _kind == LockKind.pin
-                    ? 'Current PIN'
-                    : 'Current password',
+                key: const Key('lock.secret'),
+                label: _kind == LockKind.pin ? 'New PIN' : 'New password',
                 pin: _kind == LockKind.pin,
-                controller: _currentController,
+                controller: _secretController,
                 onChanged: () => setState(() => _problem = null),
               ),
               const SizedBox(height: GerfautSpacing.md),
-            ],
-            PasswordField(
-              key: const Key('lock.secret'),
-              label: _kind == LockKind.pin ? 'New PIN' : 'New password',
-              pin: _kind == LockKind.pin,
-              controller: _secretController,
-              onChanged: () => setState(() => _problem = null),
-            ),
-            const SizedBox(height: GerfautSpacing.md),
-            PasswordField(
-              key: const Key('lock.confirm'),
-              label: 'Confirm',
-              pin: _kind == LockKind.pin,
-              controller: _confirmController,
-              onChanged: () => setState(() => _problem = null),
-              onSubmitted: _submit,
-            ),
-            if (_problem != null) ...[
-              const SizedBox(height: GerfautSpacing.sm),
-              // Said aloud as it appears.
-              Semantics(
-                liveRegion: true,
-                child: Text(
-                  _problem!,
-                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+              PasswordField(
+                key: const Key('lock.confirm'),
+                label: 'Confirm',
+                pin: _kind == LockKind.pin,
+                controller: _confirmController,
+                onChanged: () => setState(() => _problem = null),
+                onSubmitted: _submit,
+              ),
+              if (_problem != null) ...[
+                const SizedBox(height: GerfautSpacing.sm),
+                // Said aloud as it appears.
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    _problem!,
+                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                  ),
                 ),
+              ],
+              const SizedBox(height: GerfautSpacing.md),
+              PrimaryButton(
+                label: widget.asksCurrent ? 'Change' : 'Turn on',
+                expand: true,
+                onPressed: _submit,
               ),
             ],
-            const SizedBox(height: GerfautSpacing.md),
-            PrimaryButton(
-              label: widget.asksCurrent ? 'Change' : 'Turn on',
-              expand: true,
-              onPressed: _submit,
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -462,34 +476,41 @@ class _ConfirmSecretSheetState extends State<_ConfirmSecretSheet> {
         top: GerfautSpacing.md,
         bottom: MediaQuery.viewInsetsOf(context).bottom + GerfautSpacing.md,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(widget.title, style: tokens.h2),
-          if (widget.note != null) ...[
-            const SizedBox(height: GerfautSpacing.sm),
-            Text(
-              widget.note!,
-              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-            ),
-          ],
-          const SizedBox(height: GerfautSpacing.md),
-          PasswordField(
-            key: const Key('lock.current'),
-            label: widget.kind == LockKind.pin ? 'PIN' : 'Password',
-            pin: widget.kind == LockKind.pin,
-            controller: _controller,
-            autofocus: true,
-            onSubmitted: () => Navigator.of(context).pop(_controller.text),
+      child: SafeArea(
+        top: false,
+        // Scrolls under the keyboard at a large text size or in
+        // landscape, where the button would otherwise run off the sheet.
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(widget.title, style: tokens.h2),
+              if (widget.note != null) ...[
+                const SizedBox(height: GerfautSpacing.sm),
+                Text(
+                  widget.note!,
+                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                ),
+              ],
+              const SizedBox(height: GerfautSpacing.md),
+              PasswordField(
+                key: const Key('lock.current'),
+                label: widget.kind == LockKind.pin ? 'PIN' : 'Password',
+                pin: widget.kind == LockKind.pin,
+                controller: _controller,
+                autofocus: true,
+                onSubmitted: () => Navigator.of(context).pop(_controller.text),
+              ),
+              const SizedBox(height: GerfautSpacing.md),
+              PrimaryButton(
+                label: widget.action,
+                expand: true,
+                onPressed: () => Navigator.of(context).pop(_controller.text),
+              ),
+            ],
           ),
-          const SizedBox(height: GerfautSpacing.md),
-          PrimaryButton(
-            label: widget.action,
-            expand: true,
-            onPressed: () => Navigator.of(context).pop(_controller.text),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -553,57 +574,60 @@ class DisguiseSheet extends StatelessWidget {
         top: GerfautSpacing.md,
         bottom: MediaQuery.viewInsetsOf(context).bottom + GerfautSpacing.md,
       ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Disguise the app', style: tokens.h2),
-            const SizedBox(height: GerfautSpacing.sm),
-            Text(
-              'Gerfaut hides behind a working calculator. What that means:',
-              style: tokens.body,
-            ),
-            const SizedBox(height: GerfautSpacing.sm),
-            for (final fact in [...facts, if (liveOn) liveFact])
-              Padding(
-                padding: const EdgeInsets.only(bottom: GerfautSpacing.xs),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    FirstLine(
-                      style: muted,
-                      child: Icon(
-                        LucideIcons.dot,
-                        size: 16,
-                        color: tokens.textMuted,
-                      ),
-                    ),
-                    const SizedBox(width: GerfautSpacing.sm),
-                    Expanded(child: Text(fact, style: muted)),
-                  ],
-                ),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Disguise the app', style: tokens.h2),
+              const SizedBox(height: GerfautSpacing.sm),
+              Text(
+                'Gerfaut hides behind a working calculator. What that means:',
+                style: tokens.body,
               ),
-            const SizedBox(height: GerfautSpacing.sm),
-            const GerfautNotice(
-              tone: NoticeTone.info,
-              message:
-                  'Forget the PIN and the app cannot be opened: it is the '
-                  'only way in.',
-            ),
-            const SizedBox(height: GerfautSpacing.md),
-            PrimaryButton(
-              label: 'Turn on the disguise',
-              expand: true,
-              onPressed: () => Navigator.of(context).pop(true),
-            ),
-            const SizedBox(height: GerfautSpacing.sm),
-            SecondaryButton(
-              label: 'Cancel',
-              expand: true,
-              onPressed: () => Navigator.of(context).pop(false),
-            ),
-          ],
+              const SizedBox(height: GerfautSpacing.sm),
+              for (final fact in [...facts, if (liveOn) liveFact])
+                Padding(
+                  padding: const EdgeInsets.only(bottom: GerfautSpacing.xs),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      FirstLine(
+                        style: muted,
+                        child: Icon(
+                          LucideIcons.dot,
+                          size: 16,
+                          color: tokens.textMuted,
+                        ),
+                      ),
+                      const SizedBox(width: GerfautSpacing.sm),
+                      Expanded(child: Text(fact, style: muted)),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: GerfautSpacing.sm),
+              const GerfautNotice(
+                tone: NoticeTone.info,
+                message:
+                    'Forget the PIN and the app cannot be opened: it is the '
+                    'only way in.',
+              ),
+              const SizedBox(height: GerfautSpacing.md),
+              PrimaryButton(
+                label: 'Turn on the disguise',
+                expand: true,
+                onPressed: () => Navigator.of(context).pop(true),
+              ),
+              const SizedBox(height: GerfautSpacing.sm),
+              SecondaryButton(
+                label: 'Cancel',
+                expand: true,
+                onPressed: () => Navigator.of(context).pop(false),
+              ),
+            ],
+          ),
         ),
       ),
     );

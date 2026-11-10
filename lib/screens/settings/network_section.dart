@@ -508,10 +508,7 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final settings = ref.watch(settingsProvider).value;
     if (settings == null) {
-      return Text(
-        'Loading…',
-        style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-      );
+      return const SettingsPending(what: 'The network settings');
     }
     _seedBackendForm(settings);
     final network = settings.activeNetwork;
@@ -884,45 +881,51 @@ class _NetworkCard extends StatelessWidget {
         button: true,
         inMutuallyExclusiveGroup: true,
         selected: selected,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(GerfautRadius.md),
-          onTap: selected ? null : onTap,
-          child: Container(
-            padding: const EdgeInsets.all(
-              GerfautSpacing.sm + GerfautSpacing.xs,
-            ),
-            decoration: BoxDecoration(
-              color: selected ? tokens.surfaceSunken : tokens.surface,
-              borderRadius: BorderRadius.circular(GerfautRadius.md),
-              border: Border.all(
-                color: selected ? tokens.primary : tokens.border,
+        // The fill and the edge are the Material's own: a decorated
+        // box under the InkWell would hide its ripple.
+        child: Material(
+          color: selected ? tokens.surfaceSunken : tokens.surface,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(GerfautRadius.md),
+            side: BorderSide(color: selected ? tokens.primary : tokens.border),
+          ),
+          child: InkWell(
+            onTap: selected ? null : onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(
+                GerfautSpacing.sm + GerfautSpacing.xs,
               ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        entry.network.label,
-                        style: tokens.bodySmall.copyWith(
-                          color: selected ? tokens.primary : tokens.text,
-                          fontWeight: FontWeight.w500,
-                          fontVariations: const [FontVariation('wght', 500)],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          entry.network.label,
+                          style: tokens.bodySmall.copyWith(
+                            color: selected ? tokens.primary : tokens.text,
+                            fontWeight: FontWeight.w500,
+                            fontVariations: const [FontVariation('wght', 500)],
+                          ),
                         ),
                       ),
-                    ),
-                    if (selected)
-                      Icon(LucideIcons.check, size: 15, color: tokens.primary),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  entry.hint,
-                  style: tokens.label.copyWith(color: tokens.textMuted),
-                ),
-              ],
+                      if (selected)
+                        Icon(
+                          LucideIcons.check,
+                          size: 15,
+                          color: tokens.primary,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    entry.hint,
+                    style: tokens.label.copyWith(color: tokens.textMuted),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -1131,67 +1134,72 @@ class _BackendOption extends StatelessWidget {
         button: true,
         inMutuallyExclusiveGroup: true,
         selected: selected,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(GerfautRadius.md),
-          onTap: () => onChanged(value),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: GerfautSpacing.sm),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // The dot rides the first line of a label that wraps, by
-                // measurement — the 2px nudge it replaces was right at one
-                // font size and wrong at every other.
-                FirstLine(
-                  style: tokens.bodySmall,
-                  child: Container(
-                    width: 20,
-                    height: 20,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      // A control's edge, not a card's: Ardoise, which
-                      // holds 3:1 on both surfaces where Brume does not.
-                      border: Border.all(
-                        color: selected ? tokens.primary : tokens.textMuted,
-                        width: 2,
+        // Its own Material: the card around it is a decorated box, and
+        // a ripple drawn on the page under it would never show.
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(GerfautRadius.md),
+            onTap: () => onChanged(value),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: GerfautSpacing.sm),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // The dot rides the first line of a label that wraps, by
+                  // measurement — the 2px nudge it replaces was right at one
+                  // font size and wrong at every other.
+                  FirstLine(
+                    style: tokens.bodySmall,
+                    child: Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        // A control's edge, not a card's: Ardoise, which
+                        // holds 3:1 on both surfaces where Brume does not.
+                        border: Border.all(
+                          color: selected ? tokens.primary : tokens.textMuted,
+                          width: 2,
+                        ),
                       ),
-                    ),
-                    child: selected
-                        ? Center(
-                            child: Container(
-                              width: 10,
-                              height: 10,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: tokens.primary,
+                      child: selected
+                          ? Center(
+                              child: Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: tokens.primary,
+                                ),
                               ),
-                            ),
-                          )
-                        : null,
+                            )
+                          : null,
+                    ),
                   ),
-                ),
-                const SizedBox(width: GerfautSpacing.sm),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        label,
-                        style: tokens.bodySmall.copyWith(
-                          fontWeight: FontWeight.w500,
-                          fontVariations: const [FontVariation('wght', 500)],
+                  const SizedBox(width: GerfautSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label,
+                          style: tokens.bodySmall.copyWith(
+                            fontWeight: FontWeight.w500,
+                            fontVariations: const [FontVariation('wght', 500)],
+                          ),
                         ),
-                      ),
-                      Text(
-                        hint,
-                        style: tokens.bodySmall.copyWith(
-                          color: tokens.textMuted,
+                        Text(
+                          hint,
+                          style: tokens.bodySmall.copyWith(
+                            color: tokens.textMuted,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

@@ -16,6 +16,7 @@ import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/choice_group.dart';
 import '../widgets/facts.dart';
+import '../widgets/load_failure.dart';
 import '../widgets/notice.dart';
 import '../widgets/password_field.dart';
 import '../widgets/pinned_action_form.dart';
@@ -68,12 +69,28 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
   /// them, and the network option lists their ids.
   List<WalletMeta>? _all;
 
+  /// Why the wallet list could not be read, while it could not: without
+  /// the list the button stays off, and the page says why.
+  Object? _walletsError;
+
   @override
   void initState() {
     super.initState();
-    ref.read(bridgeProvider).listWallets().then((wallets) {
-      if (mounted) setState(() => _all = wallets);
-    }, onError: (_) {});
+    _loadWallets();
+  }
+
+  void _loadWallets() {
+    ref
+        .read(bridgeProvider)
+        .listWallets()
+        .then(
+          (wallets) {
+            if (mounted) setState(() => _all = wallets);
+          },
+          onError: (Object error) {
+            if (mounted) setState(() => _walletsError = error);
+          },
+        );
   }
 
   @override
@@ -262,11 +279,21 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
         const SizedBox(height: GerfautSpacing.md),
         FieldLabel('Wallets', tokens: tokens),
         const SizedBox(height: GerfautSpacing.sm),
+        if (_walletsError != null)
+          LoadFailure(
+            what: 'The wallet list',
+            error: _walletsError,
+            centered: false,
+            onRetry: () {
+              setState(() => _walletsError = null);
+              _loadWallets();
+            },
+          )
         // Both counts equal means a network scope would seal the same
         // thing under another name: there is no choice to make, and a
         // group of one option would read as a control that does
         // nothing. The scope is said plainly, as on the desktop.
-        if (all != null && onNetwork != null && onNetwork != all.length)
+        else if (all != null && onNetwork != null && onNetwork != all.length)
           ChoiceGroup<_Scope>(
             label: 'Wallets',
             value: _scope,
@@ -425,12 +452,6 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
           label: 'Show QR code',
           icon: LucideIcons.qrCode,
           onPressed: () => _showQr(bundle),
-        ),
-        const SizedBox(height: GerfautSpacing.sm),
-        Text(
-          'The QR code is animated: the other device reads it in a few '
-          'seconds, whichever frame it starts on.',
-          style: tokens.bodySmall.copyWith(color: tokens.textMuted),
         ),
         const SizedBox(height: GerfautSpacing.md),
         // Secondary like the two ways out of the backup above it: in

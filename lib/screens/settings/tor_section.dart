@@ -110,10 +110,10 @@ class _TorSectionState extends ConsumerState<TorSection> {
     final status = ref.watch(torStatusProvider).value;
     if (tor == null) return const SizedBox.shrink();
     final embedded = status?.embeddedAvailable ?? false;
+    // With a Tor of its own, the line under the choice says which one
+    // each mode uses: the intro does not say it a second time.
     final intro = embedded
-        ? 'An address ending in .onion goes through Tor. Gerfaut starts its '
-              'own Tor client, or uses the one already running on this '
-              'device when told to.'
+        ? 'An address ending in .onion goes through Tor.'
         : 'An address ending in .onion goes through Tor. This build has no '
               'Tor of its own: choose System below, with a Tor app such as '
               'Orbot running on this device.';

@@ -15,6 +15,7 @@ import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
+import '../widgets/facts.dart';
 import '../widgets/password_field.dart';
 import '../widgets/pinned_action_form.dart';
 import '../widgets/setting_switch.dart';
@@ -429,11 +430,14 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
           style: tokens.figureOf(size: 14, weight: FontWeight.w500),
         ),
         const SizedBox(height: GerfautSpacing.md),
-        Container(
-          decoration: BoxDecoration(
-            color: tokens.surface,
+        // A Material and not a decorated box: the rows' ripple is drawn
+        // on it, and would be hidden under a box's fill.
+        Material(
+          color: tokens.surface,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(GerfautRadius.lg),
-            border: Border.all(color: tokens.border),
+            side: BorderSide(color: tokens.border),
           ),
           child: Column(
             children: [
@@ -548,7 +552,6 @@ class _SettingsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final label = tokens.label.copyWith(color: tokens.textMuted);
     final value = tokens.data;
     return Container(
       width: double.infinity,
@@ -561,7 +564,7 @@ class _SettingsPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (backends.isNotEmpty) ...[
-            Text('NODES', style: label),
+            FieldLabel('Nodes', tokens: tokens),
             for (final backend in backends)
               MergeSemantics(
                 child: Padding(
@@ -595,7 +598,7 @@ class _SettingsPanel extends StatelessWidget {
           ],
           if (hosts.isNotEmpty) ...[
             if (backends.isNotEmpty) const SizedBox(height: GerfautSpacing.sm),
-            Text('PINNED CERTIFICATES', style: label),
+            FieldLabel('Pinned certificates', tokens: tokens),
             for (final host in hosts)
               Padding(
                 padding: const EdgeInsets.only(top: GerfautSpacing.xs),

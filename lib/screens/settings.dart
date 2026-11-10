@@ -85,12 +85,14 @@ class SettingsScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.all(GerfautSpacing.md),
           children: [
-            Container(
+            // A Material and not a decorated box: the rows' ripple is
+            // drawn on it, and would be hidden under a box's fill.
+            Material(
+              color: tokens.surface,
               clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                color: tokens.surface,
+              shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(GerfautRadius.lg),
-                border: Border.all(color: tokens.border),
+                side: BorderSide(color: tokens.border),
               ),
               child: Column(
                 children: [
