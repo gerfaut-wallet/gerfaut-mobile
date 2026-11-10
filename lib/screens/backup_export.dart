@@ -16,6 +16,7 @@ import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/choice_group.dart';
 import '../widgets/facts.dart';
+import '../widgets/load_failure.dart';
 import '../widgets/notice.dart';
 import '../widgets/password_field.dart';
 import '../widgets/pinned_action_form.dart';
@@ -65,15 +66,33 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
   ({String message, String? detail})? _failure;
 
   /// Every wallet on every network, fetched once: the choice counts
-  /// them, and the network option lists their ids.
-  List<WalletMeta>? _all;
+  /// them, and the network option lists their ids. Without the list the
+  /// button stays off, and a failed read says why.
+  _WalletList _wallets = const _ListLoading();
+
+  List<WalletMeta>? get _all => switch (_wallets) {
+    _ListLoaded(:final wallets) => wallets,
+    _ => null,
+  };
 
   @override
   void initState() {
     super.initState();
-    ref.read(bridgeProvider).listWallets().then((wallets) {
-      if (mounted) setState(() => _all = wallets);
-    }, onError: (_) {});
+    _loadWallets();
+  }
+
+  void _loadWallets() {
+    ref
+        .read(bridgeProvider)
+        .listWallets()
+        .then(
+          (wallets) {
+            if (mounted) setState(() => _wallets = _ListLoaded(wallets));
+          },
+          onError: (Object error) {
+            if (mounted) setState(() => _wallets = _ListFailed(error));
+          },
+        );
   }
 
   @override
@@ -262,11 +281,21 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
         const SizedBox(height: GerfautSpacing.md),
         FieldLabel('Wallets', tokens: tokens),
         const SizedBox(height: GerfautSpacing.sm),
+        if (_wallets case _ListFailed(:final error))
+          LoadFailure(
+            what: 'The wallet list',
+            error: error,
+            centered: false,
+            onRetry: () {
+              setState(() => _wallets = const _ListLoading());
+              _loadWallets();
+            },
+          )
         // Both counts equal means a network scope would seal the same
         // thing under another name: there is no choice to make, and a
         // group of one option would read as a control that does
         // nothing. The scope is said plainly, as on the desktop.
-        if (all != null && onNetwork != null && onNetwork != all.length)
+        else if (all != null && onNetwork != null && onNetwork != all.length)
           ChoiceGroup<_Scope>(
             label: 'Wallets',
             value: _scope,
@@ -426,12 +455,6 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
           icon: LucideIcons.qrCode,
           onPressed: () => _showQr(bundle),
         ),
-        const SizedBox(height: GerfautSpacing.sm),
-        Text(
-          'The QR code is animated: the other device reads it in a few '
-          'seconds, whichever frame it starts on.',
-          style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-        ),
         const SizedBox(height: GerfautSpacing.md),
         // Secondary like the two ways out of the backup above it: in
         // blue it would ask to close before either is used. Full
@@ -444,4 +467,25 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
       ],
     );
   }
+}
+
+/// Where the read of the wallet list stands.
+sealed class _WalletList {
+  const _WalletList();
+}
+
+final class _ListLoading extends _WalletList {
+  const _ListLoading();
+}
+
+final class _ListLoaded extends _WalletList {
+  const _ListLoaded(this.wallets);
+
+  final List<WalletMeta> wallets;
+}
+
+final class _ListFailed extends _WalletList {
+  const _ListFailed(this.error);
+
+  final Object error;
 }

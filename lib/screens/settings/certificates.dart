@@ -145,12 +145,6 @@ class UnknownCertificateDialog extends StatelessWidget {
                   style: tokens.data.copyWith(fontSize: 13),
                 ),
               ),
-              const SizedBox(height: GerfautSpacing.sm),
-              Text(
-                'Accepting records this fingerprint for $host. Any other '
-                'certificate from that host is refused afterwards.',
-                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-              ),
             ],
           ),
         ),

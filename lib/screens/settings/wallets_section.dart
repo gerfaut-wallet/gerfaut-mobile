@@ -8,6 +8,7 @@ import '../../src/models.dart';
 import '../../src/state.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/buttons.dart';
+import '../../widgets/load_failure.dart';
 import '../../widgets/notice.dart';
 import '../../widgets/reorder.dart';
 import '../../widgets/section_card.dart';
@@ -239,15 +240,13 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final settings = ref.watch(settingsProvider).value;
-    final wallets = ref.watch(walletsProvider).value ?? [];
+    final walletsAsync = ref.watch(walletsProvider);
+    final wallets = walletsAsync.value ?? [];
     final syncs = ref.watch(syncProvider);
     if (settings == null) {
-      return Padding(
-        padding: const EdgeInsets.all(GerfautSpacing.md),
-        child: Text(
-          'Loading…',
-          style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-        ),
+      return const Padding(
+        padding: EdgeInsets.all(GerfautSpacing.md),
+        child: SettingsPending(what: 'The wallet settings'),
       );
     }
     _seedGapLimit(settings);
@@ -270,10 +269,22 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
               SliverToBoxAdapter(child: _gapLimit(tokens)),
               if (shown.isEmpty)
                 SliverToBoxAdapter(
-                  child: Text(
-                    'No wallets on this network yet.',
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  ),
+                  // A list that failed to load is not an empty one.
+                  child: walletsAsync.hasError && !walletsAsync.isLoading
+                      ? LoadFailure(
+                          what: 'The wallets',
+                          error: walletsAsync.error,
+                          onRetry: () => ref.invalidate(walletsProvider),
+                          centered: false,
+                        )
+                      : Text(
+                          walletsAsync.hasValue
+                              ? 'No wallets on this network yet.'
+                              : 'Loading…',
+                          style: tokens.bodySmall.copyWith(
+                            color: tokens.textMuted,
+                          ),
+                        ),
                 )
               else
                 // The order here is the order of the home screen.

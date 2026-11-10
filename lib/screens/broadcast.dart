@@ -190,8 +190,14 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
         ),
         answering: ticket,
       );
-    } catch (error) {
-      _go(_Composing((headline: '$error', detail: null)), answering: ticket);
+    } catch (error, stack) {
+      debugPrint('broadcast: $error\n$stack');
+      // Not the core's refusal: a fault in the app, with no words fit
+      // for a screen of its own.
+      _go(
+        _Composing((headline: internalFailure, detail: null)),
+        answering: ticket,
+      );
     }
   }
 
@@ -282,8 +288,9 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
       _go(_Sent(preview, record), answering: ticket);
     } on BridgeException catch (error) {
       _go(_Previewing(preview, error.message), answering: ticket);
-    } catch (error) {
-      _go(_Previewing(preview, '$error'), answering: ticket);
+    } catch (error, stack) {
+      debugPrint('broadcast: $error\n$stack');
+      _go(_Previewing(preview, internalFailure), answering: ticket);
     }
   }
 
@@ -449,7 +456,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
         Padding(
           padding: const EdgeInsets.all(GerfautSpacing.md),
           child: PrimaryButton(
-            label: decoding ? 'Decoding…' : 'Preview',
+            label: decoding ? 'Reading…' : 'Preview',
             expand: true,
             busy: decoding,
             onPressed: _inputController.text.trim().isEmpty ? null : _decode,
@@ -479,7 +486,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
           child: ListView(
             padding: const EdgeInsets.all(GerfautSpacing.md),
             children: [
-              _Hero(preview: preview, tokens: tokens),
+              _Hero(preview: preview, tokens: tokens, sent: sent != null),
               if (sent != null) ...[
                 const SizedBox(height: GerfautSpacing.lg),
                 _StatusCard(
@@ -543,7 +550,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (refusal != null) ...[
-                _RefusalBlock(message: refusal, tokens: tokens),
+                _RefusalBlock(message: refusal),
                 const SizedBox(height: GerfautSpacing.md),
               ],
               if (sent == null)
@@ -556,7 +563,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
                     const SizedBox(width: GerfautSpacing.sm),
                     Expanded(
                       child: PrimaryButton(
-                        label: sending ? 'Sending…' : 'Broadcast',
+                        label: sending ? 'Broadcasting…' : 'Broadcast',
                         icon: LucideIcons.radio,
                         expand: true,
                         busy: sending,
@@ -689,10 +696,14 @@ List<TxBranch> _outputBranches(List<TxOutputPreview> outputs) {
 /// The transaction's identity and where it stands: txid, container,
 /// readiness.
 class _Hero extends StatelessWidget {
-  const _Hero({required this.preview, required this.tokens});
+  const _Hero({required this.preview, required this.tokens, this.sent = false});
 
   final TxPreview preview;
   final GerfautTokens tokens;
+
+  /// The transaction is out: the status card under the hero says where
+  /// it stands, and "Ready to broadcast" would contradict it.
+  final bool sent;
 
   @override
   Widget build(BuildContext context) {
@@ -730,24 +741,25 @@ class _Hero extends StatelessWidget {
             // too for one already out, waiting to be mined: neither the
             // green of a send still to make nor a red, since sending it
             // again does no harm.
-            _Pill(
-              tone: preview.readiness == TxReadiness.ready
-                  ? _Tone.confirmed
-                  : _Tone.pending,
-              icon: switch (preview.readiness) {
-                TxReadiness.ready => LucideIcons.circleCheck,
-                TxReadiness.refused => LucideIcons.ban,
-                TxReadiness.unsigned => LucideIcons.penOff,
-                TxReadiness.inMempool => LucideIcons.hourglass,
-              },
-              label: switch (preview.readiness) {
-                TxReadiness.ready => 'Ready to broadcast',
-                TxReadiness.refused => 'Will be refused',
-                TxReadiness.unsigned => 'Not fully signed',
-                TxReadiness.inMempool => 'Already in the mempool',
-              },
-              tokens: tokens,
-            ),
+            if (!sent)
+              _Pill(
+                tone: preview.readiness == TxReadiness.ready
+                    ? _Tone.confirmed
+                    : _Tone.pending,
+                icon: switch (preview.readiness) {
+                  TxReadiness.ready => LucideIcons.circleCheck,
+                  TxReadiness.refused => LucideIcons.ban,
+                  TxReadiness.unsigned => LucideIcons.penOff,
+                  TxReadiness.inMempool => LucideIcons.hourglass,
+                },
+                label: switch (preview.readiness) {
+                  TxReadiness.ready => 'Ready to broadcast',
+                  TxReadiness.refused => 'Will be refused',
+                  TxReadiness.unsigned => 'Not fully signed',
+                  TxReadiness.inMempool => 'Already in the mempool',
+                },
+                tokens: tokens,
+              ),
             if (preview.network != Network.mainnet)
               _Pill(
                 tone: _Tone.neutral,
@@ -1349,10 +1361,9 @@ class _FeeValue extends ConsumerWidget {
 /// is fixed. Red is what an unexpected outflow or a changed certificate
 /// costs, and spending it here is what makes it inaudible there.
 class _RefusalBlock extends StatelessWidget {
-  const _RefusalBlock({required this.message, required this.tokens});
+  const _RefusalBlock({required this.message});
 
   final String message;
-  final GerfautTokens tokens;
 
   @override
   Widget build(BuildContext context) {
@@ -1399,6 +1410,9 @@ class _ConfirmDialog extends ConsumerWidget {
               '${rate != null ? ' (${_rateFigure(preview, rate)}${preview.feeRateBasis == FeeRateBasis.exact ? '' : ' $_onceSigned'})' : ''}'
               '$ending';
     return AlertDialog(
+      // The fee line and the core's own words can run long, and more so
+      // at a large text size: the dialog scrolls rather than overflows.
+      scrollable: true,
       backgroundColor: tokens.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(GerfautRadius.lg),
@@ -1572,8 +1586,9 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
       );
     } on BridgeException catch (error) {
       answer = _Failed(error.message, _state.lastKnown);
-    } catch (error) {
-      answer = _Failed('$error', _state.lastKnown);
+    } catch (error, stack) {
+      debugPrint('broadcast: $error\n$stack');
+      answer = _Failed(internalFailure, _state.lastKnown);
     }
     _go(answer, ticket: ticket);
     if (mounted && ticket == _ticket) _arm();
@@ -1784,6 +1799,7 @@ class _ForgetDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     return AlertDialog(
+      scrollable: true,
       backgroundColor: tokens.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(GerfautRadius.lg),

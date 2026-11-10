@@ -87,6 +87,7 @@ class NotificationsSection extends ConsumerWidget {
               style: tokens.bodySmall.copyWith(color: tokens.pending),
             ),
           ),
+          const SizedBox(height: GerfautSpacing.sm),
           Align(
             alignment: AlignmentDirectional.centerStart,
             child: PrimaryButton(
@@ -222,14 +223,19 @@ class _LiveStatusState extends ConsumerState<_LiveStatus> {
           liveRegion: true,
           button: stopped,
           child: stopped
-              ? InkWell(
-                  borderRadius: BorderRadius.circular(GerfautRadius.sm),
-                  onTap: () => ref.read(liveProvider.notifier).restart(),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      minHeight: GerfautTouch.target,
+              // Its own Material: the card is a decorated box, and a
+              // ripple drawn under it would never show.
+              ? Material(
+                  type: MaterialType.transparency,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                    onTap: () => ref.read(liveProvider.notifier).restart(),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        minHeight: GerfautTouch.target,
+                      ),
+                      child: row,
                     ),
-                    child: row,
                   ),
                 )
               : Padding(

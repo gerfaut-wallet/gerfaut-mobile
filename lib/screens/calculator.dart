@@ -309,20 +309,24 @@ class _KeyButton extends StatelessWidget {
     };
     return ConstrainedBox(
       constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-      child: Material(
-        color: surface,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          onTap: data.onTap,
+      child: Semantics(
+        // Announced as a button, the way a stock calculator's keys are.
+        button: true,
+        child: Material(
+          color: surface,
           borderRadius: BorderRadius.circular(16),
-          child: Center(
-            child: Text(
-              data.label,
-              semanticsLabel: data.semantics,
-              style: TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.w400,
-                color: ink,
+          child: InkWell(
+            onTap: data.onTap,
+            borderRadius: BorderRadius.circular(16),
+            child: Center(
+              child: Text(
+                data.label,
+                semanticsLabel: data.semantics,
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w400,
+                  color: ink,
+                ),
               ),
             ),
           ),
@@ -360,7 +364,9 @@ class _Palette {
   static const light = _Palette(
     background: Color(0xFFF5F5F5),
     text: Color(0xFF212121),
-    muted: Color(0xFF757575),
+    // Material grey 700: the history line is 20 sp text, which needs 4.5:1
+    // on this background, and grey 600 falls just short.
+    muted: Color(0xFF616161),
     digitKey: Color(0xFFFFFFFF),
     digitText: Color(0xFF212121),
     functionKey: Color(0xFFE0E0E0),

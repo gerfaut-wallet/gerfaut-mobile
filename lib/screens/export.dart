@@ -16,6 +16,8 @@ import '../theme/tokens.dart';
 import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/choice_group.dart';
+import '../widgets/facts.dart';
+import '../widgets/load_failure.dart';
 import '../widgets/notice.dart';
 import '../widgets/setting_switch.dart';
 import '../widgets/toast.dart';
@@ -180,7 +182,11 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final snapshot = ref.watch(snapshotProvider(widget.walletId)).value;
+    final snapshotAsync = ref.watch(snapshotProvider(widget.walletId));
+    final snapshot = snapshotAsync.value;
+    // The history that failed to load is not an empty one: said, with a
+    // way to ask again, instead of "0 of 0" and two buttons that stay off.
+    final failed = snapshotAsync.hasError && !snapshotAsync.isLoading;
     final total = snapshot?.txs.length ?? 0;
     final selected = snapshot?.txs.where(_passes).length ?? 0;
     final chosen = snapshot != null && selected > 0;
@@ -201,7 +207,28 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                     style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                   ),
                   const SizedBox(height: GerfautSpacing.md),
-                  _SectionLabel('Date range', tokens: tokens),
+                  if (failed) ...[
+                    LoadFailure(
+                      what: 'The transactions',
+                      error: snapshotAsync.error,
+                      centered: false,
+                      onRetry: () =>
+                          ref.invalidate(snapshotProvider(widget.walletId)),
+                    ),
+                    const SizedBox(height: GerfautSpacing.md),
+                  ],
+                  // It changes what the file holds, so it is a note and
+                  // not a line of grey.
+                  if (snapshot?.truncated ?? false) ...[
+                    const GerfautNotice(
+                      tone: NoticeTone.info,
+                      message:
+                          'Only the loaded transactions export. Load older '
+                          'transactions first for a complete file.',
+                    ),
+                    const SizedBox(height: GerfautSpacing.md),
+                  ],
+                  FieldLabel('Date range', tokens: tokens),
                   const SizedBox(height: GerfautSpacing.sm),
                   Row(
                     children: [
@@ -230,7 +257,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                     style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                   ),
                   const SizedBox(height: GerfautSpacing.md),
-                  _SectionLabel('Direction', tokens: tokens),
+                  FieldLabel('Direction', tokens: tokens),
                   const SizedBox(height: GerfautSpacing.sm),
                   ChoiceGroup<ExportDirection?>(
                     label: 'Direction',
@@ -262,20 +289,18 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    '$selected of $total transactions selected',
-                    style: tokens.figureOf(color: tokens.textMuted),
-                    textAlign: TextAlign.center,
-                  ),
-                  if (snapshot?.truncated ?? false) ...[
-                    const SizedBox(height: GerfautSpacing.xs),
+                  if (snapshot != null)
                     Text(
-                      'Only the loaded transactions export. Load older '
-                      'rounds first for a complete file.',
-                      style: tokens.bodySmall.copyWith(color: tokens.pending),
+                      '$selected of $total transactions selected',
+                      style: tokens.figureOf(color: tokens.textMuted),
+                      textAlign: TextAlign.center,
+                    )
+                  else if (!failed)
+                    Text(
+                      'Loading…',
+                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                       textAlign: TextAlign.center,
                     ),
-                  ],
                   if (_failure != null) ...[
                     const SizedBox(height: GerfautSpacing.sm),
                     // Amber: nothing is at risk, the file simply did
@@ -324,21 +349,6 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
   }
 }
 
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel(this.text, {required this.tokens});
-
-  final String text;
-  final GerfautTokens tokens;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text.toUpperCase(),
-      style: tokens.label.copyWith(color: tokens.textMuted),
-    );
-  }
-}
-
 /// A tappable date bound: sunken field look, clearable once set.
 ///
 /// Drawn a touch target tall, not a field's height: the clear button
@@ -361,50 +371,56 @@ class _DateField extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final set = date != null;
-    return InkWell(
+    // The fill is the Material's own: a decorated box under the InkWell
+    // would hide its ripple.
+    return Material(
+      color: tokens.surfaceSunken,
       borderRadius: BorderRadius.circular(GerfautRadius.sm),
-      onTap: onTap,
-      child: Container(
-        height: GerfautTouch.target,
-        padding: const EdgeInsets.only(left: GerfautSpacing.md),
-        decoration: BoxDecoration(
-          color: tokens.surfaceSunken,
-          borderRadius: BorderRadius.circular(GerfautRadius.sm),
-        ),
-        child: Row(
-          children: [
-            Icon(LucideIcons.calendar, size: 15, color: tokens.textMuted),
-            const SizedBox(width: GerfautSpacing.sm),
-            Expanded(
-              child: Text(
-                set ? DateFormat('MMM d, y').format(date!) : placeholder,
-                style: set
-                    ? tokens.figureOf(color: tokens.text)
-                    : tokens.bodySmall.copyWith(color: tokens.textMuted),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(GerfautRadius.sm),
+        onTap: onTap,
+        child: Container(
+          height: GerfautTouch.target,
+          padding: const EdgeInsets.only(left: GerfautSpacing.md),
+          child: Row(
+            children: [
+              Icon(LucideIcons.calendar, size: 15, color: tokens.textMuted),
+              const SizedBox(width: GerfautSpacing.sm),
+              Expanded(
+                child: Text(
+                  set ? DateFormat('MMM d, y').format(date!) : placeholder,
+                  // Which bound this is: the date alone does not say.
+                  semanticsLabel: set
+                      ? '$placeholder date: ${DateFormat('MMM d, y').format(date!)}'
+                      : '$placeholder date',
+                  style: set
+                      ? tokens.figureOf(color: tokens.text)
+                      : tokens.bodySmall.copyWith(color: tokens.textMuted),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
-            if (set)
-              InkWell(
-                borderRadius: BorderRadius.circular(GerfautRadius.sm),
-                onTap: onClear,
-                child: Semantics(
-                  button: true,
-                  label: 'Clear $placeholder date',
-                  child: SizedBox.square(
-                    dimension: GerfautTouch.target,
-                    child: Icon(
-                      LucideIcons.x,
-                      size: 15,
-                      color: tokens.textMuted,
+              if (set)
+                InkWell(
+                  borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                  onTap: onClear,
+                  child: Semantics(
+                    button: true,
+                    label: 'Clear $placeholder date',
+                    child: SizedBox.square(
+                      dimension: GerfautTouch.target,
+                      child: Icon(
+                        LucideIcons.x,
+                        size: 15,
+                        color: tokens.textMuted,
+                      ),
                     ),
                   ),
-                ),
-              )
-            else
-              const SizedBox(width: GerfautSpacing.md),
-          ],
+                )
+              else
+                const SizedBox(width: GerfautSpacing.md),
+            ],
+          ),
         ),
       ),
     );

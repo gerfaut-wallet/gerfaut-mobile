@@ -345,18 +345,23 @@ class IoListHeading extends ConsumerWidget {
       children: [
         FieldLabel('$title ($count)', tokens: tokens),
         Text(' · ', style: tokens.label.copyWith(color: tokens.textMuted)),
+        // A total scales down rather than fading out: a figure with its
+        // last digits gone reads as a smaller sum.
         Flexible(
-          child: Text(
-            total,
-            semanticsLabel: spokenIfMasked(total),
-            style: tokens.figureOf(
-              size: 12,
-              weight: FontWeight.w500,
-              color: tokens.textMuted,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              total,
+              semanticsLabel: spokenIfMasked(total),
+              style: tokens.figureOf(
+                size: 12,
+                weight: FontWeight.w500,
+                color: tokens.textMuted,
+              ),
+              maxLines: 1,
+              softWrap: false,
             ),
-            maxLines: 1,
-            softWrap: false,
-            overflow: TextOverflow.fade,
           ),
         ),
       ],

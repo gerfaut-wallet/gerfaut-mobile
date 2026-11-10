@@ -142,9 +142,13 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
               style: tokens.bodySmall.copyWith(color: tokens.textMuted),
             ),
           ),
-        Row(
+        // A Wrap: at a large text size the two buttons stack instead of
+        // running past the card.
+        Wrap(
+          spacing: GerfautSpacing.sm,
+          runSpacing: GerfautSpacing.sm,
           children: [
-            if (newer != null) ...[
+            if (newer != null)
               PrimaryButton(
                 label: 'Get $newer',
                 onPressed: () => launchUrl(
@@ -152,8 +156,6 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
                   mode: LaunchMode.externalApplication,
                 ),
               ),
-              const SizedBox(width: GerfautSpacing.sm),
-            ],
             // Beside "Get" it is the second choice; alone, the action
             // of the line.
             if (newer != null)

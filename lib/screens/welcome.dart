@@ -135,20 +135,27 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                     _Page(page: welcomePages[index], first: index == 0),
               ),
             ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                for (var i = 0; i < welcomePages.length; i++)
-                  Container(
-                    width: 6,
-                    height: 6,
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: i == _index ? tokens.primary : tokens.textMuted,
+            // The dots say where the tour stands to the eye; this says it
+            // to a screen reader, and again at every swipe.
+            Semantics(
+              liveRegion: true,
+              label: 'Page ${_index + 1} of ${welcomePages.length}',
+              excludeSemantics: true,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  for (var i = 0; i < welcomePages.length; i++)
+                    Container(
+                      width: 6,
+                      height: 6,
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: i == _index ? tokens.primary : tokens.textMuted,
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
             Padding(
               padding: const EdgeInsets.all(GerfautSpacing.md),

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/tokens.dart';
+import 'focus_ring.dart';
 import 'tap_target.dart';
 
 /// Width from which the options open in a menu anchored to the field;
@@ -12,7 +13,10 @@ import 'tap_target.dart';
 const double _anchoredFrom = 600;
 
 /// Tallest the anchored menu grows before it scrolls.
-const double _menuMaxHeight = 360;
+const double _menuMaxHeight = 320;
+
+/// Narrowest the anchored menu gets, whatever the field's width.
+const double _menuMinWidth = 220;
 
 /// Share of the screen a bottom sheet may take.
 const double _sheetShare = 0.7;
@@ -169,12 +173,24 @@ class _GerfautSelectState<T> extends State<GerfautSelect<T>> {
                     Icon(selected!.icon, size: 16, color: tokens.textMuted),
                     const SizedBox(width: GerfautSpacing.sm),
                   ],
-                  Text(
-                    title,
-                    style: titleStyle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  if (subtitle == null)
+                    // The free width is the title's, so a long one ends
+                    // in an ellipsis inside the field, never past it.
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: titleStyle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    )
+                  else
+                    Text(
+                      title,
+                      style: titleStyle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   if (subtitle != null) ...[
                     Text(
                       ' · ',
@@ -190,8 +206,7 @@ class _GerfautSelectState<T> extends State<GerfautSelect<T>> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  ] else
-                    const Spacer(),
+                  ],
                   const SizedBox(width: GerfautSpacing.sm),
                   Icon(
                     LucideIcons.chevronDown,
@@ -361,7 +376,7 @@ class _AnchoredMenuRoute<T> extends PopupRoute<_Picked<T>> {
       _menuMaxHeight,
       max(opensBelow ? below : above, 96.0),
     );
-    final width = max(field.width, 240.0);
+    final width = max(field.width, _menuMinWidth);
     final left = min(field.left, overlaySize.width - width - GerfautSpacing.md);
 
     return CallbackShortcuts(
@@ -502,55 +517,66 @@ class _OptionRow<T> extends StatelessWidget {
           ? item.title
           : '${item.title}, ${item.subtitle}',
       excludeSemantics: true,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(GerfautRadius.md),
-        autofocus: selected,
-        onTap: onTap,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: GerfautTouch.target),
-          padding: const EdgeInsets.symmetric(
-            horizontal: GerfautSpacing.sm + 2,
-            vertical: GerfautSpacing.sm - 2,
-          ),
-          decoration: BoxDecoration(
-            color: selected ? tokens.surfaceSunken : null,
-            borderRadius: BorderRadius.circular(GerfautRadius.md),
-          ),
-          child: Row(
-            children: [
-              if (item.icon != null) ...[
-                Icon(item.icon, size: 16, color: ink),
-                const SizedBox(width: GerfautSpacing.sm),
-              ],
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      item.title,
-                      style: titleStyle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (item.subtitle != null)
+      // Rows touch each other: the ring is drawn inside the row's edge.
+      child: FocusRing(
+        gap: 0,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(GerfautRadius.md),
+          autofocus: selected,
+          focusColor: Colors.transparent,
+          onTap: onTap,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: GerfautTouch.target),
+            padding: const EdgeInsets.symmetric(
+              horizontal: GerfautSpacing.sm + 2,
+              vertical: GerfautSpacing.sm - 2,
+            ),
+            decoration: BoxDecoration(
+              color: selected ? tokens.surfaceSunken : null,
+              borderRadius: BorderRadius.circular(GerfautRadius.md),
+            ),
+            child: Row(
+              children: [
+                if (item.icon != null) ...[
+                  Icon(item.icon, size: 16, color: ink),
+                  const SizedBox(width: GerfautSpacing.sm),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // An identifier wraps rather than lose its end: the
+                      // end of a host is what tells two servers apart.
                       Text(
-                        item.subtitle!,
-                        style: tokens.label.copyWith(
-                          fontSize: 11,
-                          color: tokens.textMuted,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        item.title,
+                        style: titleStyle,
+                        maxLines: item.mono ? null : 1,
+                        overflow: item.mono ? null : TextOverflow.ellipsis,
                       ),
-                  ],
+                      if (item.subtitle != null)
+                        Text(
+                          item.subtitle!,
+                          // The label face at its size, without the
+                          // tracking it keeps for uppercase: this line is
+                          // a phrase, as in the overflow menu.
+                          style: tokens.label.copyWith(
+                            fontSize: 11,
+                            letterSpacing: 0,
+                            color: tokens.textMuted,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-              if (selected) ...[
-                const SizedBox(width: GerfautSpacing.sm),
-                Icon(LucideIcons.check, size: 16, color: tokens.primary),
+                if (selected) ...[
+                  const SizedBox(width: GerfautSpacing.sm),
+                  Icon(LucideIcons.check, size: 16, color: tokens.primary),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

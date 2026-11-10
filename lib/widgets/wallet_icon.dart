@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/models.dart';
 import '../theme/tokens.dart';
+import 'focus_ring.dart';
 
 /// The Lucide glyph behind a wallet icon. The names are the core's and
 /// Lucide's at once, so the desktop draws the same seven.
@@ -59,11 +60,6 @@ class WalletIconPicker extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Wallet icon', style: tokens.h2),
-          const SizedBox(height: GerfautSpacing.xs),
-          Text(
-            'Shown beside the name, here and on the wallet list.',
-            style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-          ),
           const SizedBox(height: GerfautSpacing.md),
           Wrap(
             spacing: GerfautSpacing.sm,
@@ -108,25 +104,28 @@ class _IconTile extends StatelessWidget {
       label: icon.label,
       onTap: onTap,
       excludeSemantics: true,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(GerfautRadius.md),
-        onTap: onTap,
-        child: Container(
-          width: WalletIconPicker.tileSize,
-          height: WalletIconPicker.tileSize,
-          decoration: BoxDecoration(
-            color: selected ? tokens.surfaceSunken : tokens.surface,
-            borderRadius: BorderRadius.circular(GerfautRadius.md),
-            border: Border.all(
-              color: selected ? tokens.primary : tokens.border,
-              width: selected ? 2 : 1,
+      child: FocusRing(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(GerfautRadius.md),
+          focusColor: Colors.transparent,
+          onTap: onTap,
+          child: Container(
+            width: WalletIconPicker.tileSize,
+            height: WalletIconPicker.tileSize,
+            decoration: BoxDecoration(
+              color: selected ? tokens.surfaceSunken : tokens.surface,
+              borderRadius: BorderRadius.circular(GerfautRadius.md),
+              border: Border.all(
+                color: selected ? tokens.primary : tokens.border,
+                width: selected ? 2 : 1,
+              ),
             ),
-          ),
-          alignment: Alignment.center,
-          child: Icon(
-            walletGlyph(icon),
-            size: 24,
-            color: selected ? tokens.primary : tokens.text,
+            alignment: Alignment.center,
+            child: Icon(
+              walletGlyph(icon),
+              size: 24,
+              color: selected ? tokens.primary : tokens.text,
+            ),
           ),
         ),
       ),

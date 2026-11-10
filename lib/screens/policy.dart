@@ -11,6 +11,7 @@ import '../theme/tokens.dart';
 import '../widgets/address_chip.dart';
 import '../widgets/app_bar.dart';
 import '../widgets/facts.dart';
+import '../widgets/load_failure.dart';
 import '../widgets/notice.dart';
 import '../widgets/status_pill.dart';
 import '../widgets/toast.dart';
@@ -50,11 +51,13 @@ class PolicyScreen extends ConsumerWidget {
               const SizedBox(height: GerfautSpacing.sm),
             ],
             switch (policy) {
-              // A read that failed says so, whatever it carried before.
-              AsyncError(:final error) => GerfautNotice(
-                tone: NoticeTone.info,
-                message: 'The policy could not be read.',
-                detail: '$error',
+              // A read that failed says so, whatever it carried before;
+              // once Try again is under way, the placeholder shows it.
+              AsyncError(:final error, isLoading: false) => LoadFailure(
+                what: 'The policy',
+                error: error,
+                centered: false,
+                onRetry: () => ref.invalidate(policyProvider(walletId)),
               ),
               // Whatever the page has read stays up: a sync refetches the
               // policy, and a refresh under way still carries the last

@@ -15,6 +15,7 @@ import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
+import '../widgets/facts.dart';
 import '../widgets/password_field.dart';
 import '../widgets/pinned_action_form.dart';
 import '../widgets/setting_switch.dart';
@@ -429,26 +430,32 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
           style: tokens.figureOf(size: 14, weight: FontWeight.w500),
         ),
         const SizedBox(height: GerfautSpacing.md),
+        // The rows' ripple is drawn on a Material over the box: on the
+        // page under it, the box's fill would hide it.
         Container(
+          clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
             color: tokens.surface,
             borderRadius: BorderRadius.circular(GerfautRadius.lg),
             border: Border.all(color: tokens.border),
           ),
-          child: Column(
-            children: [
-              for (final (position, wallet) in preview.wallets.indexed) ...[
-                if (position > 0)
-                  Divider(height: 1, thickness: 1, color: tokens.border),
-                _WalletRow(
-                  wallet: wallet,
-                  chosen: _chosen.contains(wallet.index),
-                  onChanged: wallet.outOfReach
-                      ? null
-                      : (chosen) => _toggle(wallet.index, chosen),
-                ),
+          child: Material(
+            type: MaterialType.transparency,
+            child: Column(
+              children: [
+                for (final (position, wallet) in preview.wallets.indexed) ...[
+                  if (position > 0)
+                    Divider(height: 1, thickness: 1, color: tokens.border),
+                  _WalletRow(
+                    wallet: wallet,
+                    chosen: _chosen.contains(wallet.index),
+                    onChanged: wallet.outOfReach
+                        ? null
+                        : (chosen) => _toggle(wallet.index, chosen),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
         if (preview.hasSettings) ...[
@@ -548,7 +555,6 @@ class _SettingsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final label = tokens.label.copyWith(color: tokens.textMuted);
     final value = tokens.data;
     return Container(
       width: double.infinity,
@@ -561,7 +567,7 @@ class _SettingsPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (backends.isNotEmpty) ...[
-            Text('NODES', style: label),
+            FieldLabel('Nodes', tokens: tokens),
             for (final backend in backends)
               MergeSemantics(
                 child: Padding(
@@ -595,7 +601,7 @@ class _SettingsPanel extends StatelessWidget {
           ],
           if (hosts.isNotEmpty) ...[
             if (backends.isNotEmpty) const SizedBox(height: GerfautSpacing.sm),
-            Text('PINNED CERTIFICATES', style: label),
+            FieldLabel('Pinned certificates', tokens: tokens),
             for (final host in hosts)
               Padding(
                 padding: const EdgeInsets.only(top: GerfautSpacing.xs),

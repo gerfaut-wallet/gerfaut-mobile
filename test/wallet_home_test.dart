@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
+import 'package:gerfaut/widgets/load_failure.dart';
 import 'package:gerfaut/widgets/notice.dart';
 import 'package:gerfaut/widgets/status_pill.dart';
 import 'package:gerfaut/widgets/sync_button.dart';
@@ -818,7 +819,7 @@ void main() {
     expect(find.text('Policy'), findsOneWidget);
     await tester.tap(find.text('Policy'));
     await tester.pumpAndSettle();
-    expect(find.byType(GerfautNotice), findsOneWidget);
+    expect(find.byType(LoadFailure), findsOneWidget);
     expect(find.text('the policy cannot be read'), findsOneWidget);
   });
 }

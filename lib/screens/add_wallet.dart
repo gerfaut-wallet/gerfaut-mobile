@@ -461,7 +461,7 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
               onPressed: _importFile,
             ),
             SecondaryButton(
-              label: 'Scan',
+              label: 'Scan a QR code',
               icon: LucideIcons.scanLine,
               onPressed: _scan,
             ),
@@ -473,7 +473,23 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
 
   Widget _buildConfirmStep(GerfautTokens tokens, ParsedInput parsed) {
     final payload = parsed.payload;
-    return ListView(
+    // The two actions stay at the bottom while there is room, and the
+    // form scrolls under the keyboard instead of hiding them.
+    return PinnedActionForm(
+      action: Row(
+        children: [
+          SecondaryButton(label: 'Back', onPressed: _back),
+          const SizedBox(width: GerfautSpacing.sm),
+          Expanded(
+            child: PrimaryButton(
+              label: _adding ? 'Adding…' : 'Add wallet',
+              expand: true,
+              busy: _adding,
+              onPressed: _nameController.text.trim().isEmpty ? null : _submit,
+            ),
+          ),
+        ],
+      ),
       children: [
         Container(
           padding: const EdgeInsets.all(GerfautSpacing.md),
@@ -687,26 +703,16 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
           ),
         if (_error != null) ...[
           const SizedBox(height: GerfautSpacing.md),
-          Text(
-            _error!,
-            style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+          // Said aloud as it appears, as on the first step.
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              _error!,
+              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+            ),
           ),
         ],
         const SizedBox(height: GerfautSpacing.lg),
-        Row(
-          children: [
-            SecondaryButton(label: 'Back', onPressed: _back),
-            const SizedBox(width: GerfautSpacing.sm),
-            Expanded(
-              child: PrimaryButton(
-                label: _adding ? 'Adding…' : 'Add wallet',
-                expand: true,
-                busy: _adding,
-                onPressed: _nameController.text.trim().isEmpty ? null : _submit,
-              ),
-            ),
-          ],
-        ),
       ],
     );
   }

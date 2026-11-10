@@ -454,7 +454,7 @@ ThemeData themeFrom(GerfautTokens tokens, Brightness brightness) {
     secondary: tokens.primary,
     onSecondary: tokens.onPrimary,
     error: tokens.alert,
-    onError: tokens.alertSurface,
+    onError: tokens.onAlert,
     surface: tokens.surface,
     onSurface: tokens.text,
     outline: tokens.border,
@@ -480,10 +480,31 @@ ThemeData themeFrom(GerfautTokens tokens, Brightness brightness) {
       // The touch target of every control in Gerfaut, set here rather
       // than left to the platform's padding: the glyph stays its size,
       // the ink and the hit area are the target's.
-      style: IconButton.styleFrom(
-        minimumSize: const Size.square(GerfautTouch.target),
-        padding: EdgeInsets.zero,
+      // From a keyboard, the 2px ring of every control without an edge
+      // of its own, in place of a tint that barely shows on a card.
+      style:
+          IconButton.styleFrom(
+            minimumSize: const Size.square(GerfautTouch.target),
+            padding: EdgeInsets.zero,
+          ).copyWith(
+            side: WidgetStateProperty.resolveWith(
+              (states) =>
+                  states.contains(WidgetState.focused) &&
+                      FocusManager.instance.highlightMode ==
+                          FocusHighlightMode.traditional
+                  ? BorderSide(color: tokens.primary, width: 2)
+                  : null,
+            ),
+          ),
+    ),
+    // The toast's inversion, for the same reason: Material's own is a
+    // grey outside the palette, half see-through, pure white in dark.
+    tooltipTheme: TooltipThemeData(
+      decoration: BoxDecoration(
+        color: tokens.text,
+        borderRadius: BorderRadius.circular(GerfautRadius.md),
       ),
+      textStyle: tokens.bodySmall.copyWith(color: tokens.background),
     ),
     // Every sheet from the bottom of the screen, whoever opens it: the
     // card surface and the rounded top edge of the design system, in place of
@@ -625,7 +646,7 @@ class _StartupErrorScreenState extends State<_StartupErrorScreen> {
                 ] else if (inUse) ...[
                   Text(
                     'The vault is open elsewhere, and it opens in one place '
-                    'at a time so that nothing saves over it.',
+                    'at a time.',
                     style: tokens.body,
                   ),
                   const SizedBox(height: GerfautSpacing.sm),

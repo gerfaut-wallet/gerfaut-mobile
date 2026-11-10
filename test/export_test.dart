@@ -298,7 +298,7 @@ void main() {
 
     expect(
       find.text(
-        'Only the loaded transactions export. Load older rounds first '
+        'Only the loaded transactions export. Load older transactions first '
         'for a complete file.',
       ),
       findsOneWidget,

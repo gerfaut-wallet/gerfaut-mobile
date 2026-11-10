@@ -1,7 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../src/state.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/load_failure.dart';
+
+/// What a section shows in place of its controls until the vault's
+/// settings are in, and when they cannot be read.
+///
+/// Controls drawn from settings that have not arrived show a false
+/// state (a lock switch that reads off, a list of wallets that reads
+/// empty), and a bare "Loading…" that never ends reads as a hang when
+/// the read failed. A failure names itself and offers another try.
+class SettingsPending extends ConsumerWidget {
+  const SettingsPending({super.key, required this.what});
+
+  /// The subject of the failure sentence: "The network settings".
+  final String what;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final settings = ref.watch(settingsProvider);
+    // A retry is loading again with the old error still behind it.
+    if (settings.hasError && !settings.isLoading) {
+      return LoadFailure(
+        what: what,
+        error: settings.error,
+        onRetry: () => ref.invalidate(settingsProvider),
+        centered: false,
+      );
+    }
+    return Text(
+      'Loading…',
+      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+    );
+  }
+}
 
 /// A field for an identifier: a host, a port, a URL, a count. Mono, so
 /// a `0` and an `O` never trade places, at the body size so the phone

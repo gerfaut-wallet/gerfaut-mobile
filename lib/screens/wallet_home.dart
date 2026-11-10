@@ -644,7 +644,7 @@ class _TxList extends ConsumerWidget {
             );
           },
           child: Container(
-            constraints: const BoxConstraints(minHeight: 48),
+            constraints: const BoxConstraints(minHeight: GerfautTouch.target),
             padding: const EdgeInsets.symmetric(
               horizontal: GerfautSpacing.md,
               vertical: GerfautSpacing.xs + 2,
@@ -758,7 +758,7 @@ class _UtxoList extends ConsumerWidget {
       itemBuilder: (context, index) {
         final utxo = value[index];
         return Container(
-          constraints: const BoxConstraints(minHeight: 48),
+          constraints: const BoxConstraints(minHeight: GerfautTouch.target),
           padding: const EdgeInsets.symmetric(
             horizontal: GerfautSpacing.md,
             vertical: GerfautSpacing.sm,

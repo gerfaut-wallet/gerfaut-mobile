@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/tokens.dart';
+import 'focus_ring.dart';
 
 /// Widest the menu grows, whatever its labels: past that it stops
 /// reading as a menu and starts reading as a panel.
@@ -47,9 +48,9 @@ class OverflowMenuItem {
 /// comes here, named in words rather than guessed from a glyph.
 ///
 /// The surface is the one the design system gives every floating thing: card
-/// colour, hairline, 12px radius, the single overlay shadow, and a fade
-/// with 8px of travel to place it. A device asking for less motion
-/// keeps the fade and loses the travel.
+/// colour, hairline, 12px radius, the single overlay shadow. It comes in
+/// by a fade alone, as the select's menu does: anchored under its button,
+/// it needs no travel to say where it came from.
 class OverflowMenu extends StatefulWidget {
   const OverflowMenu({super.key, required this.items});
 
@@ -225,51 +226,56 @@ class _MenuRow extends StatelessWidget {
       // double-tap lands on nothing.
       onTap: onTap,
       excludeSemantics: true,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(GerfautRadius.md),
-        onTap: onTap,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: GerfautTouch.target),
-          padding: const EdgeInsets.symmetric(
-            horizontal: GerfautSpacing.sm + 2,
-            vertical: GerfautSpacing.sm - 2,
-          ),
-          child: Row(
-            children: [
-              Icon(item.icon, size: 16, color: tokens.text),
-              const SizedBox(width: GerfautSpacing.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      item.label,
-                      style: tokens.bodySmall.copyWith(
-                        fontWeight: FontWeight.w500,
-                        fontVariations: const [FontVariation('wght', 500)],
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (detail != null)
+      // Rows touch each other: the ring is drawn inside the row's edge.
+      child: FocusRing(
+        gap: 0,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(GerfautRadius.md),
+          focusColor: Colors.transparent,
+          onTap: onTap,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: GerfautTouch.target),
+            padding: const EdgeInsets.symmetric(
+              horizontal: GerfautSpacing.sm + 2,
+              vertical: GerfautSpacing.sm - 2,
+            ),
+            child: Row(
+              children: [
+                Icon(item.icon, size: 16, color: tokens.text),
+                const SizedBox(width: GerfautSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                       Text(
-                        detail,
-                        // The label face at its size, but not its
-                        // tracking: `label` is spaced for uppercase, and
-                        // this line is a sentence ("2 of 3 keys").
-                        style: tokens.label.copyWith(
-                          fontSize: 11,
-                          letterSpacing: 0,
-                          color: tokens.textMuted,
+                        item.label,
+                        style: tokens.bodySmall.copyWith(
+                          fontWeight: FontWeight.w500,
+                          fontVariations: const [FontVariation('wght', 500)],
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                  ],
+                      if (detail != null)
+                        Text(
+                          detail,
+                          // The label face at its size, but not its
+                          // tracking: `label` is spaced for uppercase, and
+                          // this line is a sentence ("2 of 3 keys").
+                          style: tokens.label.copyWith(
+                            fontSize: 11,
+                            letterSpacing: 0,
+                            color: tokens.textMuted,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
