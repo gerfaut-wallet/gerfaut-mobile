@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - On the Broadcast screen, a status check that fails after an earlier answer now says "Could not check", with the error and the time and content of the last answer. It used to keep the previous status, such as "Waiting to be mined", and show the error nowhere.
 - When the vault fails to save a setting, the setting goes back to the value the vault still holds instead of showing a choice the background checks and Live never see. This covers new-transaction notifications, background checks, Live, notification details, widget balances, the unit, the fiat display and the theme. Hidden amounts stay hidden. Live and the background check also wait until the vault has saved the setting before they start.
 - A wallet whose last sync failed still says so after Gerfaut restarts, instead of "Synced" with an old time. A sync that Live starts on its own shows "Syncing…" while it runs.
+- Leaving the app for a moment while the QR scanner starts, for a permission prompt or the notification shade, no longer leaves it on "Starting the camera…" once you come back.
 
 ## [0.1.0] - 2026-10-21
 
