@@ -598,11 +598,13 @@ class _WalletRow extends StatelessWidget {
     // whole width for its name and its actions.
     final row = Container(
       padding: const EdgeInsets.symmetric(vertical: GerfautSpacing.md),
-      decoration: lifted
-          ? null
-          : BoxDecoration(
-              border: Border(top: BorderSide(color: tokens.border)),
-            ),
+      // Lifted, the hairline goes clear and keeps its pixel: what lands
+      // is what was lifted, to the pixel.
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: lifted ? Colors.transparent : tokens.border),
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
