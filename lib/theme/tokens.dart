@@ -275,10 +275,18 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
   /// Set on every style of the theme so no screen has to correct for it.
   static const TextLeadingDistribution _even = TextLeadingDistribution.even;
 
+  /// A style that sets no tracking of its own does not paint with none:
+  /// on a page it takes Material's default body tracking (+0.25) from
+  /// the ambient style. Text then runs wider than the design system
+  /// draws it, and wider than whatever measured it in the bare style —
+  /// an address fitted to its chip lost its last glyph to the fade.
+  /// Every style of the theme states its tracking, zero included.
+  static const double _untracked = 0;
+
   static TextStyle _bricolage({
     required double size,
     required double height,
-    double? tracking,
+    double tracking = _untracked,
     required Color color,
   }) {
     return TextStyle(
@@ -308,6 +316,7 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
       leadingDistribution: _even,
       fontSize: 16,
       height: 1.55,
+      letterSpacing: _untracked,
       color: color,
       fontWeight: FontWeight.w400,
       fontVariations: const [FontVariation('wght', 400)],
@@ -320,6 +329,7 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
       leadingDistribution: _even,
       fontSize: 14,
       height: 1.5,
+      letterSpacing: _untracked,
       color: color,
       fontWeight: FontWeight.w400,
       fontVariations: const [FontVariation('wght', 400)],
@@ -374,6 +384,7 @@ class GerfautTokens extends ThemeExtension<GerfautTokens> {
       leadingDistribution: _even,
       fontSize: 13,
       height: 1.6,
+      letterSpacing: _untracked,
       color: color,
       fontWeight: FontWeight.w400,
       fontVariations: const [FontVariation('wght', 400)],
