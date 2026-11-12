@@ -57,10 +57,14 @@
          The vault is opened by a key the Android Keystore holds and never
          releases, so a vault carried to another device lands there as a
          file nobody can open. allowBackup stops the cloud copy on every
-         version; fullBackupContent says the same to Android 6 through 11,
-         which read it instead; dataExtractionRules covers Android 12 and
-         later, where a device-to-device transfer would otherwise still
-         take the files. Wallets move by a backup made with Gerfaut, which
+         version, and on Android 11 and earlier the device-to-device
+         transfer too; fullBackupContent turns off the rules file those
+         versions would read. Android 12 and later still transfer an app
+         whose allowBackup is false: dataExtractionRules excludes every
+         domain of its data there, cloud and transfer alike, since
+         Android copies domain by domain and excluding the data
+         directory's root alone leaves the others to go. Wallets move by
+         a backup made with Gerfaut, which
          carries its own password. tools:replace keeps that true whatever
          a plugin's own manifest asks for: on these two attributes the
          merger would otherwise stop the build, or take the plugin's word. -->
