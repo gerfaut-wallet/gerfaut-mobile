@@ -371,48 +371,68 @@ class _BranchBox extends StatelessWidget {
       child: _Box(
         tokens: tokens,
         mine: branch.mine,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(
-              // One line high, so the glyph sits on the optical centre
-              // of the label rather than of the whole box.
-              height: scaler.scale(_boxText) * (_boxLine / _boxText),
-              child: Center(
-                child: Icon(role.icon, size: _iconSize, color: role.ink),
-              ),
-            ),
-            const SizedBox(width: GerfautSpacing.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
+            Row(
+              children: [
+                SizedBox(
+                  // One line high, so the glyph sits on the optical
+                  // centre of the label rather than of the whole box.
+                  height: scaler.scale(_boxText) * (_boxLine / _boxText),
+                  child: Center(
+                    child: Icon(role.icon, size: _iconSize, color: role.ink),
+                  ),
+                ),
+                const SizedBox(width: GerfautSpacing.sm),
+                Expanded(
                   // The cut is *measured*, never guessed from a
                   // character count: a count has to assume an advance, a
                   // fallback glyph for the ellipsis and a text scale,
                   // and being one character out costs the `:0` of the
                   // outpoint — exactly the half that names the input.
-                  LayoutBuilder(
-                    builder: (context, constraints) => Text(
-                      folded
-                          ? branch.label
-                          : _shortenToFit(
-                              branch.label,
-                              constraints.maxWidth,
-                              labelStyle,
-                              scaler,
-                            ),
-                      style: labelStyle,
-                      maxLines: 1,
-                      softWrap: false,
-                      overflow: TextOverflow.fade,
-                    ),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      if (folded) {
+                        return Text(
+                          branch.label,
+                          style: labelStyle,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.fade,
+                        );
+                      }
+                      // On the narrowest phone the shortest cut is still
+                      // wider than the column. It scales down, as the
+                      // figure under it does: a faded last character is
+                      // a different identifier.
+                      return FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          _shortenToFit(
+                            branch.label,
+                            constraints.maxWidth,
+                            labelStyle,
+                            scaler,
+                          ),
+                          style: labelStyle,
+                          maxLines: 1,
+                          softWrap: false,
+                        ),
+                      );
+                    },
                   ),
-                  _Figure(text: amount, muted: sats == null, tokens: tokens),
-                ],
-              ),
+                ),
+              ],
             ),
+            // Under the icon, not beside it: the figure is the longer
+            // of the two lines, and in the label's column it had the
+            // box's width less the glyph to live in — a bitcoin amount
+            // was scaled down to two thirds of its size on a phone of
+            // ordinary width.
+            _Figure(text: amount, muted: sats == null, tokens: tokens),
           ],
         ),
       ),

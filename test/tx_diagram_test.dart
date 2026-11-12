@@ -72,12 +72,15 @@ void _labelsFitTheirColumn(WidgetTester tester) {
   for (final element in find.byType(Text).evaluate()) {
     final data = (element.widget as Text).data;
     if (data == null || !data.contains('...')) continue;
-    final box = element.renderObject! as RenderBox;
-    final room = (box.parent! as RenderBox).size.width;
+    // The paragraph is never laid out wider than its column, so its
+    // size says nothing: what tells is the width the string needs
+    // against the width it was given.
+    final paragraph = element.renderObject! as RenderParagraph;
+    final needed = paragraph.getMaxIntrinsicWidth(double.infinity);
     expect(
-      box.size.width,
-      lessThanOrEqualTo(room + 0.5),
-      reason: '"$data" is ${box.size.width - room} wider than its column',
+      needed,
+      lessThanOrEqualTo(paragraph.size.width + 0.5),
+      reason: '"$data" needs ${needed - paragraph.size.width} more than it has',
     );
     checked++;
   }
