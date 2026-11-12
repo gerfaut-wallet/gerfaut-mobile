@@ -24,7 +24,9 @@ BUILD_TOOL_PKG_DIR="$BASEDIR/build_tool"
 # whole: the build tool finds this script, which it also uses as the
 # linker, next to its own package.
 RUNNER_LOCK="$BASEDIR/build_tool_runner.lock"
-ln -sfn "$BASEDIR" cargokit
+# The script also runs as the linker, possibly twice at once: the link is
+# made only when it is not already the right one.
+[ "$(readlink cargokit 2>/dev/null)" = "$BASEDIR" ] || ln -sfn "$BASEDIR" cargokit
 cp "$RUNNER_LOCK" pubspec.lock
 
 if [[ -z $FLUTTER_ROOT ]]; then # not defined
