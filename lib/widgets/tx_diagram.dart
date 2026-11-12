@@ -386,7 +386,7 @@ class _BranchBox extends StatelessWidget {
                     child: Icon(role.icon, size: _iconSize, color: role.ink),
                   ),
                 ),
-                const SizedBox(width: GerfautSpacing.sm),
+                const SizedBox(width: GerfautSpacing.xs),
                 Expanded(
                   // The cut is *measured*, never guessed from a
                   // character count: a count has to assume an advance, a
@@ -557,10 +557,7 @@ class _Box extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: GerfautSpacing.sm + 2,
-        vertical: GerfautSpacing.sm - 2,
-      ),
+      padding: const EdgeInsets.all(GerfautSpacing.sm),
       decoration: BoxDecoration(
         color: mine
             ? tokens.primary.withValues(alpha: _walletFill)
