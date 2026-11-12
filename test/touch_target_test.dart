@@ -98,6 +98,7 @@ FakeBridge _bridge() {
           address: 'bc1qcoinaddress',
           valueSats: 123456,
           status: const TxStatus.confirmed(height: 100),
+          confirmations: 10,
           keychain: 'external',
           derivationIndex: 0,
         ),

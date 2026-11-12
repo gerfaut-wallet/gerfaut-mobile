@@ -23,7 +23,7 @@ import '../widgets/facts.dart';
 import '../widgets/icon_chip.dart';
 import '../widgets/io_row.dart';
 import '../widgets/notice.dart';
-import '../widgets/status_pill.dart';
+import '../widgets/confirmation_pie.dart' show settledConfirmations;
 import '../widgets/tx_diagram.dart';
 import 'scan.dart';
 

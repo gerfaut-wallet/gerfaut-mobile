@@ -283,6 +283,7 @@ void main() {
               address: 'tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl',
               valueSats: 123456,
               status: TxStatus.confirmed(height: 100),
+              confirmations: 10,
               keychain: 'external',
               derivationIndex: 0,
             ),

@@ -878,9 +878,11 @@ class _UtxoList extends ConsumerWidget {
               const SizedBox(width: GerfautSpacing.sm),
               // The state as a glyph, as on the transaction list: a pill
               // on every row painted the whole list green and took the
-              // width the amount needs on a small phone. A coin has no
-              // count of its own, so once mined it reads settled.
-              StatusGlyph(status: utxo.status),
+              // width the amount needs on a small phone.
+              StatusGlyph(
+                status: utxo.status,
+                confirmations: utxo.confirmations,
+              ),
               const SizedBox(width: GerfautSpacing.sm),
               StackedAmount(sats: utxo.valueSats, network: network),
             ],
