@@ -728,7 +728,8 @@ class _TxList extends ConsumerWidget {
 /// What names a transaction in its row: when it was mined, or its txid
 /// until it is. Neither is ever cut at the end. A date too long for the
 /// row — a narrow phone, a large text size — puts its hour on a second
-/// line, and a txid drops characters from its middle.
+/// line, and a txid drops characters from its middle. Past that, what
+/// is left scales down.
 class _TxWhen extends StatelessWidget {
   const _TxWhen({required this.tx});
 
@@ -743,42 +744,50 @@ class _TxWhen extends StatelessWidget {
       builder: (context, constraints) {
         if (timestamp == null) {
           final style = tokens.data.copyWith(color: tokens.textMuted);
-          return Text(
-            fitMiddle(
-              tx.txid,
-              constraints.maxWidth,
-              style,
-              scaler,
-              head: 8,
-              tail: 8,
+          return FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              fitMiddle(
+                tx.txid,
+                constraints.maxWidth,
+                style,
+                scaler,
+                head: 8,
+                tail: 8,
+              ),
+              style: style,
+              maxLines: 1,
+              softWrap: false,
             ),
-            style: style,
-            maxLines: 1,
-            softWrap: false,
-            overflow: TextOverflow.fade,
           );
         }
         final style = tokens.figureOf(size: 13);
         final whole = formatTimestamp(timestamp);
-        if (textWidth(whole, style, scaler) <= constraints.maxWidth) {
+        if (fitsLine(whole, constraints.maxWidth, style, scaler)) {
           return Text(whole, style: style, maxLines: 1, softWrap: false);
         }
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              formatDate(timestamp),
-              style: style,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            Text(
-              formatClock(timestamp),
-              style: style.copyWith(color: tokens.textMuted),
-              maxLines: 1,
-            ),
-          ],
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                formatDate(timestamp),
+                style: style,
+                maxLines: 1,
+                softWrap: false,
+              ),
+              Text(
+                formatClock(timestamp),
+                style: style.copyWith(color: tokens.textMuted),
+                maxLines: 1,
+                softWrap: false,
+              ),
+            ],
+          ),
         );
       },
     );

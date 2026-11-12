@@ -16,6 +16,12 @@ double textWidth(String text, TextStyle style, TextScaler scaler) {
   return width;
 }
 
+/// Whether one line of [text] fits [room], a pixel to spare: a
+/// measurement that lands a hair under the paint costs the last glyph,
+/// and half a character of an address is worse than one fewer.
+bool fitsLine(String text, double room, TextStyle style, TextScaler scaler) =>
+    textWidth(text, style, scaler) <= room - 1;
+
 /// The longest middle truncation of [value] that fits [room], both ends
 /// kept: it drops a whole character from the longer end until it does.
 /// Under an unbounded width the asked-for truncation stands. It stops
@@ -32,10 +38,7 @@ String fitMiddle(
 }) {
   var shown = truncateMiddle(value, head: head, tail: tail);
   if (!room.isFinite) return shown;
-  // A pixel of margin: a measurement that lands a hair under the paint
-  // fades the last glyph, and half a character of an address is worse
-  // than one character fewer.
-  while (textWidth(shown, style, scaler) > room - 1 && head + tail > floor) {
+  while (!fitsLine(shown, room, style, scaler) && head + tail > floor) {
     if (head > tail) {
       head--;
     } else {
