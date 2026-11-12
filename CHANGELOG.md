@@ -11,6 +11,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - When you move through the app with a keyboard, buttons, choice lists, menus, switches and the address chip show a 2 px focus ring. Tooltips now use the app's own colours.
 - On the last step of Add a wallet, Back and Add wallet stay at the bottom of the screen, above the keyboard.
 - Hints that repeated a title or the line next to them are gone, so the screens carry less text.
+- On a wallet's page, the Transactions and UTXOs lists sit on a surface of their own. Address and direction chips stand out from the page behind them.
+- In the Wallets settings, each wallet is a row under a hairline, where it used to be a card inside the card. Its 4 actions sit in a grid of 2 columns.
 
 ### Fixed
 
@@ -21,6 +23,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - When the vault fails to save a setting, the setting goes back to the value the vault still holds instead of showing a choice the background checks and Live never see. This covers new-transaction notifications, background checks, Live, notification details, widget balances, the unit, the fiat display and the theme. Hidden amounts stay hidden. Live and the background check also wait until the vault has saved the setting before they start.
 - A wallet whose last sync failed still says so after Gerfaut restarts, instead of "Synced" with an old time. A sync that Live starts on its own shows "Syncing…" while it runs.
 - Leaving the app for a moment while the QR scanner starts, for a permission prompt or the notification shade, no longer leaves it on "Starting the camera…" once you come back.
+- An address cut to fit its chip shows its last character whole. The chip used to fade it, most often on a narrow phone.
+- On a narrow phone, the amount of a transaction's input or output goes under its address, so the address keeps both of its ends. The Broadcast preview does the same.
+- On a narrow phone, a transaction row shows the time under the date. It used to cut the time off. A pending transaction's ID is cut in the middle and keeps both of its ends.
+- In the transaction diagram, an amount is drawn at its full size, under the icon. A label too long for its box shrinks, where it used to lose its last character to a fade.
 
 ## [0.1.0] - 2026-10-21
 
