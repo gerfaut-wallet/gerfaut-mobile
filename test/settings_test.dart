@@ -2248,6 +2248,25 @@ void main() {
           await tester.pumpAndSettle();
 
           expectWhole(tester, '500', at);
+          // The explanation has the card's whole width, under the line
+          // of the field: beside it, it was a column seven lines high
+          // on a narrow phone.
+          final help = tester.getRect(
+            find.textContaining('How many unused addresses'),
+          );
+          final field = tester.getRect(find.byType(CountField));
+          expect(help.top, greaterThanOrEqualTo(field.bottom), reason: at);
+          expect(help.right, greaterThan(field.left), reason: at);
+          // A count is a figure, not an identifier: the interface face,
+          // against the right edge.
+          final drawn = tester.widget<TextField>(
+            find.descendant(
+              of: find.byType(CountField),
+              matching: find.byType(TextField),
+            ),
+          );
+          expect(drawn.style!.fontFamily, GerfautFonts.ui, reason: at);
+          expect(drawn.textAlign, TextAlign.end, reason: at);
           await tester.enterText(
             find.descendant(
               of: find.bySemanticsLabel('Gap limit'),
