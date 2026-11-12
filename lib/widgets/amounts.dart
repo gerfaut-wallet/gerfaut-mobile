@@ -159,8 +159,8 @@ class PendingAmount extends ConsumerWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(LucideIcons.clock, size: 13, color: tokens.pending),
-          const SizedBox(width: GerfautSpacing.xs + 2),
+          Icon(LucideIcons.clock, size: 14, color: tokens.pending),
+          const SizedBox(width: GerfautSpacing.xs),
           Text(
             figure,
             style: tokens.figureOf(

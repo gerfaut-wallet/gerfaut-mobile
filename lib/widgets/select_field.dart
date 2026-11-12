@@ -189,7 +189,7 @@ class _GerfautSelectState<T> extends State<GerfautSelect<T>> {
                   const SizedBox(width: GerfautSpacing.sm),
                   Icon(
                     LucideIcons.chevronDown,
-                    size: 18,
+                    size: 16,
                     color: tokens.textMuted,
                   ),
                 ],

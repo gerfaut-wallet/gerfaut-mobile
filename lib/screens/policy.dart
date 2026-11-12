@@ -284,7 +284,7 @@ class _BranchCard extends StatelessWidget {
           const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
           _StatePill(status: status),
           if (nextCoin != null) ...[
-            const SizedBox(height: GerfautSpacing.xs + 2),
+            const SizedBox(height: GerfautSpacing.sm),
             // What the pill says in time, in blocks too: the coin that
             // opens first.
             Wrap(
@@ -300,7 +300,7 @@ class _BranchCard extends StatelessWidget {
             ),
           ],
           if (date != null) ...[
-            const SizedBox(height: GerfautSpacing.xs + 2),
+            const SizedBox(height: GerfautSpacing.sm),
             Text(
               'Around $date',
               style: tokens.label.copyWith(color: tokens.textMuted),
@@ -375,7 +375,7 @@ class _KeyPill extends StatelessWidget {
       excludeSemantics: true,
       child: Container(
         padding: const EdgeInsets.symmetric(
-          horizontal: GerfautSpacing.sm + 2,
+          horizontal: GerfautSpacing.sm,
           vertical: GerfautSpacing.xs,
         ),
         decoration: BoxDecoration(

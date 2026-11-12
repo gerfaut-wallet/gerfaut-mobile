@@ -132,7 +132,7 @@ class _SectionTitle extends StatelessWidget {
       child: Row(
         children: [
           IconTheme.merge(
-            data: IconThemeData(size: 18, color: tokens.textMuted),
+            data: IconThemeData(size: 20, color: tokens.textMuted),
             child: glyph,
           ),
           const SizedBox(width: GerfautSpacing.sm),

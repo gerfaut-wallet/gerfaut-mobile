@@ -621,8 +621,8 @@ class _Flags extends StatelessWidget {
     final hasOpReturn = outputs.any((io) => io.opReturn != null);
     return Wrap(
       alignment: WrapAlignment.end,
-      spacing: GerfautSpacing.sm - 2,
-      runSpacing: GerfautSpacing.sm - 2,
+      spacing: GerfautSpacing.sm,
+      runSpacing: GerfautSpacing.sm,
       children: [
         if (extras.isCoinbase)
           _Badge(
@@ -841,7 +841,7 @@ class _IoList extends StatelessWidget {
         ),
         const SizedBox(height: GerfautSpacing.sm),
         for (final (index, io) in ios.indexed) ...[
-          if (index > 0) const SizedBox(height: GerfautSpacing.sm - 2),
+          if (index > 0) const SizedBox(height: GerfautSpacing.sm),
           _IoRow(
             io: io,
             side: side,

@@ -539,7 +539,7 @@ class _TabLabel extends StatelessWidget {
         children: [
           Text(label),
           if (count > 0) ...[
-            const SizedBox(width: GerfautSpacing.xs + 2),
+            const SizedBox(width: GerfautSpacing.xs),
             CountBadge(count: count),
           ],
         ],
@@ -670,7 +670,7 @@ class _TxList extends ConsumerWidget {
             constraints: const BoxConstraints(minHeight: GerfautTouch.target),
             padding: const EdgeInsets.symmetric(
               horizontal: GerfautSpacing.md,
-              vertical: GerfautSpacing.xs + 2,
+              vertical: GerfautSpacing.sm,
             ),
             child: Row(
               children: [

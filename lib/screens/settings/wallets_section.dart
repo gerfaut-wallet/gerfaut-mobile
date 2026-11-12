@@ -648,7 +648,7 @@ class _WalletRow extends StatelessWidget {
                                   ),
                                   contentPadding: const EdgeInsets.symmetric(
                                     horizontal: GerfautSpacing.sm,
-                                    vertical: GerfautSpacing.sm + 2,
+                                    vertical: GerfautSpacing.sm,
                                   ),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(
@@ -665,7 +665,7 @@ class _WalletRow extends StatelessWidget {
                             onPressed: onRenameSubmit,
                             icon: Icon(
                               LucideIcons.check,
-                              size: 18,
+                              size: 20,
                               color: tokens.primary,
                             ),
                           ),
@@ -674,7 +674,7 @@ class _WalletRow extends StatelessWidget {
                             onPressed: onCancel,
                             icon: Icon(
                               LucideIcons.x,
-                              size: 18,
+                              size: 20,
                               color: tokens.textMuted,
                             ),
                           ),
@@ -719,7 +719,7 @@ class _WalletRow extends StatelessWidget {
                       child: Center(
                         child: Icon(
                           LucideIcons.gripVertical,
-                          size: 18,
+                          size: 20,
                           color: tokens.textMuted,
                         ),
                       ),

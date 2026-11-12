@@ -579,7 +579,7 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
               if (chosen != payload.script) _chooseScript(chosen);
             },
           ),
-          const SizedBox(height: GerfautSpacing.xs + 2),
+          const SizedBox(height: GerfautSpacing.xs),
           Text(
             'Compare the first address above with your wallet.',
             style: tokens.bodySmall.copyWith(color: tokens.textMuted),

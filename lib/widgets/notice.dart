@@ -182,7 +182,7 @@ class GerfautNotice extends StatelessWidget {
     }
 
     final panel = Container(
-      padding: const EdgeInsets.all(GerfautSpacing.sm + 4),
+      padding: const EdgeInsets.all(GerfautSpacing.sm + GerfautSpacing.xs),
       decoration: BoxDecoration(
         // Dark theme: coloured text on the card surface, no tint. A
         // tinted flat on the dark background reads as a second card,

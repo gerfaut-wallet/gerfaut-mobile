@@ -119,11 +119,9 @@ class StatusPill extends StatelessWidget {
     };
 
     final pill = Container(
-      padding: const EdgeInsets.only(
-        left: GerfautSpacing.sm,
-        right: GerfautSpacing.sm + 2,
-        top: 2,
-        bottom: 2,
+      padding: const EdgeInsets.symmetric(
+        horizontal: GerfautSpacing.sm,
+        vertical: 2,
       ),
       decoration: BoxDecoration(
         color: surface,
@@ -134,7 +132,7 @@ class StatusPill extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 12, color: color),
-          const SizedBox(width: GerfautSpacing.xs + 2),
+          const SizedBox(width: GerfautSpacing.xs),
           // Flexible, so a long state — a per-coin count and its next
           // unlock — wraps inside the pill instead of running out of it.
           Flexible(

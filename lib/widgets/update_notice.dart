@@ -46,9 +46,9 @@ class UpdateNotice extends ConsumerWidget {
         liveRegion: true,
         child: Container(
           padding: const EdgeInsets.fromLTRB(
-            GerfautSpacing.sm + 4,
-            GerfautSpacing.sm + 4,
-            GerfautSpacing.sm + 4,
+            GerfautSpacing.sm + GerfautSpacing.xs,
+            GerfautSpacing.sm + GerfautSpacing.xs,
+            GerfautSpacing.sm + GerfautSpacing.xs,
             GerfautSpacing.sm,
           ),
           decoration: BoxDecoration(

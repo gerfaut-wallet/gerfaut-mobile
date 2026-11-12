@@ -393,7 +393,7 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
           ),
           child: Row(
             children: [
-              Icon(LucideIcons.archive, size: 18, color: tokens.textMuted),
+              Icon(LucideIcons.archive, size: 20, color: tokens.textMuted),
               const SizedBox(width: GerfautSpacing.sm),
               Expanded(
                 child: Column(

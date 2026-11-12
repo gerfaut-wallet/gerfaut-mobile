@@ -225,7 +225,7 @@ class _LockScreenState extends ConsumerState<LockScreen> {
                             onPressed: () => setState(() => _hidden = !_hidden),
                             icon: Icon(
                               _hidden ? LucideIcons.eye : LucideIcons.eyeOff,
-                              size: 18,
+                              size: 20,
                               color: tokens.textMuted,
                             ),
                           ),

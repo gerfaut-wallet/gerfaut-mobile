@@ -552,7 +552,7 @@ class _AddressCardState extends State<_AddressCard> {
                       style: tokens.label.copyWith(color: tokens.textMuted),
                     ),
                     if (rows.isNotEmpty) ...[
-                      const SizedBox(width: GerfautSpacing.xs + 2),
+                      const SizedBox(width: GerfautSpacing.xs),
                       CountBadge(count: rows.length),
                     ],
                   ],

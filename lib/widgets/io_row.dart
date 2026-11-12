@@ -25,7 +25,7 @@ class IoRow extends StatelessWidget {
   /// the identity instead of beside it. Side by side, the row needs the
   /// chip (32), an address at six and four characters with its copy
   /// icon (135), the amount of a bitcoin figure (83) and the two gaps
-  /// (18): 268. Narrower than that and the address is cut below what is
+  /// (16): 266. Narrower than that and the address is cut below what is
   /// worth comparing, then faded — a different address on screen.
   static const double stackUnder = 290;
 
@@ -34,7 +34,7 @@ class IoRow extends StatelessWidget {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
     final scale = MediaQuery.textScalerOf(context).scale(1);
     return Container(
-      padding: const EdgeInsets.all(GerfautSpacing.sm + 2),
+      padding: const EdgeInsets.all(GerfautSpacing.sm),
       decoration: BoxDecoration(
         color: mine ? tokens.primary.withValues(alpha: 0.04) : tokens.surface,
         borderRadius: BorderRadius.circular(GerfautRadius.md),
@@ -49,7 +49,7 @@ class IoRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 chip,
-                const SizedBox(width: GerfautSpacing.sm + 2),
+                const SizedBox(width: GerfautSpacing.sm),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -67,7 +67,7 @@ class IoRow extends StatelessWidget {
           return Row(
             children: [
               chip,
-              const SizedBox(width: GerfautSpacing.sm + 2),
+              const SizedBox(width: GerfautSpacing.sm),
               Expanded(child: identity),
               const SizedBox(width: GerfautSpacing.sm),
               // At a large text size the figure alone is wider than the
