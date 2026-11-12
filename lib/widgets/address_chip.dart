@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/format.dart';
 import '../theme/tokens.dart';
+import 'fitted_text.dart';
 import 'focus_ring.dart';
 
 /// Address or txid shown inline: Givre surface, mono 13px, truncated in
@@ -69,39 +70,21 @@ class _AddressChipState extends State<AddressChip> {
   }
 
   /// The longest truncation of the value that fits [room], both ends
-  /// kept. Under an unbounded width — a chip in a [Wrap] — the asked-for
-  /// truncation stands. Below the floor there is nothing left worth
-  /// comparing, so the fade takes over.
+  /// kept. Below the floor there is nothing left worth comparing, so
+  /// the fade takes over.
   String _fitted(double room, TextStyle style, TextScaler scaler) {
-    var head = widget.head;
-    var tail = widget.tail;
-    var shown = truncateMiddle(widget.value, head: head, tail: tail);
-    if (!room.isFinite) return shown;
-    // A pixel of margin: a measurement that lands a hair under the paint
-    // fades the last glyph, and half a character of an address is worse
-    // than one character fewer.
-    while (_widthOf(shown, style, scaler) > room - 1 && head + tail > 8) {
-      if (head > tail) {
-        head--;
-      } else {
-        tail--;
-      }
-      shown = truncateMiddle(widget.value, head: head, tail: tail);
-    }
-    return shown;
+    return fitMiddle(
+      widget.value,
+      room,
+      style,
+      scaler,
+      head: widget.head,
+      tail: widget.tail,
+    );
   }
 
-  /// Width one line of text takes in the style it will be drawn in,
-  /// at the reader's text scale.
-  static double _widthOf(String text, TextStyle style, TextScaler scaler) {
-    final painter = TextPainter(
-      text: TextSpan(text: text, style: style),
-      textDirection: TextDirection.ltr,
-      textScaler: scaler,
-      maxLines: 1,
-    )..layout();
-    return painter.width;
-  }
+  static double _widthOf(String text, TextStyle style, TextScaler scaler) =>
+      textWidth(text, style, scaler);
 
   @override
   Widget build(BuildContext context) {
