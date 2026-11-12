@@ -80,7 +80,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
     } else {
       _pages.animateToPage(
         target,
-        duration: const Duration(milliseconds: 250),
+        duration: GerfautMotion.slow,
         curve: Curves.easeOut,
       );
     }

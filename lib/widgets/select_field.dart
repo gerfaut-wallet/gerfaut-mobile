@@ -287,9 +287,9 @@ Future<_Picked<T>?> _showSheet<T>(
           child: _OptionList<T>(
             select: select,
             padding: const EdgeInsets.fromLTRB(
-              GerfautSpacing.sm + 2,
+              GerfautPanel.padding,
               0,
-              GerfautSpacing.sm + 2,
+              GerfautPanel.padding,
               GerfautSpacing.md,
             ),
             onPick: (value) => Navigator.of(sheetContext).pop(_Picked(value)),
@@ -324,7 +324,7 @@ class _AnchoredMenuRoute<T> extends PopupRoute<_Picked<T>> {
   bool get barrierDismissible => true;
 
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 150);
+  Duration get transitionDuration => GerfautMotion.fast;
 
   @override
   Widget buildTransitions(
@@ -387,7 +387,7 @@ class _AnchoredMenuRoute<T> extends PopupRoute<_Picked<T>> {
                   type: MaterialType.transparency,
                   child: _OptionList<T>(
                     select: select,
-                    padding: const EdgeInsets.all(GerfautSpacing.xs + 2),
+                    padding: const EdgeInsets.all(GerfautPanel.padding),
                     onPick: (value) =>
                         Navigator.of(context).pop(_Picked(value)),
                   ),
@@ -431,9 +431,9 @@ class _OptionList<T> extends StatelessWidget {
         rows.add(
           Padding(
             padding: const EdgeInsets.fromLTRB(
-              GerfautSpacing.sm + 2,
+              GerfautPanel.rowInset,
               GerfautSpacing.sm,
-              GerfautSpacing.sm + 2,
+              GerfautPanel.rowInset,
               GerfautSpacing.xs,
             ),
             child: Text(
@@ -507,8 +507,8 @@ class _OptionRow<T> extends StatelessWidget {
           child: Container(
             constraints: const BoxConstraints(minHeight: GerfautTouch.target),
             padding: const EdgeInsets.symmetric(
-              horizontal: GerfautSpacing.sm + 2,
-              vertical: GerfautSpacing.sm - 2,
+              horizontal: GerfautPanel.rowInset,
+              vertical: GerfautSpacing.xs,
             ),
             decoration: BoxDecoration(
               color: selected ? tokens.surfaceSunken : null,

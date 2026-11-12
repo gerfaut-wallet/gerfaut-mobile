@@ -40,6 +40,29 @@ abstract final class GerfautRadius {
   static const double full = 9999;
 }
 
+/// A floating list: the panel and the sheet of a select, the overflow
+/// menu.
+abstract final class GerfautPanel {
+  /// Between the edge of the panel and its rows.
+  static const double padding = 6;
+
+  /// Inside a row. With [padding], the text of a row starts where the
+  /// text of a card does.
+  static const double rowInset = GerfautSpacing.md - padding;
+}
+
+/// How long a change takes to show. Nothing runs longer than [slow].
+abstract final class GerfautMotion {
+  /// An answer to the finger: a panel that fades in under its button.
+  static const Duration fast = Duration(milliseconds: 150);
+
+  /// A change of state in place.
+  static const Duration base = Duration(milliseconds: 200);
+
+  /// A surface or a page that arrives.
+  static const Duration slow = Duration(milliseconds: 250);
+}
+
 /// QR codes stay dark-on-light in every theme: scanners expect it, and
 /// inverting hurts contrast for cameras. These are the only theme-fixed
 /// colors of the system.

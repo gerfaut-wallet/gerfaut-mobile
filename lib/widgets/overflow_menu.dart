@@ -119,7 +119,7 @@ class _OverflowMenuRoute extends PopupRoute<OverflowMenuItem> {
   bool get barrierDismissible => true;
 
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 150);
+  Duration get transitionDuration => GerfautMotion.fast;
 
   @override
   Widget buildTransitions(
@@ -184,7 +184,7 @@ class _OverflowMenuRoute extends PopupRoute<OverflowMenuItem> {
                     // running off the bottom.
                     child: ListView(
                       shrinkWrap: true,
-                      padding: const EdgeInsets.all(GerfautSpacing.xs + 2),
+                      padding: const EdgeInsets.all(GerfautPanel.padding),
                       children: [
                         for (final item in items)
                           _MenuRow(
@@ -236,8 +236,8 @@ class _MenuRow extends StatelessWidget {
           child: Container(
             constraints: const BoxConstraints(minHeight: GerfautTouch.target),
             padding: const EdgeInsets.symmetric(
-              horizontal: GerfautSpacing.sm + 2,
-              vertical: GerfautSpacing.sm - 2,
+              horizontal: GerfautPanel.rowInset,
+              vertical: GerfautSpacing.xs,
             ),
             child: Row(
               children: [
