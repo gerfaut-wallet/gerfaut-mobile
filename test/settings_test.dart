@@ -1619,6 +1619,51 @@ void main() {
       );
     });
 
+    /// A workspace pointed at an Esplora instance of one's own at [url].
+    FakeBridge ownEsplora(String url) {
+      return FakeBridge(
+        settings: Settings(
+          preferences: kPreferences,
+          activeNetwork: Network.mainnet,
+          backends: {Network.mainnet: CustomEsplora(url: url)},
+          appPrefs: const {},
+          electrumCerts: const {},
+        ),
+      );
+    }
+
+    const inTheClear =
+        'Plain TCP, no certificate: what Gerfaut asks this server and '
+        'what it answers travel in the clear.';
+
+    // Plain HTTP reads like plain TCP to anything on the path, so it is
+    // said the same way. An onion is carried encrypted by Tor whatever
+    // the scheme, whichever way its name is written.
+    for (final (url, said) in [
+      ('http://192.168.1.20:3002/api', true),
+      (' HTTP://node.local/api ', true),
+      ('https://node.local:3002/api', false),
+      ('http://abcdef.onion/api', false),
+      ('http://abcdef.ONION./api', false),
+    ]) {
+      testWidgets(
+        'an Esplora at $url is ${said ? '' : 'not '}said to be in the clear',
+        (tester) async {
+          useTallSurface(tester);
+          final bridge = ownEsplora(url);
+          await tester.pumpWidget(
+            settingsApp(bridge, section: SettingsSection.network),
+          );
+          await tester.pumpAndSettle();
+          await save(tester);
+
+          expect(bridge.inspectedCertificates, isEmpty);
+          expect(bridge.savedBackends[Network.mainnet], isA<CustomEsplora>());
+          expect(find.text(inTheClear), said ? findsOneWidget : findsNothing);
+        },
+      );
+    }
+
     testWidgets('a server that does not answer is saved anyway', (
       tester,
     ) async {

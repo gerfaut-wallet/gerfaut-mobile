@@ -29,6 +29,13 @@ const String _uncheckedNote =
     'If it signs its own, syncs fail until you press Save backend again '
     'and accept it.';
 
+/// Said once a server without TLS is saved: an Electrum server over
+/// plain TCP, or an Esplora one over plain HTTP outside Tor. Both read
+/// the same to anything on the path.
+const String _inTheClearNote =
+    'Plain TCP, no certificate: what Gerfaut asks this server and '
+    'what it answers travel in the clear.';
+
 const List<({Network network, String hint})> _networkHints = [
   (network: Network.mainnet, hint: 'The Bitcoin network'),
   (network: Network.signet, hint: 'Test network, reliable blocks'),
@@ -313,7 +320,11 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
     final endpoint = _certificateEndpoint(config, network);
     setState(() {
       _saving = endpoint != null ? _BackendSave.checking : _BackendSave.writing;
-      _certificateNote = null;
+      // An Esplora server has no certificate to check here, but its
+      // scheme already says whether it is reached in the clear.
+      _certificateNote = config is CustomEsplora && isPlainHttp(config.url)
+          ? _inTheClearNote
+          : null;
       _saveError = null;
       _left = false;
       _popWhenWritten = false;
@@ -465,9 +476,7 @@ class _NetworkSectionState extends ConsumerState<NetworkSection> {
       case TorCertificate():
         return go;
       case NotTlsCertificate():
-        _certificateNote =
-            'Plain TCP, no certificate: what Gerfaut asks this server and '
-            'what it answers travel in the clear.';
+        _certificateNote = _inTheClearNote;
         return go;
       case UnreachableCertificate():
         _certificateNote = _uncheckedNote;
