@@ -828,18 +828,13 @@ class _IoList extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.xs),
-          child: IoListHeading(
-            title: title,
-            count: ios.length,
-            // A coinbase input spends nothing: what the side carries is
-            // the sum of the outputs, the same figure its row states.
-            totalSats: sideTotal(
-              ios.map(
-                (io) => io.valueSats ?? (coinbase ? coinbaseValue : null),
-              ),
-            ),
+        IoListHeading(
+          title: title,
+          count: ios.length,
+          // A coinbase input spends nothing: what the side carries is
+          // the sum of the outputs, the same figure its row states.
+          totalSats: sideTotal(
+            ios.map((io) => io.valueSats ?? (coinbase ? coinbaseValue : null)),
           ),
         ),
         const SizedBox(height: GerfautSpacing.sm),
