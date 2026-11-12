@@ -16,6 +16,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - A button with a label that cannot be pressed yet is drawn hollow, with a thin edge and its label in grey. Faded to half strength, its label was too pale to read.
 - In the Transactions list, the check of a transaction with 6 confirmations or more is grey. It stays green for the first 5, and the clock of a pending transaction stays amber.
 - In the UTXOs list, a small mark beside the amount replaces the green "Confirmed" pill of each row: a grey check for a confirmed coin, an amber clock for one still waiting.
+- A closed list shows the chosen value alone. The line that says what the choice does stays in the open list, where it reads whole.
+- In the Wallets settings, the gap limit is set as a figure against the right edge, and its explanation takes the whole width of the card under it.
 
 ### Fixed
 
@@ -30,6 +32,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - On a narrow phone, the amount of a transaction's input or output goes under its address, so the address keeps both of its ends. The Broadcast preview does the same.
 - On a narrow phone, a transaction row shows the time under the date. It used to cut the time off. A pending transaction's ID is cut in the middle and keeps both of its ends.
 - In the transaction diagram, an amount is drawn at its full size, under the icon. A label too long for its box shrinks, where it used to lose its last character to a fade.
+- On a narrow phone, the labels of the transaction diagram have more room in their boxes and shrink less.
+- On the Policy page, the wallet's name reads as you wrote it. It used to be set in capitals.
 
 ## [0.1.0] - 2026-10-21
 

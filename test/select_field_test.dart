@@ -140,8 +140,10 @@ void main() {
       GerfautTouch.control,
     );
     expect(find.byIcon(LucideIcons.chevronDown), findsOneWidget);
+    // Closed, the field shows the value alone: what the choice means
+    // is a line of the open list, and is still read out.
     expect(find.text('EUR'), findsOneWidget);
-    expect(find.text('Euro'), findsOneWidget);
+    expect(find.text('Euro'), findsNothing);
 
     final semantics = tester.getSemantics(find.byType(GerfautSelect<String>));
     expect(semantics.label, 'Display currency');
@@ -196,7 +198,7 @@ void main() {
     expect(picked, ['usd']);
     expect(find.text('EVERY SOURCE'), findsNothing);
     expect(find.text('USD'), findsOneWidget);
-    expect(find.text('US dollar'), findsOneWidget);
+    expect(find.text('US dollar'), findsNothing);
   });
 
   testWidgets('a disabled option is muted and takes no tap', (tester) async {

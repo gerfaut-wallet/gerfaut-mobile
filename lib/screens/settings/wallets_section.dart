@@ -319,56 +319,57 @@ class _WalletsSectionState extends ConsumerState<WalletsSection> {
     );
   }
 
-  /// The gap limit, its two lines of explanation, and its field.
+  /// The gap limit: its name and its field on one line, then its two
+  /// lines of explanation on the card's whole width. Beside the field,
+  /// they had what the field left them, a column of seven lines on a
+  /// narrow phone.
   Widget _gapLimit(GerfautTokens tokens) {
+    final hint = tokens.bodySmall.copyWith(color: tokens.textMuted);
     return Padding(
       padding: const EdgeInsets.only(bottom: GerfautSpacing.md),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
+          Row(
+            children: [
+              Expanded(
+                child: Text(
                   'Gap limit',
                   style: tokens.bodySmall.copyWith(
                     fontWeight: FontWeight.w500,
                     fontVariations: const [FontVariation('wght', 500)],
                   ),
                 ),
-                Text(
-                  'How many unused addresses Gerfaut scans past '
-                  'the last used one.',
-                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+              ),
+              const SizedBox(width: GerfautSpacing.sm),
+              SizedBox(
+                // "1-500", the hint, is the widest it holds.
+                width: CountField.widthFor(
+                  context,
+                  tokens,
+                  characters: 5,
+                  atLeast: 72,
                 ),
-                Text(
-                  'Rescan a wallet to look again from its first '
-                  'address.',
-                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                child: CountField(
+                  label: 'Gap limit',
+                  controller: _gapLimitController,
+                  hint: '1-500',
+                  focusNode: _gapLimitFocus,
+                  onSubmitted: _commitGapLimit,
+                  tokens: tokens,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          const SizedBox(width: GerfautSpacing.sm),
-          SizedBox(
-            // "1-500", the hint, is the widest it holds.
-            width: MonoField.widthFor(
-              context,
-              tokens,
-              characters: 5,
-              atLeast: 72,
-            ),
-            child: MonoField(
-              label: 'Gap limit',
-              controller: _gapLimitController,
-              hint: '1-500',
-              numeric: true,
-              focusNode: _gapLimitFocus,
-              onChanged: () {},
-              onSubmitted: _commitGapLimit,
-              tokens: tokens,
-            ),
+          const SizedBox(height: GerfautSpacing.xs),
+          Text(
+            'How many unused addresses Gerfaut scans past the last used '
+            'one.',
+            style: hint,
+          ),
+          Text(
+            'Rescan a wallet to look again from its first address.',
+            style: hint,
           ),
         ],
       ),

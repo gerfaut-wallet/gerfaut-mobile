@@ -624,7 +624,8 @@ void main() {
 
       // The bar names the page; the body names the wallet.
       expect(find.text('Policy'), findsOneWidget);
-      expect(find.text('COLD STORAGE'), findsOneWidget);
+      // As its owner wrote it, not in capitals.
+      expect(find.text('Cold storage'), findsOneWidget);
       expect(
         find.text(
           'Key A signs. '
