@@ -6,7 +6,8 @@ import 'focus_ring.dart';
 import 'tap_target.dart';
 
 // Every labelled button is filled: a word alone, with no fill and no
-// edge, does not read as something to press.
+// edge, does not read as something to press. A button switched off
+// gives its fill up for a hairline, so it no longer reads as one.
 //
 // - [PrimaryButton]: an action that stands on its own, the action of a
 //   card, a form that saves, the yes of a dialog. Every one of them,
@@ -39,7 +40,8 @@ class PrimaryButton extends StatelessWidget {
 
   final String label;
 
-  /// Null switches the button off: half its strength, nothing on press.
+  /// Null switches the button off: no fill, a hairline and muted ink,
+  /// nothing on press.
   final VoidCallback? onPressed;
   final IconData? icon;
 
@@ -362,15 +364,20 @@ class _FilledActionState extends State<_FilledAction>
     final busy = widget.busy;
     final off = widget.onPressed == null && !busy;
     final radius = BorderRadius.circular(GerfautRadius.md);
-    final edge = widget.edge;
+
+    // Busy keeps its colour. Off gives up its fill for a hairline and
+    // muted ink: fading the whole button would drop the label below a
+    // readable contrast, and turning the fill grey would pass it for a
+    // secondary. Hollow, it differs from every live button by its form.
+    final fill = off ? Colors.transparent : widget.fill;
+    final ink = off ? tokens.textMuted : widget.ink;
+    final edge = off ? tokens.border : widget.edge;
 
     final style =
         FilledButton.styleFrom(
-          foregroundColor: widget.ink,
-          // Busy keeps its colour, and off fades as a whole below: the
-          // fill never turns into another button's grey.
-          disabledBackgroundColor: widget.fill,
-          disabledForegroundColor: widget.ink,
+          foregroundColor: ink,
+          disabledBackgroundColor: fill,
+          disabledForegroundColor: ink,
           elevation: 0,
           // Under the finger the fill itself darkens; no ripple on top.
           overlayColor: Colors.transparent,
@@ -383,9 +390,9 @@ class _FilledActionState extends State<_FilledAction>
           textStyle: _labelStyle(tokens),
         ).copyWith(
           backgroundColor: WidgetStateProperty.resolveWith(
-            (states) => states.contains(WidgetState.pressed)
+            (states) => states.contains(WidgetState.pressed) && !off
                 ? widget.pressedFill
-                : widget.fill,
+                : fill,
           ),
         );
 
@@ -411,7 +418,7 @@ class _FilledActionState extends State<_FilledAction>
         _focused &&
         live &&
         FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
-    Widget button = CustomPaint(
+    final button = CustomPaint(
       foregroundPainter: ring
           ? FocusRingPainter(color: tokens.primary, radius: GerfautRadius.md)
           : null,
@@ -434,8 +441,6 @@ class _FilledActionState extends State<_FilledAction>
         ),
       ),
     );
-
-    if (off) button = Opacity(opacity: 0.5, child: button);
 
     return TapTarget(
       child: SizedBox(
