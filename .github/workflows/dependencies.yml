@@ -95,9 +95,10 @@ jobs:
       - run: flutter pub get
 
       # A release runs Cargokit's build tool from a project that
-      # run_build_tool.sh writes and resolves on the spot, without the
-      # build tool's own pubspec.lock: the script itself, asked for its
-      # help, resolves the packages a release would get today.
+      # run_build_tool.sh writes next to rust_builder/cargokit/
+      # build_tool_runner.lock and installs from it, hashes checked: the
+      # script itself, asked for its help, lays out the lockfile a
+      # release uses, and fails if it no longer installs.
       - name: Resolve the packages of Cargokit's build tool
         env:
           CARGOKIT_TOOL_TEMP_DIR: ${{ runner.temp }}/build-tool
