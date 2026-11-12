@@ -75,6 +75,11 @@ jobs:
         id: core
         run: echo "rev=$(cat gerfaut-mobile/reproducible/gerfaut-core.rev)" >> "$GITHUB_OUTPUT"
 
+      - name: Check the pinned revision is on gerfaut-core's main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gerfaut-mobile/.github/core-on-main.sh "${{{{ steps.core.outputs.rev }}}}"
+
       # Only its reference JSON is read here: nothing of it runs.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -125,6 +130,11 @@ jobs:
       - name: Read the pinned gerfaut-core revision
         id: core
         run: echo "rev=$(cat gerfaut-mobile/reproducible/gerfaut-core.rev)" >> "$GITHUB_OUTPUT"
+
+      - name: Check the pinned revision is on gerfaut-core's main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gerfaut-mobile/.github/core-on-main.sh "${{{{ steps.core.outputs.rev }}}}"
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
