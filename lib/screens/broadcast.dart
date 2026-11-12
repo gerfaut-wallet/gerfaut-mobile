@@ -20,6 +20,7 @@ import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/explorer_link.dart';
 import '../widgets/facts.dart';
+import '../widgets/io_row.dart';
 import '../widgets/notice.dart';
 import '../widgets/tx_diagram.dart';
 import 'scan.dart';
@@ -992,47 +993,6 @@ class _RoleChip extends StatelessWidget {
   }
 }
 
-/// The bordered card of one input or output: role chip, identity,
-/// amount. A row on a watched wallet carries a Glacier edge.
-class _IoCard extends StatelessWidget {
-  const _IoCard({
-    required this.mine,
-    required this.chip,
-    required this.identity,
-    required this.amount,
-    required this.tokens,
-  });
-
-  final bool mine;
-  final Widget chip;
-  final Widget identity;
-  final Widget amount;
-  final GerfautTokens tokens;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(GerfautSpacing.sm + 2),
-      decoration: BoxDecoration(
-        color: mine ? tokens.primary.withValues(alpha: 0.04) : tokens.surface,
-        borderRadius: BorderRadius.circular(GerfautRadius.md),
-        border: Border.all(
-          color: mine ? tokens.primary.withValues(alpha: 0.4) : tokens.border,
-        ),
-      ),
-      child: Row(
-        children: [
-          chip,
-          const SizedBox(width: GerfautSpacing.sm + 2),
-          Expanded(child: identity),
-          const SizedBox(width: GerfautSpacing.sm),
-          amount,
-        ],
-      ),
-    );
-  }
-}
-
 /// The lines under an address: the wallet it belongs to, whether it is
 /// change, whether the input still lacks a signature.
 class _Markers extends StatelessWidget {
@@ -1091,9 +1051,8 @@ class _InputRow extends StatelessWidget {
     final mine = input.wallet != null;
     final address = input.address;
     final value = input.valueSats;
-    return _IoCard(
+    return IoRow(
       mine: mine,
-      tokens: tokens,
       chip: _RoleChip(
         icon: mine ? LucideIcons.wallet : LucideIcons.arrowUpRight,
         tone: mine ? _Tone.accent : _Tone.neutral,
@@ -1231,9 +1190,8 @@ class _OutputRow extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
       );
     }
-    return _IoCard(
+    return IoRow(
       mine: mine,
-      tokens: tokens,
       chip: _RoleChip(icon: icon, tone: tone, hint: hint, tokens: tokens),
       identity: identity,
       amount: UnitAmount(sats: output.valueSats, tokens: tokens),
