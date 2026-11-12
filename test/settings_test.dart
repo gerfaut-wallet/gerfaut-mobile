@@ -1612,7 +1612,7 @@ void main() {
       expect(bridge.savedBackends[Network.mainnet], isA<CustomElectrum>());
       expect(
         find.text(
-          'Plain TCP, no certificate: what Gerfaut asks this server and '
+          'No TLS: what Gerfaut asks this server and '
           'what it answers travel in the clear.',
         ),
         findsOneWidget,
@@ -1633,7 +1633,7 @@ void main() {
     }
 
     const inTheClear =
-        'Plain TCP, no certificate: what Gerfaut asks this server and '
+        'No TLS: what Gerfaut asks this server and '
         'what it answers travel in the clear.';
 
     // Plain HTTP reads like plain TCP to anything on the path, so it is

@@ -33,7 +33,7 @@ const String _uncheckedNote =
 /// plain TCP, or an Esplora one over plain HTTP outside Tor. Both read
 /// the same to anything on the path.
 const String _inTheClearNote =
-    'Plain TCP, no certificate: what Gerfaut asks this server and '
+    'No TLS: what Gerfaut asks this server and '
     'what it answers travel in the clear.';
 
 const List<({Network network, String hint})> _networkHints = [
