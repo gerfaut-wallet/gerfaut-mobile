@@ -37,6 +37,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - In the transaction diagram, an amount is drawn at its full size, under the icon. A label too long for its box shrinks, where it used to lose its last character to a fade.
 - On a narrow phone, the labels of the transaction diagram have more room in their boxes and shrink less.
 - On the Policy page, the wallet's name reads as you wrote it. It used to be set in capitals.
+- A transaction with an input whose final signature field is present but empty reads as not yet signed. It used to read as ready to broadcast, and no node would take it.
+- A mining reward paid to a watched address counts as immature until its 100th confirmation, as it already did in a descriptor wallet.
+
+### Security
+
+- Another app can no longer hand Gerfaut arguments when it opens it. A release build drops the extras of the intent that starts it, and its main screen is reached only through the launcher icons.
+- A transfer from one phone to another no longer copies Gerfaut's data. Android 12 and later make that copy even with backups turned off, so every data domain is now excluded from it, the vault included.
+- An Esplora server on plain `http://`, other than a `.onion` one, now carries the same "in the clear" warning as an Electrum server without TLS: what Gerfaut asks it and what it answers travel unencrypted.
+- A release build no longer writes debug messages to the system log.
+- The release build checks the hash of what it downloads: every Gradle module, the NDK, CMake, the Rust toolchain and the parts of the Flutter cache that end up in the APK. Dart packages come only at the versions and hashes of the lockfiles.
+- Gerfaut no longer takes the height of a block on a server's word. The work of a block proves it was mined, not where it sits, so a server could serve real blocks at heights of its own and make a payment look deeper than it is. On mainnet, the height of every server tip, and of the block of every confirmation that no checkpoint vouches for, is now proven by the block's own coinbase.
+- A wallet that a server fooled with heights too high is repaired by the next server whose latest block is recent. A server that is far behind, with an old latest block, is refused and changes nothing in the wallet.
+- An Electrum certificate that has expired, is not valid yet or was issued for another host is refused with that reason. It used to read as a certificate nobody vouches for.
+- The build compiles only a revision of gerfaut-core that its main branch has reached. GitHub serves any commit of a fork by its hash, so a pinned hash alone could point at code that was never merged.
 
 ## [0.1.0] - 2026-10-21
 

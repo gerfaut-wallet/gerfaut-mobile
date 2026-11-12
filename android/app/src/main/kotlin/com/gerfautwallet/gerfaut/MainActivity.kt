@@ -11,6 +11,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Bitmap
@@ -30,6 +31,7 @@ import android.view.WindowManager
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import java.io.ByteArrayOutputStream
+import io.flutter.embedding.android.FlutterActivityLaunchConfigs.BackgroundMode
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -40,6 +42,42 @@ import java.util.UUID
 // A fragment activity, which is what the biometric prompt attaches to
 // (StrongBiometrics).
 class MainActivity : FlutterFragmentActivity() {
+    // Another app can start this activity through either launcher entry,
+    // with whatever extras it likes, and the Flutter embedding reads its
+    // own configuration from those extras: a cached engine to attach to,
+    // which ends the process when none goes by that name; a background
+    // mode, which throws on a name it does not know; an initial route;
+    // arguments for the Dart entry point. Gerfaut sets none of them, so
+    // the embedding's questions are answered here, whatever the intent
+    // says.
+    override fun getCachedEngineId(): String? = null
+
+    override fun getCachedEngineGroupId(): String? = null
+
+    override fun getBackgroundMode(): BackgroundMode = BackgroundMode.opaque
+
+    override fun getInitialRoute(): String? = null
+
+    override fun getDartEntrypointArgs(): List<String>? = null
+
+    // The engine flags are read from the intent itself, never asked for,
+    // and one Dart flag outside the engine's list aborts the process. So
+    // a release build takes the extras off the intent before the
+    // embedding or a plugin sees it; nothing in Gerfaut reads them. A
+    // debuggable build keeps them: the Flutter tool hands its flags to
+    // the app that way, and such a build never leaves a developer's
+    // machine.
+    private fun dropExtras(intent: Intent) {
+        if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) {
+            intent.replaceExtras(null as Bundle?)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        dropExtras(intent)
+        super.onNewIntent(intent)
+    }
+
     // The save under way: the bytes to write once the picker names a
     // place, and the call waiting for the answer. One at a time.
     private var pendingSave: PendingSave? = null
@@ -142,6 +180,7 @@ class MainActivity : FlutterFragmentActivity() {
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        dropExtras(intent)
         super.onCreate(savedInstanceState)
         // Another app's window drawn over this one could hide what a
         // button does and let the tap through to it. From Android 12 the

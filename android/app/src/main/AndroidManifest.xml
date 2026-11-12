@@ -57,10 +57,14 @@
          The vault is opened by a key the Android Keystore holds and never
          releases, so a vault carried to another device lands there as a
          file nobody can open. allowBackup stops the cloud copy on every
-         version; fullBackupContent says the same to Android 6 through 11,
-         which read it instead; dataExtractionRules covers Android 12 and
-         later, where a device-to-device transfer would otherwise still
-         take the files. Wallets move by a backup made with Gerfaut, which
+         version, and on Android 11 and earlier the device-to-device
+         transfer too; fullBackupContent turns off the rules file those
+         versions would read. Android 12 and later still transfer an app
+         whose allowBackup is false: dataExtractionRules excludes every
+         domain of its data there, cloud and transfer alike, since
+         Android copies domain by domain and excluding the data
+         directory's root alone leaves the others to go. Wallets move by
+         a backup made with Gerfaut, which
          carries its own password. tools:replace keeps that true whatever
          a plugin's own manifest asks for: on these two attributes the
          merger would otherwise stop the build, or take the plugin's word. -->
@@ -73,9 +77,13 @@
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         tools:replace="android:allowBackup,android:fullBackupContent">
+        <!-- Not exported: other apps reach it only through the two
+             launcher entries below, which are, and which carry nothing
+             but MAIN and LAUNCHER. What any of them puts in the intent is
+             not read (MainActivity.kt). -->
         <activity
             android:name=".MainActivity"
-            android:exported="true"
+            android:exported="false"
             android:launchMode="singleTop"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
@@ -93,9 +101,9 @@
               android:resource="@style/NormalTheme"
               />
             <!-- No link opens a screen of Gerfaut. Flutter would otherwise
-                 hand the data of any intent that reaches this exported
-                 activity to the navigator, as a route to push over the
-                 screen in use. Flutter reads this flag from the component
+                 hand the data of any intent that reaches this activity
+                 through an alias to the navigator, as a route to push
+                 over the screen in use. Flutter reads this flag from the component
                  the activity was started through, so each alias below
                  carries it too: started from the launcher, this one is
                  never asked. -->

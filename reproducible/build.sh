@@ -20,6 +20,7 @@ version=""
 build_image=1
 use_cache=1
 any_core=0
+write_verification=0
 
 usage() {
     sed -n '2,9p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -34,6 +35,10 @@ Options:
   --skip-image    reuse the image already built
   --no-cache      do not reuse the downloaded-dependency volume
   --any-core      accept a gerfaut-core checkout other than the pinned one
+  --write-verification
+                  build without reproducible/verification-metadata.xml, have
+                  Gradle write it, build again against it, and leave it in
+                  the output directory (to commit after reading it)
 USAGE
 }
 
@@ -47,6 +52,7 @@ while [ $# -gt 0 ]; do
         --skip-image) build_image=0; shift ;;
         --no-cache) use_cache=0; shift ;;
         --any-core) any_core=1; shift ;;
+        --write-verification) write_verification=1; shift ;;
         -h|--help) usage; exit 0 ;;
         *) echo "unknown option: $1" >&2; usage >&2; exit 2 ;;
     esac
@@ -107,6 +113,7 @@ run_build() {
     docker run --rm \
         -e SOURCE_DATE_EPOCH="$epoch" \
         -e GERFAUT_VERSION="$version" \
+        -e GERFAUT_WRITE_VERIFICATION="$write_verification" \
         ${cache_mount:+-v "$cache_mount"} \
         -v "$(hostpath "$stage"):/src:ro" \
         -v "$(hostpath "$dest"):/out" \

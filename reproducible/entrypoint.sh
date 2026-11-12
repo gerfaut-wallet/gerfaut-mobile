@@ -55,9 +55,30 @@ android.builder.sdkDownload=false
 # change nothing in the output.
 org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g
 kotlin.daemon.jvmargs=-Xmx1g
+# Every module, plugin and tool Gradle downloads is checked against its
+# hash in gradle/verification-metadata.xml, put in place below; one
+# missing from the file, or another file under its name, stops the build.
+org.gradle.dependency.verification=strict
 PROPS
 
 cd "$WORK/gerfaut-mobile"
+
+# The hashes live in reproducible/, not in android/gradle/, where Gradle
+# reads them: they cover what a release build resolves, on Linux, and
+# nothing else, so a debug build or a test run elsewhere would fail on
+# the first module the release does not use. They come from Gradle
+# itself, in this container: `reproducible/build.sh --write-verification`
+# builds without them, has Gradle write what it resolved, builds again
+# against what it wrote, and leaves the file in the output folder, to be
+# read and committed here.
+VERIFICATION=reproducible/verification-metadata.xml
+WRITE_VERIFICATION="${GERFAUT_WRITE_VERIFICATION:-0}"
+if [ "$WRITE_VERIFICATION" = 1 ]; then
+    rm -f android/gradle/verification-metadata.xml
+else
+    [ -f "$VERIFICATION" ] || { echo "missing $VERIFICATION" >&2; exit 1; }
+    cp "$VERIFICATION" android/gradle/verification-metadata.xml
+fi
 
 VERSION="${GERFAUT_VERSION:-}"
 if [ -z "$VERSION" ]; then
@@ -68,10 +89,28 @@ echo "==> flutter $(flutter --version | head -1)"
 echo "==> rust $(rustup run stable rustc --version)"
 echo "==> version $VERSION, SOURCE_DATE_EPOCH $SOURCE_DATE_EPOCH"
 
-flutter pub get
+flutter pub get --enforce-lockfile
 # Unsigned: the release key never comes near the container. The APKs
 # are signed on the release machine by scripts/sign-release.ps1.
-flutter build apk --release --split-per-abi --android-project-arg=gerfaut.unsigned=true
+build() {
+    flutter build apk --release --split-per-abi --android-project-arg=gerfaut.unsigned=true
+}
+build
+
+if [ "$WRITE_VERIFICATION" = 1 ]; then
+    # Gradle writes the hash of everything this build resolves, plugins
+    # and tools included, when it runs the same tasks with the flag the
+    # Flutter tool cannot pass; then the build runs again with the file
+    # in force, and the APKs below come from that one.
+    (
+        cd android
+        ./gradlew --write-verification-metadata sha256 assembleRelease \
+            -Ptarget-platform=android-arm,android-arm64,android-x64 \
+            -Psplit-per-abi=true -Pgerfaut.unsigned=true
+    )
+    cp android/gradle/verification-metadata.xml "$OUT/verification-metadata.xml"
+    build
+fi
 
 for abi in armeabi-v7a arm64-v8a x86_64; do
     src="build/app/outputs/flutter-apk/app-${abi}-release.apk"

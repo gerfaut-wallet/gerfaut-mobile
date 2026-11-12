@@ -11,8 +11,9 @@ environment:
 
 # Add regular dependencies here.
 dependencies:
-  # these are pinned on purpose because the bundle_tool_runner doesn't have
-  # pubspec.lock. See run_build_tool.sh
+  # these are pinned on purpose; the build_tool_runner that
+  # run_build_tool.sh writes installs them, and everything they depend
+  # on, from build_tool_runner.lock, which has to agree with them.
   logging: 1.2.0
   path: 1.8.0
   version: 3.0.0
