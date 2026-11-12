@@ -72,12 +72,23 @@ void _labelsFitTheirColumn(WidgetTester tester) {
   for (final element in find.byType(Text).evaluate()) {
     final data = (element.widget as Text).data;
     if (data == null || !data.contains('...')) continue;
-    final box = element.renderObject! as RenderBox;
-    final room = (box.parent! as RenderBox).size.width;
+    // The paragraph scales down to its column, so its own size says
+    // nothing: what tells is the width the string needs against the
+    // width of the column. Only the shortest cut there is, two
+    // characters at each end, may need more and be scaled.
+    final paragraph = element.renderObject! as RenderParagraph;
+    final needed = paragraph.getMaxIntrinsicWidth(double.infinity);
+    late final double room;
+    element.visitAncestorElements((ancestor) {
+      if (ancestor.widget is! LayoutBuilder) return true;
+      room = (ancestor.renderObject! as RenderBox).size.width;
+      return false;
+    });
+    final shortest = RegExp(r'^.{2}\.\.\..{2}(:\d+)?$').hasMatch(data);
     expect(
-      box.size.width,
-      lessThanOrEqualTo(room + 0.5),
-      reason: '"$data" is ${box.size.width - room} wider than its column',
+      shortest || needed <= room + 0.5,
+      isTrue,
+      reason: '"$data" needs ${needed - room} more than its column has',
     );
     checked++;
   }

@@ -593,14 +593,17 @@ class _WalletRow extends StatelessWidget {
     // Under the finger, the row is the one thing that really floats:
     // its own surface, the overlay shadow. At rest it has neither.
     final lifted = LiftedItem.of(context);
-    return Container(
-      margin: const EdgeInsets.only(bottom: GerfautSpacing.sm),
-      padding: const EdgeInsets.all(GerfautSpacing.md),
+    // A row of the card's list, not a card inside the card: a hairline
+    // above each one tells them apart, and the row keeps the card's
+    // whole width for its name and its actions.
+    final row = Container(
+      padding: const EdgeInsets.symmetric(vertical: GerfautSpacing.md),
+      // Lifted, the hairline goes clear and keeps its pixel: what lands
+      // is what was lifted, to the pixel.
       decoration: BoxDecoration(
-        color: lifted ? tokens.surface : null,
-        borderRadius: BorderRadius.circular(GerfautRadius.md),
-        border: Border.all(color: tokens.border),
-        boxShadow: lifted ? [tokens.shadowOverlay] : null,
+        border: Border(
+          top: BorderSide(color: lifted ? Colors.transparent : tokens.border),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -757,13 +760,13 @@ class _WalletRow extends StatelessWidget {
             ),
           ] else if (!renaming) ...[
             const SizedBox(height: GerfautSpacing.xs),
-            // Four actions do not fit one line on a narrow phone: the
-            // last ones flow under the others rather than overflowing.
+            // Two to a line, each at least half the row: four words of
+            // four lengths left to flow made a ragged block with the
+            // last one alone under the others. A label that needs more
+            // than its half takes it, and the next one goes under.
             // Secondary, all four: the list repeats them on every row,
             // and in blue it would become a wall of buttons.
-            Wrap(
-              spacing: GerfautSpacing.sm,
-              runSpacing: GerfautSpacing.sm,
+            _ActionGrid(
               children: [
                 SecondaryButton(
                   label: 'Rename',
@@ -798,6 +801,56 @@ class _WalletRow extends StatelessWidget {
           ],
         ],
       ),
+    );
+    if (!lifted) return row;
+    // Held, its surface reaches a little past the row on each side, so
+    // the name does not sit against the edge of what floats.
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Positioned(
+          left: -GerfautSpacing.sm,
+          right: -GerfautSpacing.sm,
+          top: 0,
+          bottom: 0,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: tokens.surface,
+              borderRadius: BorderRadius.circular(GerfautRadius.md),
+              boxShadow: [tokens.shadowOverlay],
+            ),
+          ),
+        ),
+        row,
+      ],
+    );
+  }
+}
+
+/// The actions of a row, two to a line.
+class _ActionGrid extends StatelessWidget {
+  const _ActionGrid({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final half = ((constraints.maxWidth - GerfautSpacing.sm) / 2)
+            .floorToDouble();
+        return Wrap(
+          spacing: GerfautSpacing.sm,
+          runSpacing: GerfautSpacing.sm,
+          children: [
+            for (final child in children)
+              ConstrainedBox(
+                constraints: BoxConstraints(minWidth: half),
+                child: child,
+              ),
+          ],
+        );
+      },
     );
   }
 }

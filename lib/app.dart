@@ -467,6 +467,10 @@ ThemeData themeFrom(GerfautTokens tokens, Brightness brightness) {
     canvasColor: tokens.background,
     dividerColor: tokens.border,
     fontFamily: GerfautFonts.ui,
+    // The style every text of a page starts from. Material tracks it
+    // (+0.25), and that tracking reaches any style that sets none: the
+    // text is then painted wider than it measures.
+    textTheme: const TextTheme(bodyMedium: TextStyle(letterSpacing: 0)),
     appBarTheme: AppBarTheme(
       backgroundColor: tokens.background,
       surfaceTintColor: Colors.transparent,

@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/format.dart';
 import '../theme/tokens.dart';
+import 'fitted_text.dart';
 import 'focus_ring.dart';
 
 /// Address or txid shown inline: Givre surface, mono 13px, truncated in
@@ -68,41 +69,6 @@ class _AddressChipState extends State<AddressChip> {
     if (mounted) setState(() => _copied = false);
   }
 
-  /// The longest truncation of the value that fits [room], both ends
-  /// kept. Under an unbounded width — a chip in a [Wrap] — the asked-for
-  /// truncation stands. Below the floor there is nothing left worth
-  /// comparing, so the fade takes over.
-  String _fitted(double room, TextStyle style, TextScaler scaler) {
-    var head = widget.head;
-    var tail = widget.tail;
-    var shown = truncateMiddle(widget.value, head: head, tail: tail);
-    if (!room.isFinite) return shown;
-    // A pixel of margin: a measurement that lands a hair under the paint
-    // fades the last glyph, and half a character of an address is worse
-    // than one character fewer.
-    while (_widthOf(shown, style, scaler) > room - 1 && head + tail > 8) {
-      if (head > tail) {
-        head--;
-      } else {
-        tail--;
-      }
-      shown = truncateMiddle(widget.value, head: head, tail: tail);
-    }
-    return shown;
-  }
-
-  /// Width one line of text takes in the style it will be drawn in,
-  /// at the reader's text scale.
-  static double _widthOf(String text, TextStyle style, TextScaler scaler) {
-    final painter = TextPainter(
-      text: TextSpan(text: text, style: style),
-      textDirection: TextDirection.ltr,
-      textScaler: scaler,
-      maxLines: 1,
-    )..layout();
-    return painter.width;
-  }
-
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
@@ -124,7 +90,7 @@ class _AddressChipState extends State<AddressChip> {
     final copiedStyle = tokens.label.copyWith(color: tokens.textMuted);
     // What the word and its own gap will occupy, given back by the
     // identifier so the chip's outer width never moves.
-    final valueWidth = _widthOf(shown, valueStyle, scaler);
+    final valueWidth = textWidth(shown, valueStyle, scaler);
     // Only while the word is showing: capping at the measured width the
     // rest of the time buys nothing and costs a glyph, since a measured
     // width lands a hair under the painted one.
@@ -132,7 +98,7 @@ class _AddressChipState extends State<AddressChip> {
         ? math.max(
             0.0,
             valueWidth -
-                _widthOf('Copied', copiedStyle, scaler) -
+                textWidth('Copied', copiedStyle, scaler) -
                 GerfautSpacing.xs,
           )
         : double.infinity;
@@ -188,8 +154,18 @@ class _AddressChipState extends State<AddressChip> {
                         child: ConstrainedBox(
                           constraints: BoxConstraints(maxWidth: maxValueWidth),
                           child: LayoutBuilder(
+                            // Below the floor of [fitMiddle] there is
+                            // nothing left worth comparing, so the fade
+                            // takes over.
                             builder: (context, constraints) => Text(
-                              _fitted(constraints.maxWidth, valueStyle, scaler),
+                              fitMiddle(
+                                widget.value,
+                                constraints.maxWidth,
+                                valueStyle,
+                                scaler,
+                                head: widget.head,
+                                tail: widget.tail,
+                              ),
                               style: valueStyle,
                               overflow: TextOverflow.fade,
                               softWrap: false,

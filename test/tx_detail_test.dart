@@ -253,6 +253,45 @@ void main() {
     expect(find.byType(AddressChip), findsNWidgets(4));
   });
 
+  testWidgets('on a narrow phone the amount goes under the address', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 6000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    const address = 'bc1qcdepm6f0a9k3l2m7n8p4q5r6s7t8u9v2wy2r4xh';
+    final bridge = FakeBridge(
+      txDetails: {
+        'w1:$_txid': _detail(
+          inputs: const [
+            TxIo(address: address, valueSats: 10000, isMine: true),
+          ],
+        ),
+      },
+    );
+    await tester.pumpWidget(_app(bridge));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    final chip = find.byWidgetPredicate(
+      (widget) => widget is AddressChip && widget.value == address,
+    );
+    // Beside the address, the figure left it too little room to show
+    // both of its ends; under it, the row is the address's own.
+    final amount = find.text(formatAmount(10000, AmountUnit.btc)).last;
+    expect(
+      tester.getTopLeft(amount).dy,
+      greaterThan(tester.getCenter(chip).dy),
+    );
+    final drawn = tester
+        .widget<Text>(
+          find.descendant(of: chip, matching: find.byType(Text)).first,
+        )
+        .data!;
+    expect(drawn, startsWith('bc1q'));
+    expect(drawn, endsWith('r4xh'));
+  });
+
   testWidgets('four hairlines hold the five sections apart', (tester) async {
     _usePhone(tester);
     final bridge = FakeBridge(txDetails: {'w1:$_txid': _detail()});

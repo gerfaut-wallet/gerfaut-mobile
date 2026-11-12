@@ -14,6 +14,7 @@ import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/explorer_link.dart';
 import '../widgets/facts.dart';
+import '../widgets/io_row.dart';
 import '../widgets/load_failure.dart';
 import '../widgets/status_pill.dart';
 import '../widgets/toast.dart';
@@ -828,18 +829,13 @@ class _IoList extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: GerfautSpacing.xs),
-          child: IoListHeading(
-            title: title,
-            count: ios.length,
-            // A coinbase input spends nothing: what the side carries is
-            // the sum of the outputs, the same figure its row states.
-            totalSats: sideTotal(
-              ios.map(
-                (io) => io.valueSats ?? (coinbase ? coinbaseValue : null),
-              ),
-            ),
+        IoListHeading(
+          title: title,
+          count: ios.length,
+          // A coinbase input spends nothing: what the side carries is
+          // the sum of the outputs, the same figure its row states.
+          totalSats: sideTotal(
+            ios.map((io) => io.valueSats ?? (coinbase ? coinbaseValue : null)),
           ),
         ),
         const SizedBox(height: GerfautSpacing.sm),
@@ -881,40 +877,17 @@ class _IoRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final mine = io.isMine;
     final value = io.valueSats ?? (coinbase ? coinbaseValue : null);
-    return Container(
-      padding: const EdgeInsets.all(GerfautSpacing.sm + 2),
-      decoration: BoxDecoration(
-        color: mine ? tokens.primary.withValues(alpha: 0.04) : tokens.surface,
-        borderRadius: BorderRadius.circular(GerfautRadius.md),
-        border: Border.all(
-          color: mine ? tokens.primary.withValues(alpha: 0.4) : tokens.border,
-        ),
+    return IoRow(
+      mine: mine,
+      chip: _RoleChip(io: io, side: side, coinbase: coinbase, tokens: tokens),
+      identity: _IoIdentity(
+        io: io,
+        side: side,
+        coinbase: coinbase,
+        extras: extras,
+        tokens: tokens,
       ),
-      child: LayoutBuilder(
-        builder: (context, constraints) => Row(
-          children: [
-            _RoleChip(io: io, side: side, coinbase: coinbase, tokens: tokens),
-            const SizedBox(width: GerfautSpacing.sm + 2),
-            Expanded(
-              child: _IoIdentity(
-                io: io,
-                side: side,
-                coinbase: coinbase,
-                extras: extras,
-                tokens: tokens,
-              ),
-            ),
-            const SizedBox(width: GerfautSpacing.sm),
-            // At a large text size the figure alone is wider than the
-            // row. Half of it is the most it may claim; past that it
-            // scales down, and the address keeps a place to live.
-            ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: constraints.maxWidth / 2),
-              child: UnitAmount(sats: value, tokens: tokens),
-            ),
-          ],
-        ),
-      ),
+      amount: UnitAmount(sats: value, tokens: tokens),
     );
   }
 }

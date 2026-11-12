@@ -369,6 +369,64 @@ void main() {
     );
   });
 
+  testWidgets('a narrow row keeps the hour, on a line of its own', (
+    tester,
+  ) async {
+    // A small phone: the date, the state and the amount no longer fit
+    // one line, and a date cut at its end would lose the hour.
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final meta = makeMeta(totalSats: 5000);
+    final bridge = FakeBridge(
+      wallets: [meta],
+      snapshots: {
+        'w1': makeSnapshot(
+          meta: meta,
+          totalSats: 5000,
+          txs: [
+            TxSummary(
+              txid: 'a' * 64,
+              netSats: 5000,
+              feeSats: 141,
+              status: TxStatus.confirmed(height: 100, timestamp: 1755000000),
+              confirmations: 10,
+            ),
+            TxSummary(
+              txid: '${'b' * 60}cdef',
+              netSats: -2000,
+              feeSats: 141,
+              status: TxStatus.pending(),
+              confirmations: 0,
+            ),
+          ],
+        ),
+      },
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        retry: noRetry,
+        overrides: [bridgeProvider.overrideWithValue(bridge)],
+        child: MaterialApp(
+          theme: themeFrom(GerfautTokens.light, Brightness.light),
+          home: const WalletHomeScreen(walletId: 'w1'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text(formatTimestamp(1755000000)), findsNothing);
+    expect(find.text(formatDate(1755000000)), findsOneWidget);
+    expect(find.text(formatClock(1755000000)), findsOneWidget);
+    // A transaction still waiting is named by its txid, cut in the
+    // middle to the room there is: its last characters are still its
+    // last characters.
+    final pending = tester.widget<Text>(find.textContaining('...'));
+    expect(pending.data, startsWith('bbbb'));
+    expect(pending.data, endsWith('cdef'));
+  });
+
   testWidgets('tapping the title renames the wallet, over the page', (
     tester,
   ) async {

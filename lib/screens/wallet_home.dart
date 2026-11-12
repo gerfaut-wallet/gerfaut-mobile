@@ -15,6 +15,7 @@ import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/count_badge.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/fitted_text.dart';
 import '../widgets/load_failure.dart';
 import '../widgets/mask_unsaved_notice.dart';
 import '../widgets/overflow_menu.dart';
@@ -291,38 +292,60 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
               ],
             ),
           ),
-          TabBar(
-            tabs: [
-              Tab(
-                child: _TabLabel(
-                  label: 'Transactions',
-                  count: snapshot.txs.length,
-                ),
-              ),
-              Tab(
-                child: _TabLabel(
-                  label: 'UTXOs',
-                  count:
-                      ref.watch(utxosProvider(widget.walletId)).value?.length ??
-                      0,
-                ),
-              ),
-            ],
-          ),
+          // The lists live on the card surface, edge to edge: a row's
+          // chips are recessed, and a recess needs a surface to sink
+          // into — on the page canvas the two tones are one. A Material
+          // rather than a painted box, so the ink of a row is drawn on
+          // it and not under it.
           Expanded(
-            child: TabBarView(
-              children: [
-                _TxList(
-                  walletId: widget.walletId,
-                  network: snapshot.meta.network,
-                  txs: snapshot.txs,
-                  truncated: snapshot.truncated,
-                ),
-                _UtxoList(
-                  walletId: widget.walletId,
-                  network: snapshot.meta.network,
-                ),
-              ],
+            child: Material(
+              color: tokens.surface,
+              shape: Border(
+                top: BorderSide(color: tokens.border),
+                bottom: BorderSide(color: tokens.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TabBar(
+                    tabs: [
+                      Tab(
+                        child: _TabLabel(
+                          label: 'Transactions',
+                          count: snapshot.txs.length,
+                        ),
+                      ),
+                      Tab(
+                        child: _TabLabel(
+                          label: 'UTXOs',
+                          count:
+                              ref
+                                  .watch(utxosProvider(widget.walletId))
+                                  .value
+                                  ?.length ??
+                              0,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Expanded(
+                    child: TabBarView(
+                      children: [
+                        _TxList(
+                          walletId: widget.walletId,
+                          network: snapshot.meta.network,
+                          txs: snapshot.txs,
+                          truncated: snapshot.truncated,
+                        ),
+                        _UtxoList(
+                          walletId: widget.walletId,
+                          network: snapshot.meta.network,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           Padding(
@@ -630,7 +653,6 @@ class _TxList extends ConsumerWidget {
         final tx = sorted[index];
         final incoming = tx.netSats >= 0;
         final pending = !tx.status.confirmed;
-        final dated = tx.status.confirmed && tx.status.timestamp != null;
         return InkWell(
           onTap: () {
             Navigator.of(context).push(
@@ -679,18 +701,7 @@ class _TxList extends ConsumerWidget {
                 // glyph rather than a pill. "Sent" and "Received" are
                 // dropped on the phone, where the arrow, the sign and
                 // the colour already carry the direction three times.
-                Expanded(
-                  child: Text(
-                    dated
-                        ? formatTimestamp(tx.status.timestamp!)
-                        : truncateMiddle(tx.txid, head: 8, tail: 8),
-                    style: dated
-                        ? tokens.figureOf(size: 13)
-                        : tokens.data.copyWith(color: tokens.textMuted),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
+                Expanded(child: _TxWhen(tx: tx)),
                 const SizedBox(width: GerfautSpacing.sm),
                 StatusGlyph(status: tx.status),
                 const SizedBox(width: GerfautSpacing.sm),
@@ -707,6 +718,75 @@ class _TxList extends ConsumerWidget {
                 ),
               ],
             ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// What names a transaction in its row: when it was mined, or its txid
+/// until it is. Neither is ever cut at the end. A date too long for the
+/// row — a narrow phone, a large text size — puts its hour on a second
+/// line, and a txid drops characters from its middle. Past that, what
+/// is left scales down.
+class _TxWhen extends StatelessWidget {
+  const _TxWhen({required this.tx});
+
+  final TxSummary tx;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final scaler = MediaQuery.textScalerOf(context);
+    final timestamp = tx.status.confirmed ? tx.status.timestamp : null;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (timestamp == null) {
+          final style = tokens.data.copyWith(color: tokens.textMuted);
+          return FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              fitMiddle(
+                tx.txid,
+                constraints.maxWidth,
+                style,
+                scaler,
+                head: 8,
+                tail: 8,
+              ),
+              style: style,
+              maxLines: 1,
+              softWrap: false,
+            ),
+          );
+        }
+        final style = tokens.figureOf(size: 13);
+        final whole = formatTimestamp(timestamp);
+        if (fitsLine(whole, constraints.maxWidth, style, scaler)) {
+          return Text(whole, style: style, maxLines: 1, softWrap: false);
+        }
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                formatDate(timestamp),
+                style: style,
+                maxLines: 1,
+                softWrap: false,
+              ),
+              Text(
+                formatClock(timestamp),
+                style: style.copyWith(color: tokens.textMuted),
+                maxLines: 1,
+                softWrap: false,
+              ),
+            ],
           ),
         );
       },
