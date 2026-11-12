@@ -362,11 +362,61 @@ void main() {
     // one still waiting.
     expect(find.byIcon(LucideIcons.check), findsOneWidget);
     expect(find.byIcon(LucideIcons.clock), findsOneWidget);
+    // Ten confirmations deep, it is settled: the check goes quiet and
+    // only the one still waiting keeps its colour.
+    final tokens = GerfautTokens.light;
+    expect(
+      tester.widget<Icon>(find.byIcon(LucideIcons.check)).color,
+      tokens.textMuted,
+    );
+    expect(
+      tester.widget<Icon>(find.byIcon(LucideIcons.clock)).color,
+      tokens.pending,
+    );
     // The whole row still fits the list rhythm.
     expect(
       tester.getSize(find.byIcon(LucideIcons.arrowDownLeft)).height,
       lessThanOrEqualTo(48),
     );
+  });
+
+  testWidgets('a row still settling keeps its colour and its count', (
+    tester,
+  ) async {
+    final meta = makeMeta(totalSats: 5000);
+    final bridge = FakeBridge(
+      wallets: [meta],
+      snapshots: {
+        'w1': makeSnapshot(
+          meta: meta,
+          totalSats: 5000,
+          txs: [
+            TxSummary(
+              txid: 'a' * 64,
+              netSats: 5000,
+              feeSats: 141,
+              status: TxStatus.confirmed(height: 100, timestamp: 1755000000),
+              confirmations: 3,
+            ),
+          ],
+        ),
+      },
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        retry: noRetry,
+        overrides: [bridgeProvider.overrideWithValue(bridge)],
+        child: MaterialApp(
+          theme: themeFrom(GerfautTokens.light, Brightness.light),
+          home: const WalletHomeScreen(walletId: 'w1'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final check = tester.widget<Icon>(find.byIcon(LucideIcons.check));
+    expect(check.color, GerfautTokens.light.confirmed);
+    expect(check.semanticLabel, '3 conf');
   });
 
   testWidgets('a narrow row keeps the hour, on a line of its own', (
@@ -975,8 +1025,18 @@ void _utxoTests() {
       await _openUtxos(tester);
 
       expect(find.textContaining('a1b2c3d4'), findsNWidgets(2));
-      expect(find.text('Confirmed'), findsOneWidget);
-      expect(find.text('Pending'), findsOneWidget);
+      // The state is a glyph, as on the transaction list, never a pill
+      // on every row: a mined coin is settled and reads quiet, only the
+      // one still waiting keeps its colour.
+      final tokens = GerfautTokens.light;
+      expect(find.byType(StatusPill), findsNothing);
+      expect(find.byType(StatusGlyph), findsNWidgets(2));
+      final check = tester.widget<Icon>(find.byIcon(LucideIcons.check));
+      expect(check.color, tokens.textMuted);
+      expect(check.semanticLabel, 'Confirmed');
+      final clock = tester.widget<Icon>(find.byIcon(LucideIcons.clock));
+      expect(clock.color, tokens.pending);
+      expect(clock.semanticLabel, 'Pending');
       expect(find.textContaining('0.00100000', findRichText: true), findsOne);
       // A coin with no address says so rather than leaving a gap.
       expect(find.text('n/a'), findsOneWidget);
@@ -1013,7 +1073,7 @@ void _utxoTests() {
         find.textContaining('0.00050000', findRichText: true),
         findsNothing,
       );
-      expect(find.text('Confirmed'), findsOneWidget);
+      expect(find.byType(StatusGlyph), findsNWidgets(2));
     });
 
     testWidgets('the rows stay on screen while a sync reads them again', (
@@ -1022,17 +1082,43 @@ void _utxoTests() {
       final bridge = await _openUtxos(tester);
       final gate = bridge.gate = Completer<void>();
       final container = ProviderScope.containerOf(
-        tester.element(find.text('Confirmed')),
+        tester.element(find.byType(StatusGlyph).first),
       );
       container.invalidate(utxosProvider('w1'));
       await tester.pump();
       await tester.pump();
       expect(bridge.reads, 2);
       expect(find.text('Loading UTXOs…'), findsNothing);
-      expect(find.text('Confirmed'), findsOneWidget);
+      expect(find.byType(StatusGlyph), findsNWidgets(2));
       gate.complete();
       await tester.pumpAndSettle();
-      expect(find.text('Confirmed'), findsOneWidget);
+      expect(find.byType(StatusGlyph), findsNWidgets(2));
+    });
+
+    testWidgets('a narrow phone keeps the amount beside the state', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await _openUtxos(tester);
+
+      expect(tester.takeException(), isNull);
+      for (final (glyph, amount) in [
+        (LucideIcons.check, '0.00100000'),
+        (LucideIcons.clock, '0.00050000'),
+      ]) {
+        final state = tester.getRect(find.byIcon(glyph));
+        final figure = tester.getRect(
+          find.textContaining(amount, findRichText: true).first,
+        );
+        // On the same line, the state before the amount, and both
+        // inside the screen.
+        expect(state.right, lessThanOrEqualTo(figure.left), reason: amount);
+        expect(state.top, lessThan(figure.bottom), reason: amount);
+        expect(state.bottom, greaterThan(figure.top), reason: amount);
+        expect(figure.right, lessThanOrEqualTo(320), reason: amount);
+      }
     });
 
     testWidgets('a list that cannot be read says so, and asks again', (
@@ -1047,7 +1133,7 @@ void _utxoTests() {
       await tester.tap(find.text('Try again'));
       await tester.pumpAndSettle();
       expect(find.text('The UTXOs could not be loaded.'), findsNothing);
-      expect(find.text('Confirmed'), findsOneWidget);
+      expect(find.byType(StatusGlyph), findsNWidgets(2));
     });
 
     testWidgets('no coins: says what the tab is for', (tester) async {

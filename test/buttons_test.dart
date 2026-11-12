@@ -309,22 +309,105 @@ void main() {
     });
   });
 
-  testWidgets('off fades the whole button and keeps its fill', (tester) async {
-    await tester.pumpWidget(
-      _page(const PrimaryButton(label: 'Add wallet', onPressed: null)),
-    );
-    expect(_fill(tester, 'Add wallet'), GerfautTokens.light.primary);
-    expect(
-      tester
-          .widget<Opacity>(
-            find.ancestor(
-              of: find.text('Add wallet'),
-              matching: find.byType(Opacity),
+  group('off', () {
+    for (final brightness in Brightness.values) {
+      final tokens = brightness == Brightness.dark
+          ? GerfautTokens.dark
+          : GerfautTokens.light;
+
+      testWidgets('gives its fill up for a hairline, ${brightness.name}', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          _page(
+            brightness: brightness,
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                PrimaryButton(
+                  label: 'Primary',
+                  icon: LucideIcons.plus,
+                  onPressed: null,
+                ),
+                SecondaryButton(label: 'Secondary', onPressed: null),
+                DangerButton(label: 'Danger', onPressed: null),
+              ],
             ),
-          )
-          .opacity,
-      0.5,
-    );
+          ),
+        );
+        expect(find.byType(Opacity), findsNothing);
+        for (final label in ['Primary', 'Secondary', 'Danger']) {
+          expect(_fill(tester, label).a, 0, reason: label);
+          final shape = _shape(tester, label) as RoundedRectangleBorder;
+          expect(shape.side.color, tokens.border, reason: label);
+          expect(shape.side.width, 1, reason: label);
+          final text = tester.widget<RichText>(
+            find.descendant(
+              of: find.text(label),
+              matching: find.byType(RichText),
+            ),
+          );
+          expect(text.text.style?.color, tokens.textMuted, reason: label);
+        }
+        expect(
+          tester
+              .widget<IconTheme>(
+                find
+                    .ancestor(
+                      of: find.byIcon(LucideIcons.plus),
+                      matching: find.byType(IconTheme),
+                    )
+                    .first,
+              )
+              .data
+              .color,
+          tokens.textMuted,
+        );
+      });
+
+      testWidgets('nothing on press, ${brightness.name}', (tester) async {
+        await tester.pumpWidget(
+          _page(
+            brightness: brightness,
+            const PrimaryButton(label: 'Add wallet', onPressed: null),
+          ),
+        );
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.text('Add wallet')),
+        );
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(_fill(tester, 'Add wallet').a, 0);
+        final scale = tester.widget<AnimatedScale>(
+          find.ancestor(
+            of: find.text('Add wallet'),
+            matching: find.byType(AnimatedScale),
+          ),
+        );
+        expect(scale.scale, 1);
+        await gesture.up();
+      });
+    }
+
+    test('the muted label reads at AA wherever an off button sits', () {
+      final light = GerfautTokens.light;
+      final dark = GerfautTokens.dark;
+      final grounds = {
+        'light surface': light.surface,
+        'light background': light.background,
+        'light surfaceSunken': light.surfaceSunken,
+        'light alertSurface': light.alertSurface,
+        'light pendingSurface': light.pendingSurface,
+        'dark surface': dark.surface,
+        'dark background': dark.background,
+        'dark surfaceSunken': dark.surfaceSunken,
+        'dark alertSurface': dark.alertSurface,
+        'dark pendingSurface': dark.pendingSurface,
+      };
+      for (final MapEntry(key: name, value: ground) in grounds.entries) {
+        final ink = name.startsWith('dark') ? dark.textMuted : light.textMuted;
+        expect(_contrast(ink, ground), greaterThanOrEqualTo(4.5), reason: name);
+      }
+    });
   });
 
   group('a secondary on a notice', () {

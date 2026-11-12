@@ -13,6 +13,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Hints that repeated a title or the line next to them are gone, so the screens carry less text.
 - On a wallet's page, the Transactions and UTXOs lists sit on a surface of their own. Address and direction chips stand out from the page behind them.
 - In the Wallets settings, each wallet is a row under a hairline, where it used to be a card inside the card. Its 4 actions sit in a grid of 2 columns.
+- A button with a label that cannot be pressed yet is drawn hollow, with a thin edge and its label in grey. Faded to half strength, its label was too pale to read.
+- In the Transactions list, the check of a transaction with 6 confirmations or more is grey. It stays green for the first 5, and the clock of a pending transaction stays amber.
+- In the UTXOs list, a small mark beside the amount replaces the green "Confirmed" pill of each row: a grey check for a confirmed coin, an amber clock for one still waiting.
 
 ### Fixed
 

@@ -22,14 +22,12 @@ import '../widgets/explorer_link.dart';
 import '../widgets/facts.dart';
 import '../widgets/io_row.dart';
 import '../widgets/notice.dart';
+import '../widgets/status_pill.dart';
 import '../widgets/tx_diagram.dart';
 import 'scan.dart';
 
 /// How often a sent transaction is checked with the backend.
 const Duration _statusPollInterval = Duration(seconds: 30);
-
-/// Confirmations after which a broadcast stops being watched.
-const int _settledConfirmations = 6;
 
 /// The mark under a figure nobody confirmed: the inputs total, the fee,
 /// its rate. Outputs need none — they are the transaction's own, not a
@@ -1559,7 +1557,7 @@ class _StatusCardState extends ConsumerState<_StatusCard> {
     final status = _state.lastKnown;
     if (status != null &&
         status.standing == BroadcastStanding.confirmed &&
-        status.confirmations >= _settledConfirmations) {
+        status.confirmations >= settledConfirmations) {
       return;
     }
     _timer = Timer(_statusPollInterval, _check);
