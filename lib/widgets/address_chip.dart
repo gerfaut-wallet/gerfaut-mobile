@@ -69,23 +69,6 @@ class _AddressChipState extends State<AddressChip> {
     if (mounted) setState(() => _copied = false);
   }
 
-  /// The longest truncation of the value that fits [room], both ends
-  /// kept. Below the floor there is nothing left worth comparing, so
-  /// the fade takes over.
-  String _fitted(double room, TextStyle style, TextScaler scaler) {
-    return fitMiddle(
-      widget.value,
-      room,
-      style,
-      scaler,
-      head: widget.head,
-      tail: widget.tail,
-    );
-  }
-
-  static double _widthOf(String text, TextStyle style, TextScaler scaler) =>
-      textWidth(text, style, scaler);
-
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
@@ -107,7 +90,7 @@ class _AddressChipState extends State<AddressChip> {
     final copiedStyle = tokens.label.copyWith(color: tokens.textMuted);
     // What the word and its own gap will occupy, given back by the
     // identifier so the chip's outer width never moves.
-    final valueWidth = _widthOf(shown, valueStyle, scaler);
+    final valueWidth = textWidth(shown, valueStyle, scaler);
     // Only while the word is showing: capping at the measured width the
     // rest of the time buys nothing and costs a glyph, since a measured
     // width lands a hair under the painted one.
@@ -115,7 +98,7 @@ class _AddressChipState extends State<AddressChip> {
         ? math.max(
             0.0,
             valueWidth -
-                _widthOf('Copied', copiedStyle, scaler) -
+                textWidth('Copied', copiedStyle, scaler) -
                 GerfautSpacing.xs,
           )
         : double.infinity;
@@ -171,8 +154,18 @@ class _AddressChipState extends State<AddressChip> {
                         child: ConstrainedBox(
                           constraints: BoxConstraints(maxWidth: maxValueWidth),
                           child: LayoutBuilder(
+                            // Below the floor of [fitMiddle] there is
+                            // nothing left worth comparing, so the fade
+                            // takes over.
                             builder: (context, constraints) => Text(
-                              _fitted(constraints.maxWidth, valueStyle, scaler),
+                              fitMiddle(
+                                widget.value,
+                                constraints.maxWidth,
+                                valueStyle,
+                                scaler,
+                                head: widget.head,
+                                tail: widget.tail,
+                              ),
                               style: valueStyle,
                               overflow: TextOverflow.fade,
                               softWrap: false,
