@@ -14,29 +14,55 @@ import '../theme/tokens.dart';
 IconData iconOfStatus(TxStatus status) =>
     status.confirmed ? LucideIcons.check : LucideIcons.clock;
 
+/// The confirmation count from which a transaction is settled: its
+/// count is no longer written, its glyph no longer takes a colour,
+/// and a broadcast stops being watched.
+const int settledConfirmations = 6;
+
+/// Whether a confirmed transaction is still settling: mined, but under
+/// [settledConfirmations] deep. An unknown count is taken as settled.
+bool _settling(TxStatus status, int? confirmations) =>
+    status.confirmed &&
+    confirmations != null &&
+    confirmations < settledConfirmations;
+
 /// What that glyph is called, for assistive technology and for the
 /// label of the pill.
 String labelOfStatus(TxStatus status, {int? confirmations}) {
   if (!status.confirmed) return 'Pending';
-  if (confirmations != null && confirmations < 6) return '$confirmations conf';
+  if (_settling(status, confirmations)) return '$confirmations conf';
   return 'Confirmed';
 }
 
 /// The state alone, without its label: for a dense list row where the
 /// date and the amount need the width more than the word does.
+///
+/// Colour is kept for what can still move: the clock in amber while it
+/// waits, the check in green while it settles, then a muted check once
+/// it is settled, so a long list of old coins stays quiet and the few
+/// rows still moving stand out.
 class StatusGlyph extends StatelessWidget {
-  const StatusGlyph({super.key, required this.status});
+  const StatusGlyph({super.key, required this.status, this.confirmations});
 
   final TxStatus status;
+
+  /// How deep it is, or null when the count is not known (a UTXO): a
+  /// confirmed glyph with no count is drawn settled.
+  final int? confirmations;
 
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
+    final color = !status.confirmed
+        ? tokens.pending
+        : _settling(status, confirmations)
+        ? tokens.confirmed
+        : tokens.textMuted;
     return Icon(
       iconOfStatus(status),
       size: 14,
-      color: status.confirmed ? tokens.confirmed : tokens.pending,
-      semanticLabel: labelOfStatus(status),
+      color: color,
+      semanticLabel: labelOfStatus(status, confirmations: confirmations),
     );
   }
 }

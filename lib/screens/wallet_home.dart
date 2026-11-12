@@ -703,7 +703,7 @@ class _TxList extends ConsumerWidget {
                 // the colour already carry the direction three times.
                 Expanded(child: _TxWhen(tx: tx)),
                 const SizedBox(width: GerfautSpacing.sm),
-                StatusGlyph(status: tx.status),
+                StatusGlyph(status: tx.status, confirmations: tx.confirmations),
                 const SizedBox(width: GerfautSpacing.sm),
                 ListAmount(
                   sats: tx.netSats,
@@ -883,14 +883,13 @@ class _UtxoList extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: GerfautSpacing.sm),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  StatusPill(status: utxo.status),
-                  const SizedBox(height: GerfautSpacing.xs),
-                  StackedAmount(sats: utxo.valueSats, network: network),
-                ],
-              ),
+              // The state as a glyph, as on the transaction list: a pill
+              // on every row painted the whole list green and took the
+              // width the amount needs on a small phone. A coin has no
+              // count of its own, so once mined it reads settled.
+              StatusGlyph(status: utxo.status),
+              const SizedBox(width: GerfautSpacing.sm),
+              StackedAmount(sats: utxo.valueSats, network: network),
             ],
           ),
         );
