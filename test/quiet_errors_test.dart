@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/src/quiet_errors.dart';
@@ -26,6 +28,46 @@ void main() {
       PlatformDispatcher.instance.onError!(Exception('x'), StackTrace.empty),
       isTrue,
     );
+  });
+
+  test('a release build prints nothing a caught error logs', () {
+    final flutter = FlutterError.onError;
+    final platform = PlatformDispatcher.instance.onError;
+    final print = debugPrint;
+    addTearDown(() {
+      FlutterError.onError = flutter;
+      PlatformDispatcher.instance.onError = platform;
+      debugPrint = print;
+    });
+    final printed = <String>[];
+
+    runZoned(
+      () {
+        quietErrorsInRelease(release: true);
+        debugPrint('broadcast: refused by tb1q6rz28mcfaxtmd6v789l9rrl');
+      },
+      zoneSpecification: ZoneSpecification(
+        print: (_, _, _, line) => printed.add(line),
+      ),
+    );
+    expect(printed, isEmpty);
+  });
+
+  test('a debug build still prints what it logs', () {
+    final print = debugPrint;
+    addTearDown(() => debugPrint = print);
+    final printed = <String>[];
+
+    runZoned(
+      () {
+        quietErrorsInRelease(release: false);
+        debugPrint('broadcast: refused');
+      },
+      zoneSpecification: ZoneSpecification(
+        print: (_, _, _, line) => printed.add(line),
+      ),
+    );
+    expect(printed, ['broadcast: refused']);
   });
 
   test('a debug build keeps the handlers it had', () {
