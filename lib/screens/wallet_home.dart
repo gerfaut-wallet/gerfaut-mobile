@@ -292,38 +292,60 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
               ],
             ),
           ),
-          TabBar(
-            tabs: [
-              Tab(
-                child: _TabLabel(
-                  label: 'Transactions',
-                  count: snapshot.txs.length,
-                ),
-              ),
-              Tab(
-                child: _TabLabel(
-                  label: 'UTXOs',
-                  count:
-                      ref.watch(utxosProvider(widget.walletId)).value?.length ??
-                      0,
-                ),
-              ),
-            ],
-          ),
+          // The lists live on the card surface, edge to edge: a row's
+          // chips are recessed, and a recess needs a surface to sink
+          // into — on the page canvas the two tones are one. A Material
+          // rather than a painted box, so the ink of a row is drawn on
+          // it and not under it.
           Expanded(
-            child: TabBarView(
-              children: [
-                _TxList(
-                  walletId: widget.walletId,
-                  network: snapshot.meta.network,
-                  txs: snapshot.txs,
-                  truncated: snapshot.truncated,
-                ),
-                _UtxoList(
-                  walletId: widget.walletId,
-                  network: snapshot.meta.network,
-                ),
-              ],
+            child: Material(
+              color: tokens.surface,
+              shape: Border(
+                top: BorderSide(color: tokens.border),
+                bottom: BorderSide(color: tokens.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TabBar(
+                    tabs: [
+                      Tab(
+                        child: _TabLabel(
+                          label: 'Transactions',
+                          count: snapshot.txs.length,
+                        ),
+                      ),
+                      Tab(
+                        child: _TabLabel(
+                          label: 'UTXOs',
+                          count:
+                              ref
+                                  .watch(utxosProvider(widget.walletId))
+                                  .value
+                                  ?.length ??
+                              0,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Expanded(
+                    child: TabBarView(
+                      children: [
+                        _TxList(
+                          walletId: widget.walletId,
+                          network: snapshot.meta.network,
+                          txs: snapshot.txs,
+                          truncated: snapshot.truncated,
+                        ),
+                        _UtxoList(
+                          walletId: widget.walletId,
+                          network: snapshot.meta.network,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           Padding(
