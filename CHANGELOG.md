@@ -14,8 +14,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - On a wallet's page, the Transactions and UTXOs lists sit on a surface of their own. Address and direction chips stand out from the page behind them.
 - In the Wallets settings, each wallet is a row under a hairline, where it used to be a card inside the card. Its 4 actions sit in a grid of 2 columns.
 - A button with a label that cannot be pressed yet is drawn hollow, with a thin edge and its label in grey. Faded to half strength, its label was too pale to read.
-- In the Transactions list, the check of a transaction with 6 confirmations or more is grey. It stays green for the first 5, and the clock of a pending transaction stays amber.
-- In the UTXOs list, a small mark beside the amount replaces the green "Confirmed" pill of each row: a grey check for a confirmed coin, an amber clock for one still waiting.
+- In the Transactions list, a transaction under 6 confirmations shows a small green pie, one sixth filled for each confirmation. From 6 on it shows a grey check, and a pending transaction keeps its amber clock. A screen reader says "3 of 6 confirmations".
+- In the UTXOs list, the same mark beside the amount replaces the green "Confirmed" pill of each row. A coin now counts its own confirmations: the clock while it waits, the pie under 6, then the grey check.
+- On a transaction's page, the pill shows the pie next to its count under 6 confirmations.
 - A closed list shows the chosen value alone. The line that says what the choice does stays in the open list, where it reads whole.
 - In the Wallets settings, the gap limit is set as a figure against the right edge, and its explanation takes the whole width of the card under it.
 - Icons that were 13, 15 or 18 px are now 12, 14, 16 or 20 px. Between the elements of a row, a card or a list, gaps of 6 or 10 px are now 4 or 8 px.
