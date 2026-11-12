@@ -173,40 +173,19 @@ class _GerfautSelectState<T> extends State<GerfautSelect<T>> {
                     Icon(selected!.icon, size: 16, color: tokens.textMuted),
                     const SizedBox(width: GerfautSpacing.sm),
                   ],
-                  if (subtitle == null)
-                    // The free width is the title's, so a long one ends
-                    // in an ellipsis inside the field, never past it.
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: titleStyle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    )
-                  else
-                    Text(
+                  // The value alone, as on the desktop: what a choice
+                  // means is the second line of its row in the open
+                  // list, and a field has no room to say it whole. The
+                  // free width is the title's, so a long one ends in an
+                  // ellipsis inside the field, never past it.
+                  Expanded(
+                    child: Text(
                       title,
                       style: titleStyle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  if (subtitle != null) ...[
-                    Text(
-                      ' · ',
-                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                    ),
-                    Expanded(
-                      child: Text(
-                        subtitle,
-                        style: tokens.bodySmall.copyWith(
-                          color: tokens.textMuted,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
+                  ),
                   const SizedBox(width: GerfautSpacing.sm),
                   Icon(
                     LucideIcons.chevronDown,

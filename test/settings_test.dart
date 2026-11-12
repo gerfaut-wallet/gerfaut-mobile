@@ -1120,7 +1120,13 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.text('Rotates over every public Esplora.'), findsOneWidget);
+      // What it does is a line of the open list; closed, the field
+      // still says it to a screen reader.
+      expect(find.text('Rotates over every public Esplora.'), findsNothing);
+      expect(
+        tester.getSemantics(find.byType(GerfautSelect<String?>)).value,
+        'Automatic, Rotates over every public Esplora.',
+      );
       // The hint says who answers, and nothing about fee estimates: the
       // app no longer serves any.
       expect(find.textContaining('fee estimates'), findsNothing);
