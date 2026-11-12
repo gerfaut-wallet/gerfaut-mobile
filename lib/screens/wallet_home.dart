@@ -16,6 +16,7 @@ import '../widgets/buttons.dart';
 import '../widgets/count_badge.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/fitted_text.dart';
+import '../widgets/icon_chip.dart';
 import '../widgets/load_failure.dart';
 import '../widgets/mask_unsaved_notice.dart';
 import '../widgets/overflow_menu.dart';
@@ -673,28 +674,20 @@ class _TxList extends ConsumerWidget {
             ),
             child: Row(
               children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: incoming && !pending
-                        ? tokens.confirmedSurface
-                        : tokens.surfaceSunken,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    incoming
-                        ? LucideIcons.arrowDownLeft
-                        : LucideIcons.arrowUpRight,
-                    size: 15,
-                    color: incoming && !pending
-                        ? tokens.confirmed
-                        : tokens.textMuted,
-                    // Said out loud, since the word is not written any
-                    // more: the arrow, the sign and the colour say it
-                    // on screen, and this says it to a screen reader.
-                    semanticLabel: incoming ? 'Received' : 'Sent',
-                  ),
+                IconChip(
+                  icon: incoming
+                      ? LucideIcons.arrowDownLeft
+                      : LucideIcons.arrowUpRight,
+                  ink: incoming && !pending
+                      ? tokens.confirmed
+                      : tokens.textMuted,
+                  fill: incoming && !pending
+                      ? tokens.confirmedSurface
+                      : tokens.surfaceSunken,
+                  // Said out loud, since the word is not written any
+                  // more: the arrow, the sign and the colour say it
+                  // on screen, and this says it to a screen reader.
+                  semanticLabel: incoming ? 'Received' : 'Sent',
                 ),
                 const SizedBox(width: GerfautSpacing.sm),
                 // One line: the date reads in full, and the state is a
