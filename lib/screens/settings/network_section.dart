@@ -920,7 +920,7 @@ class _NetworkCard extends StatelessWidget {
                         if (selected)
                           Icon(
                             LucideIcons.check,
-                            size: 15,
+                            size: 16,
                             color: tokens.primary,
                           ),
                       ],
@@ -981,10 +981,10 @@ class _OnionNote extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          // Sits on the first line of the text, whatever its size.
-          padding: const EdgeInsets.only(top: 3),
-          child: Icon(LucideIcons.eyeOff, size: 15, color: tokens.textMuted),
+        // Sits on the first line of the text, whatever its size.
+        FirstLine(
+          style: tokens.bodySmall,
+          child: Icon(LucideIcons.eyeOff, size: 16, color: tokens.textMuted),
         ),
         const SizedBox(width: GerfautSpacing.sm),
         Expanded(

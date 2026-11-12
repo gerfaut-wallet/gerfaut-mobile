@@ -384,7 +384,7 @@ class _DateField extends StatelessWidget {
           padding: const EdgeInsets.only(left: GerfautSpacing.md),
           child: Row(
             children: [
-              Icon(LucideIcons.calendar, size: 15, color: tokens.textMuted),
+              Icon(LucideIcons.calendar, size: 16, color: tokens.textMuted),
               const SizedBox(width: GerfautSpacing.sm),
               Expanded(
                 child: Text(
@@ -411,7 +411,7 @@ class _DateField extends StatelessWidget {
                       dimension: GerfautTouch.target,
                       child: Icon(
                         LucideIcons.x,
-                        size: 15,
+                        size: 16,
                         color: tokens.textMuted,
                       ),
                     ),

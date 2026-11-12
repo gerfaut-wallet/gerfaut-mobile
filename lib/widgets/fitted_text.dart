@@ -16,6 +16,19 @@ double textWidth(String text, TextStyle style, TextScaler scaler) {
   return width;
 }
 
+/// Height one line takes in [style], at the reader's text scale.
+double lineHeight(TextStyle style, TextScaler scaler) {
+  final painter = TextPainter(
+    text: TextSpan(text: '0', style: style),
+    textDirection: TextDirection.ltr,
+    textScaler: scaler,
+    maxLines: 1,
+  )..layout();
+  final height = painter.height;
+  painter.dispose();
+  return height;
+}
+
 /// Whether one line of [text] fits [room], a pixel to spare: a
 /// measurement that lands a hair under the paint costs the last glyph,
 /// and half a character of an address is worse than one fewer.

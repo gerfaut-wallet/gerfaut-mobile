@@ -20,6 +20,7 @@ import '../widgets/app_bar.dart';
 import '../widgets/buttons.dart';
 import '../widgets/explorer_link.dart';
 import '../widgets/facts.dart';
+import '../widgets/icon_chip.dart';
 import '../widgets/io_row.dart';
 import '../widgets/notice.dart';
 import '../widgets/status_pill.dart';
@@ -523,7 +524,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
               ),
               const SizedBox(height: GerfautSpacing.sm),
               for (final (index, input) in preview.inputs.indexed) ...[
-                if (index > 0) const SizedBox(height: GerfautSpacing.sm - 2),
+                if (index > 0) const SizedBox(height: GerfautSpacing.sm),
                 _InputRow(input: input, tokens: tokens),
               ],
               const SizedBox(height: GerfautSpacing.lg),
@@ -534,7 +535,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
               ),
               const SizedBox(height: GerfautSpacing.sm),
               for (final (index, output) in preview.outputs.indexed) ...[
-                if (index > 0) const SizedBox(height: GerfautSpacing.sm - 2),
+                if (index > 0) const SizedBox(height: GerfautSpacing.sm),
                 _OutputRow(output: output, tokens: tokens),
               ],
               const SizedBox(height: GerfautSpacing.lg),
@@ -724,7 +725,7 @@ class _Hero extends StatelessWidget {
         const SizedBox(height: GerfautSpacing.sm + GerfautSpacing.xs),
         Wrap(
           spacing: GerfautSpacing.sm,
-          runSpacing: GerfautSpacing.xs + 2,
+          runSpacing: GerfautSpacing.sm,
           children: [
             _Pill(
               tone: _Tone.neutral,
@@ -978,15 +979,7 @@ class _RoleChip extends StatelessWidget {
     return Tooltip(
       message: hint,
       triggerMode: TooltipTriggerMode.longPress,
-      child: Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          color: fill,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Icon(icon, size: 15, color: ink),
-      ),
+      child: IconChip(icon: icon, ink: ink, fill: fill),
     );
   }
 }
@@ -1009,7 +1002,7 @@ class _Markers extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Wrap(
-      spacing: GerfautSpacing.xs + 2,
+      spacing: GerfautSpacing.xs,
       runSpacing: GerfautSpacing.xs,
       children: [
         if (wallet != null)

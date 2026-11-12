@@ -18,6 +18,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - In the UTXOs list, a small mark beside the amount replaces the green "Confirmed" pill of each row: a grey check for a confirmed coin, an amber clock for one still waiting.
 - A closed list shows the chosen value alone. The line that says what the choice does stays in the open list, where it reads whole.
 - In the Wallets settings, the gap limit is set as a figure against the right edge, and its explanation takes the whole width of the card under it.
+- Icons that were 13, 15 or 18 px are now 12, 14, 16 or 20 px. Between the elements of a row, a card or a list, gaps of 6 or 10 px are now 4 or 8 px.
+- In a list opened from the bottom of the screen, the choices line up with the title of the list.
 
 ### Fixed
 

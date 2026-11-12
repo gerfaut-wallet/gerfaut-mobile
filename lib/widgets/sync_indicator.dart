@@ -54,7 +54,7 @@ class SyncIndicator extends ConsumerWidget {
               children: [
                 Icon(
                   LucideIcons.triangleAlert,
-                  size: 13,
+                  size: 12,
                   color: tokens.pending,
                 ),
                 const SizedBox(width: GerfautSpacing.xs),

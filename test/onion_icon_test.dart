@@ -45,9 +45,9 @@ void main() {
       ),
     );
 
-    // The card says 18px in the muted ink, exactly as it does for the
+    // The card says 20px in the muted ink, exactly as it does for the
     // Lucide icon of every other section: the caller repeats neither.
-    expect(tester.getSize(find.byType(OnionIcon)), const Size.square(18));
+    expect(tester.getSize(find.byType(OnionIcon)), const Size.square(20));
     expect(
       tester.renderObject(find.byType(OnionIcon)),
       paints..path(color: GerfautTokens.light.textMuted),

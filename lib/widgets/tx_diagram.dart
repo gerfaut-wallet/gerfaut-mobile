@@ -93,7 +93,7 @@ const double _tightFrame = 340;
 
 /// Between two boxes of a side, and between the columns and the fee.
 const double _boxGap = GerfautSpacing.sm;
-const double _feeGap = 18;
+const double _feeGap = GerfautSpacing.md;
 
 /// Stroke of every connector, set by the design system.
 const double _wire = 1.5;

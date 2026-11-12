@@ -88,7 +88,7 @@ void openExplorer(BuildContext context, WidgetRef ref, String url) {
                           minHeight: GerfautTouch.target,
                         ),
                         padding: const EdgeInsets.symmetric(
-                          vertical: GerfautSpacing.sm + 2,
+                          vertical: GerfautSpacing.sm,
                         ),
                         child: Row(
                           children: [
