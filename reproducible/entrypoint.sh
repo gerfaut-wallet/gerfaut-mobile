@@ -68,7 +68,7 @@ echo "==> flutter $(flutter --version | head -1)"
 echo "==> rust $(rustup run stable rustc --version)"
 echo "==> version $VERSION, SOURCE_DATE_EPOCH $SOURCE_DATE_EPOCH"
 
-flutter pub get
+flutter pub get --enforce-lockfile
 # Unsigned: the release key never comes near the container. The APKs
 # are signed on the release machine by scripts/sign-release.ps1.
 flutter build apk --release --split-per-abi --android-project-arg=gerfaut.unsigned=true
