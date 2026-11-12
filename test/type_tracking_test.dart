@@ -46,4 +46,24 @@ void main() {
       expect(paintedTracking(tester, name), 0, reason: name);
     }
   });
+
+  // The same holds for a style written on the spot, and for a text that
+  // carries none: the page's own default is untracked.
+  testWidgets('a page starts every text untracked', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: themeFrom(GerfautTokens.dark, Brightness.dark),
+        home: const Scaffold(
+          body: Column(
+            children: [
+              Text('bare'),
+              Text('sized', style: TextStyle(fontSize: 12)),
+            ],
+          ),
+        ),
+      ),
+    );
+    expect(paintedTracking(tester, 'bare'), 0);
+    expect(paintedTracking(tester, 'sized'), 0);
+  });
 }
