@@ -14,6 +14,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../src/format.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
+import 'fitted_text.dart';
 
 /// What a branch is, which fixes its icon and its ink. These are the
 /// roles the input and output lists already use: a diagram and a list
@@ -676,26 +677,13 @@ String _shortenToFit(
   TextScaler scaler,
 ) {
   if (!width.isFinite || width <= 0) return value;
-  double widthOf(String text) {
-    final painter = TextPainter(
-      text: TextSpan(text: text, style: style),
-      textDirection: TextDirection.ltr,
-      textScaler: scaler,
-      maxLines: 1,
-    )..layout();
-    final measured = painter.width;
-    painter.dispose();
-    return measured;
-  }
+  bool fits(String text) => fitsLine(text, width, style, scaler);
 
-  if (widthOf(value) <= width) return value;
-  // A ceiling no monospaced face can breach: the widest of them advances
-  // well under 0.68 em, and JetBrains Mono is 0.6. Painting a candidate
-  // measures narrower than the device draws it — seen on a phone, where
-  // an eighteen-character outpoint fitted on paper and lost its `:0` to
-  // the fade on screen — so the count starts under a bound that cannot
-  // be wrong, and the measurement below only ever shortens it further.
-  final ceiling = (width / (_boxText * scaler.scale(1) * 0.68)).floor();
+  if (fits(value)) return value;
+  // The face is monospaced: one glyph gives the advance of them all,
+  // and with it the most characters the column can hold. The search
+  // starts there rather than at the whole identifier.
+  final ceiling = (width / textWidth('0', style, scaler)).floor();
   // Only the txid of an outpoint is up for cutting: the index is put
   // back whole, so the budget leaves room for it rather than counting
   // it among the characters it may drop.
@@ -711,7 +699,7 @@ String _shortenToFit(
     final head = math.max(2, chars - 3 - tail);
     if (head + tail + 3 >= body.length) continue;
     final candidate = shortenBranchLabel(value, head: head, tail: tail);
-    if (widthOf(candidate) <= width) return candidate;
+    if (fits(candidate)) return candidate;
   }
   return shortenBranchLabel(value, head: 2, tail: 2);
 }
