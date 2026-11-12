@@ -44,9 +44,11 @@ class PolicyScreen extends ConsumerWidget {
             // The header carries the wallet's name: the bar says what the
             // page is, the body says whose policy it reads.
             if (name != null) ...[
+              // As its owner wrote it: a name set in capitals is no
+              // longer the name on the wallet list.
               Text(
-                name.toUpperCase(),
-                style: tokens.label.copyWith(color: tokens.textMuted),
+                name,
+                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
               ),
               const SizedBox(height: GerfautSpacing.sm),
             ],

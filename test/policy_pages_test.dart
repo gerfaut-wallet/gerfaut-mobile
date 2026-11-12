@@ -85,7 +85,7 @@ void main() {
     testWidgets('reads several recovery paths', (tester) async {
       expect(await _readPage(tester, recoveryPathsPolicy), [
         'Balance card: Recovery in about 2 days 5 hours',
-        'COLD STORAGE',
+        'Cold storage',
         'Keys A and B sign. Both recovery keys can spend once a coin has waited about 30 days. An emergency key can spend once a coin has waited about 183 days. Another key can spend once a coin has waited about 1 year.',
         'PRIMARY',
         'Key A and Key B',
@@ -143,7 +143,7 @@ void main() {
     testWidgets('reads a relative lock while a coin waits', (tester) async {
       expect(await _readPage(tester, relativePolicy), [
         'Balance card: Recovery in about 296 days',
-        'COLD STORAGE',
+        'Cold storage',
         'Key A signs. A recovery key can spend once a coin has waited about 1 year.',
         'PRIMARY',
         'Key A',
@@ -175,7 +175,7 @@ void main() {
     ) async {
       expect(await _readPage(tester, relativeOpenPolicy), [
         'Balance card: Recovery open',
-        'COLD STORAGE',
+        'Cold storage',
         'Key A signs. A recovery key can spend once a coin has waited about 1 year.',
         'PRIMARY',
         'Key A',
@@ -201,7 +201,7 @@ void main() {
     testWidgets('reads absolute locks, a height and a date', (tester) async {
       expect(await _readPage(tester, absolutePolicy), [
         'Balance card: Recovery in about 10 days',
-        'COLD STORAGE',
+        'Cold storage',
         'Key A signs. A recovery key can spend after block 801\u00A0432. An emergency key can spend after Mar 17, 2030.',
         'PRIMARY',
         'Key A',
@@ -238,7 +238,7 @@ void main() {
     testWidgets('reads a multisig', (tester) async {
       expect(await _readPage(tester, multisigPolicy), [
         'Balance card: 2 of 3 keys',
-        'COLD STORAGE',
+        'Cold storage',
         '2 of 3 keys sign.',
         'PRIMARY',
         'Any 2 of Key A, Key B, Key C',
