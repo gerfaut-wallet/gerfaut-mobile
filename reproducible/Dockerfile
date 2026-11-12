@@ -5,12 +5,16 @@
 # their download; the NDK and CMake by the hash of the tree sdkmanager
 # unpacks; the Rust toolchain by the hash of its release manifest, which
 # gives the hash of every package; the parts of the Flutter cache a
-# release build reads (gen_snapshot, the patched SDK, the Dart SDK) by
-# the hash of their tree, Flutter itself by commit. What is still taken
-# on the word of TLS: apt (the live jammy pocket, tools that fetch,
-# unpack and link), platform-tools (no revision), build-tools and the
-# platforms by exact revision (compile-time only), and the rest of the
-# Flutter cache. The Gradle modules are checked against
+# release build reads (gen_snapshot, the patched SDK, the Dart SDK, and
+# the host tools that write into the APK, such as font-subset) by the
+# hash of their tree, Flutter itself by commit. Those trees are checked
+# once `flutter precache` has run, which already ran the Dart SDK it
+# fetched: the check catches a changed download, not a tool that hides
+# its own change. What is still taken on the word of TLS: apt (the live
+# jammy pocket, tools that fetch, unpack and link), platform-tools (no
+# revision), build-tools and the platforms by exact revision
+# (compile-time only), and the rest of the Flutter cache. The Gradle
+# modules are checked against
 # reproducible/verification-metadata.xml at build time (entrypoint.sh).
 #
 # The image builds *unsigned* APKs; signing happens later, on the release
@@ -63,7 +67,8 @@ a1dfe4083a1f17b70639f0fa3b57582483ceabf3caac86b0556e88cf9781182b:artifacts/engin
 0c487f1fe96e50241391836f252dc449abe38faae94008ddece15a0e7820469d:artifacts/engine/android-x64-release \
 572852b710a9841c2de6668bf17f8041a2e3acfccd466bc41902369ca73668bf:artifacts/engine/common \
 501978274592653e555dd4ccb0bfafe6652ce2acb9dbdbbf23a8a160ac7e483c:pkg/sky_engine \
-496af49affa74eda470838e60d62cf40e23a5638b9fd686e96129ae634667874:dart-sdk"
+496af49affa74eda470838e60d62cf40e23a5638b9fd686e96129ae634667874:dart-sdk \
+d9ec0f47dcb832cde4e06b555eab83f22068ddf95976e399311f9d0328094853:artifacts/engine/linux-x64"
 # The manifest hash has to follow the version:
 #   curl -fsSL https://static.rust-lang.org/dist/channel-rust-<version>.toml | sha256sum
 ARG RUST_VERSION=1.99.1
@@ -134,6 +139,7 @@ RUN git clone --depth 1 --branch "$FLUTTER_VERSION" \
  && flutter config --no-analytics > /dev/null \
  && flutter precache --android --no-ios --universal \
  && flutter --version \
+ && [ -n "$FLUTTER_CACHE_TREES" ] \
  && for pin in $FLUTTER_CACHE_TREES; do \
       tree-sha256 "$FLUTTER_ROOT/bin/cache/${pin#*:}" "${pin%%:*}" || exit 1; \
     done
