@@ -77,9 +77,13 @@
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         tools:replace="android:allowBackup,android:fullBackupContent">
+        <!-- Not exported: other apps reach it only through the two
+             launcher entries below, which are, and which carry nothing
+             but MAIN and LAUNCHER. What any of them puts in the intent is
+             not read (MainActivity.kt). -->
         <activity
             android:name=".MainActivity"
-            android:exported="true"
+            android:exported="false"
             android:launchMode="singleTop"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
@@ -97,9 +101,9 @@
               android:resource="@style/NormalTheme"
               />
             <!-- No link opens a screen of Gerfaut. Flutter would otherwise
-                 hand the data of any intent that reaches this exported
-                 activity to the navigator, as a route to push over the
-                 screen in use. Flutter reads this flag from the component
+                 hand the data of any intent that reaches this activity
+                 through an alias to the navigator, as a route to push
+                 over the screen in use. Flutter reads this flag from the component
                  the activity was started through, so each alias below
                  carries it too: started from the launcher, this one is
                  never asked. -->

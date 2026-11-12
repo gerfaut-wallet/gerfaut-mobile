@@ -12,6 +12,15 @@ String _withoutComments(String path) =>
         .readAsStringSync()
         .replaceAll(RegExp(r'<!--.*?-->', dotAll: true), '');
 
+/// The opening tag of the element named [name] in [xml].
+String _openingTag(String xml, String element, String name) {
+  final tag = RegExp(
+    '<$element\\s[^>]*android:name="${RegExp.escape(name)}"[^>]*>',
+  ).firstMatch(xml);
+  expect(tag, isNotNull, reason: '$element $name is declared');
+  return tag![0]!;
+}
+
 void main() {
   group('backup and transfer rules', () {
     final rules = _withoutComments(
@@ -65,6 +74,29 @@ void main() {
         application,
         contains('android:dataExtractionRules="@xml/data_extraction_rules"'),
       );
+    });
+  });
+
+  group('launch entries', () {
+    final manifest = _withoutComments(
+      'android/app/src/main/AndroidManifest.xml',
+    );
+
+    // Another app reaches the activity only through the launcher
+    // entries, and those carry nothing but MAIN and LAUNCHER.
+    test('the activity itself is not exported', () {
+      expect(
+        _openingTag(manifest, 'activity', '.MainActivity'),
+        contains('android:exported="false"'),
+      );
+    });
+
+    test('both launcher entries still are', () {
+      for (final alias in ['.Launcher', '.Calculator']) {
+        final tag = _openingTag(manifest, 'activity-alias', alias);
+        expect(tag, contains('android:exported="true"'));
+        expect(tag, contains('android:targetActivity=".MainActivity"'));
+      }
     });
   });
 }
