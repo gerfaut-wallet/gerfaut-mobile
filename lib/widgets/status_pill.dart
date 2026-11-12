@@ -4,65 +4,81 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../src/format.dart';
 import '../src/models.dart';
 import '../theme/tokens.dart';
+import 'confirmation_pie.dart';
 
 /// The glyph of a chain state: a check once it is in a block, a clock
 /// while it waits. One convention for the whole app, desktop included.
+/// While a mined transaction settles, the list and the pill draw a
+/// [ConfirmationPie] in place of the check.
 ///
-/// A shape, not a coloured dot: the two states then differ for someone
-/// who cannot tell green from amber, in a black and white screenshot,
-/// and at the size where a label no longer fits.
+/// A shape, not a coloured dot: the states then differ for someone who
+/// cannot tell green from amber, in a black and white screenshot, and
+/// at the size where a label no longer fits.
 IconData iconOfStatus(TxStatus status) =>
     status.confirmed ? LucideIcons.check : LucideIcons.clock;
 
-/// The confirmation count from which a transaction is settled: its
-/// count is no longer written, its glyph no longer takes a colour,
-/// and a broadcast stops being watched.
-const int settledConfirmations = 6;
-
 /// Whether a confirmed transaction is still settling: mined, but under
-/// [settledConfirmations] deep. An unknown count is taken as settled.
-bool _settling(TxStatus status, int? confirmations) =>
-    status.confirmed &&
-    confirmations != null &&
-    confirmations < settledConfirmations;
+/// [settledConfirmations] deep.
+bool _settling(TxStatus status, int confirmations) =>
+    status.confirmed && confirmations < settledConfirmations;
 
-/// What that glyph is called, for assistive technology and for the
-/// label of the pill.
-String labelOfStatus(TxStatus status, {int? confirmations}) {
+/// What the pill writes: short, since it sits beside the block height.
+String labelOfStatus(TxStatus status, {required int confirmations}) {
   if (!status.confirmed) return 'Pending';
   if (_settling(status, confirmations)) return '$confirmations conf';
   return 'Confirmed';
 }
 
+/// What a screen reader says for the state: the count in full words
+/// while it settles, since "conf" read aloud says nothing.
+String spokenStatus(TxStatus status, {required int confirmations}) {
+  if (_settling(status, confirmations)) {
+    return '$confirmations of $settledConfirmations confirmations';
+  }
+  return labelOfStatus(status, confirmations: confirmations);
+}
+
 /// The state alone, without its label: for a dense list row where the
 /// date and the amount need the width more than the word does.
 ///
-/// Colour is kept for what can still move: the clock in amber while it
-/// waits, the check in green while it settles, then a muted check once
-/// it is settled, so a long list of old coins stays quiet and the few
-/// rows still moving stand out.
+/// Each state has its own shape, and colour is kept for what can still
+/// move: the clock in amber while it waits, a green pie that fills one
+/// part per confirmation while it settles, then a muted check once it
+/// is settled, so a long list of old coins stays quiet and the few rows
+/// still moving stand out.
 class StatusGlyph extends StatelessWidget {
-  const StatusGlyph({super.key, required this.status, this.confirmations});
+  const StatusGlyph({
+    super.key,
+    required this.status,
+    required this.confirmations,
+  });
 
   final TxStatus status;
 
-  /// How deep it is, or null when the count is not known (a UTXO): a
-  /// confirmed glyph with no count is drawn settled.
-  final int? confirmations;
+  /// How deep it is: 0 while it waits, 1 in the tip block.
+  final int confirmations;
+
+  static const double _size = 14;
 
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<GerfautTokens>()!;
-    final color = !status.confirmed
-        ? tokens.pending
-        : _settling(status, confirmations)
-        ? tokens.confirmed
-        : tokens.textMuted;
+    final spoken = spokenStatus(status, confirmations: confirmations);
+    if (_settling(status, confirmations)) {
+      return Semantics(
+        label: spoken,
+        child: ConfirmationPie(
+          filled: confirmations,
+          size: _size,
+          color: tokens.confirmed,
+        ),
+      );
+    }
     return Icon(
       iconOfStatus(status),
-      size: 14,
-      color: color,
-      semanticLabel: labelOfStatus(status, confirmations: confirmations),
+      size: _size,
+      color: status.confirmed ? tokens.textMuted : tokens.pending,
+      semanticLabel: spoken,
     );
   }
 }
@@ -81,11 +97,15 @@ enum PillTone { confirmed, pending, neutral }
 /// of a spending policy, a timelock's countdown — so a new state never
 /// forks the pill.
 class StatusPill extends StatelessWidget {
-  StatusPill({super.key, required TxStatus status, int? confirmations})
+  StatusPill({super.key, required TxStatus status, required int confirmations})
     : tone = status.confirmed ? PillTone.confirmed : PillTone.pending,
       icon = iconOfStatus(status),
+      pie = _settling(status, confirmations) ? confirmations : null,
       label = labelOfStatus(status, confirmations: confirmations),
-      semanticLabel = null;
+      // The written "N conf" is read as the full count instead, once.
+      semanticLabel = _settling(status, confirmations)
+          ? spokenStatus(status, confirmations: confirmations)
+          : null;
 
   /// Any state in the pill's shape: a tone, a 12px glyph, its label.
   const StatusPill.tone({
@@ -94,10 +114,15 @@ class StatusPill extends StatelessWidget {
     required this.icon,
     required this.label,
     this.semanticLabel,
-  });
+  }) : pie = null;
 
   final PillTone tone;
   final IconData icon;
+
+  /// The confirmations drawn as a [ConfirmationPie] in place of [icon],
+  /// while a transaction settles; null for any other state.
+  final int? pie;
+
   final String label;
 
   /// Read in place of the label, for a pill whose words alone would
@@ -131,7 +156,10 @@ class StatusPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: color),
+          if (pie case final filled?)
+            ConfirmationPie(filled: filled, size: 12, color: color)
+          else
+            Icon(icon, size: 12, color: color),
           const SizedBox(width: GerfautSpacing.xs),
           // Flexible, so a long state — a per-coin count and its next
           // unlock — wraps inside the pill instead of running out of it.

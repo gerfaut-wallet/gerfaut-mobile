@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
+import 'package:gerfaut/widgets/confirmation_pie.dart';
 import 'package:gerfaut/widgets/load_failure.dart';
 import 'package:gerfaut/widgets/notice.dart';
 import 'package:gerfaut/widgets/status_pill.dart';
@@ -380,44 +381,94 @@ void main() {
     );
   });
 
-  testWidgets('a row still settling keeps its colour and its count', (
-    tester,
-  ) async {
-    final meta = makeMeta(totalSats: 5000);
-    final bridge = FakeBridge(
-      wallets: [meta],
-      snapshots: {
-        'w1': makeSnapshot(
-          meta: meta,
-          totalSats: 5000,
-          txs: [
-            TxSummary(
-              txid: 'a' * 64,
-              netSats: 5000,
-              feeSats: 141,
-              status: TxStatus.confirmed(height: 100, timestamp: 1755000000),
-              confirmations: 3,
-            ),
+  // One row waiting, one three deep, one settled, on each list: the
+  // shape says which, the colour stays on the two still moving.
+  for (final tab in ['Transactions', 'UTXOs']) {
+    testWidgets('$tab: a clock, a pie at three, a check at six', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      const depths = [0, 3, settledConfirmations];
+      TxStatus statusAt(int depth) => depth == 0
+          ? const TxStatus.pending()
+          : TxStatus.confirmed(
+              height: 200 - depth,
+              timestamp: 1755000000 - depth,
+            );
+      final meta = makeMeta(totalSats: 5000);
+      final bridge = FakeBridge(
+        wallets: [meta],
+        snapshots: {
+          'w1': makeSnapshot(
+            meta: meta,
+            totalSats: 5000,
+            txs: [
+              for (final depth in depths)
+                TxSummary(
+                  txid: '$depth' * 64,
+                  netSats: 1000 + depth,
+                  feeSats: 141,
+                  status: statusAt(depth),
+                  confirmations: depth,
+                ),
+            ],
+          ),
+        },
+        utxos: {
+          'w1': [
+            for (final depth in depths)
+              UtxoInfo(
+                txid: '$depth' * 64,
+                vout: 0,
+                address: 'tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl',
+                valueSats: 1000 + depth,
+                status: statusAt(depth),
+                confirmations: depth,
+                keychain: 'external',
+                derivationIndex: depth,
+              ),
           ],
+        },
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          retry: noRetry,
+          overrides: [bridgeProvider.overrideWithValue(bridge)],
+          child: MaterialApp(
+            theme: themeFrom(GerfautTokens.light, Brightness.light),
+            home: const WalletHomeScreen(walletId: 'w1'),
+          ),
         ),
-      },
-    );
-    await tester.pumpWidget(
-      ProviderScope(
-        retry: noRetry,
-        overrides: [bridgeProvider.overrideWithValue(bridge)],
-        child: MaterialApp(
-          theme: themeFrom(GerfautTokens.light, Brightness.light),
-          home: const WalletHomeScreen(walletId: 'w1'),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
+      if (tab == 'UTXOs') {
+        await tester.tap(find.text('UTXOs'));
+        await tester.pumpAndSettle();
+      }
 
-    final check = tester.widget<Icon>(find.byIcon(LucideIcons.check));
-    expect(check.color, GerfautTokens.light.confirmed);
-    expect(check.semanticLabel, '3 conf');
-  });
+      final tokens = GerfautTokens.light;
+      expect(find.byType(StatusGlyph), findsNWidgets(3));
+      final pie = tester.widget<ConfirmationPie>(find.byType(ConfirmationPie));
+      expect(pie.filled, 3);
+      expect(pie.color, tokens.confirmed);
+      // The box of the clock and the check, so the column holds.
+      expect(tester.getSize(find.byType(ConfirmationPie)), const Size(14, 14));
+      // The row may merge its parts into one announcement: the count is
+      // in it, in full, and the short written form is not.
+      expect(
+        find.bySemanticsLabel(RegExp(r'\b3 of 6 confirmations\b')),
+        findsOneWidget,
+      );
+      expect(find.bySemanticsLabel(RegExp(r'\bconf\b')), findsNothing);
+      final check = tester.widget<Icon>(find.byIcon(LucideIcons.check));
+      expect(check.color, tokens.textMuted);
+      expect(check.semanticLabel, 'Confirmed');
+      final clock = tester.widget<Icon>(find.byIcon(LucideIcons.clock));
+      expect(clock.color, tokens.pending);
+      expect(clock.semanticLabel, 'Pending');
+      semantics.dispose();
+    });
+  }
 
   testWidgets('a narrow row keeps the hour, on a line of its own', (
     tester,
@@ -985,6 +1036,7 @@ Future<_UtxoBridge> _openUtxos(
               address: 'tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl',
               valueSats: 100000,
               status: TxStatus.confirmed(height: 200000),
+              confirmations: settledConfirmations,
               keychain: 'external',
               derivationIndex: 0,
             ),
@@ -994,6 +1046,7 @@ Future<_UtxoBridge> _openUtxos(
               address: null,
               valueSats: 50000,
               status: TxStatus.pending(),
+              confirmations: 0,
               keychain: null,
               derivationIndex: null,
             ),

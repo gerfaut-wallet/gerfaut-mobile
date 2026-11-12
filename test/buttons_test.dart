@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
@@ -7,6 +5,8 @@ import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/buttons.dart';
 import 'package:gerfaut/widgets/notice.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+
+import 'contrast.dart';
 
 Widget _page(
   Widget body, {
@@ -57,16 +57,6 @@ ShapeBorder _shape(WidgetTester tester, String label) {
             .first,
       )
       .shape!;
-}
-
-/// WCAG 2 contrast ratio between two opaque colours.
-double _contrast(Color a, Color b) {
-  double channel(double c) =>
-      c <= 0.03928 ? c / 12.92 : math.pow((c + 0.055) / 1.055, 2.4).toDouble();
-  double luminance(Color c) =>
-      0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b);
-  final (hi, lo) = (luminance(a), luminance(b));
-  return (math.max(hi, lo) + 0.05) / (math.min(hi, lo) + 0.05);
 }
 
 void main() {
@@ -152,7 +142,11 @@ void main() {
           'disclosure pressed': (tokens.textMuted, tokens.surfaceSunken),
         };
         for (final MapEntry(key: name, value: (ink, fill)) in pairs.entries) {
-          expect(_contrast(ink, fill), greaterThanOrEqualTo(4.5), reason: name);
+          expect(
+            contrastRatio(ink, fill),
+            greaterThanOrEqualTo(4.5),
+            reason: name,
+          );
         }
       });
     }
@@ -405,7 +399,11 @@ void main() {
       };
       for (final MapEntry(key: name, value: ground) in grounds.entries) {
         final ink = name.startsWith('dark') ? dark.textMuted : light.textMuted;
-        expect(_contrast(ink, ground), greaterThanOrEqualTo(4.5), reason: name);
+        expect(
+          contrastRatio(ink, ground),
+          greaterThanOrEqualTo(4.5),
+          reason: name,
+        );
       }
     });
   });

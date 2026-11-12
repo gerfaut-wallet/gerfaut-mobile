@@ -758,6 +758,7 @@ class UtxoInfo {
     required this.address,
     required this.valueSats,
     required this.status,
+    required this.confirmations,
     required this.keychain,
     required this.derivationIndex,
   });
@@ -769,6 +770,7 @@ class UtxoInfo {
       address: json['address'] as String?,
       valueSats: json['value_sats'] as int,
       status: TxStatus.fromJson(json['status'] as Map<String, dynamic>),
+      confirmations: json['confirmations'] as int,
       keychain: json['keychain'] as String?,
       derivationIndex: json['derivation_index'] as int?,
     );
@@ -779,6 +781,10 @@ class UtxoInfo {
   final String? address;
   final int valueSats;
   final TxStatus status;
+
+  /// How deep the coin's transaction is: 0 while it waits, 1 in the
+  /// tip block.
+  final int confirmations;
   final String? keychain;
   final int? derivationIndex;
 
