@@ -1,15 +1,15 @@
 name: CI
 
 # Flutter formatting, analysis and widget tests, the Rust crate's
-# formatting, Clippy pass and tests, and the checks of the signing
-# script, on every push to main, every pull request, and on demand
-# (Actions, CI, Run workflow); a pull request of documentation alone
-# skips the Flutter and Rust jobs (the `changes` job). Both the crate and
-# the widget tests need the sibling gerfaut-core checkout, at the
-# revision reproducible/gerfaut-core.rev pins: the crate builds against
-# it, the tests read its reference JSON (test/core_fixtures.dart). It is
-# public: no key reads it. The APKs themselves are built by the release
-# workflow.
+# formatting, Clippy pass and tests, the iOS app built and run on the
+# simulator, and the checks of the signing script, on every push to
+# main, every pull request, and on demand (Actions, CI, Run workflow);
+# a pull request of documentation alone skips the Flutter, Rust and iOS
+# jobs (the `changes` job). All three need the sibling gerfaut-core
+# checkout, at the revision reproducible/gerfaut-core.rev pins: the
+# crate builds against it, the widget tests read its reference JSON
+# (test/core_fixtures.dart). It is public: no key reads it. The APKs
+# themselves are built by the release workflow.
 on:
   push:
     branches: [main]
@@ -100,7 +100,7 @@ jobs:
         working-directory: gerfaut-mobile
       - name: Format
         working-directory: gerfaut-mobile
-        run: dart format --output=none --set-exit-if-changed lib test
+        run: dart format --output=none --set-exit-if-changed lib test integration_test
       - name: Analyze
         working-directory: gerfaut-mobile
         run: flutter analyze
@@ -173,6 +173,103 @@ jobs:
       - name: Check that every patch applies
         working-directory: gerfaut-mobile/rust
         run: if grep -n '^\[\[patch.unused\]\]' Cargo.lock; then exit 1; fi
+
+  # The iOS app, on the only runner that builds it. `simulator` compiles
+  # the core and arti for the simulator, starts the app there and runs
+  # integration_test/ against the real bridge; `device` compiles them for
+  # an iPhone, in release, unsigned: what TestFlight would get, short of
+  # the signature. Both fail when the build changed a tracked file under
+  # ios/, such as the Xcode project CocoaPods rewrites: what is committed
+  # is what builds.
+  ios:
+    runs-on: macos-26
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [simulator, device]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: gerfaut-mobile
+          persist-credentials: false
+
+      - name: Read the pinned gerfaut-core revision
+        id: core
+        run: echo "rev=$(cat gerfaut-mobile/reproducible/gerfaut-core.rev)" >> "$GITHUB_OUTPUT"
+
+      - name: Check the pinned revision is on gerfaut-core's main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REV: ${{ steps.core.outputs.rev }}
+        run: gerfaut-mobile/.github/core-on-main.sh "$REV"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: gerfaut-wallet/gerfaut-core
+          ref: ${{ steps.core.outputs.rev }}
+          path: gerfaut-core
+          persist-credentials: false
+
+      # Named, not the image's default, which moves under the workflow.
+      # App Store Connect takes builds from the iOS 26 SDK on.
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+
+      - name: Pin the Rust toolchain
+        run: gerfaut-mobile/.github/ios-toolchain.sh gerfaut-mobile
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          flutter-version: 3.47.7
+          cache: true
+      - run: flutter pub get
+        working-directory: gerfaut-mobile
+
+      - name: Start a simulator
+        if: matrix.target == 'simulator'
+        id: sim
+        run: |
+          udid=$(xcrun simctl list devices available -j | jq -r '
+            [.devices | to_entries[] | select(.key | test("iOS-26"))
+              | .value[] | select(.name | startswith("iPhone"))][0].udid')
+          [ -n "$udid" ] && [ "$udid" != null ] || { xcrun simctl list devices available; exit 1; }
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid"
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+
+      - name: Test on the simulator
+        if: matrix.target == 'simulator'
+        working-directory: gerfaut-mobile
+        env:
+          UDID: ${{ steps.sim.outputs.udid }}
+        run: flutter test integration_test -d "$UDID"
+
+      - name: Build for an iPhone, unsigned
+        if: matrix.target == 'device'
+        working-directory: gerfaut-mobile
+        run: flutter build ios --release --no-codesign
+
+      - name: Check that the build left ios/ as committed
+        working-directory: gerfaut-mobile
+        run: |
+          git add --intent-to-add ios
+          if ! git diff --exit-code --stat -- ios; then
+            git diff -- ios > "$RUNNER_TEMP/ios.diff"
+            echo "::error::the build changed ios/: commit the diff of the ios-diff artifact"
+            exit 1
+          fi
+
+      - name: Keep the diff of ios/
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-diff-${{ matrix.target }}
+          path: ${{ runner.temp }}/ios.diff
+          if-no-files-found: ignore
 
   # What scripts/sign-release.ps1 checks before it signs a release, on
   # throwaway git repositories: no key, no network. Pester comes with
