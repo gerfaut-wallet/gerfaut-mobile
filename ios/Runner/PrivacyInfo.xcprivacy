@@ -8,7 +8,9 @@
   file timestamps (std::fs and SQLite read the metadata of the
   app's own files), the time since boot (Rust's Instant counts
   elapsed time with mach_absolute_time), disk space (SQLite asks
-  statfs about the file system of its database before writing).
+  statfs about the file system of its database before writing), and
+  the app's own defaults (the home_widget plugin, linked on iOS but
+  unused there, reads them and ships no manifest).
 -->
 <plist version="1.0">
 <dict>
@@ -34,6 +36,14 @@
 			<key>NSPrivacyAccessedAPITypeReasons</key>
 			<array>
 				<string>35F9.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
 			</array>
 		</dict>
 		<dict>
