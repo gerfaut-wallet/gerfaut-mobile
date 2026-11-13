@@ -18,6 +18,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'disguise.dart';
 import 'models.dart';
+import 'platform_features.dart';
 import 'prefs.dart';
 import 'state.dart';
 import 'window.dart';
@@ -627,11 +628,22 @@ class LockController extends Notifier<LockState> {
   ///
   /// The one place the rule lives: a screen that announced a trip and
   /// forgot to take it back would leave the next real absence unlocked.
+  ///
+  /// [leavesApp] is for a screen that takes the user out of Gerfaut on
+  /// every system, the system settings. Without it, on a system whose
+  /// pickers and share sheet are drawn over the app, nothing is
+  /// announced: Gerfaut never leaves the screen, and an announcement
+  /// there would never be spent by a return, but by the next real
+  /// absence, which has to lock.
   Future<T> excursion<T>(
     Future<T> Function() open, {
     bool Function(Object error)? cameUp,
     bool Function(T result)? shown,
+    bool leavesApp = false,
   }) async {
+    if (!leavesApp && !ref.read(platformFeaturesProvider).pickersLeaveApp) {
+      return open();
+    }
     expectExcursion();
     final T result;
     try {

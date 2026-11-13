@@ -11,6 +11,7 @@ import 'package:gerfaut/screens/welcome.dart';
 import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/models.dart';
+import 'package:gerfaut/src/platform_features.dart';
 import 'package:gerfaut/src/prefs.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/updates.dart';
@@ -1069,6 +1070,35 @@ void main() {
       app.lock.noteResumed();
       return app.container.read(lockProvider).locked;
     }
+
+    /// The app with its lock, on iOS: pickers drawn over the app.
+    Future<({ProviderContainer container, LockController lock})>
+    unlockedOnIos() async {
+      final container = ProviderContainer(
+        retry: noRetry,
+        overrides: [
+          ..._overrides(locked(), null),
+          platformFeaturesProvider.overrideWithValue(PlatformFeatures.ios),
+        ],
+      );
+      addTearDown(container.dispose);
+      final lock = container.read(lockProvider.notifier)
+        ..syncFromSettings(pinLock);
+      await lock.unlock('1234');
+      return (container: container, lock: lock);
+    }
+
+    test('on iOS, a picker over the app excuses no later absence', () async {
+      final app = await unlockedOnIos();
+      expect(await app.lock.excursion(() async => 'picked'), 'picked');
+      expect(await nextReturnLocks(app), isTrue);
+    });
+
+    test('on iOS, the system settings still excuse their return', () async {
+      final app = await unlockedOnIos();
+      await app.lock.excursion(() async => true, leavesApp: true);
+      expect(await nextReturnLocks(app), isFalse);
+    });
 
     test('an excursion that opened covers its return', () async {
       final app = lockedApp();

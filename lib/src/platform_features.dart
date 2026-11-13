@@ -24,6 +24,8 @@ class PlatformFeatures {
     required this.disguise,
     required this.homeWidgets,
     required this.releaseChecks,
+    required this.pickersLeaveApp,
+    this.backgroundBudget,
   });
 
   static const android = PlatformFeatures._(
@@ -33,6 +35,7 @@ class PlatformFeatures {
     disguise: true,
     homeWidgets: true,
     releaseChecks: true,
+    pickersLeaveApp: true,
   );
 
   /// Live needs a service that keeps running behind the app, which iOS
@@ -49,6 +52,8 @@ class PlatformFeatures {
     disguise: false,
     homeWidgets: false,
     releaseChecks: false,
+    pickersLeaveApp: false,
+    backgroundBudget: Duration(seconds: 25),
   );
 
   /// The set of [platform]. Android's for every other one: the app is
@@ -86,6 +91,18 @@ class PlatformFeatures {
   /// whose store delivers the app, the app asks nothing and says
   /// nothing of versions.
   final bool releaseChecks;
+
+  /// The file pickers, the save dialog and the share sheet are screens
+  /// of the system that Gerfaut leaves for, and comes back from. On iOS
+  /// they are drawn over the app, which never leaves the screen: there
+  /// is no trip for the lock to excuse (`LockController.excursion`).
+  final bool pickersLeaveApp;
+
+  /// How long the background check may take before it gives up its
+  /// turn; null for no bound. iOS gives a refresh task about thirty
+  /// seconds and stops an app that runs past them, then wakes it less
+  /// often.
+  final Duration? backgroundBudget;
 }
 
 /// What the system the app runs on lets it do. Overridden in a test

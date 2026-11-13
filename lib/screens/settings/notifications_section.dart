@@ -45,7 +45,11 @@ class NotificationsSection extends ConsumerWidget {
     final platform = ref.read(livePlatformProvider);
     await ref
         .read(lockProvider.notifier)
-        .excursion(platform.openAppSettings, shown: (opened) => opened);
+        .excursion(
+          platform.openAppSettings,
+          shown: (opened) => opened,
+          leavesApp: true,
+        );
   }
 
   @override
