@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 // The "gerfaut/files" channel: the system's save and open dialogs, and
 // the share sheet, as lib/src/documents.dart and lib/src/share.dart ask
 // for them.
-final class Documents: NSObject, UIDocumentPickerDelegate {
+final class Documents: NSObject, UIDocumentPickerDelegate, UIAdaptivePresentationControllerDelegate {
   static let shared = Documents()
 
   private var channel: FlutterMethodChannel?
@@ -14,6 +14,9 @@ final class Documents: NSObject, UIDocumentPickerDelegate {
   // answer. One at a time: a second picker would have nothing to go
   // over, and its call would wait for ever.
   private var pending: Pending?
+
+  // The share sheet up, if any: its call was answered once it opened.
+  private weak var sheet: UIActivityViewController?
 
   private final class Pending {
     enum Kind {
@@ -114,6 +117,7 @@ final class Documents: NSObject, UIDocumentPickerDelegate {
         }
         let picker = UIDocumentPickerViewController(forExporting: [file], asCopy: true)
         picker.delegate = self
+        picker.presentationController?.delegate = self
         save.kind = .save(staged: file)
         save.picker = picker
         presenter.present(picker, animated: true)
@@ -143,6 +147,7 @@ final class Documents: NSObject, UIDocumentPickerDelegate {
     let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: false)
     picker.allowsMultipleSelection = false
     picker.delegate = self
+    picker.presentationController?.delegate = self
     let open = Pending(.open(maxBytes: maxBytes), result)
     open.picker = picker
     pending = open
@@ -159,7 +164,24 @@ final class Documents: NSObject, UIDocumentPickerDelegate {
     finish(controller, picked: nil)
   }
 
-  private func finish(_ controller: UIDocumentPickerViewController, picked: URL?) {
+  // A dialog swiped away may close without a word to its delegate: its
+  // call is answered here, or every later dialog would be refused as busy.
+  func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+    finish(presentationController.presentedViewController, picked: nil)
+  }
+
+  // The app is going behind the lock: whatever this side put up comes
+  // down, a dialog answered as cancelled.
+  func closeForLock() {
+    if let picker = pending?.picker {
+      finish(picker, picked: nil)
+      picker.dismiss(animated: false)
+    }
+    sheet?.dismiss(animated: false)
+    sheet = nil
+  }
+
+  private func finish(_ controller: UIViewController, picked: URL?) {
     guard let done = pending, done.picker === controller else { return }
     pending = nil
     switch done.kind {
@@ -260,6 +282,7 @@ final class Documents: NSObject, UIDocumentPickerDelegate {
           popover.permittedArrowDirections = []
         }
         presenter.present(sheet, animated: true)
+        self.sheet = sheet
         result(nil)
       }
     }

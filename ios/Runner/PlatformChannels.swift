@@ -50,7 +50,10 @@ final class WindowGuard {
   private var channel: FlutterMethodChannel?
 
   // Set by the Dart side while an app lock exists (lib/src/window.dart).
-  private var secure = false
+  private(set) var secure = false
+
+  // The cover's way off, a few frames after the scene is back.
+  private var lifting: AfterFrames?
 
   func register(messenger: FlutterBinaryMessenger) {
     let channel = FlutterMethodChannel(name: "gerfaut/window", binaryMessenger: messenger)
@@ -129,19 +132,58 @@ final class WindowGuard {
 
   // From the scene delegate, as the scene loses the focus or leaves the
   // screen: the second is there for a scene that went without the first.
+  // A captured screen gets a line saying why it shows nothing, so a
+  // recording is not taken for a frozen app.
   func cover(_ scene: UIScene) {
     guard secure, let scene = scene as? UIWindowScene else { return }
-    for window in scene.windows where window.viewWithTag(Self.coverTag) == nil {
-      let cover = UIView(frame: window.bounds)
-      cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-      cover.backgroundColor = .systemBackground
-      cover.tag = Self.coverTag
-      window.addSubview(cover)
+    lifting?.cancel()
+    lifting = nil
+    let captured = Self.captured(scene)
+    for window in scene.windows {
+      let cover = window.viewWithTag(Self.coverTag) ?? Self.makeCover(over: window)
+      cover.viewWithTag(Self.noticeTag)?.isHidden = !captured
     }
   }
 
-  // From the scene delegate, as the scene is active again; a screen
-  // still captured keeps its cover.
+  private static func makeCover(over window: UIWindow) -> UIView {
+    let cover = UIView(frame: window.bounds)
+    cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    cover.backgroundColor = .systemBackground
+    cover.tag = coverTag
+    let notice = UILabel()
+    notice.text = "Hidden while the screen is recorded or shared"
+    notice.textColor = .secondaryLabel
+    notice.font = .preferredFont(forTextStyle: .body)
+    notice.adjustsFontForContentSizeCategory = true
+    notice.textAlignment = .center
+    notice.numberOfLines = 0
+    notice.tag = noticeTag
+    notice.isHidden = true
+    notice.translatesAutoresizingMaskIntoConstraints = false
+    cover.addSubview(notice)
+    NSLayoutConstraint.activate([
+      notice.centerYAnchor.constraint(equalTo: cover.centerYAnchor),
+      notice.leadingAnchor.constraint(equalTo: cover.layoutMarginsGuide.leadingAnchor),
+      notice.trailingAnchor.constraint(equalTo: cover.layoutMarginsGuide.trailingAnchor),
+    ])
+    window.addSubview(cover)
+    return cover
+  }
+
+  // From the scene delegate, as the scene is active again. Not at once:
+  // the lock screen the Dart side puts up on the way back is drawn a
+  // frame or two later, and the cover lifted before it would show the
+  // wallets in between.
+  func uncoverOnceDrawn(_ scene: UIScene) {
+    lifting?.cancel()
+    lifting = AfterFrames(Self.framesBeforeLifting) { [weak self, weak scene] in
+      guard let self, let scene else { return }
+      self.lifting = nil
+      if scene.activationState == .foregroundActive { self.uncover(scene) }
+    }
+  }
+
+  // A screen still captured keeps its cover.
   func uncover(_ scene: UIScene) {
     guard let scene = scene as? UIWindowScene else { return }
     if secure && Self.captured(scene) { return }
@@ -170,8 +212,46 @@ final class WindowGuard {
     )
   }
 
-  // A number no other view of the window is likely to carry.
+  // Numbers no other view of the window is likely to carry.
   private static let coverTag = 0x6765_7266
+  private static let noticeTag = 0x6765_7267
+
+  // Three frames: one for the platform to tell the Dart side it is
+  // back, one for the lock to be built, one for it to reach the screen.
+  private static let framesBeforeLifting = 3
 
   private static let sensitiveSeconds: TimeInterval = 60
+}
+
+// Runs once, after the screen has shown a number of frames.
+final class AfterFrames: NSObject {
+  private var left: Int
+  private let done: () -> Void
+  private var link: CADisplayLink?
+
+  init(_ frames: Int, _ done: @escaping () -> Void) {
+    left = frames
+    self.done = done
+    super.init()
+    let link = CADisplayLink(target: self, selector: #selector(frame))
+    link.add(to: .main, forMode: .common)
+    self.link = link
+  }
+
+  @objc private func frame() {
+    left -= 1
+    if left > 0 { return }
+    // Invalidated, the link lets go of this object, and what is done
+    // may let go of the last other hold on it: kept until the end.
+    withExtendedLifetime(self) {
+      cancel()
+      done()
+    }
+  }
+
+  // The link holds this object until it is invalidated.
+  func cancel() {
+    link?.invalidate()
+    link = nil
+  }
 }
