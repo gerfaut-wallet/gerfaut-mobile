@@ -5,7 +5,10 @@
 //
 //   flutter test integration_test -d <simulator id>
 //
-// It needs no network: an empty vault syncs nothing.
+// It needs no network: an empty vault syncs nothing. It expects a first
+// launch, as on CI's fresh simulator; run again on the same one, after
+// `xcrun simctl uninstall <simulator id> com.gerfautwallet.gerfaut`
+// and `xcrun simctl keychain <simulator id> reset`.
 
 import 'dart:io';
 

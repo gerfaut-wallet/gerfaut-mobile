@@ -22,7 +22,7 @@ rustup toolchain install "$version" --profile minimal \
   --target aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
 
 home=$(rustup show home)
-host=$(rustc -vV | sed -n 's/^host: //p')
+host=$(rustup run "$version" rustc -vV | sed -n 's/^host: //p')
 stable="$home/toolchains/stable-$host"
 # The runner's own stable is moved aside, not deleted: nothing else in
 # the job uses it, and a link cannot replace a directory. Out of
@@ -33,7 +33,7 @@ if [ -d "$stable" ] && [ ! -L "$stable" ]; then
 fi
 ln -sfn "$home/toolchains/$version-$host" "$stable"
 
-rustup run stable rustc --version | grep -q " $version " || {
+[ "$(rustup run stable rustc --version)" = "$(rustup run "$version" rustc --version)" ] || {
   echo "stable does not resolve to $version" >&2
   exit 1
 }
