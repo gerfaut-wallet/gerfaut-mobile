@@ -18,6 +18,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'live.dart';
 import 'notifications.dart';
+import 'platform_features.dart';
 
 /// What the platform does for the disguise. Behind an interface so no
 /// test ever reaches the activity.
@@ -68,9 +69,28 @@ class SystemDisguise implements Disguise {
       _channel.invokeMethod<void>('setWidgetsEnabled', enabled);
 }
 
+/// A system where the app wears no other face: never disguised, and
+/// nothing to swap. The settings offer no switch for it.
+class NoDisguise implements Disguise {
+  const NoDisguise();
+
+  @override
+  Future<bool> isDisguised() async => false;
+
+  @override
+  Future<void> setDisguised(bool disguised) async {
+    if (disguised) throw UnsupportedError('no disguise on this system');
+  }
+
+  @override
+  Future<void> setWidgetsEnabled(bool enabled) async {}
+}
+
 /// The platform side in use. Widget tests override this with a fake.
 final disguiseServiceProvider = Provider<Disguise>(
-  (ref) => const SystemDisguise(),
+  (ref) => ref.watch(platformFeaturesProvider).disguise
+      ? const SystemDisguise()
+      : const NoDisguise(),
 );
 
 /// Whether the app is disguised, read from the marker file the activity

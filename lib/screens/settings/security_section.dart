@@ -8,6 +8,7 @@ import '../../src/disguise.dart';
 import '../../src/lock.dart';
 import '../../src/models.dart';
 import '../../src/notifications.dart';
+import '../../src/platform_features.dart';
 import '../../src/state.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/buttons.dart';
@@ -186,6 +187,7 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
     final weakOnly = biometrics == BiometricSupport.weakOnly;
     final disguised = ref.watch(disguiseProvider).disguised;
     final pinLock = lock?.kind == LockKind.pin;
+    final canDisguise = ref.watch(platformFeaturesProvider).disguise;
 
     return SectionCard(
       icon: LucideIcons.lock,
@@ -237,24 +239,26 @@ class _SecuritySectionState extends ConsumerState<SecuritySection> {
               onChanged: weakOnly ? null : (on) => _setBiometric(on, lock.kind),
             ),
           ],
-          const SizedBox(height: GerfautSpacing.md),
-          SettingSwitch(
-            title: 'Disguise the app',
-            hint:
-                'Shows a calculator in the launcher. Open the wallet by '
-                'typing your PIN, then =.',
-            value: disguised,
-            // A password is not something you type into a calculator: the
-            // disguise needs a PIN lock.
-            onChanged: pinLock ? _setDisguise : null,
-          ),
-          if (!pinLock) ...[
-            const SizedBox(height: GerfautSpacing.xs),
-            Text(
-              'Needs a PIN lock: the PIN is what you type into the '
-              'calculator.',
-              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+          if (canDisguise) ...[
+            const SizedBox(height: GerfautSpacing.md),
+            SettingSwitch(
+              title: 'Disguise the app',
+              hint:
+                  'Shows a calculator in the launcher. Open the wallet by '
+                  'typing your PIN, then =.',
+              value: disguised,
+              // A password is not something you type into a calculator:
+              // the disguise needs a PIN lock.
+              onChanged: pinLock ? _setDisguise : null,
             ),
+            if (!pinLock) ...[
+              const SizedBox(height: GerfautSpacing.xs),
+              Text(
+                'Needs a PIN lock: the PIN is what you type into the '
+                'calculator.',
+                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+              ),
+            ],
           ],
         ],
         if (_error != null) ...[
