@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Gerfaut now runs on iPhone. Live watch, the calculator disguise and home-screen widgets stay on Android. On iOS, background checks run when the system allows, never sooner than the cadence you choose, and stop once you swipe Gerfaut away.
+
 ### Changed
 
 - When you move through the app with a keyboard, buttons, choice lists, menus, switches and the address chip show a 2 px focus ring. Tooltips now use the app's own colours.
