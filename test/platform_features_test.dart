@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/screens/settings.dart';
 import 'package:gerfaut/screens/settings/security_section.dart';
+import 'package:gerfaut/screens/wallet_home.dart';
 import 'package:gerfaut/src/background.dart';
 import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/src/home_widgets.dart';
@@ -26,6 +27,7 @@ import 'package:gerfaut/widgets/select_field.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 
 import 'fakes.dart';
+import 'menu.dart';
 import 'notifications_test.dart' show FakeNotifications;
 
 final _ios = TargetPlatformVariant.only(TargetPlatform.iOS);
@@ -133,6 +135,8 @@ void main() {
       expect(PlatformFeatures.ios.disguise, isFalse);
       expect(PlatformFeatures.ios.homeWidgets, isFalse);
       expect(PlatformFeatures.ios.checksKeepCadence, isFalse);
+      expect(PlatformFeatures.ios.broadcast, isFalse);
+      expect(PlatformFeatures.android.broadcast, isTrue);
     });
 
     test('Android keeps every one of them', () {
@@ -458,5 +462,57 @@ void main() {
       expect(find.text('Check for updates'), findsOneWidget);
       expect(find.text('Check automatically'), findsOneWidget);
     });
+  });
+
+  group('Broadcast on iOS', () {
+    final meta = makeMeta();
+    FakeBridge vault() => FakeBridge(
+      wallets: [meta],
+      snapshots: {'w1': makeSnapshot(meta: meta)},
+      settings: const Settings(
+        preferences: kPreferences,
+        activeNetwork: Network.mainnet,
+        backends: {},
+        appPrefs: {'onboarding.seen': '1'},
+      ),
+    );
+
+    Widget scope(Widget child, PlatformFeatures features) => ProviderScope(
+      retry: noRetry,
+      overrides: [
+        bridgeProvider.overrideWithValue(vault()),
+        platformFeaturesProvider.overrideWithValue(features),
+        disguiseServiceProvider.overrideWithValue(FakeDisguise()),
+      ],
+      child: child,
+    );
+
+    for (final features in [PlatformFeatures.ios, PlatformFeatures.android]) {
+      final shown = features.broadcast ? findsOneWidget : findsNothing;
+
+      testWidgets('the home menu on ${features.system}', (tester) async {
+        await tester.pumpWidget(scope(const GerfautApp(), features));
+        await tester.pumpAndSettle();
+        await openMenu(tester);
+        expect(find.text('Settings'), findsOneWidget);
+        expect(find.text('Broadcast'), shown);
+      });
+
+      testWidgets('the wallet menu on ${features.system}', (tester) async {
+        await tester.pumpWidget(
+          scope(
+            MaterialApp(
+              theme: themeFrom(GerfautTokens.light, Brightness.light),
+              home: const WalletHomeScreen(walletId: 'w1'),
+            ),
+            features,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await openMenu(tester);
+        expect(find.text('Export CSV'), findsOneWidget);
+        expect(find.text('Broadcast'), shown);
+      });
+    }
   });
 }
