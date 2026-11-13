@@ -19,6 +19,13 @@ on:
 permissions:
   contents: read
 
+# A pull request pushed again stops its previous run: the macOS runners
+# of the iOS jobs are few, and a run on a commit nobody will merge only
+# holds the next one in the queue. Runs on main always finish.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Whether the jobs that compile have anything to check. On a pull
   # request whose files are all documentation, listed below, they are
@@ -262,6 +269,18 @@ jobs:
             echo "::error::the build changed ios/: commit the diff of the ios-diff artifact"
             exit 1
           fi
+
+      # The TestFlight workflow cannot run without its secrets: its
+      # signing script is tried here, on a copy of the project, so that
+      # it does not rot unseen.
+      - name: Try the TestFlight signing script
+        if: matrix.target == 'device'
+        run: |
+          copy="$RUNNER_TEMP/signing-try"
+          mkdir -p "$copy"
+          cp -R gerfaut-mobile/ios/Runner.xcodeproj "$copy/"
+          ruby gerfaut-mobile/.github/ios-signing.rb "$copy/Runner.xcodeproj" ABCDE12345 "Gerfaut App Store"
+          grep -q 'PROVISIONING_PROFILE_SPECIFIER = "Gerfaut App Store";' "$copy/Runner.xcodeproj/project.pbxproj"
 
       - name: Keep the diff of ios/
         if: failure()

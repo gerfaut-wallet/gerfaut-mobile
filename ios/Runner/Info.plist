@@ -34,6 +34,10 @@
 	<string>Gerfaut uses the camera to scan the QR codes of wallets, addresses and transactions. No picture is kept.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Face ID unlocks Gerfaut, in place of its PIN or password.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Gerfaut connects to the node you set up on your own network, and to nothing else there.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Gerfaut does not open your photo library. The QR code reader it is built with can ask for it, and Gerfaut never does.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
