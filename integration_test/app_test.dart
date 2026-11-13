@@ -12,6 +12,7 @@
 
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -19,6 +20,8 @@ import 'package:path_provider/path_provider.dart';
 
 import 'package:gerfaut/app.dart';
 import 'package:gerfaut/src/bridge.dart';
+import 'package:gerfaut/src/clipboard.dart';
+import 'package:gerfaut/src/lock.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/src/vault_key.dart';
 
@@ -68,5 +71,27 @@ void main() {
     // And the core answers through the bridge.
     final settings = await const RustBridge().getSettings();
     expect(settings.preferences.notifyNewTx, isFalse);
+  });
+
+  testWidgets('the native channels answer through the platform', (
+    tester,
+  ) async {
+    // The window: marked and unmarked without a word against it.
+    const window = MethodChannel('gerfaut/window');
+    await window.invokeMethod<void>('setSecure', true);
+    await window.invokeMethod<void>('setSecure', false);
+
+    // A sensitive copy is a timed one only when the platform made it,
+    // and it is on the clipboard for the paste.
+    const clipboard = SystemSensitiveClipboard();
+    expect(await clipboard.copy('wpkh(tpub)'), isTrue);
+    final pasted = await Clipboard.getData(Clipboard.kTextPlain);
+    expect(pasted?.text, 'wpkh(tpub)');
+
+    // A simulator has no face nor finger enrolled: nothing to offer,
+    // and no key was ever made.
+    const gate = SystemBiometricGate();
+    expect(await gate.support(), BiometricSupport.none);
+    expect(await gate.keyPresence(), KeyPresence.absent);
   });
 }
