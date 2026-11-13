@@ -34,5 +34,8 @@ import workmanager_apple
       GeneratedPluginRegistrant.register(with: registry)
     }
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    // The channels no plugin answers, served as on Android: the window,
+    // the files, the biometric prompt (PlatformChannels.swift).
+    PlatformChannels.register(with: engineBridge.pluginRegistry)
   }
 }
