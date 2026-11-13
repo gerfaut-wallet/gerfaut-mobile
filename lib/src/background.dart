@@ -123,7 +123,12 @@ Future<bool> runBackgroundCheck({
       return true;
     }
 
-    final report = await bridge.syncAll(settings.activeNetwork);
+    // Past the system's budget, the turn is given up rather than taken
+    // from the app: what the sync found by then is in the vault, and
+    // said at the next turn or the next opening.
+    final sync = bridge.syncAll(settings.activeNetwork);
+    final budget = system.backgroundBudget;
+    final report = budget == null ? await sync : await sync.timeout(budget);
     // Only what nobody has said yet. A wallet's first sync is an
     // import, and the core keeps none of it as news.
     final claimed = await claimAll(bridge, report.reports);

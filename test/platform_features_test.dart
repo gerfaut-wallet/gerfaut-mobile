@@ -3,6 +3,8 @@
 // itself is the one under test; the tests without a screen hand the set
 // over directly.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -111,6 +113,17 @@ List<BackgroundCheck> _offered(WidgetTester tester) => [
           .items)
     item.value,
 ];
+
+/// A sync that never ends, as one over a slow Tor circuit can seem to.
+class _EndlessSync extends FakeBridge {
+  _EndlessSync({super.wallets, super.settings});
+
+  @override
+  Future<SyncAllReport> syncAll([Network? network]) {
+    syncAllCalls += 1;
+    return Completer<SyncAllReport>().future;
+  }
+}
 
 void main() {
   group('the set of each system', () {
@@ -347,7 +360,7 @@ void main() {
       );
     }
 
-    Future<void> run(FakeBridge bridge, PlatformFeatures features) =>
+    Future<bool> run(FakeBridge bridge, PlatformFeatures features) =>
         runBackgroundCheck(
           bridge: bridge,
           service: FakeNotifications(),
@@ -361,6 +374,21 @@ void main() {
       final bridge = synced(20 * 60);
       await run(bridge, PlatformFeatures.ios);
       expect(bridge.syncAllCalls, 0);
+    });
+
+    testWidgets('gives up its turn past the budget iOS grants', (tester) async {
+      final slow = synced(61 * 60);
+      final bridge = _EndlessSync(
+        wallets: slow.wallets,
+        settings: slow.settings,
+      );
+      bool? done;
+      unawaited(run(bridge, PlatformFeatures.ios).then((ran) => done = ran));
+      await tester.pump(const Duration(seconds: 24));
+      expect(done, isNull);
+      await tester.pump(const Duration(seconds: 2));
+      expect(bridge.syncAllCalls, 1);
+      expect(done, isTrue);
     });
 
     test('syncs once the cadence has passed', () async {
