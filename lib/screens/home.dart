@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../src/live.dart';
 import '../src/models.dart';
+import '../src/platform_features.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
 import '../widgets/amounts.dart';
@@ -116,17 +117,18 @@ class HomeScreen extends ConsumerWidget {
               ),
               // A transaction belongs to the workspace network, not to
               // one wallet: broadcasting starts from here.
-              OverflowMenuItem(
-                icon: LucideIcons.radio,
-                label: 'Broadcast',
-                onSelected: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const BroadcastScreen(),
-                    ),
-                  );
-                },
-              ),
+              if (ref.watch(platformFeaturesProvider).broadcast)
+                OverflowMenuItem(
+                  icon: LucideIcons.radio,
+                  label: 'Broadcast',
+                  onSelected: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const BroadcastScreen(),
+                      ),
+                    );
+                  },
+                ),
               OverflowMenuItem(
                 icon: LucideIcons.settings,
                 label: 'Settings',

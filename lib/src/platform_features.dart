@@ -25,6 +25,7 @@ class PlatformFeatures {
     required this.homeWidgets,
     required this.releaseChecks,
     required this.pickersLeaveApp,
+    required this.broadcast,
     this.backgroundBudget,
   });
 
@@ -36,6 +37,7 @@ class PlatformFeatures {
     homeWidgets: true,
     releaseChecks: true,
     pickersLeaveApp: true,
+    broadcast: true,
   );
 
   /// Live needs a service that keeps running behind the app, which iOS
@@ -44,7 +46,10 @@ class PlatformFeatures {
   /// icon, and the App Review guidelines (2.5.19, 4.1) take an app
   /// passing for another as a reason to refuse it. The widgets wait for
   /// a WidgetKit extension. New versions reach an iPhone through
-  /// TestFlight or the App Store, which say so themselves.
+  /// TestFlight or the App Store, which say so themselves. The app
+  /// goes to the App Store as a monitor of public addresses, and App
+  /// Review reads relaying a transaction to the network as moving
+  /// money: Broadcast stays on Android.
   static const ios = PlatformFeatures._(
     system: 'iOS',
     liveWatch: false,
@@ -53,6 +58,7 @@ class PlatformFeatures {
     homeWidgets: false,
     releaseChecks: false,
     pickersLeaveApp: false,
+    broadcast: false,
     backgroundBudget: Duration(seconds: 25),
   );
 
@@ -97,6 +103,10 @@ class PlatformFeatures {
   /// they are drawn over the app, which never leaves the screen: there
   /// is no trip for the lock to excuse (`LockController.excursion`).
   final bool pickersLeaveApp;
+
+  /// The Broadcast screen: a transaction signed elsewhere, checked and
+  /// handed to the backend.
+  final bool broadcast;
 
   /// How long the background check may take before it gives up its
   /// turn; null for no bound. iOS gives a refresh task about thirty

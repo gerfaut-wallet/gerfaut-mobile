@@ -6,6 +6,7 @@ import '../src/bridge.dart';
 import '../src/format.dart';
 import '../src/live.dart';
 import '../src/models.dart';
+import '../src/platform_features.dart';
 import '../src/policy_text.dart';
 import '../src/state.dart';
 import '../theme/tokens.dart';
@@ -167,11 +168,12 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                 label: 'Export CSV',
                 onSelected: () => _open((id) => ExportScreen(walletId: id)),
               ),
-              OverflowMenuItem(
-                icon: LucideIcons.radio,
-                label: 'Broadcast',
-                onSelected: () => _open((_) => const BroadcastScreen()),
-              ),
+              if (ref.watch(platformFeaturesProvider).broadcast)
+                OverflowMenuItem(
+                  icon: LucideIcons.radio,
+                  label: 'Broadcast',
+                  onSelected: () => _open((_) => const BroadcastScreen()),
+                ),
             ],
           ),
           const SizedBox(width: GerfautSpacing.sm),

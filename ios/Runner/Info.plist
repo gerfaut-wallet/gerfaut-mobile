@@ -31,7 +31,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Gerfaut uses the camera to scan the QR codes of wallets, addresses and transactions. No picture is kept.</string>
+	<string>Gerfaut uses the camera to scan QR codes: Bitcoin addresses, public keys, descriptors and Gerfaut backups. No picture is kept.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Face ID unlocks Gerfaut, in place of its PIN or password.</string>
 	<key>NSLocalNetworkUsageDescription</key>
