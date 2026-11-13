@@ -25,9 +25,11 @@ home=$(rustup show home)
 host=$(rustc -vV | sed -n 's/^host: //p')
 stable="$home/toolchains/stable-$host"
 # The runner's own stable is moved aside, not deleted: nothing else in
-# the job uses it, and a link cannot replace a directory.
+# the job uses it, and a link cannot replace a directory. Out of
+# toolchains/, where cargokit would take any name that starts with
+# `stable` for a toolchain to build with.
 if [ -d "$stable" ] && [ ! -L "$stable" ]; then
-  mv "$stable" "$stable.runner"
+  mv "$stable" "$home/runner-stable-$host"
 fi
 ln -sfn "$home/toolchains/$version-$host" "$stable"
 
