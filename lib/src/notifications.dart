@@ -10,6 +10,7 @@ import 'bridge.dart';
 import 'disguise.dart';
 import 'live.dart';
 import 'models.dart';
+import 'platform_features.dart';
 import 'state.dart';
 import 'prefs.dart';
 
@@ -18,8 +19,8 @@ import 'prefs.dart';
 abstract class NotificationService {
   Future<void> init();
 
-  /// Asks the system for leave to notify. Android 13 and later put the
-  /// question to the user; earlier versions answer for them.
+  /// Asks the system for leave to notify. iOS, and Android from 13 on,
+  /// put the question to the user; earlier Androids answer for them.
   Future<bool> requestPermission();
 
   /// Posts a notification, replacing the one already up under [id].
@@ -52,12 +53,26 @@ class LocalNotificationService implements NotificationService {
         AndroidFlutterLocalNotificationsPlugin
       >();
 
+  IOSFlutterLocalNotificationsPlugin? get _ios => _plugin
+      .resolvePlatformSpecificImplementation<
+        IOSFlutterLocalNotificationsPlugin
+      >();
+
   @override
   Future<void> init() async {
     if (_ready) return;
     await _plugin.initialize(
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('@drawable/ic_notification'),
+        // Nothing asked at start: the question comes when the user turns
+        // the notice on (see [requestPermission]), as on Android 13. The
+        // plugin's defaults put it at the first start of this service,
+        // which a background check may make with nobody looking.
+        iOS: DarwinInitializationSettings(
+          requestAlertPermission: false,
+          requestSoundPermission: false,
+          requestBadgePermission: false,
+        ),
       ),
     );
     await _android?.createNotificationChannel(
@@ -73,6 +88,13 @@ class LocalNotificationService implements NotificationService {
   @override
   Future<bool> requestPermission() async {
     await init();
+    final ios = _ios;
+    if (ios != null) {
+      // No badge: Gerfaut counts nothing on its icon. Asked a second
+      // time, iOS answers with what the user chose, and asks nothing.
+      return await ios.requestPermissions(alert: true, sound: true) ??
+          await _iosDeliverable(ios);
+    }
     final android = _android;
     if (android == null) return true;
     // Before Android 13 there is no question to put: the answer is
@@ -82,9 +104,20 @@ class LocalNotificationService implements NotificationService {
         true;
   }
 
+  /// Allowed, and allowed to show: with every alert style turned off in
+  /// Settings (lock screen, notification centre, banners) a notice is
+  /// posted where nobody sees it, as on a silenced Android channel.
+  Future<bool> _iosDeliverable(IOSFlutterLocalNotificationsPlugin ios) async {
+    final options = await ios.checkPermissions();
+    if (options == null) return true;
+    return options.isEnabled && options.isAlertEnabled;
+  }
+
   @override
   Future<bool> deliverable() async {
     await init();
+    final ios = _ios;
+    if (ios != null) return _iosDeliverable(ios);
     final android = _android;
     if (android == null) return true;
     if (await android.areNotificationsEnabled() == false) return false;
@@ -116,6 +149,9 @@ class LocalNotificationService implements NotificationService {
           // and carries no amount while balances are hidden.
           visibility: NotificationVisibility.private,
         ),
+        // What the lock screen shows of it is the user's own choice in
+        // Settings, Show Previews; the same rule of words holds there.
+        iOS: DarwinNotificationDetails(),
       ),
     );
   }
@@ -449,7 +485,8 @@ enum BackgroundCheck {
 
   /// A connection kept open by a foreground service. The periodic check
   /// stays scheduled under it, at the shortest cadence Android grants:
-  /// whenever Live cannot run, that is what is left.
+  /// whenever Live cannot run, that is what is left. Where it cannot
+  /// run at all, that is what it reads as ([on]).
   live('live', 900, 'Live'),
   quarterHour('900', 900, 'Every 15 min'),
   hour('3600', 3600, 'Every hour'),
@@ -469,18 +506,39 @@ enum BackgroundCheck {
     }
     return null;
   }
+
+  /// What this choice comes to on a system with [features]. Live where
+  /// there is no Live, a vault restored from an Android backup, is the
+  /// check it keeps scheduled under it: the same cadence, nothing else.
+  BackgroundCheck on(PlatformFeatures features) =>
+      this == live && !features.liveWatch ? quarterHour : this;
+
+  /// The choices a system with [features] offers: those that come to
+  /// themselves there.
+  static List<BackgroundCheck> offeredOn(PlatformFeatures features) => [
+    for (final check in values)
+      if (check.on(features) == check) check,
+  ];
 }
 
 class BackgroundCheckNotifier extends VaultPrefNotifier<BackgroundCheck> {
   @override
   VaultPref<BackgroundCheck> get pref => AppPref.background;
 
+  PlatformFeatures get _features => ref.read(platformFeaturesProvider);
+
+  /// Live stored, read on a phone without it: the screens show the
+  /// check that runs, and nothing ever starts the service.
+  @override
+  BackgroundCheck decode(String? stored) => super.decode(stored).on(_features);
+
   /// Persists the choice, then brings the periodic task in line, and
   /// starts or stops the Live service to match. Choosing Live from the
   /// settings goes through the explanation sheet first; this is what
   /// the sheet calls once the user has said yes.
   @override
-  Future<Shown> set(BackgroundCheck check) async {
+  Future<Shown> set(BackgroundCheck asked) async {
+    final check = asked.on(_features);
     final scheduler = ref.read(backgroundSchedulerProvider);
     final live = ref.read(liveProvider.notifier);
     final writes = ref.read(vaultWritesProvider);

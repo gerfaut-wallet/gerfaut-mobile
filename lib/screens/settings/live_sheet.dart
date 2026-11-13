@@ -272,7 +272,11 @@ class _LiveSheetState extends ConsumerState<LiveSheet> {
     final platform = ref.read(livePlatformProvider);
     await ref
         .read(lockProvider.notifier)
-        .excursion(platform.openAppSettings, shown: (opened) => opened);
+        .excursion(
+          platform.openAppSettings,
+          shown: (opened) => opened,
+          leavesApp: true,
+        );
   }
 
   List<Widget> _phoneMaker(BuildContext context) {

@@ -37,18 +37,32 @@ abstract class VaultKeyStore {
   Future<void> write(String value);
 }
 
-/// The Android Keystore, through flutter_secure_storage.
+/// The Android Keystore or the iOS Keychain, through
+/// flutter_secure_storage.
 ///
 /// `resetOnError` is off on purpose. The plugin's default wipes the
 /// entry on any error reading it and answers as if nothing had ever
 /// been stored, which turns a passing Keystore fault into a vault
 /// nobody can open, silently. An error is an error here: it is
 /// reported, and the entry stays.
+///
+/// On iOS the key is readable from the first unlock after a restart
+/// until the next restart, and only on this iPhone. The background
+/// check opens the vault while the phone sits locked in a pocket: the
+/// plugin's default, readable only while unlocked, would leave it
+/// nothing to open the vault with. "This device" keeps the key out of
+/// any backup restored on another iPhone, and `synchronizable` off
+/// keeps it out of iCloud Keychain: it does not travel, as the Android
+/// one does not, and the vault file alone opens nothing.
 class SecureVaultKeyStore implements VaultKeyStore {
   const SecureVaultKeyStore();
 
   static const FlutterSecureStorage _storage = FlutterSecureStorage(
     aOptions: AndroidOptions(resetOnError: false),
+    iOptions: IOSOptions(
+      accessibility: KeychainAccessibility.first_unlock_this_device,
+      synchronizable: false,
+    ),
   );
 
   @override

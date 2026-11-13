@@ -7,6 +7,7 @@ import '../../src/live.dart';
 import '../../src/lock.dart';
 import '../../src/models.dart';
 import '../../src/notifications.dart';
+import '../../src/platform_features.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/facts.dart';
@@ -44,7 +45,11 @@ class NotificationsSection extends ConsumerWidget {
     final platform = ref.read(livePlatformProvider);
     await ref
         .read(lockProvider.notifier)
-        .excursion(platform.openAppSettings, shown: (opened) => opened);
+        .excursion(
+          platform.openAppSettings,
+          shown: (opened) => opened,
+          leavesApp: true,
+        );
   }
 
   @override
@@ -55,6 +60,7 @@ class NotificationsSection extends ConsumerWidget {
     final refused = ref.watch(notificationsRefusedProvider);
     final cadence = ref.watch(backgroundCheckProvider);
     final disguised = ref.watch(disguiseProvider).disguised;
+    final features = ref.watch(platformFeaturesProvider);
 
     return SectionCard(
       icon: LucideIcons.bell,
@@ -118,7 +124,7 @@ class NotificationsSection extends ConsumerWidget {
           label: 'Check for transactions',
           value: cadence,
           items: [
-            for (final check in BackgroundCheck.values)
+            for (final check in BackgroundCheck.offeredOn(features))
               GerfautSelectItem(
                 value: check,
                 title: check.label,
@@ -149,10 +155,16 @@ class NotificationsSection extends ConsumerWidget {
               ? 'Live talks to your configured backend and to nothing '
                     'else. A check every 15 minutes stays scheduled under '
                     'it, for whenever Android stops Live.'
-              : 'Syncs with your configured backend even when Gerfaut is '
+              : features.checksKeepCadence
+              ? 'Syncs with your configured backend even when Gerfaut is '
                     'closed: the same servers, nothing else. Android checks '
                     'at most every 15 minutes and may delay it to save '
-                    'battery.',
+                    'battery.'
+              : 'Syncs with your configured backend even when Gerfaut is '
+                    'closed: the same servers, nothing else. iOS decides '
+                    'when, never sooner than you choose here, and checks '
+                    'nothing once you swipe Gerfaut away in the app '
+                    'switcher.',
           style: tokens.bodySmall.copyWith(color: tokens.textMuted),
         ),
       ],

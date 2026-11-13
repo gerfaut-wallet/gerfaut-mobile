@@ -4,6 +4,7 @@
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show protected;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'bridge.dart';
@@ -317,9 +318,15 @@ abstract class VaultPrefNotifier<T> extends Notifier<T> {
   T get stored => _stored;
 
   @override
-  T build() => _stored = pref.decode(null);
+  T build() => _stored = decode(null);
 
-  void hydrate(String? stored) => state = _stored = pref.decode(stored);
+  void hydrate(String? stored) => state = _stored = decode(stored);
+
+  /// What [stored] reads as on this phone: the rule of [pref], unless
+  /// a value the vault may hold stands for something this system does
+  /// not offer. A vault travels between phones in a backup.
+  @protected
+  T decode(String? stored) => pref.decode(stored);
 
   /// Shows [value] and writes it, and answers what became of it: a
   /// refusal puts the screen back at what the vault holds.
