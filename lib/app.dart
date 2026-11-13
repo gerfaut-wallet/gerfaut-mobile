@@ -16,6 +16,7 @@ import 'src/lock.dart';
 import 'src/models.dart';
 import 'src/notifications.dart';
 import 'src/onboarding.dart';
+import 'src/platform_features.dart';
 import 'src/state.dart';
 import 'src/updates.dart';
 import 'src/vault_key.dart';
@@ -574,7 +575,7 @@ class _StartupScreen extends ConsumerWidget {
 /// vault, so a phone restored from a backup comes back with a file
 /// nobody can open. The way out is a fresh vault and a Gerfaut backup,
 /// behind a confirmation that says the file is set aside, not deleted.
-class _StartupErrorScreen extends StatefulWidget {
+class _StartupErrorScreen extends ConsumerStatefulWidget {
   const _StartupErrorScreen({
     required this.error,
     required this.onRetry,
@@ -589,10 +590,11 @@ class _StartupErrorScreen extends StatefulWidget {
   final VoidCallback? onStartOver;
 
   @override
-  State<_StartupErrorScreen> createState() => _StartupErrorScreenState();
+  ConsumerState<_StartupErrorScreen> createState() =>
+      _StartupErrorScreenState();
 }
 
-class _StartupErrorScreenState extends State<_StartupErrorScreen> {
+class _StartupErrorScreenState extends ConsumerState<_StartupErrorScreen> {
   bool _confirmingStartOver = false;
 
   @override
@@ -625,11 +627,22 @@ class _StartupErrorScreenState extends State<_StartupErrorScreen> {
                   ),
                   const SizedBox(height: GerfautSpacing.sm),
                   Text(
-                    'Android keeps that key in its secure storage, apart '
-                    'from the vault, and it does not travel: a phone '
-                    'restored from a backup, moved to a new device or reset '
-                    'comes back with the vault file and without the key. '
-                    'Nothing can open the vault without it.',
+                    // Each system keeps the key its own way. A backup of
+                    // an iPhone restored on the same one brings the key
+                    // back: only another iPhone is without it.
+                    ref.watch(platformFeaturesProvider) != PlatformFeatures.ios
+                        ? 'Android keeps that key in its secure storage, '
+                              'apart from the vault, and it does not travel: '
+                              'a phone restored from a backup, moved to a new '
+                              'device or reset comes back with the vault file '
+                              'and without the key. Nothing can open the vault '
+                              'without it.'
+                        : 'iOS keeps that key in the keychain of this '
+                              'iPhone, apart from the vault, and it does not '
+                              'travel: a backup restored on another iPhone, '
+                              'or an iPhone reset, comes back with the vault '
+                              'file and without the key. Nothing can open the '
+                              'vault without it.',
                     style: muted,
                   ),
                   const SizedBox(height: GerfautSpacing.sm),

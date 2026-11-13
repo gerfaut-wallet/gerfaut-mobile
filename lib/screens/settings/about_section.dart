@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../src/bridge.dart';
 import '../../src/models.dart';
 import '../../src/onboarding.dart';
+import '../../src/platform_features.dart';
 import '../../src/updates.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/buttons.dart';
@@ -91,7 +92,7 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
                 label: 'Beta',
               ),
             Text(
-              'for Android',
+              'for ${ref.watch(platformFeaturesProvider).system}',
               style: tokens.bodySmall.copyWith(color: tokens.textMuted),
             ),
           ],
