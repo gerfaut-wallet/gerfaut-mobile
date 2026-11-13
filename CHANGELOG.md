@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- Gerfaut now runs on iPhone. Live watch, the calculator disguise and home-screen widgets stay on Android. On iOS, background checks run when the system allows, never sooner than the cadence you choose, and stop once you swipe Gerfaut away.
+- Gerfaut now runs on iPhone. Live watch, the calculator disguise and home-screen widgets stay on Android. On iOS, background checks run when the system allows it, never more often than the cadence you choose, and stop once you swipe Gerfaut away. The app doesn't ask GitHub for new versions there either: TestFlight and the App Store deliver them.
 
 ### Changed
 
