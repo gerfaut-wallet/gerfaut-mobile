@@ -54,6 +54,9 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # Drives the real app, core and all, on the iOS simulator in CI.
+  integration_test:
+    sdk: flutter
   # Lets widget tests substitute the url_launcher platform with a fake.
   url_launcher_platform_interface: ^2.3.2
 
