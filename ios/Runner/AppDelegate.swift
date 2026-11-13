@@ -9,6 +9,7 @@ import workmanager_apple
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    excludeDocumentsFromBackup()
     // The background check (lib/src/background.dart). iOS only runs a
     // task whose identifier was registered before launch ends, and
     // listed under BGTaskSchedulerPermittedIdentifiers in Info.plist;
@@ -27,6 +28,20 @@ import workmanager_apple
     // on Android: the plugin answers the system's foreground question.
     UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  // The vault, its count of failed attempts and Tor's state live in
+  // Documents, which iCloud and a computer back up by default. Kept out,
+  // as Android keeps every one of its folders out: the phone's backup is
+  // no way to carry a vault, which has a sealed backup of its own, made
+  // and kept by the user. Before the engine starts, and at every launch,
+  // for a folder an earlier build left unmarked.
+  private func excludeDocumentsFromBackup() {
+    guard var documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+    else { return }
+    var values = URLResourceValues()
+    values.isExcludedFromBackup = true
+    try? documents.setResourceValues(values)
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
