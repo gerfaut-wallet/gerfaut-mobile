@@ -19,6 +19,13 @@ on:
 permissions:
   contents: read
 
+# A pull request pushed again stops its previous run: the macOS runners
+# of the iOS jobs are few, and a run on a commit nobody will merge only
+# holds the next one in the queue. Runs on main always finish.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Whether the jobs that compile have anything to check. On a pull
   # request whose files are all documentation, listed below, they are
