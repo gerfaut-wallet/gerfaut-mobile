@@ -1,0 +1,22 @@
+PODS:
+  - Flutter (1.0.0)
+  - rust_lib_gerfaut (0.0.1):
+    - Flutter
+
+DEPENDENCIES:
+  - Flutter (from `Flutter`)
+  - rust_lib_gerfaut (from `.symlinks/plugins/rust_lib_gerfaut/ios`)
+
+EXTERNAL SOURCES:
+  Flutter:
+    :path: Flutter
+  rust_lib_gerfaut:
+    :path: ".symlinks/plugins/rust_lib_gerfaut/ios"
+
+SPEC CHECKSUMS:
+  Flutter: 71a624a5bc0c04062bf19101d501e466baf2fb47
+  rust_lib_gerfaut: 8d0e2114b168dc79a3ef543f9c883edbe1d17fa7
+
+PODFILE CHECKSUM: 5c15be2a25279ad49586acd443a639c864078ff4
+
+COCOAPODS: 1.17.0

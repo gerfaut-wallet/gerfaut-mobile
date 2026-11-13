@@ -35,6 +35,12 @@ allow_attributes_without_reason = "warn"
 # gerfaut-core, see the note there.
 [patch.crates-io]
 saturating-time = { git = "https://github.com/gerfaut-wallet/saturating-time", rev = "784e1a396ac8890fcc2c7bab6d1c07e432ceedac" }
+# sysinfo 0.38.4 as published, with one function kept off iOS, where
+# it does not compile (patches/sysinfo-0.38.4/src/unix/apple/process.rs,
+# the only change). arti's memory quota asks for 0.38; upstream fixed it
+# in 0.39.4. Every other target compiles the same code as before. Drop
+# this, and the folder, once arti asks for a sysinfo of 0.39.4 or later.
+sysinfo = { path = "patches/sysinfo-0.38.4" }
 
 [dev-dependencies]
 # To run the bridge's async functions in a test.
