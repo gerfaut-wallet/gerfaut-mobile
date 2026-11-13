@@ -23,6 +23,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'bridge.dart';
 import 'disguise.dart';
 import 'models.dart';
+import 'platform_features.dart';
 import 'state.dart';
 
 /// Application version shown in About, and the one the core compares
@@ -89,6 +90,8 @@ class UpdateController extends Notifier<UpdateState> {
   ///
   /// Nothing while disguised: the notice names Gerfaut.
   Future<void> sessionStarted() async {
+    // Where the store delivers the app, GitHub is not asked at all.
+    if (!ref.read(platformFeaturesProvider).releaseChecks) return;
     final disguise = ref.read(disguiseProvider);
     if (!disguise.loaded || disguise.disguised) {
       state = UpdateState(status: state.status);

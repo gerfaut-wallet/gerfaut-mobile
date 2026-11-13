@@ -75,6 +75,7 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
     final automatic = updates.automatic;
     final torDown = updates.status.torUnavailable;
     final beta = isBetaVersion(appVersion);
+    final releaseChecks = ref.watch(platformFeaturesProvider).releaseChecks;
     return SectionCard(
       icon: LucideIcons.info,
       title: 'About',
@@ -117,76 +118,8 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
             ),
           ),
         ],
-        const SizedBox(height: GerfautSpacing.md),
-        if (_updateFailed)
-          Padding(
-            padding: const EdgeInsets.only(bottom: GerfautSpacing.sm),
-            child: Text(
-              'Could not reach the release page. Try again later.',
-              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-            ),
-          ),
-        if (torDown)
-          Padding(
-            padding: const EdgeInsets.only(bottom: GerfautSpacing.sm),
-            child: Text(
-              'Tor could not be reached, so nothing was asked. Your node is '
-              'a .onion address, and this request only goes through Tor.',
-              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-            ),
-          ),
-        if (result != null && newer == null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: GerfautSpacing.sm),
-            child: Text(
-              'You are up to date.',
-              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-            ),
-          ),
-        // A Wrap: at a large text size the two buttons stack instead of
-        // running past the card.
-        Wrap(
-          spacing: GerfautSpacing.sm,
-          runSpacing: GerfautSpacing.sm,
-          children: [
-            if (newer != null)
-              PrimaryButton(
-                label: 'Get $newer',
-                onPressed: () => launchUrl(
-                  Uri.parse(releasePageUrl),
-                  mode: LaunchMode.externalApplication,
-                ),
-              ),
-            // Beside "Get" it is the second choice; alone, the action
-            // of the line.
-            if (newer != null)
-              SecondaryButton(
-                label: _checkingUpdate ? 'Checking…' : 'Check for updates',
-                icon: LucideIcons.refreshCw,
-                busy: _checkingUpdate,
-                onPressed: _checkForUpdates,
-              )
-            else
-              PrimaryButton(
-                label: _checkingUpdate ? 'Checking…' : 'Check for updates',
-                icon: LucideIcons.refreshCw,
-                busy: _checkingUpdate,
-                onPressed: _checkForUpdates,
-              ),
-          ],
-        ),
-        const SizedBox(height: GerfautSpacing.md),
-        SettingSwitch(
-          title: 'Check automatically',
-          // Worded as on the desktop; the disguise is the phone's alone.
-          hint:
-              'Asks GitHub for the latest release at most once a day while '
-              'Gerfaut is unlocked, and downloads nothing. With a .onion '
-              'node it goes through Tor or not at all, and never while the '
-              'app is disguised.',
-          value: automatic,
-          onChanged: (on) => ref.read(updateProvider.notifier).setAutomatic(on),
-        ),
+        if (releaseChecks)
+          ..._updateRows(tokens, result, newer, automatic, torDown),
         const SizedBox(height: GerfautSpacing.sm),
         Align(
           alignment: Alignment.centerLeft,
@@ -203,5 +136,88 @@ class _AboutSectionState extends ConsumerState<AboutSection> {
         ),
       ],
     );
+  }
+
+  /// The release check: what it found, the button, the automatic
+  /// switch. Only where Gerfaut asks GitHub for its releases.
+  List<Widget> _updateRows(
+    GerfautTokens tokens,
+    UpdateStatus? result,
+    String? newer,
+    bool automatic,
+    bool torDown,
+  ) {
+    return [
+      const SizedBox(height: GerfautSpacing.md),
+      if (_updateFailed)
+        Padding(
+          padding: const EdgeInsets.only(bottom: GerfautSpacing.sm),
+          child: Text(
+            'Could not reach the release page. Try again later.',
+            style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+          ),
+        ),
+      if (torDown)
+        Padding(
+          padding: const EdgeInsets.only(bottom: GerfautSpacing.sm),
+          child: Text(
+            'Tor could not be reached, so nothing was asked. Your node is '
+            'a .onion address, and this request only goes through Tor.',
+            style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+          ),
+        ),
+      if (result != null && newer == null)
+        Padding(
+          padding: const EdgeInsets.only(bottom: GerfautSpacing.sm),
+          child: Text(
+            'You are up to date.',
+            style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+          ),
+        ),
+      // A Wrap: at a large text size the two buttons stack instead of
+      // running past the card.
+      Wrap(
+        spacing: GerfautSpacing.sm,
+        runSpacing: GerfautSpacing.sm,
+        children: [
+          if (newer != null)
+            PrimaryButton(
+              label: 'Get $newer',
+              onPressed: () => launchUrl(
+                Uri.parse(releasePageUrl),
+                mode: LaunchMode.externalApplication,
+              ),
+            ),
+          // Beside "Get" it is the second choice; alone, the action
+          // of the line.
+          if (newer != null)
+            SecondaryButton(
+              label: _checkingUpdate ? 'Checking…' : 'Check for updates',
+              icon: LucideIcons.refreshCw,
+              busy: _checkingUpdate,
+              onPressed: _checkForUpdates,
+            )
+          else
+            PrimaryButton(
+              label: _checkingUpdate ? 'Checking…' : 'Check for updates',
+              icon: LucideIcons.refreshCw,
+              busy: _checkingUpdate,
+              onPressed: _checkForUpdates,
+            ),
+        ],
+      ),
+      const SizedBox(height: GerfautSpacing.md),
+      SettingSwitch(
+        title: 'Check automatically',
+        // Worded as on the desktop; the disguise is the phone's alone.
+        hint:
+            'Asks GitHub for the latest release at most once a day while '
+            'Gerfaut is unlocked, and downloads nothing. With a .onion '
+            'node it goes through Tor or not at all, and never while the '
+            'app is disguised.',
+        value: automatic,
+        onChanged: (on) => ref.read(updateProvider.notifier).setAutomatic(on),
+      ),
+    ];
   }
 }

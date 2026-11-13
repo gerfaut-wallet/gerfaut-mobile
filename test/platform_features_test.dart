@@ -18,6 +18,7 @@ import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/notifications.dart';
 import 'package:gerfaut/src/platform_features.dart';
 import 'package:gerfaut/src/state.dart';
+import 'package:gerfaut/src/updates.dart';
 import 'package:gerfaut/theme/tokens.dart';
 import 'package:gerfaut/widgets/select_field.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
@@ -391,6 +392,43 @@ void main() {
       final bridge = synced(20 * 60);
       await run(bridge, PlatformFeatures.android);
       expect(bridge.syncAllCalls, 1);
+    });
+  });
+
+  group('the releases on iOS', () {
+    test('a session asks GitHub nothing', () async {
+      final bridge = _fromAndroid();
+      final container = ProviderContainer(
+        retry: noRetry,
+        overrides: [
+          bridgeProvider.overrideWithValue(bridge),
+          platformFeaturesProvider.overrideWithValue(PlatformFeatures.ios),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(updateProvider.notifier).sessionStarted();
+      expect(bridge.updates.sessions, 0);
+      expect(container.read(updateProvider).notice, isNull);
+    });
+
+    testWidgets('About offers no update check', (tester) async {
+      await _open(
+        tester,
+        _settings(_fromAndroid(), section: SettingsSection.about),
+      );
+      expect(find.text('Gerfaut $appVersion'), findsOneWidget);
+      expect(find.text('Check for updates'), findsNothing);
+      expect(find.text('Check automatically'), findsNothing);
+      expect(find.text('Show the welcome tour'), findsOneWidget);
+    }, variant: _ios);
+
+    testWidgets('Android keeps the check', (tester) async {
+      await _open(
+        tester,
+        _settings(_fromAndroid(), section: SettingsSection.about),
+      );
+      expect(find.text('Check for updates'), findsOneWidget);
+      expect(find.text('Check automatically'), findsOneWidget);
     });
   });
 }

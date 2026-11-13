@@ -23,6 +23,7 @@ class PlatformFeatures {
     required this.checksKeepCadence,
     required this.disguise,
     required this.homeWidgets,
+    required this.releaseChecks,
   });
 
   static const android = PlatformFeatures._(
@@ -31,6 +32,7 @@ class PlatformFeatures {
     checksKeepCadence: true,
     disguise: true,
     homeWidgets: true,
+    releaseChecks: true,
   );
 
   /// Live needs a service that keeps running behind the app, which iOS
@@ -38,13 +40,15 @@ class PlatformFeatures {
   /// under the icon, puts up an alert of its own at every change of
   /// icon, and the App Review guidelines (2.5.19, 4.1) take an app
   /// passing for another as a reason to refuse it. The widgets wait for
-  /// a WidgetKit extension.
+  /// a WidgetKit extension. New versions reach an iPhone through
+  /// TestFlight or the App Store, which say so themselves.
   static const ios = PlatformFeatures._(
     system: 'iOS',
     liveWatch: false,
     checksKeepCadence: false,
     disguise: false,
     homeWidgets: false,
+    releaseChecks: false,
   );
 
   /// The set of [platform]. Android's for every other one: the app is
@@ -76,6 +80,12 @@ class PlatformFeatures {
 
   /// Home-screen widgets, and the periodic task that repaints them.
   final bool homeWidgets;
+
+  /// Gerfaut asks GitHub for its latest release and points to it. A
+  /// GitHub release holds the APKs and the desktop builds: on a system
+  /// whose store delivers the app, the app asks nothing and says
+  /// nothing of versions.
+  final bool releaseChecks;
 }
 
 /// What the system the app runs on lets it do. Overridden in a test
