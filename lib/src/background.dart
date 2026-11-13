@@ -1,5 +1,8 @@
-// The background check: a sync Android runs while Gerfaut is closed, so
-// a transaction that lands overnight is told in the morning.
+// The background check: a sync the system runs while Gerfaut is closed,
+// so a transaction that lands overnight is told in the morning. Android
+// runs it at the cadence it is given. iOS runs it when it sees fit, a
+// quarter of an hour apart at the soonest and never once the app is
+// swiped away; the check keeps the cadence there itself.
 //
 // It talks to the backend already configured for the workspace network
 // and to nothing else. There is no Gerfaut server in this path, and the
@@ -12,6 +15,7 @@ import 'disguise.dart';
 import 'home_widgets.dart';
 import 'models.dart';
 import 'notifications.dart';
+import 'platform_features.dart';
 import 'quiet_errors.dart';
 import 'vault_key.dart';
 import 'prefs.dart';
@@ -23,8 +27,9 @@ const String backgroundTaskName = 'gerfaut.check';
 /// Registers the periodic check at `seconds`, or cancels it at zero.
 ///
 /// Android never runs a periodic task more often than every fifteen
-/// minutes and delays it further to save battery; the settings say so
-/// rather than promising a cadence the system does not honour.
+/// minutes and delays it further to save battery; iOS takes no cadence
+/// at all (see [isCheckDue]). The settings say so rather than promise
+/// what the system does not honour.
 Future<void> registerBackgroundCheck(int seconds) async {
   final manager = Workmanager();
   if (seconds <= 0) {
@@ -71,7 +76,7 @@ Future<void> registerWidgetRefresh(bool wanted) async {
   );
 }
 
-/// The entry point Android calls in a fresh isolate. Top level and
+/// The entry point the system calls in a fresh isolate. Top level and
 /// annotated, or the tree shaker drops it from a release build.
 @pragma('vm:entry-point')
 void callbackDispatcher() {
@@ -84,13 +89,16 @@ void callbackDispatcher() {
 
 /// Opens the vault, syncs every wallet of the workspace network, and
 /// posts what the sync found. Returns false only when the check could
-/// not run at all, which asks Android to try again later.
+/// not run at all, which asks the system to try again later.
 Future<bool> runBackgroundCheck({
   GerfautBridge bridge = const RustBridge(),
   NotificationService? service,
   Future<void> Function() bootstrap = bootstrapGerfaut,
   Future<bool> Function() isDisguised = isDisguisedFromDisk,
+  PlatformFeatures? features,
+  DateTime? now,
 }) async {
+  final system = features ?? PlatformFeatures.current;
   try {
     await bootstrap();
     final settings = await bridge.getSettings();
@@ -101,12 +109,17 @@ Future<bool> runBackgroundCheck({
     // Nothing is posted while disguised. The isolate has no channel to
     // the activity, so it reads the marker the activity keeps on disk.
     if (await isDisguised()) return true;
+    final cadence = AppPrefs(prefs).background.on(system);
     // Under Live this task is the safety net, for when Android stopped
     // the service. While the watch runs it has everything covered, and
     // a full sync every quarter hour would only cost data and battery.
     // The watch lives in this same process, so the core can say.
-    if (AppPrefs(prefs).background == BackgroundCheck.live &&
+    if (cadence == BackgroundCheck.live &&
         (await bridge.liveStatus()).state != WatchState.off) {
+      return true;
+    }
+    if (!system.checksKeepCadence &&
+        !await isCheckDue(bridge, settings.activeNetwork, cadence, now: now)) {
       return true;
     }
 
@@ -130,6 +143,31 @@ Future<bool> runBackgroundCheck({
     // tight loop: the next scheduled check is soon enough.
     return true;
   }
+}
+
+/// How much sooner than its cadence a turn still counts as due: a sync
+/// takes a moment, and the system's turn never lands on the second.
+const int _dueMargin = 60;
+
+/// Whether a turn the system chose on its own is due at [cadence]: a
+/// wallet of [network] last synced longer ago than that, or never did.
+/// The open app's syncs count, so a turn just after it is skipped. With
+/// no cadence, none is.
+Future<bool> isCheckDue(
+  GerfautBridge bridge,
+  Network network,
+  BackgroundCheck cadence, {
+  DateTime? now,
+}) async {
+  if (cadence.seconds <= 0) return false;
+  final at = (now ?? DateTime.now()).millisecondsSinceEpoch ~/ 1000;
+  for (final wallet in await bridge.listWallets(network)) {
+    final stamp = wallet.lastSync;
+    if (stamp == null || at - stamp.at >= cadence.seconds - _dueMargin) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /// Starts the scheduler. Called once from `main`, never from a test.

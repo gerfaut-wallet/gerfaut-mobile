@@ -21,6 +21,7 @@ import 'dart:ui';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'background.dart';
 import 'bridge.dart';
@@ -29,6 +30,7 @@ import 'format.dart';
 import 'lock.dart';
 import 'models.dart';
 import 'notifications.dart';
+import 'platform_features.dart';
 import 'state.dart';
 import 'prefs.dart';
 import 'vault_key.dart';
@@ -137,8 +139,56 @@ class SystemLivePlatform implements LivePlatform {
   Future<bool> openAppSettings() => _ask('openAppSettings', false);
 }
 
+/// A system without Live: nothing runs, nothing is wanted, nothing is
+/// asked. The settings page opens all the same, by the address iOS
+/// gives every app for its own page in Settings.
+class NoLivePlatform implements LivePlatform {
+  const NoLivePlatform();
+
+  /// `UIApplication.openSettingsURLString`.
+  static const String appSettingsUrl = 'app-settings:';
+
+  @override
+  Future<bool> start() async => false;
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<void> hold() async {}
+
+  @override
+  Future<bool> isHeld() async => false;
+
+  @override
+  Future<bool> isRunning() async => false;
+
+  @override
+  Future<bool> isWanted() async => false;
+
+  @override
+  Future<bool> isBatteryExempt() async => true;
+
+  @override
+  Future<bool?> requestBatteryExemption() async => null;
+
+  @override
+  Future<String> manufacturer() async => '';
+
+  @override
+  Future<bool> openAppSettings() async {
+    try {
+      return await launchUrl(Uri.parse(appSettingsUrl));
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
 final livePlatformProvider = Provider<LivePlatform>(
-  (ref) => const SystemLivePlatform(),
+  (ref) => ref.watch(platformFeaturesProvider).liveWatch
+      ? const SystemLivePlatform()
+      : const NoLivePlatform(),
 );
 
 /// One change to make in a maker's own settings.

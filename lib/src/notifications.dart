@@ -10,6 +10,7 @@ import 'bridge.dart';
 import 'disguise.dart';
 import 'live.dart';
 import 'models.dart';
+import 'platform_features.dart';
 import 'state.dart';
 import 'prefs.dart';
 
@@ -449,7 +450,8 @@ enum BackgroundCheck {
 
   /// A connection kept open by a foreground service. The periodic check
   /// stays scheduled under it, at the shortest cadence Android grants:
-  /// whenever Live cannot run, that is what is left.
+  /// whenever Live cannot run, that is what is left. Where it cannot
+  /// run at all, that is what it reads as ([on]).
   live('live', 900, 'Live'),
   quarterHour('900', 900, 'Every 15 min'),
   hour('3600', 3600, 'Every hour'),
@@ -469,18 +471,39 @@ enum BackgroundCheck {
     }
     return null;
   }
+
+  /// What this choice comes to on a system with [features]. Live where
+  /// there is no Live, a vault restored from an Android backup, is the
+  /// check it keeps scheduled under it: the same cadence, nothing else.
+  BackgroundCheck on(PlatformFeatures features) =>
+      this == live && !features.liveWatch ? quarterHour : this;
+
+  /// The choices a system with [features] offers: those that come to
+  /// themselves there.
+  static List<BackgroundCheck> offeredOn(PlatformFeatures features) => [
+    for (final check in values)
+      if (check.on(features) == check) check,
+  ];
 }
 
 class BackgroundCheckNotifier extends VaultPrefNotifier<BackgroundCheck> {
   @override
   VaultPref<BackgroundCheck> get pref => AppPref.background;
 
+  PlatformFeatures get _features => ref.read(platformFeaturesProvider);
+
+  /// Live stored, read on a phone without it: the screens show the
+  /// check that runs, and nothing ever starts the service.
+  @override
+  BackgroundCheck decode(String? stored) => super.decode(stored).on(_features);
+
   /// Persists the choice, then brings the periodic task in line, and
   /// starts or stops the Live service to match. Choosing Live from the
   /// settings goes through the explanation sheet first; this is what
   /// the sheet calls once the user has said yes.
   @override
-  Future<Shown> set(BackgroundCheck check) async {
+  Future<Shown> set(BackgroundCheck asked) async {
+    final check = asked.on(_features);
     final scheduler = ref.read(backgroundSchedulerProvider);
     final live = ref.read(liveProvider.notifier);
     final writes = ref.read(vaultWritesProvider);
