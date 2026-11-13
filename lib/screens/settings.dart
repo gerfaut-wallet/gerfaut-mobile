@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../src/disguise.dart';
 import '../src/models.dart';
 import '../src/notifications.dart';
+import '../src/platform_features.dart';
 import '../src/state.dart';
 import '../src/updates.dart' show isBetaVersion;
 import '../theme/tokens.dart';
@@ -193,7 +194,7 @@ class SettingsScreen extends ConsumerWidget {
 
 /// One section's page: its title in the bar, its cards below, nothing
 /// else. The cards are the same ones the single long page held.
-class SettingsSectionScreen extends StatelessWidget {
+class SettingsSectionScreen extends ConsumerWidget {
   const SettingsSectionScreen({
     super.key,
     required this.section,
@@ -207,7 +208,8 @@ class SettingsSectionScreen extends StatelessWidget {
   final CameraBuilder? cameraBuilder;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final features = ref.watch(platformFeaturesProvider);
     return Scaffold(
       appBar: GerfautAppBar.text(section.title),
       body: SafeArea(
@@ -224,9 +226,9 @@ class SettingsSectionScreen extends StatelessWidget {
           // own scroll view, with the rows as a sliver of it.
           SettingsSection.wallets => const WalletsSection(),
           SettingsSection.security => _cards(const [SecuritySection()]),
-          SettingsSection.notifications => _cards(const [
-            NotificationsSection(),
-            WidgetsSection(),
+          SettingsSection.notifications => _cards([
+            const NotificationsSection(),
+            if (features.homeWidgets) const WidgetsSection(),
           ]),
           SettingsSection.backup => _cards(const [BackupSection()]),
           SettingsSection.about => _cards(const [AboutSection()]),

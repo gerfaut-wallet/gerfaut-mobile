@@ -14,6 +14,7 @@ import 'background.dart';
 import 'bridge.dart';
 import 'format.dart';
 import 'models.dart';
+import 'platform_features.dart';
 import 'state.dart';
 import 'vault_key.dart';
 import 'prefs.dart';
@@ -359,8 +360,11 @@ final widgetBoardProvider = Provider<WidgetBoard>(
 /// Which widgets are on a home screen, by provider name. Read at start
 /// and again on every return to the foreground, since the launcher had
 /// the screen in between. Nothing is fetched for a widget nobody placed.
+/// None, and the board never asked, on a system without Gerfaut's.
 final installedWidgetsProvider = FutureProvider<Set<String>>(
-  (ref) => ref.watch(widgetBoardProvider).installedWidgets(),
+  (ref) async => ref.watch(platformFeaturesProvider).homeWidgets
+      ? ref.watch(widgetBoardProvider).installedWidgets()
+      : const <String>{},
 );
 
 // --- preferences -------------------------------------------------------
@@ -435,8 +439,13 @@ final widgetPriceProvider =
 /// mask, the widget preference, the set of placed widgets —
 /// and republishes on each change. Publishing coalesces: a burst of
 /// changes is written once, after the last of them.
+///
+/// On a system without Gerfaut's widgets it follows nothing: nothing is
+/// composed, nothing written, and no refresh is ever scheduled.
 class WidgetFeed {
-  WidgetFeed(this._ref) {
+  WidgetFeed(this._ref)
+    : _fed = _ref.read(platformFeaturesProvider).homeWidgets {
+    if (!_fed) return;
     void republish(Object? _, Object? _) => publish();
     // A provider refreshing still shows what it had: only a settled
     // state is worth a write.
@@ -470,6 +479,9 @@ class WidgetFeed {
   }
 
   final Ref _ref;
+
+  /// The system has the widgets to feed.
+  final bool _fed;
   Future<void>? _inFlight;
   bool _again = false;
 
@@ -477,6 +489,7 @@ class WidgetFeed {
   /// state at the time of the last call is on the board, so a caller
   /// that awaits it can read the board.
   Future<void> publish() {
+    if (!_fed) return Future.value();
     final running = _inFlight;
     if (running != null) {
       _again = true;
@@ -498,7 +511,9 @@ class WidgetFeed {
 
   /// The launcher had the screen: the set of placed widgets may have
   /// changed. Reading it again is what republishes.
-  void resume() => _ref.invalidate(installedWidgetsProvider);
+  void resume() {
+    if (_fed) _ref.invalidate(installedWidgetsProvider);
+  }
 
   Future<void> _publishOnce() async {
     // Nothing to say before the vault has answered: an empty wallet
