@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gerfaut/app.dart';
+import 'package:gerfaut/screens/wallet_home.dart';
 import 'package:gerfaut/src/disguise.dart';
 import 'package:gerfaut/src/models.dart';
 import 'package:gerfaut/src/state.dart';
 import 'package:gerfaut/theme/tokens.dart';
+import 'package:gerfaut/widgets/buttons.dart';
 import 'package:gerfaut/widgets/readable_width.dart';
 
 import 'fakes.dart';
@@ -115,6 +117,46 @@ void main() {
       expect(card.width, lessThanOrEqualTo(GerfautLayout.readableWidth));
       expect(card.center.dx, closeTo(500, 0.5));
       expect(tester.getSize(find.byType(AppBar)).width, 1000);
+    });
+
+    testWidgets('keeps the wallet page readable, its list surface whole', (
+      tester,
+    ) async {
+      window(tester, 1000, 800);
+      await tester.pumpWidget(
+        ProviderScope(
+          retry: noRetry,
+          overrides: [
+            bridgeProvider.overrideWithValue(
+              FakeBridge(
+                wallets: [meta],
+                snapshots: {'w1': makeSnapshot(meta: meta)},
+              ),
+            ),
+          ],
+          child: MaterialApp(
+            theme: themeFrom(GerfautTokens.light, Brightness.light),
+            home: const WalletHomeScreen(walletId: 'w1'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Every part a hand reaches keeps the readable width, the bar at
+      // the bottom included.
+      for (final finder in [
+        find.widgetWithText(PrimaryButton, 'Receive'),
+        find.byType(TabBar),
+      ]) {
+        final rect = tester.getRect(finder);
+        expect(rect.width, lessThanOrEqualTo(GerfautLayout.readableWidth));
+        expect(rect.center.dx, closeTo(500, 0.5));
+      }
+      // The surface the lists sit on runs edge to edge.
+      final surface = find
+          .ancestor(of: find.byType(TabBar), matching: find.byType(Material))
+          .first;
+      expect(tester.getSize(surface).width, 1000);
     });
 
     testWidgets('lays a phone out as before', (tester) async {

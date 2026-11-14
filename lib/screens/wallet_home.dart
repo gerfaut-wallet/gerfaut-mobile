@@ -362,19 +362,21 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(GerfautSpacing.md),
-            child: PrimaryButton(
-              label: 'Receive',
-              icon: LucideIcons.qrCode,
-              expand: true,
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => ReceiveScreen(walletId: widget.walletId),
-                  ),
-                );
-              },
+          ReadableWidth(
+            child: Padding(
+              padding: const EdgeInsets.all(GerfautSpacing.md),
+              child: PrimaryButton(
+                label: 'Receive',
+                icon: LucideIcons.qrCode,
+                expand: true,
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => ReceiveScreen(walletId: widget.walletId),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         ],
