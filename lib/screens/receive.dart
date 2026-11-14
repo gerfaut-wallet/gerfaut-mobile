@@ -18,6 +18,7 @@ import '../widgets/load_failure.dart';
 import '../widgets/notice.dart';
 import '../widgets/status_pill.dart';
 import '../widgets/toast.dart';
+import '../widgets/readable_width.dart';
 
 /// Side of the small QR code in the address block; tapping it opens the
 /// large one.
@@ -117,42 +118,44 @@ class _ReceiveScreenState extends ConsumerState<ReceiveScreen> {
     return Scaffold(
       appBar: GerfautAppBar.text('Receive'),
       body: SafeArea(
-        child: addresses.hasError
-            ? LoadFailure(
-                what: 'The receive address',
-                error: addresses.error,
-                onRetry: () => ref.invalidate(receiveProvider),
-              )
-            : entry == null
-            ? Center(
-                child: Text(
-                  'Deriving address…',
-                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                ),
-              )
-            : ListView(
-                padding: const EdgeInsets.all(GerfautSpacing.md),
-                children: [
-                  _AddressBlock(
-                    entry: entry,
-                    single: single,
-                    oneAddress: oneAddress,
-                    offset: _offset,
-                    gap: unusedInARow(list!, min(_offset, list.length - 1)),
-                    hasNext: hasNext,
-                    gapLimit: gapLimit,
-                    copied: _copied,
-                    onCopy: () => _copy(entry.address),
-                    onEnlarge: () => _enlarge(entry.address),
-                    onNext: () => setState(
-                      () => _offset = min(_offset + 1, maxReceivePeek),
-                    ),
-                    onFirst: () => setState(() => _offset = 0),
+        child: ReadableWidth(
+          child: addresses.hasError
+              ? LoadFailure(
+                  what: 'The receive address',
+                  error: addresses.error,
+                  onRetry: () => ref.invalidate(receiveProvider),
+                )
+              : entry == null
+              ? Center(
+                  child: Text(
+                    'Deriving address…',
+                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                   ),
-                  const SizedBox(height: GerfautSpacing.lg),
-                  ..._auditCards(tokens, audit, single, meta?.network),
-                ],
-              ),
+                )
+              : ListView(
+                  padding: const EdgeInsets.all(GerfautSpacing.md),
+                  children: [
+                    _AddressBlock(
+                      entry: entry,
+                      single: single,
+                      oneAddress: oneAddress,
+                      offset: _offset,
+                      gap: unusedInARow(list!, min(_offset, list.length - 1)),
+                      hasNext: hasNext,
+                      gapLimit: gapLimit,
+                      copied: _copied,
+                      onCopy: () => _copy(entry.address),
+                      onEnlarge: () => _enlarge(entry.address),
+                      onNext: () => setState(
+                        () => _offset = min(_offset + 1, maxReceivePeek),
+                      ),
+                      onFirst: () => setState(() => _offset = 0),
+                    ),
+                    const SizedBox(height: GerfautSpacing.lg),
+                    ..._auditCards(tokens, audit, single, meta?.network),
+                  ],
+                ),
+        ),
       ),
     );
   }

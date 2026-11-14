@@ -8,10 +8,6 @@ import '../theme/tokens.dart';
 import 'focus_ring.dart';
 import 'tap_target.dart';
 
-/// Width from which the options open in a menu anchored to the field;
-/// narrower, they rise as a bottom sheet the thumb reaches.
-const double _anchoredFrom = 600;
-
 /// Tallest the anchored menu grows before it scrolls.
 const double _menuMaxHeight = 320;
 
@@ -110,7 +106,9 @@ class _GerfautSelectState<T> extends State<GerfautSelect<T>> {
   bool _focused = false;
 
   Future<void> _open() async {
-    final wide = MediaQuery.sizeOf(context).width >= _anchoredFrom;
+    // A wide window opens the options in a menu anchored to the field;
+    // a narrower one raises a bottom sheet the thumb reaches.
+    final wide = MediaQuery.sizeOf(context).width >= GerfautLayout.wideFrom;
     final picked = wide
         ? await _showAnchored<T>(context, widget)
         : await _showSheet<T>(context, widget);

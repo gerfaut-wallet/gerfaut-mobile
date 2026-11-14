@@ -11,6 +11,7 @@ import '../theme/tokens.dart';
 import '../widgets/brand.dart';
 import '../widgets/buttons.dart';
 import '../widgets/pinned_action_form.dart';
+import '../widgets/readable_width.dart';
 
 /// The screen that stands in front of everything while the app is
 /// locked. Nothing of the wallet is behind it: it replaces the app,
@@ -142,115 +143,120 @@ class _LockScreenState extends ConsumerState<LockScreen> {
 
     return Scaffold(
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(GerfautSpacing.md),
-          child: PinnedActionForm(
-            action: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (_offersBiometrics) ...[
-                  SecondaryButton(
-                    label: 'Use fingerprint or face',
-                    icon: LucideIcons.fingerprint,
+        child: ReadableWidth(
+          child: Padding(
+            padding: const EdgeInsets.all(GerfautSpacing.md),
+            child: PinnedActionForm(
+              action: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_offersBiometrics) ...[
+                    SecondaryButton(
+                      label: 'Use fingerprint or face',
+                      icon: LucideIcons.fingerprint,
+                      expand: true,
+                      onPressed: _tryBiometrics,
+                    ),
+                    const SizedBox(height: GerfautSpacing.sm),
+                  ],
+                  PrimaryButton(
+                    label: _checking ? 'Unlocking…' : 'Unlock',
                     expand: true,
-                    onPressed: _tryBiometrics,
+                    busy: _checking,
+                    onPressed: blocked ? null : _unlock,
                   ),
-                  const SizedBox(height: GerfautSpacing.sm),
                 ],
-                PrimaryButton(
-                  label: _checking ? 'Unlocking…' : 'Unlock',
-                  expand: true,
-                  busy: _checking,
-                  onPressed: blocked ? null : _unlock,
+              ),
+              children: [
+                const SizedBox(height: GerfautSpacing.xl),
+                Center(
+                  child: GerfautMark(
+                    color: tokens.primary,
+                    height: 40,
+                    semanticLabel: 'Gerfaut',
+                  ),
                 ),
+                const SizedBox(height: GerfautSpacing.lg),
+                Center(child: Text('Locked', style: tokens.h2)),
+                const SizedBox(height: GerfautSpacing.lg),
+                Semantics(
+                  // The hint goes as soon as a digit is typed: the name stays.
+                  label: pin ? 'PIN' : 'Password',
+                  child: TextField(
+                    controller: _controller,
+                    autofocus: true,
+                    obscureText: _hidden,
+                    enabled: !blocked,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    enableIMEPersonalizedLearning: false,
+                    keyboardType: pin
+                        ? TextInputType.number
+                        : TextInputType.text,
+                    inputFormatters: pin
+                        ? [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(12),
+                          ]
+                        : null,
+                    style: tokens.body,
+                    textAlign: pin ? TextAlign.center : TextAlign.start,
+                    onChanged: (_) => setState(() => _message = null),
+                    onSubmitted: (_) => _unlock(),
+                    decoration: InputDecoration(
+                      hintText: pin ? 'PIN' : 'Password',
+                      hintStyle: tokens.body.copyWith(color: tokens.textMuted),
+                      filled: true,
+                      fillColor: tokens.surfaceSunken,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: GerfautSpacing.md,
+                        vertical: GerfautSpacing.sm + GerfautSpacing.xs,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(GerfautRadius.sm),
+                        borderSide: BorderSide(color: tokens.primary, width: 2),
+                      ),
+                      suffixIcon: pin
+                          ? null
+                          : IconButton(
+                              tooltip: _hidden
+                                  ? 'Show password'
+                                  : 'Hide password',
+                              onPressed: () =>
+                                  setState(() => _hidden = !_hidden),
+                              icon: Icon(
+                                _hidden ? LucideIcons.eye : LucideIcons.eyeOff,
+                                size: 20,
+                                color: tokens.textMuted,
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+                if (note != null) ...[
+                  const SizedBox(height: GerfautSpacing.sm),
+                  // A refused secret is a fact, not an alarm: Alerte is
+                  // kept for coins moving. Said aloud as it appears; the
+                  // countdown is said once, with the wait it began at,
+                  // and the field greyed meanwhile says the rest.
+                  Semantics(
+                    liveRegion: true,
+                    label: blocked
+                        ? 'Too many attempts. Try again in $_waitFrom seconds.'
+                        : null,
+                    excludeSemantics: blocked,
+                    child: Text(
+                      note,
+                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                    ),
+                  ),
+                ],
               ],
             ),
-            children: [
-              const SizedBox(height: GerfautSpacing.xl),
-              Center(
-                child: GerfautMark(
-                  color: tokens.primary,
-                  height: 40,
-                  semanticLabel: 'Gerfaut',
-                ),
-              ),
-              const SizedBox(height: GerfautSpacing.lg),
-              Center(child: Text('Locked', style: tokens.h2)),
-              const SizedBox(height: GerfautSpacing.lg),
-              Semantics(
-                // The hint goes as soon as a digit is typed: the name stays.
-                label: pin ? 'PIN' : 'Password',
-                child: TextField(
-                  controller: _controller,
-                  autofocus: true,
-                  obscureText: _hidden,
-                  enabled: !blocked,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  enableIMEPersonalizedLearning: false,
-                  keyboardType: pin ? TextInputType.number : TextInputType.text,
-                  inputFormatters: pin
-                      ? [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(12),
-                        ]
-                      : null,
-                  style: tokens.body,
-                  textAlign: pin ? TextAlign.center : TextAlign.start,
-                  onChanged: (_) => setState(() => _message = null),
-                  onSubmitted: (_) => _unlock(),
-                  decoration: InputDecoration(
-                    hintText: pin ? 'PIN' : 'Password',
-                    hintStyle: tokens.body.copyWith(color: tokens.textMuted),
-                    filled: true,
-                    fillColor: tokens.surfaceSunken,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: GerfautSpacing.md,
-                      vertical: GerfautSpacing.sm + GerfautSpacing.xs,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(GerfautRadius.sm),
-                      borderSide: BorderSide.none,
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(GerfautRadius.sm),
-                      borderSide: BorderSide(color: tokens.primary, width: 2),
-                    ),
-                    suffixIcon: pin
-                        ? null
-                        : IconButton(
-                            tooltip: _hidden
-                                ? 'Show password'
-                                : 'Hide password',
-                            onPressed: () => setState(() => _hidden = !_hidden),
-                            icon: Icon(
-                              _hidden ? LucideIcons.eye : LucideIcons.eyeOff,
-                              size: 20,
-                              color: tokens.textMuted,
-                            ),
-                          ),
-                  ),
-                ),
-              ),
-              if (note != null) ...[
-                const SizedBox(height: GerfautSpacing.sm),
-                // A refused secret is a fact, not an alarm: Alerte is
-                // kept for coins moving. Said aloud as it appears; the
-                // countdown is said once, with the wait it began at,
-                // and the field greyed meanwhile says the rest.
-                Semantics(
-                  liveRegion: true,
-                  label: blocked
-                      ? 'Too many attempts. Try again in $_waitFrom seconds.'
-                      : null,
-                  excludeSemantics: blocked,
-                  child: Text(
-                    note,
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  ),
-                ),
-              ],
-            ],
           ),
         ),
       ),

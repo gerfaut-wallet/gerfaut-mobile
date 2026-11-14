@@ -30,6 +30,7 @@ import 'policy.dart';
 import 'receive.dart';
 import 'tx_detail.dart';
 import '../widgets/toast.dart';
+import '../widgets/readable_width.dart';
 
 /// Home of one wallet: balance, freshness, transactions and UTXOs.
 /// The one primary action, Receive, sits at the bottom under the thumb.
@@ -181,30 +182,34 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
       ),
       // A wallet already loaded stays on screen while it refreshes: a
       // loading line in place of a balance would hide what is known.
+      // The list surface runs edge to edge; what sits on it and above it
+      // keeps the readable width (_buildLoaded).
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const MaskUnsavedNotice(),
+            const ReadableWidth(child: MaskUnsavedNotice()),
             Expanded(
               child: loaded != null
                   ? _buildLoaded(loaded, syncing)
-                  : switch (snapshot) {
-                      AsyncError(:final error) => LoadFailure(
-                        what: 'This wallet',
-                        error: error,
-                        onRetry: () =>
-                            ref.invalidate(snapshotProvider(widget.walletId)),
-                      ),
-                      _ => Center(
-                        child: Text(
-                          'Loading wallet…',
-                          style: tokens.bodySmall.copyWith(
-                            color: tokens.textMuted,
+                  : ReadableWidth(
+                      child: switch (snapshot) {
+                        AsyncError(:final error) => LoadFailure(
+                          what: 'This wallet',
+                          error: error,
+                          onRetry: () =>
+                              ref.invalidate(snapshotProvider(widget.walletId)),
+                        ),
+                        _ => Center(
+                          child: Text(
+                            'Loading wallet…',
+                            style: tokens.bodySmall.copyWith(
+                              color: tokens.textMuted,
+                            ),
                           ),
                         ),
-                      ),
-                    },
+                      },
+                    ),
             ),
           ],
         ),
@@ -237,62 +242,66 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              GerfautSpacing.md,
-              GerfautSpacing.sm,
-              GerfautSpacing.md,
-              GerfautSpacing.md,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SyncIndicator(
-                  stamp: snapshot.meta.lastSync,
-                  syncing: syncing,
-                  error: syncError,
-                ),
-                if (coverage != null) ...[
-                  const SizedBox(height: GerfautSpacing.sm),
-                  _CoverageLine(coverage: coverage),
-                ],
-                const SizedBox(height: GerfautSpacing.md),
-                // The balance as a dashboard figure: its own bordered
-                // surface, with the role spelled out above it.
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(GerfautSpacing.md),
-                  decoration: BoxDecoration(
-                    color: tokens.surface,
-                    borderRadius: BorderRadius.circular(GerfautRadius.lg),
-                    border: Border.all(color: tokens.border),
+          ReadableWidth(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                GerfautSpacing.md,
+                GerfautSpacing.sm,
+                GerfautSpacing.md,
+                GerfautSpacing.md,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SyncIndicator(
+                    stamp: snapshot.meta.lastSync,
+                    syncing: syncing,
+                    error: syncError,
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'TOTAL BALANCE',
-                        style: tokens.label.copyWith(color: tokens.textMuted),
-                      ),
-                      const SizedBox(height: GerfautSpacing.sm),
-                      BalanceAmount(
-                        sats: snapshot.balance.total,
-                        network: snapshot.meta.network,
-                      ),
-                      if (note != null) ...[
-                        const SizedBox(height: GerfautSpacing.sm),
+                  if (coverage != null) ...[
+                    const SizedBox(height: GerfautSpacing.sm),
+                    _CoverageLine(coverage: coverage),
+                  ],
+                  const SizedBox(height: GerfautSpacing.md),
+                  // The balance as a dashboard figure: its own bordered
+                  // surface, with the role spelled out above it.
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(GerfautSpacing.md),
+                    decoration: BoxDecoration(
+                      color: tokens.surface,
+                      borderRadius: BorderRadius.circular(GerfautRadius.lg),
+                      border: Border.all(color: tokens.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          note,
+                          'TOTAL BALANCE',
                           style: tokens.label.copyWith(color: tokens.textMuted),
                         ),
-                      ] else if (pending != null) ...[
                         const SizedBox(height: GerfautSpacing.sm),
-                        PendingAmount(sats: pending),
+                        BalanceAmount(
+                          sats: snapshot.balance.total,
+                          network: snapshot.meta.network,
+                        ),
+                        if (note != null) ...[
+                          const SizedBox(height: GerfautSpacing.sm),
+                          Text(
+                            note,
+                            style: tokens.label.copyWith(
+                              color: tokens.textMuted,
+                            ),
+                          ),
+                        ] else if (pending != null) ...[
+                          const SizedBox(height: GerfautSpacing.sm),
+                          PendingAmount(sats: pending),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           // The lists live on the card surface, edge to edge: a row's
@@ -307,47 +316,49 @@ class _WalletHomeScreenState extends ConsumerState<WalletHomeScreen> {
                 top: BorderSide(color: tokens.border),
                 bottom: BorderSide(color: tokens.border),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TabBar(
-                    tabs: [
-                      Tab(
-                        child: _TabLabel(
-                          label: 'Transactions',
-                          count: snapshot.txs.length,
+              child: ReadableWidth(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TabBar(
+                      tabs: [
+                        Tab(
+                          child: _TabLabel(
+                            label: 'Transactions',
+                            count: snapshot.txs.length,
+                          ),
                         ),
-                      ),
-                      Tab(
-                        child: _TabLabel(
-                          label: 'UTXOs',
-                          count:
-                              ref
-                                  .watch(utxosProvider(widget.walletId))
-                                  .value
-                                  ?.length ??
-                              0,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Expanded(
-                    child: TabBarView(
-                      children: [
-                        _TxList(
-                          walletId: widget.walletId,
-                          network: snapshot.meta.network,
-                          txs: snapshot.txs,
-                          truncated: snapshot.truncated,
-                        ),
-                        _UtxoList(
-                          walletId: widget.walletId,
-                          network: snapshot.meta.network,
+                        Tab(
+                          child: _TabLabel(
+                            label: 'UTXOs',
+                            count:
+                                ref
+                                    .watch(utxosProvider(widget.walletId))
+                                    .value
+                                    ?.length ??
+                                0,
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                ],
+                    Expanded(
+                      child: TabBarView(
+                        children: [
+                          _TxList(
+                            walletId: widget.walletId,
+                            network: snapshot.meta.network,
+                            txs: snapshot.txs,
+                            truncated: snapshot.truncated,
+                          ),
+                          _UtxoList(
+                            walletId: widget.walletId,
+                            network: snapshot.meta.network,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

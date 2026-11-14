@@ -19,6 +19,7 @@ import 'settings/notifications_section.dart';
 import 'settings/security_section.dart';
 import 'settings/wallets_section.dart';
 import 'settings/widgets_section.dart';
+import '../widgets/readable_width.dart';
 
 /// The seven sections of the settings, in the order the root lists
 /// them. The same names as the desktop app, so a setting found on one
@@ -83,45 +84,51 @@ class SettingsScreen extends ConsumerWidget {
     return Scaffold(
       appBar: GerfautAppBar.text('Settings'),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(GerfautSpacing.md),
-          children: [
-            // The rows' ripple is drawn on a Material over the box: on
-            // the page under it, the box's fill would hide it.
-            Container(
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                color: tokens.surface,
-                borderRadius: BorderRadius.circular(GerfautRadius.lg),
-                border: Border.all(color: tokens.border),
-              ),
-              child: Material(
-                type: MaterialType.transparency,
-                child: Column(
-                  children: [
-                    for (final (index, section)
-                        in SettingsSection.values.indexed) ...[
-                      if (index > 0)
-                        Divider(height: 1, thickness: 1, color: tokens.border),
-                      _SectionRow(
-                        section: section,
-                        summary: _summary(ref, section),
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => SettingsSectionScreen(
-                              section: section,
-                              cameraBuilder: cameraBuilder,
+        child: ReadableWidth(
+          child: ListView(
+            padding: const EdgeInsets.all(GerfautSpacing.md),
+            children: [
+              // The rows' ripple is drawn on a Material over the box: on
+              // the page under it, the box's fill would hide it.
+              Container(
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: tokens.surface,
+                  borderRadius: BorderRadius.circular(GerfautRadius.lg),
+                  border: Border.all(color: tokens.border),
+                ),
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: Column(
+                    children: [
+                      for (final (index, section)
+                          in SettingsSection.values.indexed) ...[
+                        if (index > 0)
+                          Divider(
+                            height: 1,
+                            thickness: 1,
+                            color: tokens.border,
+                          ),
+                        _SectionRow(
+                          section: section,
+                          summary: _summary(ref, section),
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => SettingsSectionScreen(
+                                section: section,
+                                cameraBuilder: cameraBuilder,
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: GerfautSpacing.lg),
-          ],
+              const SizedBox(height: GerfautSpacing.lg),
+            ],
+          ),
         ),
       ),
     );
@@ -213,26 +220,28 @@ class SettingsSectionScreen extends ConsumerWidget {
     return Scaffold(
       appBar: GerfautAppBar.text(section.title),
       body: SafeArea(
-        child: switch (section) {
-          SettingsSection.general => _cards(const [GeneralSection()]),
-          SettingsSection.network => _cards([
-            // A test seam of the section; this screen only forwards
-            // its own, which is null outside a test.
-            // ignore: invalid_use_of_visible_for_testing_member
-            NetworkSection(cameraBuilder: cameraBuilder),
-          ]),
-          // The wallet rows reorder by drag, and a drag has to scroll
-          // the page to reach a row out of sight: this section is its
-          // own scroll view, with the rows as a sliver of it.
-          SettingsSection.wallets => const WalletsSection(),
-          SettingsSection.security => _cards(const [SecuritySection()]),
-          SettingsSection.notifications => _cards([
-            const NotificationsSection(),
-            if (features.homeWidgets) const WidgetsSection(),
-          ]),
-          SettingsSection.backup => _cards(const [BackupSection()]),
-          SettingsSection.about => _cards(const [AboutSection()]),
-        },
+        child: ReadableWidth(
+          child: switch (section) {
+            SettingsSection.general => _cards(const [GeneralSection()]),
+            SettingsSection.network => _cards([
+              // A test seam of the section; this screen only forwards
+              // its own, which is null outside a test.
+              // ignore: invalid_use_of_visible_for_testing_member
+              NetworkSection(cameraBuilder: cameraBuilder),
+            ]),
+            // The wallet rows reorder by drag, and a drag has to scroll
+            // the page to reach a row out of sight: this section is its
+            // own scroll view, with the rows as a sliver of it.
+            SettingsSection.wallets => const WalletsSection(),
+            SettingsSection.security => _cards(const [SecuritySection()]),
+            SettingsSection.notifications => _cards([
+              const NotificationsSection(),
+              if (features.homeWidgets) const WidgetsSection(),
+            ]),
+            SettingsSection.backup => _cards(const [BackupSection()]),
+            SettingsSection.about => _cards(const [AboutSection()]),
+          },
+        ),
       ),
     );
   }

@@ -26,6 +26,7 @@ import 'widgets/notice.dart';
 import 'widgets/price_credit.dart';
 import 'src/prefs.dart';
 import 'src/share.dart';
+import 'widgets/readable_width.dart';
 
 /// Root widget: both Toundra themes, light by default, and the startup
 /// bootstrap (Rust bridge + encrypted vault) before the home screen.
@@ -608,126 +609,132 @@ class _StartupErrorScreenState extends ConsumerState<_StartupErrorScreen> {
     final muted = tokens.bodySmall.copyWith(color: tokens.textMuted);
     return Scaffold(
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(GerfautSpacing.md),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  inUse ? 'Gerfaut is already open' : 'Gerfaut could not start',
-                  style: tokens.h2,
-                ),
-                const SizedBox(height: GerfautSpacing.sm),
-                if (keyGone) ...[
+        child: ReadableWidth(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(GerfautSpacing.md),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
                   Text(
-                    'The vault is here, but the key that opens it is gone.',
-                    style: tokens.body,
+                    inUse
+                        ? 'Gerfaut is already open'
+                        : 'Gerfaut could not start',
+                    style: tokens.h2,
                   ),
                   const SizedBox(height: GerfautSpacing.sm),
-                  Text(
-                    // Each system keeps the key its own way. A backup of
-                    // an iPhone restored on the same one brings the key
-                    // back: only another iPhone is without it.
-                    ref.watch(platformFeaturesProvider) != PlatformFeatures.ios
-                        ? 'Android keeps that key in its secure storage, '
-                              'apart from the vault, and it does not travel: '
-                              'a phone restored from a backup, moved to a new '
-                              'device or reset comes back with the vault file '
-                              'and without the key. Nothing can open the vault '
-                              'without it.'
-                        : 'iOS keeps that key in the keychain of this '
-                              'iPhone, apart from the vault, and it does not '
-                              'travel: a backup restored on another iPhone, '
-                              'or an iPhone reset, comes back with the vault '
-                              'file and without the key. Nothing can open the '
-                              'vault without it.',
-                    style: muted,
-                  ),
-                  const SizedBox(height: GerfautSpacing.sm),
-                  Text(
-                    'If the phone was only restarting, try again first. '
-                    'Otherwise, a backup made with Gerfaut brings the '
-                    'wallets back into an empty vault.',
-                    style: muted,
-                  ),
-                  const SizedBox(height: GerfautSpacing.sm),
-                  SelectableText(
-                    error.detail,
-                    style: tokens.data.copyWith(
-                      fontSize: 12,
-                      color: tokens.textMuted,
+                  if (keyGone) ...[
+                    Text(
+                      'The vault is here, but the key that opens it is gone.',
+                      style: tokens.body,
                     ),
-                  ),
-                ] else if (inUse) ...[
-                  Text(
-                    'The vault is open elsewhere, and it opens in one place '
-                    'at a time.',
-                    style: tokens.body,
-                  ),
-                  const SizedBox(height: GerfautSpacing.sm),
-                  Text(
-                    'Nothing is wrong with it. Give it a moment, then try '
-                    'again.',
-                    style: muted,
-                  ),
-                ] else
-                  SelectableText(
-                    '$error',
-                    style: tokens.data.copyWith(color: tokens.textMuted),
-                  ),
-                const SizedBox(height: GerfautSpacing.md),
-                Wrap(
-                  spacing: GerfautSpacing.sm,
-                  runSpacing: GerfautSpacing.sm,
-                  children: [
-                    // Trying again comes first whatever the cause: the
-                    // whole answer to a vault held elsewhere, and the
-                    // first thing to do after a restart.
-                    PrimaryButton(
-                      label: 'Try again',
-                      icon: LucideIcons.refreshCw,
-                      onPressed: widget.onRetry,
+                    const SizedBox(height: GerfautSpacing.sm),
+                    Text(
+                      // Each system keeps the key its own way. A backup of
+                      // an iPhone restored on the same one brings the key
+                      // back: only another iPhone is without it.
+                      ref.watch(platformFeaturesProvider) !=
+                              PlatformFeatures.ios
+                          ? 'Android keeps that key in its secure storage, '
+                                'apart from the vault, and it does not travel: '
+                                'a phone restored from a backup, moved to a new '
+                                'device or reset comes back with the vault file '
+                                'and without the key. Nothing can open the vault '
+                                'without it.'
+                          : 'iOS keeps that key in the keychain of this '
+                                'iPhone, apart from the vault, and it does not '
+                                'travel: a backup restored on another iPhone, '
+                                'or an iPhone reset, comes back with the vault '
+                                'file and without the key. Nothing can open the '
+                                'vault without it.',
+                      style: muted,
                     ),
-                    // It only opens the confirmation below: neutral, the
-                    // red waits for the yes.
-                    if (keyGone && widget.onStartOver != null)
-                      SecondaryButton(
-                        label: 'Start over…',
-                        icon: LucideIcons.archiveRestore,
-                        onPressed: _confirmingStartOver
-                            ? null
-                            : () => setState(() => _confirmingStartOver = true),
+                    const SizedBox(height: GerfautSpacing.sm),
+                    Text(
+                      'If the phone was only restarting, try again first. '
+                      'Otherwise, a backup made with Gerfaut brings the '
+                      'wallets back into an empty vault.',
+                      style: muted,
+                    ),
+                    const SizedBox(height: GerfautSpacing.sm),
+                    SelectableText(
+                      error.detail,
+                      style: tokens.data.copyWith(
+                        fontSize: 12,
+                        color: tokens.textMuted,
                       ),
-                  ],
-                ),
-                if (_confirmingStartOver) ...[
+                    ),
+                  ] else if (inUse) ...[
+                    Text(
+                      'The vault is open elsewhere, and it opens in one place '
+                      'at a time.',
+                      style: tokens.body,
+                    ),
+                    const SizedBox(height: GerfautSpacing.sm),
+                    Text(
+                      'Nothing is wrong with it. Give it a moment, then try '
+                      'again.',
+                      style: muted,
+                    ),
+                  ] else
+                    SelectableText(
+                      '$error',
+                      style: tokens.data.copyWith(color: tokens.textMuted),
+                    ),
                   const SizedBox(height: GerfautSpacing.md),
-                  // Amber: the file is kept. What is lost was lost
-                  // before this screen, and the sentence says so.
-                  GerfautNotice(
-                    tone: NoticeTone.info,
-                    message:
-                        'Gerfaut opens an empty vault and the restore page. '
-                        'The vault it cannot open is set aside under another '
-                        'name, not deleted.',
-                    liveRegion: true,
-                    actionsBelow: true,
-                    action: ConfirmActions(
-                      cancel: SecondaryButton(
-                        label: 'Cancel',
-                        onPressed: () =>
-                            setState(() => _confirmingStartOver = false),
+                  Wrap(
+                    spacing: GerfautSpacing.sm,
+                    runSpacing: GerfautSpacing.sm,
+                    children: [
+                      // Trying again comes first whatever the cause: the
+                      // whole answer to a vault held elsewhere, and the
+                      // first thing to do after a restart.
+                      PrimaryButton(
+                        label: 'Try again',
+                        icon: LucideIcons.refreshCw,
+                        onPressed: widget.onRetry,
                       ),
-                      confirm: DangerButton(
-                        label: 'Start over',
-                        onPressed: widget.onStartOver,
+                      // It only opens the confirmation below: neutral, the
+                      // red waits for the yes.
+                      if (keyGone && widget.onStartOver != null)
+                        SecondaryButton(
+                          label: 'Start over…',
+                          icon: LucideIcons.archiveRestore,
+                          onPressed: _confirmingStartOver
+                              ? null
+                              : () =>
+                                    setState(() => _confirmingStartOver = true),
+                        ),
+                    ],
+                  ),
+                  if (_confirmingStartOver) ...[
+                    const SizedBox(height: GerfautSpacing.md),
+                    // Amber: the file is kept. What is lost was lost
+                    // before this screen, and the sentence says so.
+                    GerfautNotice(
+                      tone: NoticeTone.info,
+                      message:
+                          'Gerfaut opens an empty vault and the restore page. '
+                          'The vault it cannot open is set aside under another '
+                          'name, not deleted.',
+                      liveRegion: true,
+                      actionsBelow: true,
+                      action: ConfirmActions(
+                        cancel: SecondaryButton(
+                          label: 'Cancel',
+                          onPressed: () =>
+                              setState(() => _confirmingStartOver = false),
+                        ),
+                        confirm: DangerButton(
+                          label: 'Start over',
+                          onPressed: widget.onStartOver,
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),

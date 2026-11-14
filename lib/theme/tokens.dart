@@ -19,6 +19,20 @@ abstract final class GerfautSpacing {
   static const double gutter = 12;
 }
 
+/// Window widths that change a layout. They are read from the window
+/// the app is given, never from the device: a foldable resizes it while
+/// the app runs.
+abstract final class GerfautLayout {
+  /// From this width on, the window counts as wide: a list of options
+  /// opens as a menu by its field rather than as a bottom sheet.
+  static const double wideFrom = 600;
+
+  /// The widest a screen's content grows. A wider window, the inner
+  /// display of a foldable or a tablet, centres the content at this
+  /// width rather than stretching rows and buttons edge to edge.
+  static const double readableWidth = 640;
+}
+
 /// Touch targets, Android's figure.
 abstract final class GerfautTouch {
   /// The smallest hit area of anything a finger can press, both ways.

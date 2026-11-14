@@ -7,6 +7,7 @@ import '../src/updates.dart';
 import '../theme/tokens.dart';
 import '../widgets/brand.dart';
 import '../widgets/buttons.dart';
+import '../widgets/readable_width.dart';
 
 /// One page of the tour.
 typedef WelcomePage = ({IconData icon, String title, String body});
@@ -101,71 +102,75 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
 
     return Scaffold(
       body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              // Filled, Back and Skip line up with Next below them
-              // rather than hug the edges of the screen.
-              padding: const EdgeInsets.symmetric(
-                horizontal: GerfautSpacing.md,
-                vertical: GerfautSpacing.sm,
-              ),
-              child: Row(
-                children: [
-                  // A page one can only leave or pass is re-read by
-                  // starting the tour over. The swipe already goes back;
-                  // the button is what makes it visible. It takes the
-                  // left of the row Skip has to itself on the first page.
-                  if (_index > 0)
-                    SecondaryButton(
-                      label: 'Back',
-                      onPressed: () => _goTo(context, _index - 1),
-                    ),
-                  const Spacer(),
-                  SecondaryButton(label: 'Skip', onPressed: _done),
-                ],
-              ),
-            ),
-            Expanded(
-              child: PageView.builder(
-                controller: _pages,
-                itemCount: welcomePages.length,
-                onPageChanged: (index) => setState(() => _index = index),
-                itemBuilder: (context, index) =>
-                    _Page(page: welcomePages[index], first: index == 0),
-              ),
-            ),
-            // The dots say where the tour stands to the eye; this says it
-            // to a screen reader, and again at every swipe.
-            Semantics(
-              liveRegion: true,
-              label: 'Page ${_index + 1} of ${welcomePages.length}',
-              excludeSemantics: true,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  for (var i = 0; i < welcomePages.length; i++)
-                    Container(
-                      width: 6,
-                      height: 6,
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: i == _index ? tokens.primary : tokens.textMuted,
+        child: ReadableWidth(
+          child: Column(
+            children: [
+              Padding(
+                // Filled, Back and Skip line up with Next below them
+                // rather than hug the edges of the screen.
+                padding: const EdgeInsets.symmetric(
+                  horizontal: GerfautSpacing.md,
+                  vertical: GerfautSpacing.sm,
+                ),
+                child: Row(
+                  children: [
+                    // A page one can only leave or pass is re-read by
+                    // starting the tour over. The swipe already goes back;
+                    // the button is what makes it visible. It takes the
+                    // left of the row Skip has to itself on the first page.
+                    if (_index > 0)
+                      SecondaryButton(
+                        label: 'Back',
+                        onPressed: () => _goTo(context, _index - 1),
                       ),
-                    ),
-                ],
+                    const Spacer(),
+                    SecondaryButton(label: 'Skip', onPressed: _done),
+                  ],
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(GerfautSpacing.md),
-              child: PrimaryButton(
-                label: last ? 'Get started' : 'Next',
-                expand: true,
-                onPressed: () => _next(context),
+              Expanded(
+                child: PageView.builder(
+                  controller: _pages,
+                  itemCount: welcomePages.length,
+                  onPageChanged: (index) => setState(() => _index = index),
+                  itemBuilder: (context, index) =>
+                      _Page(page: welcomePages[index], first: index == 0),
+                ),
               ),
-            ),
-          ],
+              // The dots say where the tour stands to the eye; this says it
+              // to a screen reader, and again at every swipe.
+              Semantics(
+                liveRegion: true,
+                label: 'Page ${_index + 1} of ${welcomePages.length}',
+                excludeSemantics: true,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (var i = 0; i < welcomePages.length; i++)
+                      Container(
+                        width: 6,
+                        height: 6,
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: i == _index
+                              ? tokens.primary
+                              : tokens.textMuted,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(GerfautSpacing.md),
+                child: PrimaryButton(
+                  label: last ? 'Get started' : 'Next',
+                  expand: true,
+                  onPressed: () => _next(context),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

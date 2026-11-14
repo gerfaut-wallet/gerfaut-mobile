@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- On a wide window, like a tablet or the inner display of a foldable, each screen keeps its content 640 points wide and centred. Rows and buttons no longer run from one edge to the other. Phones held upright lay out as before.
 - When you move through the app with a keyboard, buttons, choice lists, menus, switches and the address chip show a 2 px focus ring. Tooltips now use the app's own colours.
 - On the last step of Add a wallet, Back and Add wallet stay at the bottom of the screen, above the keyboard.
 - Hints that repeated a title or the line next to them are gone, so the screens carry less text.

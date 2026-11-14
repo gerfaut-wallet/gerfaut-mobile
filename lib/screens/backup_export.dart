@@ -23,6 +23,7 @@ import '../widgets/pinned_action_form.dart';
 import '../widgets/setting_switch.dart';
 import 'backup_qr.dart';
 import '../widgets/toast.dart';
+import '../widgets/readable_width.dart';
 
 /// Shortest password the core accepts, after trimming. Checked here too
 /// so a short one is told before anything is sealed.
@@ -244,11 +245,13 @@ class _BackupExportScreenState extends ConsumerState<BackupExportScreen> {
     return Scaffold(
       appBar: GerfautAppBar.text('Export a backup'),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(GerfautSpacing.md),
-          child: bundle == null
-              ? _buildOptions(tokens)
-              : _buildResult(tokens, bundle),
+        child: ReadableWidth(
+          child: Padding(
+            padding: const EdgeInsets.all(GerfautSpacing.md),
+            child: bundle == null
+                ? _buildOptions(tokens)
+                : _buildResult(tokens, bundle),
+          ),
         ),
       ),
     );
