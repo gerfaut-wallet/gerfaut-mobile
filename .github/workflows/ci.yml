@@ -290,6 +290,22 @@ jobs:
           path: ${{ runner.temp }}/ios.diff
           if-no-files-found: ignore
 
+  # The two iOS checks main requires, when there is nothing to build:
+  # GitHub reports a skipped matrix job under its bare name, `ios`, so
+  # the skipped `ios` above never answers for `ios (simulator)` and
+  # `ios (device)`. These answer in its place, on a Linux runner, and
+  # only when no code changed.
+  ios-unchanged:
+    name: ios (${{ matrix.target }})
+    runs-on: ubuntu-24.04
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code == 'false' }}
+    strategy:
+      matrix:
+        target: [simulator, device]
+    steps:
+      - run: echo "No code changed, so there is nothing to build for iOS."
+
   # What scripts/sign-release.ps1 checks before it signs a release, on
   # throwaway git repositories: no key, no network. Pester comes with
   # the runner image.
