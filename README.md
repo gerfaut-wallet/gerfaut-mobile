@@ -5,7 +5,7 @@
   <img src=".github/images/logo-light.svg" alt="Gerfaut" width="180">
 </picture>
 
-<h3>The Bitcoin watch-only wallet for Android</h3>
+<h3>The Bitcoin watch-only wallet for Android, with iPhone coming soon</h3>
 
 Follow every wallet you own from its descriptor or public key.<br>
 Gerfaut holds no private keys, so it can never spend your bitcoin.
@@ -54,6 +54,17 @@ Gerfaut runs on Android 7.0 or newer. Get the APK for your phone's processor fro
 
 Open the file on your phone and allow the install when Android asks. [Install on Android](https://gerfaut-wallet.com/docs/getting-started/install-android) walks through it, updates included.
 
+### iPhone, coming soon
+
+The iPhone app comes from this same code, and CI builds and tests it on every change. No version is out yet: the first one will come through TestFlight. It will need iOS 15 or newer, on an iPhone.
+
+iOS doesn't allow everything Android does, so a few things change there:
+
+- There is no Live watch. iOS lets no app keep a connection open in the background, so Gerfaut checks for new transactions when iOS wakes it: never more often than the interval you set, often less, and not at all once you swipe it away.
+- There is no calculator disguise and there are no home-screen widgets.
+- There is no Broadcast screen, so the iPhone app never sends a transaction to the network.
+- iOS has no way to block screenshots. With a lock set, Gerfaut still blanks itself in the app switcher.
+
 ### Verify your download
 
 Every release ships a `SHA256SUMS` file signed with the author's [minisign](https://jedisct1.github.io/minisign/) key:
@@ -90,6 +101,8 @@ git -C gerfaut-core checkout "$(cat gerfaut-mobile/reproducible/gerfaut-core.rev
 cd gerfaut-mobile
 flutter build apk --debug   # build/app/outputs/flutter-apk/app-debug.apk
 ```
+
+The iPhone app builds on a Mac with Xcode; the `ios` jobs of `.github/workflows/ci.yml` show each step.
 
 Release APKs come out of the pinned container in `reproducible/`. To build the three unsigned APKs the way the release workflow does, run `reproducible/build.sh`, which needs git and Docker.
 
