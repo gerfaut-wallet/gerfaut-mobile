@@ -15,6 +15,7 @@ import '../widgets/load_failure.dart';
 import '../widgets/notice.dart';
 import '../widgets/status_pill.dart';
 import '../widgets/toast.dart';
+import '../widgets/readable_width.dart';
 
 /// What the descriptor says: who can spend, under which locks, and
 /// whether each path is open right now. One page per wallet, a tap
@@ -38,40 +39,42 @@ class PolicyScreen extends ConsumerWidget {
     return Scaffold(
       appBar: GerfautAppBar.text('Policy'),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(GerfautSpacing.md),
-          children: [
-            // The header carries the wallet's name: the bar says what the
-            // page is, the body says whose policy it reads.
-            if (name != null) ...[
-              // As its owner wrote it: a name set in capitals is no
-              // longer the name on the wallet list.
-              Text(
-                name,
-                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-              ),
-              const SizedBox(height: GerfautSpacing.sm),
+        child: ReadableWidth(
+          child: ListView(
+            padding: const EdgeInsets.all(GerfautSpacing.md),
+            children: [
+              // The header carries the wallet's name: the bar says what the
+              // page is, the body says whose policy it reads.
+              if (name != null) ...[
+                // As its owner wrote it: a name set in capitals is no
+                // longer the name on the wallet list.
+                Text(
+                  name,
+                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                ),
+                const SizedBox(height: GerfautSpacing.sm),
+              ],
+              switch (policy) {
+                // A read that failed says so, whatever it carried before;
+                // once Try again is under way, the placeholder shows it.
+                AsyncError(:final error, isLoading: false) => LoadFailure(
+                  what: 'The policy',
+                  error: error,
+                  centered: false,
+                  onRetry: () => ref.invalidate(policyProvider(walletId)),
+                ),
+                // Whatever the page has read stays up: a sync refetches the
+                // policy, and a refresh under way still carries the last
+                // snapshot, which is no reason to swap the cards for the
+                // placeholder. Only a page that never had one waits.
+                AsyncValue(value: final snapshot?) => _Loaded(
+                  snapshot: snapshot,
+                  wallet: meta?.kind,
+                ),
+                _ => const PolicyPlaceholder(),
+              },
             ],
-            switch (policy) {
-              // A read that failed says so, whatever it carried before;
-              // once Try again is under way, the placeholder shows it.
-              AsyncError(:final error, isLoading: false) => LoadFailure(
-                what: 'The policy',
-                error: error,
-                centered: false,
-                onRetry: () => ref.invalidate(policyProvider(walletId)),
-              ),
-              // Whatever the page has read stays up: a sync refetches the
-              // policy, and a refresh under way still carries the last
-              // snapshot, which is no reason to swap the cards for the
-              // placeholder. Only a page that never had one waits.
-              AsyncValue(value: final snapshot?) => _Loaded(
-                snapshot: snapshot,
-                wallet: meta?.kind,
-              ),
-              _ => const PolicyPlaceholder(),
-            },
-          ],
+          ),
         ),
       ),
     );

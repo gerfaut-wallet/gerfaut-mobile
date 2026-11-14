@@ -26,6 +26,7 @@ import 'broadcast.dart';
 import 'settings.dart';
 import 'wallet_home.dart';
 import '../widgets/toast.dart';
+import '../widgets/readable_width.dart';
 
 /// Home: the wallets of the active workspace network as cards, or the
 /// empty state. Pull down to sync them all; the one primary action sits
@@ -140,97 +141,102 @@ class HomeScreen extends ConsumerWidget {
         ],
       ),
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const UpdateNotice(),
-            const MaskUnsavedNotice(),
-            Expanded(
-              child: switch ((settings, wallets)) {
-                // The wallets alone failed: the vault is open, and the
-                // list can be asked for again.
-                (AsyncData(), AsyncError(:final error)) => LoadFailure(
-                  what: 'The wallets',
-                  error: error,
-                  onRetry: () => ref.invalidate(walletsProvider),
-                ),
-                (AsyncError(), _) || (_, AsyncError()) => Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: GerfautSpacing.md,
+        child: ReadableWidth(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const UpdateNotice(),
+              const MaskUnsavedNotice(),
+              Expanded(
+                child: switch ((settings, wallets)) {
+                  // The wallets alone failed: the vault is open, and the
+                  // list can be asked for again.
+                  (AsyncData(), AsyncError(:final error)) => LoadFailure(
+                    what: 'The wallets',
+                    error: error,
+                    onRetry: () => ref.invalidate(walletsProvider),
+                  ),
+                  (AsyncError(), _) || (_, AsyncError()) => Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: GerfautSpacing.md,
+                      ),
+                      child: Text(
+                        'The vault could not be opened. Restart Gerfaut; if '
+                        'this persists, the secure storage refused access to '
+                        'the vault key.',
+                        style: tokens.bodySmall.copyWith(
+                          color: tokens.textMuted,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
                     ),
+                  ),
+                  // A value, the current one or the last while the vault
+                  // is read again — refreshed after a drop, or reloaded
+                  // behind a settings change: the list stays mounted
+                  // through it, and what it holds — a drop on its way,
+                  // the note of a refused one — survives, instead of
+                  // giving way to the opening line and coming back blank.
+                  (_, AsyncValue(:final value?)) when value.isEmpty =>
+                    EmptyState(
+                      // The first screen of the app: the full logo, once,
+                      // where every other empty state gets a watermark.
+                      art: GerfautLockup(
+                        color: tokens.primary,
+                        width: 160,
+                        semanticLabel: 'Gerfaut',
+                      ),
+                      title: 'No wallets yet',
+                      hint:
+                          'Import a descriptor, xpub, or address to start '
+                          'watching it.',
+                    ),
+                  (_, AsyncValue(:final value?)) => _WalletList(
+                    wallets: value,
+                    onRefresh: () async {
+                      if (network == null) return;
+                      final report = await sync.syncAll(network);
+                      if (report == null || !context.mounted) return;
+                      // A benign confirmation: the summary may disappear,
+                      // per-wallet failures stay on the freshness lines.
+                      final synced = report.reports.length;
+                      final failed = report.failures.length;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        Toast(
+                          failed == 0
+                              ? (synced == 1
+                                    ? '1 wallet synced'
+                                    : '$synced wallets synced')
+                              : '$synced synced, $failed failed',
+                        ),
+                      );
+                    },
+                  ),
+                  _ => Center(
                     child: Text(
-                      'The vault could not be opened. Restart Gerfaut; if '
-                      'this persists, the secure storage refused access to '
-                      'the vault key.',
+                      'Opening the vault…',
                       style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                      textAlign: TextAlign.center,
                     ),
                   ),
-                ),
-                // A value, the current one or the last while the vault
-                // is read again — refreshed after a drop, or reloaded
-                // behind a settings change: the list stays mounted
-                // through it, and what it holds — a drop on its way,
-                // the note of a refused one — survives, instead of
-                // giving way to the opening line and coming back blank.
-                (_, AsyncValue(:final value?)) when value.isEmpty => EmptyState(
-                  // The first screen of the app: the full logo, once,
-                  // where every other empty state gets a watermark.
-                  art: GerfautLockup(
-                    color: tokens.primary,
-                    width: 160,
-                    semanticLabel: 'Gerfaut',
-                  ),
-                  title: 'No wallets yet',
-                  hint:
-                      'Import a descriptor, xpub, or address to start '
-                      'watching it.',
-                ),
-                (_, AsyncValue(:final value?)) => _WalletList(
-                  wallets: value,
-                  onRefresh: () async {
-                    if (network == null) return;
-                    final report = await sync.syncAll(network);
-                    if (report == null || !context.mounted) return;
-                    // A benign confirmation: the summary may disappear,
-                    // per-wallet failures stay on the freshness lines.
-                    final synced = report.reports.length;
-                    final failed = report.failures.length;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      Toast(
-                        failed == 0
-                            ? (synced == 1
-                                  ? '1 wallet synced'
-                                  : '$synced wallets synced')
-                            : '$synced synced, $failed failed',
+                },
+              ),
+              Padding(
+                padding: const EdgeInsets.all(GerfautSpacing.md),
+                child: PrimaryButton(
+                  label: 'Add a wallet',
+                  expand: true,
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const AddWalletScreen(),
                       ),
                     );
                   },
                 ),
-                _ => Center(
-                  child: Text(
-                    'Opening the vault…',
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  ),
-                ),
-              },
-            ),
-            Padding(
-              padding: const EdgeInsets.all(GerfautSpacing.md),
-              child: PrimaryButton(
-                label: 'Add a wallet',
-                expand: true,
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const AddWalletScreen(),
-                    ),
-                  );
-                },
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

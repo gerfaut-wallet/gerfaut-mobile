@@ -21,6 +21,7 @@ import '../widgets/load_failure.dart';
 import '../widgets/notice.dart';
 import '../widgets/setting_switch.dart';
 import '../widgets/toast.dart';
+import '../widgets/readable_width.dart';
 
 /// Where an exported file goes: written where the user points, or
 /// handed to the system share sheet.
@@ -195,154 +196,161 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
     return Scaffold(
       appBar: GerfautAppBar.text('Export'),
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(GerfautSpacing.md),
-                children: [
-                  Text(
-                    "This wallet's transaction history as a CSV file.",
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  ),
-                  const SizedBox(height: GerfautSpacing.md),
-                  if (failed) ...[
-                    LoadFailure(
-                      what: 'The transactions',
-                      error: snapshotAsync.error,
-                      centered: false,
-                      onRetry: () =>
-                          ref.invalidate(snapshotProvider(widget.walletId)),
-                    ),
-                    const SizedBox(height: GerfautSpacing.md),
-                  ],
-                  // It changes what the file holds, so it is a note and
-                  // not a line of grey.
-                  if (snapshot?.truncated ?? false) ...[
-                    const GerfautNotice(
-                      tone: NoticeTone.info,
-                      message:
-                          'Only the loaded transactions export. Load older '
-                          'transactions first for a complete file.',
-                    ),
-                    const SizedBox(height: GerfautSpacing.md),
-                  ],
-                  FieldLabel('Date range', tokens: tokens),
-                  const SizedBox(height: GerfautSpacing.sm),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _DateField(
-                          placeholder: 'From',
-                          date: _from,
-                          onTap: () => _pickDate(from: true),
-                          onClear: () => setState(() => _from = null),
-                        ),
-                      ),
-                      const SizedBox(width: GerfautSpacing.sm),
-                      Expanded(
-                        child: _DateField(
-                          placeholder: 'To',
-                          date: _to,
-                          onTap: () => _pickDate(from: false),
-                          onClear: () => setState(() => _to = null),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: GerfautSpacing.xs),
-                  Text(
-                    'Leave empty to export the full history.',
-                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                  ),
-                  const SizedBox(height: GerfautSpacing.md),
-                  FieldLabel('Direction', tokens: tokens),
-                  const SizedBox(height: GerfautSpacing.sm),
-                  ChoiceGroup<ExportDirection?>(
-                    label: 'Direction',
-                    value: _direction,
-                    options: [
-                      // Null keeps both, and reads as its own option.
-                      const ChoiceOption(value: null, label: 'All'),
-                      for (final direction in ExportDirection.values)
-                        ChoiceOption(value: direction, label: direction.label),
-                    ],
-                    onChanged: (direction) =>
-                        setState(() => _direction = direction),
-                  ),
-                  const SizedBox(height: GerfautSpacing.md),
-                  SettingSwitch(
-                    title: 'Include pending',
-                    hint:
-                        'Pending transactions have no date yet: they only '
-                        'export without date bounds.',
-                    value: _includePending,
-                    onChanged: (value) =>
-                        setState(() => _includePending = value),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(GerfautSpacing.md),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (snapshot != null)
+        child: ReadableWidth(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.all(GerfautSpacing.md),
+                  children: [
                     Text(
-                      '$selected of $total transactions selected',
-                      style: tokens.figureOf(color: tokens.textMuted),
-                      textAlign: TextAlign.center,
-                    )
-                  else if (!failed)
-                    Text(
-                      'Loading…',
+                      "This wallet's transaction history as a CSV file.",
                       style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                      textAlign: TextAlign.center,
                     ),
-                  if (_failure != null) ...[
+                    const SizedBox(height: GerfautSpacing.md),
+                    if (failed) ...[
+                      LoadFailure(
+                        what: 'The transactions',
+                        error: snapshotAsync.error,
+                        centered: false,
+                        onRetry: () =>
+                            ref.invalidate(snapshotProvider(widget.walletId)),
+                      ),
+                      const SizedBox(height: GerfautSpacing.md),
+                    ],
+                    // It changes what the file holds, so it is a note and
+                    // not a line of grey.
+                    if (snapshot?.truncated ?? false) ...[
+                      const GerfautNotice(
+                        tone: NoticeTone.info,
+                        message:
+                            'Only the loaded transactions export. Load older '
+                            'transactions first for a complete file.',
+                      ),
+                      const SizedBox(height: GerfautSpacing.md),
+                    ],
+                    FieldLabel('Date range', tokens: tokens),
                     const SizedBox(height: GerfautSpacing.sm),
-                    // Amber: nothing is at risk, the file simply did
-                    // not get where it was going, and the other side's
-                    // words say why when it had any.
-                    GerfautNotice(
-                      tone: NoticeTone.info,
-                      message: _failure!.message,
-                      detail: _failure!.detail,
-                      liveRegion: true,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _DateField(
+                            placeholder: 'From',
+                            date: _from,
+                            onTap: () => _pickDate(from: true),
+                            onClear: () => setState(() => _from = null),
+                          ),
+                        ),
+                        const SizedBox(width: GerfautSpacing.sm),
+                        Expanded(
+                          child: _DateField(
+                            placeholder: 'To',
+                            date: _to,
+                            onTap: () => _pickDate(from: false),
+                            onClear: () => setState(() => _to = null),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: GerfautSpacing.xs),
+                    Text(
+                      'Leave empty to export the full history.',
+                      style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                    ),
+                    const SizedBox(height: GerfautSpacing.md),
+                    FieldLabel('Direction', tokens: tokens),
+                    const SizedBox(height: GerfautSpacing.sm),
+                    ChoiceGroup<ExportDirection?>(
+                      label: 'Direction',
+                      value: _direction,
+                      options: [
+                        // Null keeps both, and reads as its own option.
+                        const ChoiceOption(value: null, label: 'All'),
+                        for (final direction in ExportDirection.values)
+                          ChoiceOption(
+                            value: direction,
+                            label: direction.label,
+                          ),
+                      ],
+                      onChanged: (direction) =>
+                          setState(() => _direction = direction),
+                    ),
+                    const SizedBox(height: GerfautSpacing.md),
+                    SettingSwitch(
+                      title: 'Include pending',
+                      hint:
+                          'Pending transactions have no date yet: they only '
+                          'export without date bounds.',
+                      value: _includePending,
+                      onChanged: (value) =>
+                          setState(() => _includePending = value),
                     ),
                   ],
-                  const SizedBox(height: GerfautSpacing.sm),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: PrimaryButton(
-                          label: _exporting ? 'Exporting…' : 'Save file',
-                          icon: LucideIcons.save,
-                          expand: true,
-                          busy: _exporting,
-                          onPressed: chosen
-                              ? () => _export(snapshot, _Destination.file)
-                              : null,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(GerfautSpacing.md),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (snapshot != null)
+                      Text(
+                        '$selected of $total transactions selected',
+                        style: tokens.figureOf(color: tokens.textMuted),
+                        textAlign: TextAlign.center,
+                      )
+                    else if (!failed)
+                      Text(
+                        'Loading…',
+                        style: tokens.bodySmall.copyWith(
+                          color: tokens.textMuted,
                         ),
+                        textAlign: TextAlign.center,
                       ),
-                      const SizedBox(width: GerfautSpacing.sm),
-                      Expanded(
-                        child: SecondaryButton(
-                          label: 'Share',
-                          icon: LucideIcons.share2,
-                          onPressed: ready
-                              ? () => _export(snapshot, _Destination.share)
-                              : null,
-                        ),
+                    if (_failure != null) ...[
+                      const SizedBox(height: GerfautSpacing.sm),
+                      // Amber: nothing is at risk, the file simply did
+                      // not get where it was going, and the other side's
+                      // words say why when it had any.
+                      GerfautNotice(
+                        tone: NoticeTone.info,
+                        message: _failure!.message,
+                        detail: _failure!.detail,
+                        liveRegion: true,
                       ),
                     ],
-                  ),
-                ],
+                    const SizedBox(height: GerfautSpacing.sm),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: PrimaryButton(
+                            label: _exporting ? 'Exporting…' : 'Save file',
+                            icon: LucideIcons.save,
+                            expand: true,
+                            busy: _exporting,
+                            onPressed: chosen
+                                ? () => _export(snapshot, _Destination.file)
+                                : null,
+                          ),
+                        ),
+                        const SizedBox(width: GerfautSpacing.sm),
+                        Expanded(
+                          child: SecondaryButton(
+                            label: 'Share',
+                            icon: LucideIcons.share2,
+                            onPressed: ready
+                                ? () => _export(snapshot, _Destination.share)
+                                : null,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

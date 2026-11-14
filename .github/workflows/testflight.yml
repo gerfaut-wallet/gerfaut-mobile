@@ -75,7 +75,7 @@ jobs:
   upload:
     needs: ready
     if: needs.ready.outputs.ready == 'true'
-    runs-on: macos-26
+    runs-on: xcode-27
     environment: testflight
     timeout-minutes: 75
     steps:
@@ -103,7 +103,7 @@ jobs:
 
       # The same Xcode, Rust and Flutter as the ios job of CI.
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+        run: sudo xcode-select -s /Applications/Xcode_27.1.app
       - name: Pin the Rust toolchain
         run: gerfaut-mobile/.github/ios-toolchain.sh gerfaut-mobile
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0

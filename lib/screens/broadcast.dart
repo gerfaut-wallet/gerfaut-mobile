@@ -26,6 +26,7 @@ import '../widgets/notice.dart';
 import '../widgets/confirmation_pie.dart' show settledConfirmations;
 import '../widgets/tx_diagram.dart';
 import 'scan.dart';
+import '../widgets/readable_width.dart';
 
 /// How often a sent transaction is checked with the backend.
 const Duration _statusPollInterval = Duration(seconds: 30);
@@ -310,28 +311,31 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     return Scaffold(
       appBar: GerfautAppBar.text('Broadcast'),
       body: SafeArea(
-        child: network == null
-            ? Center(
-                child: Text(
-                  'Loading…',
-                  style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-                ),
-              )
-            : switch (_flow) {
-                _Composing() || _Decoding() => _buildInputStep(tokens, network),
-                _Previewing(:final preview, :final refusal) =>
-                  _buildPreviewStep(tokens, preview, refusal: refusal),
-                _Sending(:final preview) => _buildPreviewStep(
-                  tokens,
-                  preview,
-                  sending: true,
-                ),
-                _Sent(:final preview, :final record) => _buildPreviewStep(
-                  tokens,
-                  preview,
-                  sent: record,
-                ),
-              },
+        child: ReadableWidth(
+          child: network == null
+              ? Center(
+                  child: Text(
+                    'Loading…',
+                    style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+                  ),
+                )
+              : switch (_flow) {
+                  _Composing() ||
+                  _Decoding() => _buildInputStep(tokens, network),
+                  _Previewing(:final preview, :final refusal) =>
+                    _buildPreviewStep(tokens, preview, refusal: refusal),
+                  _Sending(:final preview) => _buildPreviewStep(
+                    tokens,
+                    preview,
+                    sending: true,
+                  ),
+                  _Sent(:final preview, :final record) => _buildPreviewStep(
+                    tokens,
+                    preview,
+                    sent: record,
+                  ),
+                },
+        ),
       ),
     );
   }

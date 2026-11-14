@@ -7,6 +7,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../src/screen.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_bar.dart';
+import '../widgets/readable_width.dart';
 
 /// How long each frame of the animated code stays on screen.
 const Duration frameInterval = Duration(milliseconds: 200);
@@ -63,44 +64,46 @@ class _BackupQrScreenState extends ConsumerState<BackupQrScreen> {
     return Scaffold(
       appBar: GerfautAppBar.text('Backup QR code'),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(GerfautSpacing.md),
-          children: [
-            // Bytewords read the same in either case, and uppercase lets
-            // the encoder use the alphanumeric mode: fewer modules for
-            // the same frame, which a camera catches sooner.
-            _QrCard(
-              data: widget.frames[_index].toUpperCase(),
-              // A QR code is silent to a screen reader unless it is
-              // told what it is; the frame number also lets a test
-              // watch the animation advance.
-              semanticsLabel: _animated
-                  ? 'Backup QR code, frame ${_index + 1} of '
-                        '${widget.frames.length}'
-                  : 'Backup QR code',
-            ),
-            const SizedBox(height: GerfautSpacing.md),
-            // The counter below is a place in the loop, not a count of
-            // what has been sent — the scanner shows a counter that
-            // looks exactly the same and does mean progress. The caption
-            // names which one this is, so the two are never read as one.
-            Text(
-              _animated
-                  ? 'Scan it with Gerfaut on the other device. The code '
-                        'loops: start at any frame.'
-                  : 'Scan it with Gerfaut on the other device.',
-              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
-              textAlign: TextAlign.center,
-            ),
-            if (_animated) ...[
-              const SizedBox(height: GerfautSpacing.xs),
+        child: ReadableWidth(
+          child: ListView(
+            padding: const EdgeInsets.all(GerfautSpacing.md),
+            children: [
+              // Bytewords read the same in either case, and uppercase lets
+              // the encoder use the alphanumeric mode: fewer modules for
+              // the same frame, which a camera catches sooner.
+              _QrCard(
+                data: widget.frames[_index].toUpperCase(),
+                // A QR code is silent to a screen reader unless it is
+                // told what it is; the frame number also lets a test
+                // watch the animation advance.
+                semanticsLabel: _animated
+                    ? 'Backup QR code, frame ${_index + 1} of '
+                          '${widget.frames.length}'
+                    : 'Backup QR code',
+              ),
+              const SizedBox(height: GerfautSpacing.md),
+              // The counter below is a place in the loop, not a count of
+              // what has been sent — the scanner shows a counter that
+              // looks exactly the same and does mean progress. The caption
+              // names which one this is, so the two are never read as one.
               Text(
-                '${_index + 1} / ${widget.frames.length}',
-                style: tokens.figureOf(color: tokens.textMuted),
+                _animated
+                    ? 'Scan it with Gerfaut on the other device. The code '
+                          'loops: start at any frame.'
+                    : 'Scan it with Gerfaut on the other device.',
+                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
                 textAlign: TextAlign.center,
               ),
+              if (_animated) ...[
+                const SizedBox(height: GerfautSpacing.xs),
+                Text(
+                  '${_index + 1} / ${widget.frames.length}',
+                  style: tokens.figureOf(color: tokens.textMuted),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

@@ -19,6 +19,7 @@ import '../widgets/pinned_action_form.dart';
 import '../widgets/select_field.dart';
 import 'scan.dart';
 import 'wallet_home.dart';
+import '../widgets/readable_width.dart';
 
 /// Two steps: paste or import, then confirm what was recognized.
 /// Detection is never silent — the user validates before anything is
@@ -370,11 +371,13 @@ class _AddWalletScreenState extends ConsumerState<AddWalletScreen> {
     return Scaffold(
       appBar: GerfautAppBar.text('Add a wallet'),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(GerfautSpacing.md),
-          child: _parsed == null
-              ? _buildInputStep(tokens)
-              : _buildConfirmStep(tokens, _parsed!),
+        child: ReadableWidth(
+          child: Padding(
+            padding: const EdgeInsets.all(GerfautSpacing.md),
+            child: _parsed == null
+                ? _buildInputStep(tokens)
+                : _buildConfirmStep(tokens, _parsed!),
+          ),
         ),
       ),
     );

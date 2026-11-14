@@ -21,6 +21,7 @@ import '../widgets/pinned_action_form.dart';
 import '../widgets/setting_switch.dart';
 import 'scan.dart';
 import '../widgets/toast.dart';
+import '../widgets/readable_width.dart';
 
 /// Opens the system file picker; tests hand back a file of their own.
 typedef BackupFilePicker = Future<XFile?> Function();
@@ -339,11 +340,13 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
     return Scaffold(
       appBar: GerfautAppBar.text('Restore a backup'),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(GerfautSpacing.md),
-          child: preview == null
-              ? _buildSourceStep(tokens)
-              : _buildChoiceStep(tokens, preview),
+        child: ReadableWidth(
+          child: Padding(
+            padding: const EdgeInsets.all(GerfautSpacing.md),
+            child: preview == null
+                ? _buildSourceStep(tokens)
+                : _buildChoiceStep(tokens, preview),
+          ),
         ),
       ),
     );

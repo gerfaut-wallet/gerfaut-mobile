@@ -20,6 +20,7 @@ import '../widgets/load_failure.dart';
 import '../widgets/status_pill.dart';
 import '../widgets/toast.dart';
 import '../widgets/tx_diagram.dart';
+import '../widgets/readable_width.dart';
 
 /// Transaction detail, read in the order the questions come: how much
 /// and where it stands, the two facts one looks for first, the
@@ -48,22 +49,24 @@ class TxDetailScreen extends ConsumerWidget {
     return Scaffold(
       appBar: GerfautAppBar.text('Transaction'),
       body: SafeArea(
-        child: switch (detail) {
-          AsyncData(:final value) => _Detail(detail: value, network: network),
-          AsyncError(:final error) => LoadFailure(
-            what: 'This transaction',
-            error: error,
-            onRetry: () => ref.invalidate(
-              txDetailProvider((walletId: walletId, txid: txid)),
+        child: ReadableWidth(
+          child: switch (detail) {
+            AsyncData(:final value) => _Detail(detail: value, network: network),
+            AsyncError(:final error) => LoadFailure(
+              what: 'This transaction',
+              error: error,
+              onRetry: () => ref.invalidate(
+                txDetailProvider((walletId: walletId, txid: txid)),
+              ),
             ),
-          ),
-          _ => Center(
-            child: Text(
-              'Loading…',
-              style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+            _ => Center(
+              child: Text(
+                'Loading…',
+                style: tokens.bodySmall.copyWith(color: tokens.textMuted),
+              ),
             ),
-          ),
-        },
+          },
+        ),
       ),
     );
   }

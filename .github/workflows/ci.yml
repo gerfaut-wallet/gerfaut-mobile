@@ -188,15 +188,18 @@ jobs:
   # the signature. Both fail when the build changed a tracked file under
   # ios/, such as the Xcode project CocoaPods rewrites: what is committed
   # is what builds.
+  # `duo` runs the app on the iPhone Duo simulator and keeps a picture
+  # of its main screens; main does not require it, and ios-unchanged
+  # has no stand-in for it.
   ios:
-    runs-on: macos-26
+    runs-on: xcode-27
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
-        target: [simulator, device]
+        target: [simulator, device, duo]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -221,9 +224,11 @@ jobs:
           persist-credentials: false
 
       # Named, not the image's default, which moves under the workflow.
-      # App Store Connect takes builds from the iOS 26 SDK on.
+      # The iOS 27.1 SDK is the first an iPhone Duo runs full screen:
+      # built with an older one, the app sits in a phone-sized window in
+      # the middle of the inner display.
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+        run: sudo xcode-select -s /Applications/Xcode_27.1.app
 
       - name: Pin the Rust toolchain
         run: gerfaut-mobile/.github/ios-toolchain.sh gerfaut-mobile
@@ -236,24 +241,75 @@ jobs:
       - run: flutter pub get
         working-directory: gerfaut-mobile
 
+      # The newest runtime the SDK can build for that has the device: an
+      # iPhone for `simulator`, the iPhone Duo for `duo`. The runner
+      # lists runtimes in no set order, and some hold a single device.
       - name: Start a simulator
-        if: matrix.target == 'simulator'
+        if: matrix.target != 'device'
         id: sim
+        env:
+          DEVICE: ${{ matrix.target == 'duo' && 'iPhone Duo' || 'iPhone' }}
         run: |
-          udid=$(xcrun simctl list devices available -j | jq -r '
-            [.devices | to_entries[] | select(.key | test("iOS-26"))
-              | .value[] | select(.name | startswith("iPhone"))][0].udid')
+          sdk=$(xcrun --sdk iphonesimulator --show-sdk-version)
+          udid=$(xcrun simctl list devices available -j | jq -r --arg device "$DEVICE" --arg sdk "$sdk" '
+            def version: capture("iOS-(?<major>[0-9]+)-(?<minor>[0-9]+)$")
+              | [(.major | tonumber), (.minor | tonumber)];
+            ($sdk | split(".") | map(tonumber) | .[0:2]) as $newest
+            | [.devices | to_entries[]
+                | select(.key | test("iOS-[0-9]+-[0-9]+$"))
+                | select((.key | version) <= $newest)]
+            | sort_by(.key | version) | reverse
+            | [.[].value[] | select(.name | startswith($device))
+                | select($device == "iPhone Duo" or (.name | contains("Duo") | not))][0].udid')
+          echo "SDK $sdk, $DEVICE: $udid"
           [ -n "$udid" ] && [ "$udid" != null ] || { xcrun simctl list devices available; exit 1; }
           xcrun simctl boot "$udid"
           xcrun simctl bootstatus "$udid"
           echo "udid=$udid" >> "$GITHUB_OUTPUT"
 
       - name: Test on the simulator
-        if: matrix.target == 'simulator'
+        if: matrix.target != 'device'
         working-directory: gerfaut-mobile
         env:
           UDID: ${{ steps.sim.outputs.udid }}
-        run: flutter test integration_test -d "$UDID"
+        run: flutter test integration_test/app_test.dart -d "$UDID"
+
+      # Every main screen, drawn at the device's size: one that overflows
+      # fails. On the iPhone Duo, each one is also photographed by the
+      # simulator itself, status bar, camera and safe areas included.
+      - name: Draw the main screens
+        if: matrix.target != 'device'
+        working-directory: gerfaut-mobile
+        env:
+          UDID: ${{ steps.sim.outputs.udid }}
+          SHOTS: ${{ matrix.target == 'duo' && '1' || '' }}
+        run: |
+          if [ -z "$SHOTS" ]; then
+            flutter test integration_test/screens_test.dart -d "$UDID"
+            exit 0
+          fi
+          set -o pipefail
+          out="$RUNNER_TEMP/iphone-duo"
+          mkdir -p "$out"
+          # What the simulator says of its displays and of the commands
+          # it takes: Apple documents opening an iPhone Duo only with
+          # Device Hub's buttons.
+          xcrun simctl io "$UDID" enumerate > "$out/displays.txt" 2>&1 || true
+          { xcrun simctl help; xcrun simctl help ui; xcrun simctl ui "$UDID"; } \
+            > "$out/simctl-help.txt" 2>&1 || true
+          .github/simulator-shots.sh "$UDID" com.gerfautwallet.gerfaut "$out" &
+          shooter=$!
+          trap 'kill "$shooter" 2>/dev/null' EXIT
+          flutter test integration_test/screens_test.dart -d "$UDID" \
+            --dart-define=GERFAUT_SHOTS=1 | tee "$out/screens.log"
+
+      - name: Keep the iPhone Duo pictures
+        if: always() && matrix.target == 'duo'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: iphone-duo-screens
+          path: ${{ runner.temp }}/iphone-duo
+          if-no-files-found: ignore
 
       - name: Build for an iPhone, unsigned
         if: matrix.target == 'device'
