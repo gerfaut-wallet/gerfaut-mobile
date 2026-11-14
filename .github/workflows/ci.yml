@@ -291,8 +291,12 @@ jobs:
           set -o pipefail
           out="$RUNNER_TEMP/iphone-duo"
           mkdir -p "$out"
-          # What the simulator says of its displays, for the next steps.
+          # What the simulator says of its displays and of the commands
+          # it takes: Apple documents opening an iPhone Duo only with
+          # Device Hub's buttons.
           xcrun simctl io "$UDID" enumerate > "$out/displays.txt" 2>&1 || true
+          { xcrun simctl help; xcrun simctl help ui; xcrun simctl ui "$UDID"; } \
+            > "$out/simctl-help.txt" 2>&1 || true
           .github/simulator-shots.sh "$UDID" com.gerfautwallet.gerfaut "$out" &
           shooter=$!
           trap 'kill "$shooter" 2>/dev/null' EXIT
