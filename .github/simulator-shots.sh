@@ -26,11 +26,18 @@ while true; do
     [ -e "$ready" ] || continue
     name=$(basename "$ready" .ready)
     [ -e "$shots/$name.done" ] && continue
-    if xcrun simctl io "$udid" screenshot "$out/$name-simulator.png" >> "$out/simctl.log" 2>&1; then
-      echo "pictured $name"
-    else
-      echo "no simulator picture of $name" | tee -a "$out/simctl.log"
+    # A simulator with two displays, the iPhone Duo, wants one named:
+    # each display it lists is photographed, as <name>-simulator-<n>.png.
+    if ! answer=$(xcrun simctl io "$udid" screenshot "$out/$name-simulator.png" 2>&1); then
+      displays=$(grep -o -- '--display=[0-9]*' <<<"$answer" | cut -d= -f2)
+      [ -n "$displays" ] || echo "$answer" >> "$out/simctl.log"
+      for display in $displays; do
+        xcrun simctl io "$udid" screenshot --display="$display" \
+          "$out/$name-simulator-$display.png" >> "$out/simctl.log" 2>&1 \
+          || echo "no picture of $name on display $display" | tee -a "$out/simctl.log"
+      done
     fi
+    echo "pictured $name"
     touch "$shots/$name.done"
   done
   sleep 0.5
